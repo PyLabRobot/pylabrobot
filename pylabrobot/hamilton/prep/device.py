@@ -1,12 +1,15 @@
 """The Prep: the device, and what it knows about its own deck."""
 
 import logging
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
+from pylabrobot.hamilton.prep.driver.features.heater_shaker import PrepHamiltonHeaterShaker
+from pylabrobot.hamilton.prep.driver.features.lights import Lights
 from pylabrobot.hamilton.prep.driver.features.method import MethodLifecycle
 from pylabrobot.hamilton.prep.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.prep.driver.features.x_arm import XArm
@@ -24,7 +27,12 @@ PREP_SIZE_Y = 575.0
 PREP_SIZE_Z = 575.0
 
 # Where the deck sits inside the device, from the device's left front bottom corner to the deck's.
-PREP_DECK_LOCATION = Coordinate(25.0, 86.5, 50.0)
+# It also places Prep.glb, so it moves with PREP_FIRST_SLOT_LOCATION.
+PREP_DECK_LOCATION = Coordinate(29.20, 88.02, 50.0)
+
+# The device's model with a heater shaker fitted: Prep.glb's frame opened at the back left, where the
+# heater shaker stands in place of spot_0_3, without that spot's position labels.
+PREP_HEATER_SHAKER_MODEL = "Prep_heater_shaker"
 
 
 class PrepDevice(Resource, HasLifespan):
@@ -86,8 +94,10 @@ class PrepDevice(Resource, HasLifespan):
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
-    default_traverse_height: Optional[float] = None,
+    default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
+    enable_safe_speeds: bool = False,
+    deck_components_offset: Optional[Coordinate] = None,
     skip_raise_to_z_safety: bool = False,
   ) -> None:
     """Bring the device up.
@@ -96,8 +106,12 @@ class PrepDevice(Resource, HasLifespan):
       smart: as `PrepDriver.setup` takes it.
       force_initialize: as `PrepDriver.setup` takes it.
       skip_device_initialization: as `PrepDriver.setup` takes it.
-      default_traverse_height: as `PrepDriver.setup` takes it.
+      default_minimum_traverse_height: as `PrepDriver.setup` takes it.
       use_v1_aspirate_dispense: as `PrepDriver.setup` takes it.
+      enable_safe_speeds: as `PrepDriver.setup` takes it.
+      deck_components_offset: shift every labware spot by this, as `update_deck_components` does.
+        None leaves them where they are.
+      skip_raise_to_z_safety: leave the channels where they stand when exiting the lifespan.
     """
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(
@@ -105,12 +119,26 @@ class PrepDevice(Resource, HasLifespan):
         smart=smart,
         force_initialize=force_initialize,
         skip_device_initialization=skip_device_initialization,
-        default_traverse_height=default_traverse_height,
+        default_minimum_traverse_height=default_minimum_traverse_height,
         use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+        enable_safe_speeds=enable_safe_speeds,
         skip_raise_to_z_safety=skip_raise_to_z_safety,
       )
     )
+    if self.driver.hs is not None:
+      self.model = PREP_HEATER_SHAKER_MODEL
+    if deck_components_offset is not None:
+      self.update_deck_components(deck_components_offset)
 
+  def update_deck_components(self, offset: Coordinate) -> None:
+    """Shift every labware spot by `offset`, in software only: nothing is written to the device.
+
+    Args:
+      offset: how far to move each spot, in mm on the deck.
+    """
+    for spot in self.deck.spots:
+      if spot.location is not None:
+        spot.location = spot.location + offset
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.
 
@@ -130,9 +158,19 @@ class PrepDevice(Resource, HasLifespan):
     return self.driver.head8
 
   @property
+  def heater_shaker(self) -> Optional[PrepHamiltonHeaterShaker]:
+    """The heater shaker, on a device that has one."""
+    return self.driver.hs
+
+  @property
   def core_grippers(self) -> Optional[CoreGrippers]:
     """The CoRe gripper."""
     return self.driver.core_grippers
+
+  @property
+  def lights(self) -> Optional[Lights]:
+    """The deck light, on a device that has one."""
+    return self.driver.lights
 
   @property
   def method(self) -> Optional[MethodLifecycle]:
@@ -143,6 +181,31 @@ class PrepDevice(Resource, HasLifespan):
   def calibration(self) -> Optional[Calibration]:
     """Calibration."""
     return self.driver.calibration
+
+  # -- error lighting --------------------------------------------------------
+
+  async def signal_error(self, duration: Optional[float] = 8.0, wait: bool = False) -> None:
+    """Pulse the deck red, if this device has a light to say it with. Never raises.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error.
+      wait: hold until the pulse is over, for a script that exits the moment it raises.
+    """
+    await self.driver.signal_error(duration=duration, wait=wait)
+
+  @asynccontextmanager
+  async def error_lighting(
+    self, duration: Optional[float] = 8.0, wait: bool = False
+  ) -> AsyncIterator[None]:
+    """Pulse the deck red when something inside raises, and let it raise on.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error,
+        until the light is turned off or set to something else.
+      wait: as `signal_error`.
+    """
+    async with self.driver.error_lighting(duration=duration, wait=wait):
+      yield
 
   # -- session ---------------------------------------------------------------
 
@@ -161,10 +224,12 @@ def Prep(
   declared_configuration_json: Optional[str] = None,
   firmware_tree_json: Optional[str] = None,
   driver: Optional[PrepDriver] = None,
-  name: str = "Hamilton Prep",
+  name: str = "Prep",
   size_x: float = PREP_SIZE_X,
   size_y: float = PREP_SIZE_Y,
   size_z: float = PREP_SIZE_Z,
+  simulate_motion_time: bool = False,
+  motion_time_scale: float = 0.25,
 ) -> PrepDevice:
   """A Prep, on a Prep deck.
 
@@ -176,14 +241,18 @@ def Prep(
     port: the port it answers on.
     declared_configuration_json: path to a declared configuration, passed to the driver this builds.
       Read only when this builds one: a driver given outright brings its own. A simulated device
-      defaults to PRPAA1087's recording.
+      defaults to the recording of a device with an 8-channel head and no heater shaker.
     firmware_tree_json: path to a recorded firmware tree, for a simulated device to have. Defaults to
-      MLPrep Runtime V1.2.2's.
+      that device's (MLPrep Runtime V1.2.2).
     driver: the driver to drive it through, instead of building one.
     name: what to call it.
     size_x: how wide it is, in mm.
     size_y: how deep it is, in mm.
     size_z: how tall it is, in mm.
+    simulate_motion_time: for a simulated device, whether each move takes time at all, so a viewer
+      shows every step. Ignored for a real device.
+    motion_time_scale: the share of the real device's time a simulated move then takes, a quarter
+      by default. 1.0 keeps the real time. Ignored for a real device.
 
   Returns:
     The device, on a Prep deck.
@@ -196,6 +265,8 @@ def Prep(
         deck=deck,
         declared_configuration_json=declared_configuration_json,
         firmware_tree_json=firmware_tree_json,
+        simulate_motion_time=simulate_motion_time,
+        motion_time_scale=motion_time_scale,
       )
     else:
       driver = PrepDriver(

@@ -5,7 +5,6 @@
     "num_channels": 2,
     "has_enclosure": false,
     "safe_speeds_enabled": false,
-    "default_traverse_height": 167.5,
     "deck_bounds": {
       "min_x": 0.0,
       "max_x": 299.0,

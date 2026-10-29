@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from typing import List
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,10 @@ import pytest
 from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.configuration import read_configuration, to_jsonable
+from pylabrobot.hamilton.prep.driver.simulator import (
+  FIRMWARE_TREE_V3_0_20_HEATER_SHAKER,
+  RECORDING_PREP_HEATER_SHAKER,
+)
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck
@@ -71,7 +76,7 @@ def test_prep_device_motion_method_and_power_commands():
     deck = STARLetDeck()
     p = PrepSimulationDriver(deck=deck)
     await p.setup()
-    await p.park()
+    await p.park_device()
     await p.spread()
     assert p.method is not None
     await p.method.begin(automatic_pause=False)
@@ -127,13 +132,15 @@ def test_prep_method_run_context_manager_aborts_on_exception():
   asyncio.run(_run())
 
 
-def test_mounted_core_grippers_picks_up_the_tools_and_returns_them():
+def test_mounted_picks_up_the_tools_and_returns_them():
   async def _run() -> None:
     p = PrepSimulationDriver(deck=PrepDeck(with_core_grippers=True))
     await p.setup()
-    async with p.mounted_core_grippers() as arm:
+    assert p.core_grippers is not None
+    assert p.core_grippers is not None
+    async with p.core_grippers.mounted() as grippers:
       assert p.core_grippers_mounted
-      assert arm.backend is p.core_grippers
+      assert grippers is p.core_grippers
     assert not p.core_grippers_mounted
     await p.stop()
 
@@ -189,6 +196,41 @@ def test_force_initialize_skips_is_initialized_check():
   asyncio.run(_run())
 
 
+def test_setup_switches_safe_speeds_to_what_is_asked_and_sets_the_x_speed_scale(tmp_path):
+  """Safe speeds switch only when the device reports otherwise; X runs at the arm's default speed."""
+
+  async def _run() -> None:
+    p = PrepSimulationDriver(deck=PrepDeck())
+    await p.setup()
+    declared = str(tmp_path / "declared.json")
+    p.save_configuration(declared)
+    await p.stop()
+    with open(declared, encoding="utf-8") as f:
+      saved = json.load(f)
+    saved["device"]["safe_speeds_enabled"] = True
+    with open(declared, "w", encoding="utf-8") as f:
+      json.dump(saved, f)
+
+    for asked, switched in ((False, [False]), (True, [])):
+      q = PrepSimulationDriver(deck=PrepDeck(), declared_configuration_json=declared)
+      sent: list = []
+      send = q.send_command
+
+      async def record(command, *args, _sent=sent, _send=send, **kwargs):
+        _sent.append(command)
+        return await _send(command, *args, **kwargs)
+
+      q.send_command = record  # type: ignore[method-assign]
+      await q.setup(enable_safe_speeds=asked)
+      assert [c.value for c in sent if isinstance(c, PrepCmd.PrepSetSafeSpeedsEnabled)] == switched
+      assert q.configuration is not None and q.configuration.safe_speeds_enabled is asked
+      # The simulator reports 100 %: the X-arm's 240 mm/s default is 40 % of the scale.
+      assert [c.value for c in sent if isinstance(c, PrepCmd.PrepSetXSpeedScale)] == [40]
+      await q.stop()
+
+  asyncio.run(_run())
+
+
 def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
   """What a device reports it has fitted is saved, and a declaration of it drives the simulator."""
 
@@ -222,32 +264,43 @@ def test_saved_configuration_holds_channel_count_and_head8(tmp_path):
   asyncio.run(_run())
 
 
+class _Records(logging.Handler):
+  """What a logger emits, collected whatever pytest's caplog does with it."""
+
+  def __init__(self) -> None:
+    super().__init__()
+    self.records: List[logging.LogRecord] = []
+
+  def emit(self, record: logging.LogRecord) -> None:
+    self.records.append(record)
+
+
 def test_setup_logs_one_summary_of_what_was_found(caplog):
   """Setup ends with one INFO block describing the device, as the STAR driver's does."""
 
   async def _run() -> None:
-    p = PrepSimulationDriver(deck=STARLetDeck())
+    p = PrepSimulationDriver(
+      deck=STARLetDeck(),
+      declared_configuration_json=RECORDING_PREP_HEATER_SHAKER,
+      firmware_tree_json=FIRMWARE_TREE_V3_0_20_HEATER_SHAKER,
+    )
     assert p.format_setup_summary() == "[Hamilton Prep] not discovered yet"
-    # caplog listens on this logger directly. Whether a record also reaches caplog's root handler
-    # depends on `setup_logger` having run, which sets `propagate = False` on `pylabrobot` - so it
-    # is held off here for the duration, and each record is captured once either way.
     prep_logger = logging.getLogger("pylabrobot.hamilton.prep")
-    prep_logger.addHandler(caplog.handler)
-    propagated = prep_logger.propagate
-    prep_logger.propagate = False
+    records = _Records()
+    prep_logger.addHandler(records)
     try:
       with caplog.at_level(logging.DEBUG, logger="pylabrobot.hamilton.prep"):
         await p.setup()
     finally:
-      prep_logger.propagate = propagated
-      prep_logger.removeHandler(caplog.handler)
+      prep_logger.removeHandler(records)
     summary = p.format_setup_summary()
     assert summary.startswith("[Hamilton Prep] Connected on simulation (no link)")
     assert "  Pipettes: 2, v2 aspirate/dispense" in summary
     assert "    channel 0 (rear):" in summary
     assert "    channel 1 (front):" in summary
-    assert "  8-channel head: none" in summary
-    infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert "  8-channel head: installed" in summary
+    assert "  heater shaker: installed" in summary
+    infos = [r.getMessage() for r in records.records if r.levelno == logging.INFO]
     assert infos == ["tips held at setup: none", summary]
     await p.stop()
 
@@ -385,5 +438,32 @@ def test_stop_closes_the_link_when_the_channels_do_not_go_up():
       m.startswith("not everything is at Z safety: channel 0 at 120.0 mm") for m in messages
     )
     assert p._setup_finished is False
+
+  asyncio.run(_run())
+
+
+def test_the_driver_opens_a_second_session_for_channel_commands():
+  """From a host, a second link beside `io`; none with injected IO or simulation.
+
+  Commands go on it.
+  """
+
+  async def _run() -> None:
+    simulated = PrepSimulationDriver(deck=PrepDeck())
+    assert simulated._second_io is None
+    assert PrepDriver(deck=PrepDeck(), io=simulated.io)._second_io is None
+    channel_read = PrepCmd.PrepZDriveGetPosition(dest=Address(1, 238, 516))
+    with pytest.raises(RuntimeError, match="no second session"):
+      await simulated.send_command_on_second_session(channel_read)
+
+    driver = PrepDriver(deck=PrepDeck(), host="127.0.0.1")
+    assert driver._second_io is not None
+    assert driver._second_io is not driver.io
+    execute = AsyncMock(return_value="answer")
+    driver._second_io._session.execute = execute  # type: ignore[method-assign]
+    assert await driver.send_command_on_second_session(channel_read, read_timeout=5) == "answer"
+    execute.assert_awaited_once_with(channel_read, read_timeout=5)
+    with pytest.raises(RuntimeError, match="needs a dest="):
+      await driver.send_command_on_second_session(PrepCmd.PrepGetPositions())
 
   asyncio.run(_run())

@@ -588,13 +588,17 @@ class Axis:
       selected_mode = self._motor_mode() if restore_motor_mode is None else restore_motor_mode
       await complete_cleanup(self.motor._set_mode(selected_mode))
 
-  async def move_to_ticks(
+  async def _move_to_ticks(
     self,
     target_encoder_ticks: int,
-    velocity_ticks_per_second: Optional[int] = None,
-    arrival_tolerance_ticks: Optional[int] = None,
+    velocity_ticks_per_second: int | None,
+    arrival_tolerance_ticks: int | None,
   ) -> int:
-    """Move to an encoder target and verify the settled position."""
+    """Execute a move, optionally verifying precision before accepting completion.
+
+    Filter homing uses motor completion followed by its optical reference sensor;
+    normal positioning additionally requires the configured encoder tolerance.
+    """
     selected_velocity = (
       self._rate_to_encoder_tick_rate(self.config.max_velocity)
       if velocity_ticks_per_second is None
@@ -606,11 +610,6 @@ class Axis:
     temporary_hold_current = min(50, self.config.moving_current_percentage)
     if arrival_tolerance_ticks is not None and arrival_tolerance_ticks < 0:
       raise ValueError("arrival_tolerance_ticks must be non-negative")
-    selected_tolerance = (
-      self.config.fine_position_error_window
-      if arrival_tolerance_ticks is None
-      else arrival_tolerance_ticks
-    )
     last_position: Optional[int] = None
     for attempt in range(3):
       try:
@@ -647,14 +646,29 @@ class Axis:
           "hold-current restore",
         )
       )
-      if (
-        last_position is not None
-        and abs(last_position - target_encoder_ticks) <= selected_tolerance
+      if last_position is not None and (
+        arrival_tolerance_ticks is None
+        or abs(last_position - target_encoder_ticks) <= arrival_tolerance_ticks
       ):
         return last_position
     raise CeligoError(
       f"motor {self.axis_index} stopped at {last_position}, target "
-      f"{target_encoder_ticks}, tolerance {selected_tolerance}"
+      f"{target_encoder_ticks}, tolerance {arrival_tolerance_ticks}"
+    )
+
+  async def move_to_ticks(
+    self,
+    target_encoder_ticks: int,
+    velocity_ticks_per_second: Optional[int] = None,
+    arrival_tolerance_ticks: Optional[int] = None,
+  ) -> int:
+    """Move to an encoder target and verify the settled position."""
+    return await self._move_to_ticks(
+      target_encoder_ticks,
+      velocity_ticks_per_second,
+      self.config.fine_position_error_window
+      if arrival_tolerance_ticks is None
+      else arrival_tolerance_ticks,
     )
 
 
@@ -994,9 +1008,10 @@ class FilterWheel(Axis):
     homing_velocity = self._rate_to_encoder_tick_rate(self.config.homing_velocity)
     try:
       for physical_position in range(1, self.config.number_of_filters + 1):
-        await self.move_to_ticks(
+        await self._move_to_ticks(
           target_encoder_ticks,
           velocity_ticks_per_second=homing_velocity,
+          arrival_tolerance_ticks=None,
         )
         if await self.request_limit_flags() & _LIMIT_OPTO_1:
           self._home_encoder_ticks = target_encoder_ticks

@@ -1,17 +1,21 @@
 import logging
 import math
+import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
+from urllib.parse import quote
 
 import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.http import HTTP
+from pylabrobot.io.http_serial import HTTPSerial
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.flex.checks import traversal_z
 from pylabrobot.opentrons.flex.errors import OpentronsError
 from pylabrobot.opentrons.flex.flex_gripper import FlexGripper
 from pylabrobot.opentrons.flex.flex_head import FlexHead1, FlexHead8, FlexHead96, _FlexHead
 from pylabrobot.opentrons.flex.flex_wire import (
+  MOVABLE_TRASH_SLOTS,
   ROBOT_AXES,
   _require_robot_commands,
 )
@@ -35,7 +39,7 @@ from pylabrobot.opentrons.types import (
   RunInfo,
 )
 from pylabrobot.resources import Container, Plate, Resource, TipRack
-from pylabrobot.resources.opentrons.flex_deck import FlexDeck
+from pylabrobot.resources.opentrons.flex_deck import SLOT_DEPTH, SLOT_WIDTH, FlexDeck
 from pylabrobot.resources.trash import Trash
 
 logger = logging.getLogger(__name__)
@@ -116,21 +120,31 @@ class Flex(HasLifespan):
   Liquid-handling ops live on the heads, not here — see
   :mod:`pylabrobot.opentrons.flex.flex_head`.
 
-  The lifespan owns its default HTTP transport and run. ``query_only=True``
-  scopes health and discovery without creating a run or moving the robot.
+  The lifespan owns its default HTTP or HTTPSerial transport and run.
+  ``query_only=True`` scopes health and discovery without creating a run or
+  moving the robot. Use ``host="robot.local"`` for Ethernet/Wi-Fi, or
+  ``serial_port="/dev/cu.usbmodem1201"`` (``"COM3"`` on Windows) for the USB-B
+  bridge. USB requires ``pylabrobot[serial]`` and exclusive access to the port;
+  close the Opentrons App first.
   """
 
   def __init__(
     self,
-    host: str,
+    host: Optional[str] = None,
     port: int = 31950,
     deck: Optional[FlexDeck] = None,
     io: Optional[HTTP] = None,
     command_timeout: float = 30.0,
     command_poll_interval: float = 0.05,
+    *,
+    serial_port: Optional[str] = None,
   ) -> None:
     super().__init__()
-    if "://" in host:
+    if (host is None) == (serial_port is None):
+      raise ValueError("Specify exactly one of host or serial_port")
+    if serial_port is not None and not serial_port:
+      raise ValueError("serial_port must not be empty")
+    if host is not None and (not host or "://" in host):
       raise ValueError("host must be a hostname or IP address without a URL scheme")
     if not 1 <= port <= 65535:
       raise ValueError("port must be between 1 and 65535")
@@ -140,22 +154,34 @@ class Flex(HasLifespan):
       raise ValueError("command_poll_interval must be finite and non-negative")
 
     self.host, self.port = host, port
-    self.base_url = f"http://{host}:{port}"
+    self.base_url = (
+      f"http://{host}:{port}"
+      if host is not None
+      else f"http+serial://{quote(serial_port or '', safe='')}"
+    )
     self.command_timeout = command_timeout
     self.command_poll_interval = command_poll_interval
     # Built here rather than on connect: a pylabrobot io refuses construction
     # once a capture is armed, so a robot built first can still be recorded.
     self._owns_io = io is None
-    self.io: HTTP = (
-      io
-      if io is not None
-      else HTTP(
+    self.serial_port = serial_port
+    self.io: HTTP
+    if io is not None:
+      self.io = io
+    elif serial_port is not None:
+      self.io = HTTPSerial(
+        human_readable_device_name="Opentrons Flex",
+        port=serial_port,
+        headers={"Opentrons-Version": HTTP_API_VERSION},
+        timeout=command_timeout,
+      )
+    else:
+      self.io = HTTP(
         human_readable_device_name="Opentrons Flex",
         base_url=self.base_url,
         headers={"Opentrons-Version": HTTP_API_VERSION},
         timeout=command_timeout,
       )
-    )
     self._api = OpentronsAPI(self.io)
     self._operation_lock = RobotOperationLock()
     self._connected = False
@@ -212,6 +238,30 @@ class Flex(HasLifespan):
     self.deck = deck
     self._stub_labware.clear()
 
+  async def _load_trash_configuration(self) -> None:
+    """Place the local trash resource at the first movable bin configured on the robot."""
+    fixtures = await self._api.get_deck_configuration()
+    fixture = next((f for f in fixtures if f.fixture_id == "trashBinAdapter"), None)
+    slot = fixture.cutout_id.removeprefix("cutout") if fixture is not None else None
+    if slot is not None and slot not in MOVABLE_TRASH_SLOTS:
+      raise OpentronsError(f"Invalid trash cutout reported by the robot: {fixture}")
+    try:
+      trash = self.deck.get_trash_area()
+    except ValueError:
+      trash = None
+    if slot is not None:
+      occupant = self.deck.get_resource_at_slot(slot)
+      if occupant is not None and occupant is not trash:
+        raise OpentronsError(
+          f"Robot trash slot {slot} is occupied by '{occupant.name}' in the deck"
+        )
+    if trash is not None:
+      self.deck.unassign_child_resource(trash)
+    if slot is not None:
+      if trash is None:
+        trash = Trash(name="trash", size_x=SLOT_WIDTH, size_y=SLOT_DEPTH, size_z=82.0)
+      self.deck.assign_child_at_slot(trash, slot)
+
   # --- Lifecycle ---
 
   async def _enter_lifespan(
@@ -248,18 +298,18 @@ class Flex(HasLifespan):
 
   @serialized
   async def connect(self) -> None:
-    """Confirm an active connection answers without moving the robot."""
+    """Confirm an active connection answers and load the robot's trash location. Moves nothing."""
     if not self._connected:
       raise RuntimeError("The Flex is not connected; enter its lifespan first")
     health = await self._api.get_health()
+    await self._load_trash_configuration()
     self.api_version = health.software_version
     self.robot_model = health.model
     self._connected = True
     logger.info(
-      "Connected to robot '%s' at %s:%s (API %s, model: %s)",
+      "Connected to robot '%s' at %s (API %s, model: %s)",
       health.name,
-      self.host,
-      self.port,
+      self.base_url,
       self.api_version,
       self.robot_model,
     )
@@ -310,7 +360,7 @@ class Flex(HasLifespan):
     pipettes = self._parse_pipettes(instruments_data)
 
     if not pipettes:
-      raise OpentronsError("No pipette detected", f"{self.host}:{self.port}")
+      raise OpentronsError("No pipette detected", self.base_url)
 
     if any(pip.channels == 96 for pip in pipettes) and len(pipettes) > 1:
       raise OpentronsError(
@@ -383,7 +433,7 @@ class Flex(HasLifespan):
 
   @serialized
   async def _park(self) -> None:
-    """Drop tracked tips and park before the independent run release."""
+    """Drop tracked or hardware-mounted tips and park before the independent run release."""
     if self._run is None or not self._ready:
       return
     # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
@@ -396,7 +446,10 @@ class Flex(HasLifespan):
     if trash is not None:
       for head in reversed(self._heads):
         try:
-          if any(tip is not None for tip in head.get_mounted_tips()):
+          if (
+            any(tip is not None for tip in head.get_mounted_tips())
+            or await head.has_tip_on_hardware()
+          ):
             await head.discard_tips(trash)
         except Exception:
           logger.warning(

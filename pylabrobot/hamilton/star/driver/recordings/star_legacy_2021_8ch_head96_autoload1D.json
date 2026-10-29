@@ -65,13 +65,7 @@
       "acceleration_level_range": [
         1,
         5
-      ],
-      "acceleration_level_default": 4,
-      "current_limit_range": [
-        0,
-        7
-      ],
-      "current_limit_default": 7
+      ]
     },
     "right_arm": null,
     "min_iswap_collision_free_position": 350.0,
@@ -279,8 +273,6 @@
         "y_drive_acceleration_firmware_reported": null,
         "z_drive_speed_firmware_reported": null,
         "z_drive_acceleration_firmware_reported": null,
-        "dispensing_drive_speed_firmware_reported": null,
-        "dispensing_drive_acceleration_firmware_reported": null,
         "squeezer_drive_speed_firmware_reported": null,
         "squeezer_drive_acceleration_firmware_reported": null,
         "stop_disc_type": "core_ii",

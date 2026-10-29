@@ -63,7 +63,7 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
     "software-double-runnable", False, (), ()
   ),
   "docs/cookbook/star_movement_plate_to_alpaqua_core.ipynb": NotebookPolicy(
-    "hardware-prohibited", True, ("lh", "vis"), ("vis", "lh")
+    "hardware-prohibited", True, ("star", "viewer"), ("viewer", "star")
   ),
   "docs/resources/carrier/plate-carrier/plate_carrier.ipynb": NotebookPolicy(
     "software-double-runnable", True, ("lh",), ("lh",)
@@ -88,6 +88,9 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
   ),
   "docs/user_guide/agilent/plateloc/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("plateloc",), ("plateloc",)
+  ),
+  "docs/user_guide/agilent/synergy_ht/hello-world.ipynb": NotebookPolicy(
+    "structural-only", True, ("reader",), ("reader",)
   ),
   "docs/user_guide/agilent/vspin/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("vspin",), ("vspin",)
@@ -237,6 +240,7 @@ EXPECTED_RUNTIME_CLASSIFICATIONS: dict[str, RuntimeClass] = {
   ),
   "docs/user_guide/agilent/benchcel/hello-world.ipynb": "structural-only",
   "docs/user_guide/agilent/plateloc/hello-world.ipynb": "structural-only",
+  "docs/user_guide/agilent/synergy_ht/hello-world.ipynb": "structural-only",
   "docs/user_guide/agilent/vspin/hello-world.ipynb": "structural-only",
   "docs/user_guide/azenta/fluidx/intellixcap96/hello-world.ipynb": "structural-only",
   "docs/user_guide/big_bear/orbital-shaker/hello-world.ipynb": "structural-only",
@@ -319,6 +323,7 @@ TASK2_LIFECYCLE_CELL_IDS: dict[str, tuple[str, ...]] = {
     "benchcel-disconnect-code",
   ),
   "docs/user_guide/agilent/plateloc/hello-world.ipynb": ("plateloc-setup", "plateloc-stop"),
+  "docs/user_guide/agilent/synergy_ht/hello-world.ipynb": ("8b6489d1", "e9cd0896"),
   "docs/user_guide/agilent/vspin/hello-world.ipynb": (
     "vspin-connect-code",
     "vspin-disconnect-code",
@@ -507,7 +512,7 @@ _SELECTED_PROTOCOL_FUNCTIONS = {
 
 DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
   "docs/cookbook/star_movement_plate_to_alpaqua_core.ipynb": (
-    ("star-alpaqua-interactive-setup", ("lh", "vis")),
+    ("star-alpaqua-interactive-setup", ("star", "viewer")),
   ),
   "docs/resources/carrier/plate-carrier/plate_carrier.ipynb": (
     ("plate-carrier-interactive-setup", ("lh",)),
@@ -525,6 +530,7 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
   ),
   "docs/user_guide/agilent/benchcel/hello-world.ipynb": (("benchcel-connect-code", ("benchcel",)),),
   "docs/user_guide/agilent/plateloc/hello-world.ipynb": (("plateloc-setup", ("plateloc",)),),
+  "docs/user_guide/agilent/synergy_ht/hello-world.ipynb": (("8b6489d1", ("reader",)),),
   "docs/user_guide/agilent/vspin/hello-world.ipynb": (("vspin-connect-code", ("vspin",)),),
   "docs/user_guide/azenta/fluidx/intellixcap96/hello-world.ipynb": (("729f73e2", ("decapper",)),),
   "docs/user_guide/big_bear/orbital-shaker/hello-world.ipynb": (
@@ -881,8 +887,8 @@ def _definition_names(tree: ast.AST) -> set[str]:
   return names
 
 
-def test_lifecycle_notebook_inventory_has_54_explicit_paths() -> None:
-  assert len(LIFECYCLE_NOTEBOOKS) == 54
+def test_lifecycle_notebook_inventory_has_55_explicit_paths() -> None:
+  assert len(LIFECYCLE_NOTEBOOKS) == 55
   tracked = set(_tracked_notebooks())
   assert all(path.endswith(".ipynb") for path in LIFECYCLE_NOTEBOOKS)
   assert set(LIFECYCLE_NOTEBOOKS) <= tracked
@@ -1183,7 +1189,7 @@ def test_notebooks_pin_expected_backend_source_and_constructor(
 
 
 def test_runtime_classifications_match_closed_inventory() -> None:
-  assert len(EXPECTED_RUNTIME_CLASSIFICATIONS) == 54
+  assert len(EXPECTED_RUNTIME_CLASSIFICATIONS) == 55
   assert {
     path: policy.runtime for path, policy in LIFECYCLE_NOTEBOOKS.items()
   } == EXPECTED_RUNTIME_CLASSIFICATIONS

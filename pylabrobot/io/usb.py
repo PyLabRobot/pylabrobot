@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Union
 
 import anyio
 
-from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import emit_event
 from pylabrobot.io.boundary import BoundaryCursor, BoundaryDiscard, BoundaryRead
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
@@ -329,7 +329,7 @@ class USB(ReconnectableConnectionIO):
           def dispatch() -> int:
             if on_dispatch is not None:
               on_dispatch()
-            return dev.write(write_endpoint, data, timeout=int(timeout * 1000))
+            return int(dev.write(write_endpoint, data, timeout=int(timeout * 1000)))
 
           written = await anyio.to_thread.run_sync(
             dispatch,
@@ -377,10 +377,10 @@ class USB(ReconnectableConnectionIO):
     *,
     during_setup: bool = False,
   ) -> Optional[bytearray]:
-    """Read a packet from the machine.
+    """Read one USB transfer, which can contain multiple endpoint packets.
 
     Args:
-      size: The maximum number of bytes to read. If `None`, read up to wMaxPacketSize bytes.
+      size: The maximum number of bytes to read. If `None`, use the default transfer size.
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `packet_read_timeout` attribute).
       endpoint: The endpoint address to read from. If `None`, use the default read endpoint.
@@ -604,7 +604,7 @@ class USB(ReconnectableConnectionIO):
     self,
     endpoint: Optional[int] = None,
     timeout: float = 0.05,
-    size: int = 512,
+    size: Optional[int] = None,
     max_duration: float = 1,
   ) -> None:
     """Discard queued input from an endpoint until no packet arrives before the timeout."""
@@ -949,6 +949,7 @@ class USBValidator(USB):
     self, stack: AsyncExitStackWithShielding, *, empty_buffer: bool = True
   ) -> None:
     """Enter a validator lifespan without opening a USB device."""
+    await HasLifespan._enter_lifespan(self, stack)
     self._unread.clear()
     self._cursors.clear()
     self.legacy_inferred_marks.clear()
@@ -1206,7 +1207,7 @@ class USBValidator(USB):
     self,
     endpoint: Optional[int] = None,
     timeout: float = 0.05,
-    size: int = 512,
+    size: Optional[int] = None,
     max_duration: float = 1,
   ) -> None:
     """Validation discards uncaptured packets without touching a device."""

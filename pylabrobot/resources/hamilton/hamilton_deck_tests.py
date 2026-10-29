@@ -1,3 +1,4 @@
+import logging
 import textwrap
 import unittest
 from typing import cast
@@ -15,14 +16,84 @@ from pylabrobot.resources.hamilton import (
   STARLetDeck,
   STARPlusDeck,
   hamilton_96_tiprack_300uL_filter,
+  hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
+  hamilton_core_gripper_tool,
 )
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
 )
 
 
 class HamiltonDeckTests(unittest.TestCase):
+  def test_the_safe_deck_height_follows_the_longest_tip_when_asked(self):
+    deck = STARDeck()
+    self.assertEqual(deck.safe_deck_height, 245.0)
+    carrier = TIP_CAR_480_A00(name="tip_carrier")
+    carrier[0] = hamilton_96_tiprack_1000uL(name="rack")
+    deck.assign_child_resource(carrier, track=20)
+    # The 1000 uL rack decides: 334.7 - 87.1 - 5.
+    self.assertEqual(deck._update_safe_deck_height_from_tips(334.7), 242.6)
+    self.assertEqual(deck.safe_deck_height, 242.6)
+
+  def test_what_hangs_from_a_carried_tool_is_not_checked(self):
+    deck = STARDeck()
+    arm = Resource(name="arm", size_x=10, size_y=10, size_z=10, category="x_arm")
+    deck.assign_child_resource(arm, location=Coordinate(0, 0, 300))
+    tool = hamilton_core_gripper_tool("tool")
+    arm.assign_child_resource(tool, location=Coordinate.zero())
+    logger_name = "pylabrobot.resources.hamilton.hamilton_decks"
+    # assertNoLogs needs Python 3.10; a sentinel gives assertLogs something, and nothing else may.
+    with self.assertLogs(logger_name, level="WARNING") as captured:
+      logging.getLogger(logger_name).warning("sentinel")
+      tool.assign_child_resource(
+        Resource(name="plate", size_x=5, size_y=5, size_z=5), location=None
+      )
+    self.assertEqual(captured.output, [f"WARNING:{logger_name}:sentinel"])
+    with self.assertLogs(logger_name, level="WARNING"):
+      deck.assign_child_resource(
+        Resource(name="tower", size_x=5, size_y=5, size_z=5), location=Coordinate(500, 100, 300)
+      )
+
+  def test_a_turned_deck_places_carriers_as_an_upright_one_does(self):
+    """Fit and overlap are checked along the deck's axes, whichever way the deck stands."""
+    for angle in (0, 90, 37.5):
+      with self.subTest(angle=angle):
+        room = Resource("room", size_x=9000, size_y=9000, size_z=3000)
+        room.location = Coordinate.zero()
+        body = Resource("body", size_x=1200, size_y=800, size_z=900, rotation=Rotation(z=angle))
+        room.assign_child_resource(body, location=Coordinate(4000, 4000, 0))
+        deck = STARLetDeck()
+        body.assign_child_resource(deck, location=Coordinate(50, 50, 0))
+        tips = TIP_CAR_480_A00(name="tip_carrier")
+        deck.assign_child_resource(tips, track=1)
+        deck.assign_child_resource(PLT_CAR_L5AC_A00(name="plate_carrier"), track=7)
+        self.assertEqual(deck.compute_right_track_of_carrier(tips), 6)
+        with self.assertRaisesRegex(ValueError, "occupied"):
+          deck.assign_child_resource(PLT_CAR_L5AC_A00(name="clash"), track=2)
+
+  def test_with_teaching_rack_is_deprecated(self):
+    """`with_teaching_rack` still decides the rack, and says it is deprecated."""
+    for deck_factory in (STARDeck, STARLetDeck, STARPlusDeck):
+      with self.subTest(deck=deck_factory.__name__):
+        self.assertTrue(deck_factory().has_resource("teaching_tip_rack"))
+        self.assertFalse(
+          deck_factory(with_teaching_needle_rack=False).has_resource("teaching_tip_rack")
+        )
+        with self.assertWarns(DeprecationWarning):
+          deck = deck_factory(with_teaching_rack=False)
+        self.assertFalse(deck.has_resource("teaching_tip_rack"))
+
+  def test_a_deck_saved_with_the_old_teaching_rack_key_reads_back(self):
+    saved = STARLetDeck().serialize()
+    self.assertEqual(saved["with_teaching_needle_rack"], False)
+    saved["with_teaching_rack"] = saved.pop("with_teaching_needle_rack")
+    with self.assertWarns(DeprecationWarning):
+      deck = Deck.deserialize(saved)
+    racks = [r for r in deck.get_all_children() if r.name == "teaching_tip_rack"]
+    self.assertEqual([r.model for r in racks], ["hamilton_teaching_needle_rack"])
+
   def test_rails_is_deprecated(self):
     """`rails` still places a resource, and says it is deprecated."""
     deck = STARLetDeck()
@@ -130,31 +201,29 @@ class HamiltonDeckTests(unittest.TestCase):
       deck.summary(),
       textwrap.dedent(
         """
-    Rail  Resource                           Type                    Coordinates (mm)
-    ===============================================================================================
-    (-6)  ├── trash_core96                   Trash                   (-58.200, 106.000, 216.400)
+    Rail  Resource                      Type                  Coordinates (mm)
+    ========================================================================================
+    (-6)  ├── trash_core96              Trash                 (-58.200, 106.000, 216.400)
           │
-    (1)   ├── tip_carrier                    TipCarrier              (100.000, 063.000, 100.000)
-          │   ├── tip_rack_01                EmbeddedTipRack         (106.200, 073.000, 208.950)
-          │   ├── tip_rack_02                EmbeddedTipRack         (106.200, 169.000, 208.950)
+    (1)   ├── tip_carrier               TipCarrier            (100.000, 063.000, 100.000)
+          │   ├── tip_rack_01           EmbeddedTipRack       (106.200, 073.000, 208.950)
+          │   ├── tip_rack_02           EmbeddedTipRack       (106.200, 169.000, 208.950)
           │   ├── <empty>
-          │   ├── tip_rack_04                EmbeddedTipRack         (106.200, 361.000, 208.950)
-          │   ├── <empty>
-          │
-    (21)  ├── plate carrier                  PlateCarrier            (550.000, 063.000, 100.000)
-          │   ├── aspiration plate           Plate                   (554.000, 071.500, 183.120)
-          │   ├── <empty>
-          │   ├── dispense plate             Plate                   (554.000, 263.500, 183.120)
-          │   ├── <empty>
+          │   ├── tip_rack_04           EmbeddedTipRack       (106.200, 361.000, 208.950)
           │   ├── <empty>
           │
-    (31)  ├── waste_block                    Resource                (775.000, 115.000, 100.000)
-          │   ├── teaching_tip_rack          TipRack                 (780.900, 461.100, 100.000)
-          │   ├── core_grippers              HamiltonCoreGrippers    (797.500, 085.500, 200.500)
-          │   │   ├── core_grippers_front    HamiltonCoreGripperTool (779.500, 102.750, 203.000)
-          │   │   ├── core_grippers_back     HamiltonCoreGripperTool (779.500, 120.750, 203.000)
+    (21)  ├── plate carrier             PlateCarrier          (550.000, 063.000, 100.000)
+          │   ├── aspiration plate      Plate                 (554.000, 071.500, 183.120)
+          │   ├── <empty>
+          │   ├── dispense plate        Plate                 (554.000, 263.500, 183.120)
+          │   ├── <empty>
+          │   ├── <empty>
           │
-    (32)  ├── trash                          Trash                   (800.000, 190.600, 137.100)
+    (31)  ├── waste_block               Resource              (775.000, 115.000, 100.000)
+          │   ├── teaching_tip_rack     TipRack               (781.750, 461.500, 100.000)
+          │   ├── core_grippers         HamiltonCoreGrippers  (778.000, 085.500, 200.500)
+          │
+    (32)  ├── trash                     Trash                 (800.000, 190.600, 137.100)
     """[1:]
       ),
     )
@@ -221,20 +290,62 @@ class HamiltonDeckTests(unittest.TestCase):
     )
 
   def test_core_gripper_holder_on_the_waste_block_as_probed(self):
-    # Probed on a STAR: the holder's top is at 220.0 and it is 19.5 mm tall, so it stands at 200.5.
-    # Its centre is the x the channels take the tools at.
+    # Probed on a STAR: holder top 220.0, 19.5 mm tall, tool (collar) tops 235.0. Its centre is the
+    # x the channels take the tools at; they take the collars at y 107.0 and 125.0.
     for deck, x in ((STARDeck(), 1337.5), (STARLetDeck(), 797.5)):
       with self.subTest(deck=type(deck).__name__):
         holder = deck.get_resource("core_grippers")
-        self.assertAlmostEqual(holder.get_location_wrt(deck).x, x)
+        assert isinstance(holder, HamiltonCoreGrippers)
+        self.assertAlmostEqual(holder.get_location_wrt(deck, x="c").x, x)
         self.assertAlmostEqual(holder.get_location_wrt(deck).z, 200.5)
         self.assertAlmostEqual(holder.get_location_wrt(deck, z="t").z, 220.0)
+        front, back = holder.front_tool, holder.back_tool
+        for tool in (front, back):
+          self.assertAlmostEqual(tool.get_location_wrt(deck, z="t").z, 235.0)
+        # the collar is 4.25 mm from the side of the tool its pins face
+        self.assertAlmostEqual(front.get_location_wrt(deck).y, 107.0 - 4.25)
+        # the back tool is turned 180 degrees, so its own front faces the back of the deck
+        self.assertAlmostEqual(back.get_location_wrt(deck, y="f").y, 125.0 + 4.25)
 
-  def test_core_gripper_tools_belong_to_the_mount_and_round_trip(self):
-    """The deck owns the two parked tools and preserves them through serialization."""
+  def test_two_decks_stand_in_one_tree(self):
+    """A deck names what it owns after itself, so two of them stand in one tree."""
+    lab = Resource(name="lab", size_x=4000, size_y=2000, size_z=1000)
+    first = STARLetDeck(name="left_deck")
+    second = STARLetDeck(name="right_deck")
+    lab.assign_child_resource(first, location=Coordinate.zero())
+    lab.assign_child_resource(second, location=Coordinate(2000, 0, 0))
+
+    names = [r.name for r in lab.get_all_children()]
+    self.assertEqual(len(names), len(set(names)))
+    for deck in (first, second):
+      for name in ("waste_block", "trash", "trash_core96", "teaching_tip_rack", "core_grippers"):
+        self.assertTrue(deck.has_resource(f"{deck.name}_{name}"), name)
+
+  def test_core_gripper_tools_stand_where_the_channels_take_them(self):
+    """Both holders are centred on the x the channels take the tools at, and so are their tools."""
+    pickup_x = {
+      ("STARDeck", "1000uL-at-waste"): 1338.0,
+      ("STARDeck", "1000uL-5mL-on-waste"): 1337.5,
+      ("STARLetDeck", "1000uL-at-waste"): 798.0,
+      ("STARLetDeck", "1000uL-5mL-on-waste"): 797.5,
+    }
+    for factory in (STARDeck, STARLetDeck):
+      for grippers in ("1000uL-at-waste", "1000uL-5mL-on-waste"):
+        x = pickup_x[(factory.__name__, grippers)]
+        with self.subTest(deck=factory.__name__, grippers=grippers):
+          deck = factory(core_grippers=grippers)
+          holder = deck.get_resource("core_grippers")
+          assert isinstance(holder, HamiltonCoreGrippers)
+          self.assertAlmostEqual(holder.get_location_wrt(deck, x="c").x, x)
+          for tool in (holder.front_tool, holder.back_tool):
+            self.assertAlmostEqual(tool.get_location_wrt(deck, x="c").x, x)
+
+  def test_core_gripper_tools_belong_to_the_mount_and_are_not_structure(self):
+    """The deck owns the two parked tools; a serialized deck leaves them out, as it leaves out the
+    tips in its racks, since what a holder holds is state a driver reads off the device."""
     for deck_factory in (STARDeck, STARLetDeck):
       with self.subTest(deck=deck_factory.__name__):
-        deck = deck_factory(with_teaching_rack=False)
+        deck = deck_factory(with_teaching_needle_rack=False)
         mount = deck.get_resource("core_grippers")
         self.assertIsInstance(mount, HamiltonCoreGrippers)
         assert isinstance(mount, HamiltonCoreGrippers)
@@ -249,9 +360,8 @@ class HamiltonDeckTests(unittest.TestCase):
         self.assertEqual(restored.serialize(), deck.serialize())
         restored_mount = restored.get_resource("core_grippers")
         assert isinstance(restored_mount, HamiltonCoreGrippers)
-        self.assertEqual(len(restored_mount.children), 2)
-        self.assertEqual(restored_mount.front_tool, mount.front_tool)
-        self.assertEqual(restored_mount.back_tool, mount.back_tool)
+        self.assertEqual(restored_mount._comparable_children(), [])
+        self.assertEqual(len(restored_mount.children), 0)
 
   def test_named_decks_preserve_accessories_when_saved_and_cleared(self):
     """Named deck accessories remain discoverable after serialization and deck clearing."""
@@ -270,9 +380,11 @@ class HamiltonDeckTests(unittest.TestCase):
           self.assertEqual(mount.back_tool.name, "custom_deck_core_grippers_back")
           restored = Resource.deserialize(deck.serialize())
           restored.load_all_state(deck.serialize_all_state())
+          # The tools parked in the mount are state, so the restored deck has everything but them.
+          parked = {mount.front_tool.name, mount.back_tool.name}
           self.assertEqual(
             sorted(child.name for child in restored.get_all_children()),
-            sorted(child.name for child in deck.get_all_children()),
+            sorted(child.name for child in deck.get_all_children() if child.name not in parked),
           )
           self.assertEqual(restored.get_resource(mount.name).serialize(), mount.serialize())
           plate = cor_96_wellplate_360uL_Fb("user_plate")

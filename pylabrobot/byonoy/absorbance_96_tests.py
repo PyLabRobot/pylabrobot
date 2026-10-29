@@ -1,6 +1,8 @@
+import logging
 import struct
 import unittest
 from typing import Sequence, cast
+from unittest.mock import AsyncMock, call, patch
 
 import anyio
 import pytest
@@ -12,7 +14,8 @@ from pylabrobot.byonoy import (
 )
 from pylabrobot.byonoy.absorbance_96 import ByonoyAbsorbance96, ByonoyAbsorbanceBaseUnit
 from pylabrobot.byonoy.driver_tests import FakeHID, ReadEffect, report_ids, status_report
-from pylabrobot.concurrency import HasLifespan
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.io.binary import Writer
 from pylabrobot.io.hid import HID
 from pylabrobot.resources import Coordinate, Lid, Plate, Well, cellvis_96_wellplate_350uL_Fb
 from pylabrobot.testing.concurrency import AnyioTestBase
@@ -92,7 +95,10 @@ class TestByonoyAbsorbanceProtocol(AnyioTestBase):
     assert report_ids(fake.writes) == [0x0010, 0x0200, 0x0320, 0x0300]
     assert all(timeout is None for _, timeout in fake.reads)
 
-  async def test_nonzero_chunk_flags_are_warned(self, caplog: pytest.LogCaptureFixture) -> None:
+  async def test_nonzero_chunk_flags_are_warned(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     rows = [[0.0] * 12 for _ in range(8)]
     reader, _ = make_reader(complete_absorbance(rows, flags=0x12) + [status_report()])
     reader.available_wavelengths = [450]
@@ -285,6 +291,131 @@ class TestByonoyAbsorbanceProtocol(AnyioTestBase):
 
     assert report_ids(fake.writes)[-1] == 0x0060
     assert fake.events.index("write.0060") < fake.events.index("hid.exit")
+
+
+class TestCalibrationErrorOverride(AnyioTestBase):
+  @staticmethod
+  def _field_response(value: int, field: int = 0x800E, flags: int = 0xC1) -> bytes:
+    """Build the firmware's integer data-field reply."""
+    return Writer().u16(0x0200).u16(field).u8(flags).u32(value).finish().ljust(64, b"\x00")
+
+  @staticmethod
+  def _ack(code: int = 0, report: int = 0x0210) -> bytes:
+    """Build a write acknowledgement."""
+    return Writer().u16(0x0020).u16(report).u16(code).finish().ljust(62, b"\x00") + b"\x00\x40"
+
+  async def test_enable_and_disable_write_integer_and_verify_readback(self) -> None:
+    for enabled in (True, False):
+      reader, io = make_reader(
+        [
+          self._ack(),
+          self._field_response(int(enabled)),
+          self._field_response(int(enabled)),
+        ]
+      )
+      await reader.set_ignore_errors_in_calibration(enabled)
+      write_packet = io.writes[0]
+      expected = b"\x10\x02\x0e\x80\x00" + int(enabled).to_bytes(4, "little")
+      assert write_packet == expected.ljust(62, b"\x00") + b"\x00\x40"
+      assert len(io.writes) == 2
+      assert await reader.request_ignore_errors_in_calibration() == enabled
+
+  async def test_rejected_write_raises_without_claiming_success(self) -> None:
+    reader, io = make_reader([self._ack(report=0x0040), self._ack(code=1)])
+    with pytest.raises(RuntimeError, match="0x0001"):
+      await reader.set_ignore_errors_in_calibration(True)
+    assert len(io.writes) == 1
+
+  async def test_readback_must_match_requested_value(self) -> None:
+    reader, _ = make_reader([self._ack(), self._field_response(0)])
+    with pytest.raises(RuntimeError, match="readback"):
+      await reader.set_ignore_errors_in_calibration(True)
+
+  async def test_getter_rejects_wrong_field_type_or_value(self) -> None:
+    for response in (
+      self._field_response(0, field=0x800D),
+      self._field_response(0, flags=0xC3),
+      self._field_response(2),
+    ):
+      reader, _ = make_reader([response])
+      with pytest.raises(RuntimeError):
+        await reader.request_ignore_errors_in_calibration()
+
+  async def test_cannot_change_override_during_measurement(self) -> None:
+    reader, io = make_reader()
+    reader._in_flight_trigger = 0x0320
+    with pytest.raises(RuntimeError, match="measurement"):
+      await reader.set_ignore_errors_in_calibration(True)
+    assert io.writes == []
+
+
+class TestSetupCalibrationErrorOverride(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self.reader, self.io = make_reader()
+    patchers = [
+      patch.object(self.reader, "initialize_measurements", new_callable=AsyncMock),
+      patch.object(self.reader, "request_ignore_errors_in_calibration", new_callable=AsyncMock),
+      patch.object(self.reader, "set_ignore_errors_in_calibration", new_callable=AsyncMock),
+      patch.object(self.reader, "request_available_absorbance_wavelengths", new_callable=AsyncMock),
+    ]
+    self.initialize, self.get_override, self.set_override, self.wavelengths = [
+      stack.enter_context(patcher) for patcher in patchers
+    ]
+    self.get_override.return_value = False
+    self.wavelengths.return_value = [600, 450]
+
+  async def test_default_setup_does_not_access_override(self) -> None:
+    async with self.reader:
+      assert "hid.enter" in self.io.events
+      self.initialize.assert_awaited_once()
+      self.get_override.assert_not_awaited()
+      self.set_override.assert_not_awaited()
+      assert self.reader.available_wavelengths == [600, 450]
+
+  async def test_override_is_enabled_during_calibration_and_original_value_restored(self) -> None:
+    async def initialize() -> None:
+      self.set_override.assert_awaited_once_with(True)
+
+    self.initialize.side_effect = initialize
+    for original in (False, True):
+      self.get_override.return_value = original
+      self.set_override.reset_mock()
+      async with self.reader.lifespan(ignore_errors_in_calibration=True):
+        assert self.set_override.await_args_list == [call(True), call(original)]
+        assert self.reader.available_wavelengths == [600, 450]
+
+  async def test_override_is_restored_if_calibration_fails_or_is_cancelled(self) -> None:
+    self.initialize.side_effect = RuntimeError("calibration failed")
+    self.set_override.reset_mock()
+    with pytest.raises(RuntimeError, match="calibration failed"):
+      async with self.reader.lifespan(ignore_errors_in_calibration=True):
+        pass
+    assert self.set_override.await_args_list == [call(True), call(False)]
+    self.wavelengths.assert_not_awaited()
+
+    scope = anyio.CancelScope()
+
+    async def cancel_init() -> None:
+      scope.cancel()
+      await anyio.lowlevel.checkpoint()
+
+    self.initialize.side_effect = cancel_init
+    self.set_override.reset_mock()
+    with scope:
+      async with self.reader.lifespan(ignore_errors_in_calibration=True):
+        pass
+    assert scope.cancelled_caught
+    assert self.set_override.await_args_list == [call(True), call(False)]
+    self.wavelengths.assert_not_awaited()
+
+  async def test_override_is_restored_if_enabling_it_fails_verification(self) -> None:
+    self.set_override.side_effect = [RuntimeError("readback mismatch"), None]
+    with pytest.raises(RuntimeError, match="readback mismatch"):
+      async with self.reader.lifespan(ignore_errors_in_calibration=True):
+        pass
+    assert self.set_override.await_args_list == [call(True), call(False)]
+    self.initialize.assert_not_awaited()
 
 
 def _plate(size_z: float) -> Plate:

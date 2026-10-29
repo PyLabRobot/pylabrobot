@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import json
+import logging
 import pathlib
 import tempfile
 import unittest
@@ -24,7 +25,7 @@ from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.io.io import IOBase
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.hamilton import STARDeck, STARLetDeck
 from pylabrobot.serializer import serialize
 from pylabrobot.testing.concurrency import AnyioTestBase
 
@@ -95,6 +96,7 @@ class TestSimulationLifespan(AnyioTestBase):
       attempted.append("wheel")
       raise RuntimeError("wheel stuck")
 
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     async with driver:
       assert driver.left_x_arm is not None and driver.left_x_arm.pipettes is not None
       assert driver.autoload is not None
@@ -418,6 +420,31 @@ class TestDeclaredConfiguration(unittest.IsolatedAsyncioTestCase):
       await star.setup()
 
 
+class TestDeckSize(unittest.IsolatedAsyncioTestCase):
+  """Discovery refuses a deck built for another frame before anything moves."""
+
+  async def test_a_starlet_deck_on_a_star_is_refused_before_initialization(self):
+    star = STARSimulationDriver(deck=STARLetDeck(), declared_configuration_json=RECORDING_STAR)
+    sent: List[str] = []
+    sent_before_stop: List[List[str]] = []
+    send, finish = star.send_command, star._finish_session
+
+    async def sending(module: str, command: str, *args, **kwargs):
+      sent.append(module + command)
+      return await send(module, command, *args, **kwargs)
+
+    # The simulator builds its features up front, so the failure path's teardown has them to raise.
+    async def finishing():
+      sent_before_stop.append(list(sent))
+      await finish()
+
+    with unittest.mock.patch.object(star, "send_command", sending):
+      with unittest.mock.patch.object(star, "_finish_session", finishing):
+        with self.assertRaisesRegex(ValueError, "54 slots, the deck is built for 30"):
+          await star.setup()
+    self.assertEqual(sent_before_stop, [["C0RM", "C0QM", "C0RU", "C0UA"]])
+
+
 class TestRepeatedSetup(unittest.IsolatedAsyncioTestCase):
   """Discovery can re-read a device within one open session."""
 
@@ -486,7 +513,13 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
     )
     with recorded_moves() as moves:
       await star.setup()
-    return list(moves)
+    # The autoload is its own unit and comes up alongside the arm's features, so where its two
+    # steps fall among theirs is the event loop's business; that it homes after the device is not.
+    autoload = [move for move in moves if "autoload" in move]
+    self.assertEqual(autoload, ["II autoload", "autoload park"])
+    if "VI device" in moves:
+      self.assertGreater(moves.index("II autoload"), moves.index("VI device"))
+    return [move for move in moves if "autoload" not in move]
 
   async def test_everything_already_up(self):
     self.assertEqual(
@@ -497,8 +530,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "ZA channels to safe Z",
         "iSWAP park",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -512,8 +543,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "iSWAP park",
         "EI 96-head",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -529,8 +558,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "ZA channels to safe Z",
         "iSWAP park",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 
@@ -542,6 +569,18 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         device_up=True, head_up=head_up, eject_position=eject_position, trash96=trash96
       )
     return [call.args[0] % call.args[1:] for call in warning.call_args_list]
+
+  async def test_channels_left_as_they_are_still_have_their_pistons_read(self):
+    """A device already up with nothing mounted skips the channels' initialization."""
+    star = simulator.STARSimulationDriver(
+      deck=STARDeck(), initialized=True, declared_configuration_json=RECORDING_STAR
+    )
+    with recorded_moves() as moves:
+      await star.setup()
+    self.assertNotIn("DI channels", moves)
+    pipettes = star.pipettes
+    assert pipettes is not None
+    self.assertEqual(pipettes.piston_positions, [0.0] * pipettes.num_channels)
 
   async def test_a_head_told_nowhere_to_eject_ejects_at_the_decks_trash(self):
     """A STAR deck carries a trash for the 96-head, and a head with no eject location of its own is
@@ -591,8 +630,6 @@ class TestSetupSequence(unittest.IsolatedAsyncioTestCase):
         "iSWAP park",
         "EI 96-head",
         "EV 96-head probe and retract",
-        "II autoload",
-        "autoload park",
       ],
     )
 

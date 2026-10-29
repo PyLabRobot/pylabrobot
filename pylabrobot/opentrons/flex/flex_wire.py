@@ -74,3 +74,7 @@ def _require_robot_commands(command: str, api_version: Optional[str]) -> None:
       f"{command} requires Opentrons robot software {_ROBOT_COMMANDS_MIN_VERSION} or newer, "
       f"but this robot reports {api_version}.",
     )
+
+
+# Cutouts that support the movable trash-bin fixture.
+MOVABLE_TRASH_SLOTS = frozenset({"A1", "B1", "C1", "D1", "A3", "B3", "C3", "D3"})

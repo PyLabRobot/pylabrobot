@@ -19,10 +19,14 @@ a command that has not been simulated makes itself known.
 import dataclasses
 import json
 import logging
+import math
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
+import anyio
+
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
 from pylabrobot.hamilton.transport.tcp.introspection import (
@@ -46,14 +50,26 @@ from pylabrobot.hamilton.transport.tcp.wire_types import U32, PaddedBool, Str, S
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.tip import Tip
 
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration
 from .errors import PREP_ERROR_CODES
-from .features.pipettes import Pipettes, PipettesConfiguration
+from .features.core_grippers import JAW_OPEN_EXTRA
+from .features.head8 import Head8
+from .features.heater_shaker import PrepHamiltonHeaterShaker
+from .features.lights import Lights
+from .features.pipettes import HEAD8_CLEARANCE_Y, Pipettes, PipettesConfiguration
 from .features.x_arm import XArm
 from .master import PrepDriver, _ResolvedPrepCommand
-from .prep_commands import MPH_OBJECT_PATH, PrepCommand
+from .prep_commands import (
+  HEATER_OBJECT_PATH,
+  HEATER_SHAKER_CPU_OBJECT_PATH,
+  HEATER_SHAKER_ROOT_PATH,
+  MPH_OBJECT_PATH,
+  SHAKER_OBJECT_PATH,
+  PrepCommand,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,39 +80,61 @@ SIMULATED_LINK = "[simulation]"
 
 _RECORDINGS = os.path.join(os.path.dirname(__file__), "recordings")
 
-# PRPAA1087 as it saved itself, on MLPrep Runtime V1.2.2. What a simulated Prep is unless told otherwise.
+# The recorded device as it saved itself (MLPrep Runtime V1.2.2): two channels, nothing else.
 RECORDING_PREP = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2.json")
-# The same, declared with an 8-channel head. No device with one has been recorded.
+# The same, declared with an 8-channel head: a simulated Prep unless told otherwise.
 RECORDING_PREP_HEAD8 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_head8.json")
+# A device with two channels, an 8-channel head, an enclosure and a heater shaker (V3.0.20).
+RECORDING_PREP_HEATER_SHAKER = os.path.join(_RECORDINGS, "prep_PRPBC1317_v3_0_20.json")
 
-# The firmware trees read off two devices. V1.2.2 is what a simulated Prep runs unless told otherwise.
+# The firmware trees read off three devices.
 FIRMWARE_TREE_V1_2_2 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_firmware_tree.json")
 FIRMWARE_TREE_V3_0_20 = os.path.join(_RECORDINGS, "prep_PRPBD1394_v3_0_20_firmware_tree.json")
+# V3.0.20 read off the device with a heater shaker, whose tree also holds its 8-channel head.
+FIRMWARE_TREE_V3_0_20_HEATER_SHAKER = os.path.join(
+  _RECORDINGS, "prep_PRPBC1317_v3_0_20_firmware_tree.json"
+)
 
-# Where PRPAA1087's channels reported themselves after it initialized on 2026-09-13, as (x, y, z) in
-# mm, by channel. What a simulated device answers until the resource model holds the channels.
+# Where the recorded device's channels reported themselves after initializing, as (x, y, z) in mm,
+# by channel: what a simulated device answers until the resource model holds the channels.
 SIMULATED_INITIALIZED_POSITIONS = {
   0: (289.489, 365.0148, 167.499),
   1: (289.489, 345.0123, 167.4954),
 }
 
-# The X axis profile PRPAA1087 read at an X speed scale of 100 percent, in mm/s and mm/s2. A simulated
-# axis keeps no profile, so setting one changes nothing it answers.
-# Each channel's Y drive frame reads deck Y plus this, rear first, as measured on PRPAA1087 (V1.2.2).
+# Where a device with the 8-channel head reported the head's probe 0 after initializing: X this far
+# past the channels', and (y, z) in mm.
+SIMULATED_HEAD8_X_PAST_CHANNELS = 2.70
+SIMULATED_INITIALIZED_HEAD8_YZ = (452.99, 167.5)
+
+# Each channel's Y drive frame reads deck Y plus this, rear first, as measured on the device.
 SIMULATED_Y_DRIVE_OFFSETS = (112.36, 102.451)
-# Each channel's Z drive frame above the reported Z (rear, front), as PRPAA1087's read-only sweep read them.
+# Each channel's Z drive frame above the reported Z (rear, front), as the device's sweep read.
 SIMULATED_Z_DRIVE_OFFSETS = (171.784, 171.091)
-# What PRPAA1087's Z drives read for the PWM that limits how hard they push.
+# What the device's Z drives read for the PWM that limits how hard they push.
 SIMULATED_Z_DRIVE_PWM = 125
 # What a simulated channel touches with in a cLLD search, in mm: the probes' default
 # `stop_disc_diameter`, as simulated channels hold no tips.
 SIMULATED_CLLD_PROBE_DIAMETER = 7.0
-# The reported X less the X axis's own position, in mm, as on PRPAA1087 (V1.2.2).
+# The reported X less the X axis's own position, in mm, as on the device (V1.2.2).
 SIMULATED_X_AXIS_OFFSET = 0.193
-SIMULATED_X_VELOCITY = 400.0
-SIMULATED_X_ACCELERATION = 2250.0
+# Each axis's speed in mm/s and acceleration in mm/s2, as timed on the device (X at a speed scale
+# of 100 percent). A simulated axis keeps no profile: setting one changes nothing it answers.
+SIMULATED_X_SPEED, SIMULATED_X_ACCELERATION = 400.0, 2250.0
+SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION = 345.0, 950.0
+SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION = 142.0, 800.0
+_PROFILES = (
+  (SIMULATED_X_SPEED, SIMULATED_X_ACCELERATION),
+  (SIMULATED_Y_SPEED, SIMULATED_Y_ACCELERATION),
+  (SIMULATED_Z_SPEED, SIMULATED_Z_ACCELERATION),
+)
 
-# The speed scales PRPAA1087 read, in percent. A simulated device keeps none.
+# Each channel's TADM pressure at rest, in sensor counts (rear, front), as the device read it.
+SIMULATED_TADM_PRESSURES = (-4384, -4350)
+# The TADM buffer's size in entries and its sample rate, as the device reported them.
+SIMULATED_TADM_BUFFER_SIZE, SIMULATED_TADM_SAMPLE_RATE = 20000, 10
+
+# The speed scales the device read, in percent. A simulated device keeps none.
 SIMULATED_SPEED_SCALE = 100
 
 # What the deck light reads: off. A simulated device has no light.
@@ -111,6 +149,17 @@ _NOT_SUPPORTED = next(
 # recorded, so these addresses are not a device's.
 _MPH_ROOT_ADDRESS = Address(0xE001, 1, 0xBF00)
 _MPH_ADDRESS = Address(0xE001, 1, 0x1000)
+# Where a heater shaker's objects are, as a device with one reported them.
+_HEATER_SHAKER_ROOT_ADDRESS = Address(0xE002, 1, 0xBF00)
+_HEATER_SHAKER_OBJECTS = (
+  ("HeaterShakerCpu", HEATER_SHAKER_CPU_OBJECT_PATH, Address(0xE002, 1, 0xC100)),
+  ("Heater", HEATER_OBJECT_PATH, Address(0xE002, 1, 0x1000)),
+  ("Shaker", SHAKER_OBJECT_PATH, Address(0xE002, 1, 0x2000)),
+)
+# What a simulated heater shaker reads before it is told to heat, and the ranges it reports, as a
+# device with one answered them.
+SIMULATED_HEATER_SHAKER_TEMPERATURE = 22.9
+SIMULATED_HEATER_SHAKER_FIRMWARE = "S.1.00.01.0101 2018-05-02 (XRP Heater Shaker)"
 
 
 def _encode(response: Any) -> HoiParams:
@@ -155,11 +204,13 @@ class _RecordedObject:
 class _RecordedTree:
   """A firmware tree read off a device, which a simulated device answers introspection from."""
 
-  def __init__(self, path: str, head8_installed: bool):
+  def __init__(self, path: str, head8_installed: bool, heater_shaker_installed: bool = False):
     """
     Args:
       path: a recorded firmware tree.
       head8_installed: whether to add the 8-channel head's objects, which no recorded tree holds.
+      heater_shaker_installed: whether the heater shaker's objects are there: added when the tree has
+        none, taken out when it has them.
     """
     with open(path, encoding="utf-8") as f:
       recorded = json.load(f)
@@ -167,6 +218,12 @@ class _RecordedTree:
     self.root = self._read(recorded["tree"])
     if head8_installed and not any(c.name == "MphRoot" for c in self.root.children):
       self.root.children.append(self._head8_objects())
+    has_heater_shaker = any(c.name == "HeaterShakerRoot" for c in self.root.children)
+    if heater_shaker_installed and not has_heater_shaker:
+      self.root.children.append(self._heater_shaker_objects())
+    if not heater_shaker_installed and has_heater_shaker:
+      # A tree read off a device with one, declared without: the device it stands for has none.
+      self.root.children = [c for c in self.root.children if c.name != "HeaterShakerRoot"]
     self._by_address: Dict[Address, _RecordedObject] = {}
     self._index(self.root)
 
@@ -187,18 +244,18 @@ class _RecordedTree:
     for child in node.children:
       self._index(child)
 
-  def _head8_objects(self) -> _RecordedObject:
-    """`MphRoot.MPH`, carrying the root's recorded introspection methods and the commands the driver
-    sends the head, at the ids it sends them at."""
+  def _declared_methods(self, path: str) -> List[Dict[str, Any]]:
+    """The root's recorded introspection methods, and the commands the driver sends the object at
+    `path`, at the ids it sends them at."""
     introspection = [m for m in self.root.methods if m["interface_id"] == 0]
     commands: Dict[Tuple[int, int], str] = {}
     pending = list(PrepCommand.__subclasses__())
     while pending:
       cls = pending.pop()
       pending.extend(cls.__subclasses__())
-      if cls.firmware_path == MPH_OBJECT_PATH and cls.command_id is not None:
+      if cls.firmware_path == path and cls.command_id is not None:
         commands[(cls.interface_id, cls.command_id)] = cls.__name__
-    methods = introspection + [
+    return introspection + [
       {
         "name": name,
         "interface_id": interface_id,
@@ -214,13 +271,17 @@ class _RecordedTree:
       }
       for (interface_id, method_id), name in sorted(commands.items())
     ]
+
+  def _head8_objects(self) -> _RecordedObject:
+    """`MphRoot.MPH`, answering the commands the driver sends the head."""
+    introspection = [m for m in self.root.methods if m["interface_id"] == 0]
     mph = _RecordedObject(
       path=MPH_OBJECT_PATH,
       name="MPH",
       version="",
       address=_MPH_ADDRESS,
       interfaces=list(self.root.interfaces),
-      methods=methods,
+      methods=self._declared_methods(MPH_OBJECT_PATH),
       children=[],
     )
     return _RecordedObject(
@@ -231,6 +292,29 @@ class _RecordedTree:
       interfaces=list(self.root.interfaces),
       methods=introspection,
       children=[mph],
+    )
+
+  def _heater_shaker_objects(self) -> _RecordedObject:
+    """`HeaterShakerRoot` and the objects under it, answering the commands the driver sends them."""
+    return _RecordedObject(
+      path=HEATER_SHAKER_ROOT_PATH,
+      name="HeaterShakerRoot",
+      version="",
+      address=_HEATER_SHAKER_ROOT_ADDRESS,
+      interfaces=list(self.root.interfaces),
+      methods=[m for m in self.root.methods if m["interface_id"] == 0],
+      children=[
+        _RecordedObject(
+          path=path,
+          name=name,
+          version="",
+          address=address,
+          interfaces=list(self.root.interfaces),
+          methods=self._declared_methods(path),
+          children=[],
+        )
+        for name, path, address in _HEATER_SHAKER_OBJECTS
+      ],
     )
 
   def get(self, address: Address) -> Optional[_RecordedObject]:
@@ -297,6 +381,20 @@ class _RecordedTree:
     return None
 
 
+# What the device answered while its plate-held latch was set: the Pipettor refuses to drop the
+# tools, and MLPrep to initialize, whose own attempt to drop them is refused the same way.
+_TOOLS_HELD_BY_A_PLATE = "0xE000.0x0001.0x1000:0x01,0x0010,0x0F04"
+_INITIALIZE_WITH_A_PLATE = "0x0001.0x0001.0x2000:0x01,0x0001,0x0F0A;" + _TOOLS_HELD_BY_A_PLATE
+
+
+class _DeviceRefuses(Exception):
+  """A simulated answer that is the device's exception, as its entries."""
+
+  def __init__(self, entries: str):
+    super().__init__(entries)
+    self.entries = entries
+
+
 class _Simulated:
   """Reaches the device behind a feature, which for a simulated one is the simulator."""
 
@@ -322,6 +420,25 @@ class _Simulated:
       model it came from. None when this feature does not answer that command.
     """
     return None
+
+
+# The commands that move the two CoRe gripper tool channels.
+_GRIPPER_MOVES = (
+  PrepCmd.PrepPickUpTool,
+  PrepCmd.PrepDropTool,
+  PrepCmd.PrepPickUpPlate,
+  PrepCmd.PrepMovePlate,
+  PrepCmd.PrepDropPlate,
+  PrepCmd.PrepReleasePlate,
+)
+
+# Each firmware channel enum's channel, 0-indexed from the back.
+_CHANNEL_INDEX = {int(enum): index for index, enum in enumerate(PrepCmd.channel_order_legacy_prep)}
+
+
+def _channel_index(enum: Any) -> Optional[int]:
+  """The channel a firmware channel enum names, or None for one this device has not."""
+  return _CHANNEL_INDEX.get(int(enum))
 
 
 def _first_contact_along(
@@ -407,10 +524,17 @@ class SimulatedPipettes(_Simulated, Pipettes):
   def __init__(self, *args: Any, **kwargs: Any) -> None:
     super().__init__(*args, **kwargs)
     # Channels with continuous cLLD on, and whether each detected since its last start. A detection
-    # is still reported after detection stops, as on PRPAA1087.
+    # is still reported after detection stops, as on the device.
     self._clld_on: Set[int] = set()
     self._clld_detected: Dict[int, bool] = {}
     self._z_drive_pwm: Dict[int, int] = {}
+    # The pipettor's record of a plate held: set by a finished pick-up whatever the jaws closed on,
+    # cleared by a drop or a release.
+    self._plate_held = False
+    # What a grip leaves for the carry and the let-go (the jaws' offset below the top, how far they
+    # closed), and where the tools came from, which is where the firmware returns them.
+    self._grip: Optional[Tuple[float, float]] = None
+    self._tools_from: Optional[Tuple[float, float, float]] = None
 
   def _touchable(self) -> List[Tuple[Resource, Coordinate, Coordinate]]:
     """The deck's resources a channel can touch.
@@ -520,7 +644,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
     channel_idx: int,
     here: float,
     end: float,
-    speed: float,
     detect_mode: int,
     sensitivity: int,
   ) -> Optional[float]:
@@ -530,7 +653,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
       channel_idx: detecting channel, 0-indexed from the back.
       here: the arm's x where the search starts, in mm.
       end: search end in mm.
-      speed: arm speed in mm/s.
       detect_mode: cLLD detect mode; not modelled.
       sensitivity: cLLD sensitivity; not modelled.
 
@@ -542,7 +664,9 @@ class SimulatedPipettes(_Simulated, Pipettes):
       raise RuntimeError("no X arm to move; have you called `prep.setup()`?")
     _, y, z = self._modelled_location(channel_idx)
     touched = self._touched_along(channel_idx, 0, here, end, y, z)
-    await arm.move_to_x_position(end if touched is None else touched, speed=speed)
+    await arm.move_to_x_position(
+      end if touched is None else touched, minimum_traverse_height_start=z
+    )
     return touched
 
   def _declared(self) -> PipettesConfiguration:
@@ -556,8 +680,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
       channel: which channel, 0-indexed from the back.
 
     Returns:
-      Where the model has it, or where PRPAA1087 reported it after initializing when nothing models it
-      yet.
+      Where the model has it, or where the device reported it after initializing while nothing
+      models it.
     """
     x, y, z = SIMULATED_INITIALIZED_POSITIONS[channel]
     point = self.get_reference_point_location(channel)
@@ -572,13 +696,89 @@ class SimulatedPipettes(_Simulated, Pipettes):
       arm.update_location_by_reference_point(x)
     self.update_location_by_reference_point(channel, y=y, z=z)
 
-  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
-    channels = range(self.device.simulated_configuration.num_channels or 0)
-    index_of = {int(enum): index for index, enum in enumerate(PrepCmd.channel_order_legacy_prep)}
+  def _gripper_channels(self) -> Tuple[int, int]:
+    """The back and front channels the CoRe gripper tools ride: the two front-most."""
+    count = self.device.simulated_configuration.num_channels or 0
+    return count - 2, count - 1
 
+  def _owner(self, request: TCPCommand) -> Optional[int]:
+    """The channel the object a request is sent to belongs to, or None."""
+    return self.device.tree.channel_of(request.dest)
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    # Each group answers its own commands, and none shares one with another.
+    for answer in (
+      self._answer_grippers,
+      self._answer_moves,
+      self._answer_seeks,
+      self._answer_drive_settings,
+      self._answer_probes,
+    ):
+      answered = answer(request, method)
+      if answered is not None:
+        return answered
+    return None
+
+  def _answer_grippers(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
+    """The plate-held latch, and where each CoRe gripper command leaves the two tool channels.
+
+    Where the device reported them after each command; Z at the jaws once the tools are on.
+    """
+    if isinstance(request, PrepCmd.PrepGetPlateHeld):
+      return PrepCmd.PrepGetPlateHeld.Response(value=self._plate_held), "the pipettor's record"
+    if not isinstance(request, _GRIPPER_MOVES):
+      return None
+    back, front = self._gripper_channels()
+    if isinstance(request, PrepCmd.PrepPickUpTool):
+      # Left in the tools, shafts at the seek height; the tools go on the model after.
+      self._tools_from = (
+        request.tool_position_x,
+        request.rear_channel_position_y,
+        request.front_channel_position_y,
+      )
+      self._move(back, request.tool_position_x, request.rear_channel_position_y, request.tool_seek)
+      self._move(front, None, request.front_channel_position_y, request.tool_seek)
+    elif isinstance(request, PrepCmd.PrepDropTool):
+      if self._plate_held:
+        raise _DeviceRefuses(_TOOLS_HELD_BY_A_PLATE)
+      # Taken home from anywhere, shafts at the traverse height; the tools come off the model after.
+      height = self.device.simulated_default_minimum_traverse_height
+      if self._tools_from is not None and height is not None:
+        x, rear_y, front_y = self._tools_from
+        self._move(back, x, rear_y, height - self._mounted_length(back))
+        self._move(front, None, front_y, height - self._mounted_length(front))
+      self._tools_from = None
+    elif isinstance(request, PrepCmd.PrepPickUpPlate):
+      # Down to the grip height, jaws closed on the plate; the firmware does not lift it.
+      plate_top = request.plate_top_center
+      half = (request.plate.width + JAW_OPEN_EXTRA - 2 * request.grip_distance) / 2
+      self._grip = (plate_top.z_position - request.grip_height, request.grip_distance)
+      self._move(back, plate_top.x_position, plate_top.y_position + half, request.grip_height)
+      self._move(front, None, plate_top.y_position - half, request.grip_height)
+      self._plate_held = True
+    elif isinstance(request, (PrepCmd.PrepMovePlate, PrepCmd.PrepDropPlate)):
+      # Both jaws to the top less the grip's offset, spacing kept; a drop then opens them by the
+      # clearance and how far they closed.
+      plate_top = request.plate_top_center
+      half = (self._modelled_location(back)[1] - self._modelled_location(front)[1]) / 2
+      z = None if self._grip is None else plate_top.z_position - self._grip[0]
+      if isinstance(request, PrepCmd.PrepDropPlate):
+        half += request.clearance_y + (0.0 if self._grip is None else self._grip[1])
+        self._grip = None
+        self._plate_held = False
+      self._move(back, plate_top.x_position, plate_top.y_position + half, z)
+      self._move(front, None, plate_top.y_position - half, z)
+    elif isinstance(request, PrepCmd.PrepReleasePlate):
+      # What the jaws do is unmeasured: they are left where they are.
+      self._grip = None
+      self._plate_held = False
+    return None
+
+  def _answer_moves(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
+    """Where the channels are, and the moves that take them elsewhere."""
     if isinstance(request, PrepCmd.PrepGetPositions):
       positions = []
-      for channel in channels:
+      for channel in range(self.device.simulated_configuration.num_channels or 0):
         x, y, z = self._modelled_location(channel)
         positions.append(
           PrepCmd.ChannelXYZPositionParameters(
@@ -589,47 +789,58 @@ class SimulatedPipettes(_Simulated, Pipettes):
             position_z=z,
           )
         )
+      if self.device.head8 is not None:
+        x, y, z = self.device.head8_location()
+        positions.append(
+          PrepCmd.ChannelXYZPositionParameters(
+            default_values=False,
+            channel=PrepCmd.ChannelIndex.MPHChannel,
+            position_x=x,
+            position_y=y,
+            position_z=z,
+          )
+        )
       return PrepCmd.PrepGetPositions.Response(
         positions=positions
       ), "where the model has the channels"
-
     if isinstance(request, (PrepCmd.PrepMoveToPosition, PrepCmd.PrepMoveToPositionViaLane)):
       move = request.move_parameters
-      for axis in move.axis_parameters:
-        moved = index_of.get(int(axis.channel))
-        if moved is not None:
-          self._move(moved, move.gantry_x_position, axis.y_position, axis.z_position)
-      return None
-
-    if isinstance(request, PrepCmd.PrepMoveYAbsolute):
+      for target in move.axis_parameters:
+        self._move_channel(
+          target.channel, move.gantry_x_position, target.y_position, target.z_position
+        )
+    elif isinstance(request, PrepCmd.PrepMoveYAbsolute):
       for y_target in request.channels:
-        moved = index_of.get(int(y_target.channel))
-        if moved is not None:
-          self._move(moved, None, y_target.y_position, None)
-      return None
-
-    if isinstance(request, PrepCmd.PrepMoveZAbsolute):
+        self._move_channel(y_target.channel, None, y_target.y_position, None)
+    elif isinstance(request, PrepCmd.PrepMoveZAbsolute):
       for z_target in request.channels:
-        moved = index_of.get(int(z_target.channel))
-        if moved is not None:
-          self._move(moved, None, None, z_target.z_position)
-      return None
-
-    if isinstance(request, PrepCmd.PrepMoveZUpToSafe):
-      height = self.device.simulated_configuration.default_traverse_height
+        self._move_channel(z_target.channel, None, None, z_target.z_position)
+    elif isinstance(request, PrepCmd.PrepMoveZUpToSafe):
+      # The shaft's end goes to the traverse height; what it carries reaches below that.
+      height = self.device.simulated_default_minimum_traverse_height
       for enum in request.channels:
-        raised = index_of.get(int(enum))
+        raised = _channel_index(enum)
         if raised is not None and height is not None:
-          self._move(raised, None, None, height)
-      return None
+          self._move(raised, None, None, height - self._mounted_length(raised))
+    return None
 
+  def _move_channel(
+    self, enum: Any, x: Optional[float], y: Optional[float], z: Optional[float]
+  ) -> None:
+    """`_move` for the channel a firmware channel enum names; nothing for one this has not."""
+    channel = _channel_index(enum)
+    if channel is not None:
+      self._move(channel, x, y, z)
+
+  def _answer_seeks(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
+    """The cLLD and obstacle searches, each stopping at the first resource in the way."""
     if isinstance(request, PrepCmd.PrepZSeekLldPosition):
-      # Each channel seeks down toward its floor, stops at the top of the first resource under it,
-      # and is left at its final height.
+      # Each channel seeks down toward its floor and ends at the higher of its final height and
+      # where it stopped, as the firmware does.
       results = []
       found = False
       for seek in request.seek_parameters:
-        seeking = index_of.get(int(seek.channel))
+        seeking = _channel_index(seek.channel)
         touched = None
         if seeking is not None:
           self._move(seeking, seek.seek_position_x, seek.seek_position_y, seek.seek_height)
@@ -643,7 +854,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
             SIMULATED_CLLD_PROBE_DIAMETER / 2,
           )
           touched = None if top is None else top - offset
-          self._move(seeking, None, None, seek.final_position_z)
+          stopped = seek.min_seek_height if touched is None else touched
+          self._move(seeking, None, None, max(seek.final_position_z, stopped))
         found = found or touched is not None
         results.append(
           PrepCmd.SeekResultParameters(
@@ -657,30 +869,8 @@ class SimulatedPipettes(_Simulated, Pipettes):
         "the resource model" if found else "nothing in the way"
       )
 
-    if isinstance(request, PrepCmd.PrepGetChannelBounds):
-      declared = self._declared().channels
-      bounds = []
-      for channel in channels:
-        if channel >= len(declared):
-          continue
-        c = declared[channel]
-        if c.x_range is None or c.y_range is None or c.z_range is None:
-          continue
-        bounds.append(
-          PrepCmd.ChannelBoundsParameters(
-            channel=PrepCmd.channel_order_legacy_prep[channel],
-            x_min=c.x_range[0],
-            x_max=c.x_range[1],
-            y_min=c.y_range[0],
-            y_max=c.y_range[1],
-            z_min=c.z_range[0],
-            z_max=c.z_range[1],
-          )
-        )
-      return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
-
     if isinstance(request, (PrepCmd.PrepYDriveGetPosition, PrepCmd.PrepYAxisSeekCapacitiveLld)):
-      owner = self.device.tree.channel_of(request.dest)
+      owner = self._owner(request)
       if owner is None or owner >= len(SIMULATED_Y_DRIVE_OFFSETS):
         return None
       offset = SIMULATED_Y_DRIVE_OFFSETS[owner]
@@ -688,8 +878,6 @@ class SimulatedPipettes(_Simulated, Pipettes):
         return PrepCmd.PrepYDriveGetPosition.Response(
           position=self._modelled_location(owner)[1] + offset
         ), f"channel {owner}'s modelled Y in its drive frame"
-      # The channel searches toward the end of its search, and stops at the first resource in the
-      # way.
       x, y, z = self._modelled_location(owner)
       end = request.position - offset
       touched = self._touched_along(owner, 1, y, end, x, z)
@@ -699,19 +887,15 @@ class SimulatedPipettes(_Simulated, Pipettes):
         detect_position=0.0 if touched is None else touched + offset,
       ), "the resource model" if touched is not None else "nothing in the way"
 
-    if isinstance(request, PrepCmd.PrepZDriveSetPwm):
-      # Nothing is modelled about how hard the drive pushes; the value is accepted and read back.
-      self._z_drive_pwm[self.device.tree.channel_of(request.dest) or 0] = int(request.value)
-      return None
-
-    if isinstance(request, PrepCmd.PrepZDriveGetPwm):
-      owner = self.device.tree.channel_of(request.dest)
-      return PrepCmd.PrepZDriveGetPwm.Response(
-        value=self._z_drive_pwm.get(owner or 0, SIMULATED_Z_DRIVE_PWM)
-      ), "the declared Z drive PWM"
-
-    if isinstance(request, (PrepCmd.PrepZDriveGetPosition, PrepCmd.PrepZAxisSeekObstacle)):
-      owner = self.device.tree.channel_of(request.dest)
+    if isinstance(
+      request,
+      (
+        PrepCmd.PrepZDriveGetPosition,
+        PrepCmd.PrepZAxisSeekObstacle,
+        PrepCmd.PrepZAxisSeekCapacitiveLld,
+      ),
+    ):
+      owner = self._owner(request)
       if owner is None or owner >= len(SIMULATED_Z_DRIVE_OFFSETS):
         return None
       offset = SIMULATED_Z_DRIVE_OFFSETS[owner]
@@ -720,8 +904,20 @@ class SimulatedPipettes(_Simulated, Pipettes):
         return PrepCmd.PrepZDriveGetPosition.Response(
           position=z + offset
         ), f"channel {owner}'s modelled Z in its drive frame"
-      # The channel seeks down from its start, stops at the top of the first resource under it, and
-      # is left at its final height.
+      if isinstance(request, PrepCmd.PrepZAxisSeekCapacitiveLld):
+        # Down from where it stands to the first resource under it, and left there.
+        bottom = self._bottom_offset(owner)
+        end = request.position - offset
+        top = _first_contact_below(
+          z + bottom, end + bottom, x, y, self._touchable(), SIMULATED_CLLD_PROBE_DIAMETER / 2
+        )
+        touched = None if top is None else top - bottom
+        self._move(owner, None, None, end if touched is None else touched)
+        return PrepCmd.PrepZAxisSeekCapacitiveLld.Response(
+          lld_detected=touched is not None,
+          detect_position=0.0 if touched is None else touched + offset,
+        ), "the resource model" if touched is not None else "nothing in the way"
+      # Down from its start to the first resource under it, then left at its final height.
       bottom = self._bottom_offset(owner)
       top = _first_contact_below(
         request.start_position - offset + bottom,
@@ -741,7 +937,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
     if isinstance(
       request, (PrepCmd.PrepChannelStartCLldDetection, PrepCmd.PrepChannelStopCLldDetection)
     ):
-      owner = self.device.tree.channel_of(request.dest)
+      owner = self._owner(request)
       if owner is not None:
         if isinstance(request, PrepCmd.PrepChannelStartCLldDetection):
           self._clld_on.add(owner)
@@ -751,37 +947,78 @@ class SimulatedPipettes(_Simulated, Pipettes):
       return None
 
     if isinstance(request, PrepCmd.PrepCLldGetStatus):
-      # Whether the channel touched a resource since its detection was last started; nothing is
-      # recorded.
-      owner = self.device.tree.channel_of(request.dest)
+      # Whether the channel touched a resource since its detection last started.
+      owner = self._owner(request)
       detected = owner is not None and self._clld_detected.get(owner, False)
       return PrepCmd.PrepCLldGetStatus.Response(
         detected=[detected], detect_index=[0], length=[0], sample_rate=1
       ), "the resource model" if detected else "nothing in the way"
+    return None
 
+  def _answer_drive_settings(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
+    """The channels' windows, and what their Z drives are set to."""
+    if isinstance(request, PrepCmd.PrepGetChannelBounds):
+      declared = self._declared().channels
+      bounds = []
+      for channel in range(self.device.simulated_configuration.num_channels or 0):
+        if channel >= len(declared):
+          continue
+        c = declared[channel]
+        if c.x_range is None or c.y_range is None or c.z_range is None:
+          continue
+        # The Z window is for whatever is attached: it drops by what the channel carries.
+        below = self._mounted_length(channel)
+        bounds.append(
+          PrepCmd.ChannelBoundsParameters(
+            channel=PrepCmd.channel_order_legacy_prep[channel],
+            x_min=c.x_range[0],
+            x_max=c.x_range[1],
+            y_min=c.y_range[0],
+            y_max=c.y_range[1],
+            z_min=c.z_range[0] - below,
+            z_max=c.z_range[1] - below,
+          )
+        )
+      return PrepCmd.PrepGetChannelBounds.Response(bounds=bounds), "the declared channel ranges"
+    if isinstance(request, PrepCmd.PrepZDriveSetPwm):
+      # How hard the drive pushes is not modelled: the value is kept and read back.
+      self._z_drive_pwm[self._owner(request) or 0] = int(request.value)
+      return None
+    if isinstance(request, PrepCmd.PrepZDriveGetPwm):
+      return PrepCmd.PrepZDriveGetPwm.Response(
+        value=self._z_drive_pwm.get(self._owner(request) or 0, SIMULATED_Z_DRIVE_PWM)
+      ), "the declared Z drive PWM"
     if isinstance(request, PrepCmd.PrepZDriveGetAcceleration):
       return PrepCmd.PrepZDriveGetAcceleration.Response(
         value=self._declared().z_drive_acceleration
       ), "the declared Z drive acceleration"
+    return None
 
-    if isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld":
-      # The tip the first channel holding one holds, as the definition it was picked up with.
-      tip = next((t.get_tip() for t in self.head.values() if t.has_tip), None)
-      held = PrepCmd.TipDefinition(
-        default_values=False,
-        id=0 if tip is None else 1,
-        volume=0.0 if tip is None else tip.maximal_volume,
-        length=0.0 if tip is None else tip.get_size_z() - tip.fitting_depth,
-        tip_type=0 if tip is None else int(PrepCmd.TipTypes.StandardVolume),
-        has_filter=False if tip is None else tip.has_filter,
-        is_needle=False,
-        is_tool=False,
-        label="No Tip" if tip is None else "simulated",
+  def _answer_probes(self, request: TCPCommand, method: str) -> Optional[Tuple[Any, str]]:
+    """What the channels say they hold, their TADM reads, and their reads by name."""
+    if isinstance(request, PrepCmd.PrepRetrieveTadmData):
+      # Pressure is not modelled, so nothing is recorded.
+      data = PrepCmd.TadmReturnParameters(
+        default_values=False, channel=request.channel, entries=0, error=False, data=[]
       )
-      return HoiParams().add(held, Struct()), "the channels' tip trackers"
-
+      return PrepCmd.PrepRetrieveTadmData.Response(tadm_data=data), "no pressure modelled"
+    if isinstance(request, (PrepCmd.PrepTadmGetPressure, PrepCmd.PrepTadmGetStatus)):
+      owner = self._owner(request)
+      if owner is None or owner >= len(SIMULATED_TADM_PRESSURES):
+        return None
+      if isinstance(request, PrepCmd.PrepTadmGetPressure):
+        return PrepCmd.PrepTadmGetPressure.Response(
+          pressure=[SIMULATED_TADM_PRESSURES[owner]]
+        ), f"channel {owner}'s pressure at rest"
+      return PrepCmd.PrepTadmGetStatus.Response(
+        entries=0, buffer_size=SIMULATED_TADM_BUFFER_SIZE, sample_rate=SIMULATED_TADM_SAMPLE_RATE
+      ), "no pressure modelled"
+    if isinstance(request, PrepCmd.PrepGetTipDefinitionHeld) or (
+      isinstance(request, PrepCmd.PrepProbeRequest) and method == "GetTipDefinitionHeld"
+    ):
+      return HoiParams().add(self._tip_definition_held(), Struct()), "the channels' mounting shafts"
     if isinstance(request, PrepCmd.PrepProbeRequest):
-      owner = self.device.tree.channel_of(request.dest)
+      owner = self._owner(request)
       if owner is None:
         return None
       if method == "GetNodeVersion":
@@ -791,11 +1028,56 @@ class SimulatedPipettes(_Simulated, Pipettes):
           return None
         return HoiParams().add(version, Str), f"channel {owner}'s declared firmware"
       if method == "GetTipPresent":
-        tracker = self.head.get(owner)
-        present = tracker is not None and tracker.has_tip
-        return HoiParams().add(int(present), U32), f"channel {owner}'s tip tracker"
-
+        # The sleeve senses what sits in the collar, a tool as much as a tip.
+        shaft = self.shaft(owner)
+        present = shaft is not None and shaft.has_tip()
+        return HoiParams().add(int(present), U32), f"channel {owner}'s mounting shaft"
     return None
+
+  def _tip_definition_held(self) -> PrepCmd.TipDefinition:
+    """What the first channel carrying something holds, as the definition it was picked up with.
+
+    The id and label are the device's own answers, empty and holding.
+    """
+    shafts = (self.shaft(channel) for channel in range(self.num_channels))
+    mounted = next((s.tip for s in shafts if s is not None and s.has_tip()), None)
+    if mounted is None:
+      return PrepCmd.TipDefinition(
+        default_values=True,
+        id=0,
+        volume=0.0,
+        length=0.0,
+        tip_type=0,
+        has_filter=False,
+        is_needle=False,
+        is_tool=False,
+        label="No Tip",
+      )
+    if isinstance(mounted, Tip):
+      return PrepCmd.TipDefinition(
+        default_values=False,
+        id=255,
+        volume=mounted.maximal_volume,
+        length=mounted.get_size_z() - mounted.fitting_depth,
+        tip_type=int(PrepCmd.TipTypes.StandardVolume),
+        has_filter=mounted.has_filter,
+        is_needle=mounted.maximal_volume == 0,
+        is_tool=False,
+        label="Pipettor Custom",
+      )
+    # A tool is a HeadTool that is not a Tip, and a tool pick-up sends this definition.
+    tool = PrepCmd.CO_RE_GRIPPER_TIP_PICKUP_PARAMETERS
+    return PrepCmd.TipDefinition(
+      default_values=False,
+      id=255,
+      volume=tool.volume,
+      length=tool.length,
+      tip_type=int(tool.tip_type),
+      has_filter=tool.has_filter,
+      is_needle=False,
+      is_tool=True,
+      label="Pipettor Custom",
+    )
 
 
 class SimulatedXArm(_Simulated, XArm):
@@ -809,13 +1091,11 @@ class SimulatedXArm(_Simulated, XArm):
         value=x - SIMULATED_X_AXIS_OFFSET
       ), "where the model has the arm"
     if isinstance(request, PrepCmd.PrepXAxisGetVelocity):
-      return PrepCmd.PrepXAxisGetVelocity.Response(
-        value=SIMULATED_X_VELOCITY
-      ), "PRPAA1087's profile"
+      return PrepCmd.PrepXAxisGetVelocity.Response(value=SIMULATED_X_SPEED), "the device's profile"
     if isinstance(request, PrepCmd.PrepXAxisGetAcceleration):
       return (
         PrepCmd.PrepXAxisGetAcceleration.Response(value=SIMULATED_X_ACCELERATION),
-        "PRPAA1087's profile",
+        "the device's profile",
       )
     if isinstance(request, PrepCmd.PrepXAxisMoveAbsolute):
       # A channel with continuous cLLD on stops the arm where it touches a resource.
@@ -831,6 +1111,112 @@ class SimulatedXArm(_Simulated, XArm):
         value=x - SIMULATED_X_AXIS_OFFSET
       ), "where the model has the arm"
     return None
+
+
+class SimulatedHeaterShaker(_Simulated, PrepHamiltonHeaterShaker):
+  """The heater shaker, answering for itself. It reaches a temperature the moment it is told to."""
+
+  def __init__(self, driver: PrepDriver) -> None:
+    super().__init__(driver)
+    self._initialized = False
+    self._locked = False
+    self._heating = False
+    self._target = 0.0
+    self._current = SIMULATED_HEATER_SHAKER_TEMPERATURE
+    self._status = PrepCmd.ShakerStatus.InactiveShaking
+    self._speed = 0.0
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    if isinstance(request, PrepCmd.PrepHHSGetFirmwareVersion):
+      return PrepCmd.PrepHHSGetFirmwareVersion.Response(
+        firmware_version=SIMULATED_HEATER_SHAKER_FIRMWARE
+      ), "the device's firmware"
+    if isinstance(request, PrepCmd.PrepHHSGetTemperatureRange):
+      return PrepCmd.PrepHHSGetTemperatureRange.Response(
+        minimum_temperature=0.0,
+        maximum_temperature=115.0,
+        maximum_supervision_tolerance=115.0,
+        maximum_security_tolerance=115.0,
+      ), "the device's ranges"
+    if isinstance(request, PrepCmd.PrepHHSGetSpeedRange):
+      return PrepCmd.PrepHHSGetSpeedRange.Response(
+        minimum_velocity=25.0,
+        maximum_velocity=2500.0,
+        minimum_acceleration=625.0,
+        maximum_acceleration=12500.0,
+      ), "the device's ranges"
+    if isinstance(request, PrepCmd.PrepHHSInitialize):
+      self._initialized = True
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetIsInitialized):
+      return PrepCmd.PrepHHSGetIsInitialized.Response(
+        is_initialized=self._initialized
+      ), "whether it was initialized"
+    if isinstance(request, PrepCmd.PrepHHSSetPlateLockState):
+      self._locked = bool(request.locked)
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetPlateLockState):
+      return PrepCmd.PrepHHSGetPlateLockState.Response(locked=self._locked), "the modelled lock"
+    if isinstance(request, (PrepCmd.PrepHHSEnableShaking, PrepCmd.PrepHHSEnablePeriodicShaking)):
+      periodic = isinstance(request, PrepCmd.PrepHHSEnablePeriodicShaking)
+      self._status = (
+        PrepCmd.ShakerStatus.PeriodicShaking if periodic else PrepCmd.ShakerStatus.ContinuousShaking
+      )
+      self._speed = float(request.shaking_speed)
+      return None
+    if isinstance(request, PrepCmd.PrepHHSDisableShaking):
+      self._status = PrepCmd.ShakerStatus.InactiveShaking
+      self._speed = 0.0
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetShakingStatus):
+      return PrepCmd.PrepHHSGetShakingStatus.Response(
+        shaker_status=int(self._status),
+        current_speed=self._speed,
+        target_speed=self._speed,
+        remaining_shaking_time=0,
+        remaining_shaking_time_status=int(PrepCmd.ShakingTimeStatus.Inactive),
+        shaking_period=0,
+        shaking_active_time=0,
+      ), "the modelled shaker"
+    if isinstance(request, PrepCmd.PrepHHSStartHeating):
+      self._heating = True
+      self._target = self._current = float(request.target_temperature)
+      return None
+    if isinstance(request, PrepCmd.PrepHHSStopHeating):
+      self._heating = False
+      self._target = 0.0
+      return None
+    if isinstance(request, PrepCmd.PrepHHSGetHeaterStatus):
+      return PrepCmd.PrepHHSGetHeaterStatus.Response(
+        heating=self._heating,
+        current_temperature=self._current,
+        target_temperature=self._target,
+      ), "the modelled heater"
+    return None
+
+
+class SimulatedHead8(_Simulated, Head8):
+  """The 8-channel head, answering for itself.
+
+  The driver records where each command sends the head. The channels share its X, so the device
+  keeps them in front of it, and so does this.
+  """
+
+  async def answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
+    pipettes = self.device.pipettes
+    if path != MPH_OBJECT_PATH or not isinstance(pipettes, SimulatedPipettes):
+      return None
+    count = self.device.simulated_configuration.num_channels or 0
+    limit = self.device.head8_location()[1] - HEAD8_CLEARANCE_Y
+    for channel in range(count):
+      if channel > 0:
+        limit -= pipettes._min_spacing_between(channel - 1, channel)
+      y = pipettes._modelled_location(channel)[1]
+      if y > limit:
+        pipettes._move(channel, None, limit, None)
+        y = limit
+      limit = y
+    return None  # moved the model; the device answers the command itself
 
 
 class _SimulatedSession(TCPSession):
@@ -908,7 +1294,11 @@ class _SimulatedSession(TCPSession):
         dest, hoi, f"{node.path} has no such method in the recorded firmware"
       ), True
 
-    answer = await self._driver._answer(request, node.path, method["name"])
+    try:
+      answer = await self._driver._answer(request, node.path, method["name"])
+    except _DeviceRefuses as refused:
+      logger.debug("%s read: simulation refuses as the device does: %s", SIMULATED_LINK, refused)
+      return HoiParams().add(refused.entries, Str).build(), True
     if answer is None:
       if isinstance(request, PrepCmd.PrepProbeRequest) or hasattr(type(request), "Response"):
         return self._refusal(dest, hoi, f"{node.path}.{method['name']} is not simulated"), True
@@ -965,25 +1355,41 @@ class PrepSimulationDriver(PrepDriver):
     declared_configuration_json: Optional[str] = None,
     firmware_tree_json: Optional[str] = None,
     initialized: bool = False,
+    default_minimum_traverse_height: float = 167.5,
+    simulate_motion_time: bool = False,
+    motion_time_scale: float = 0.25,
+    liquid_class_lookup: Optional[LiquidClassLookup] = None,
   ):
     """
     Args:
       deck: the deck to reflect this device into.
       declared_configuration_json: path to a saved configuration, which this device then answers as.
-        Defaults to `RECORDING_PREP`.
+        Defaults to `RECORDING_PREP_HEAD8`, which has no heater shaker.
       firmware_tree_json: path to a recorded firmware tree, whose objects and methods this device
         then has. Defaults to `FIRMWARE_TREE_V1_2_2`.
       initialized: whether the device reports itself already initialized. One that has just been
         switched on does not.
+      default_minimum_traverse_height: what the device answers `GetDefaultTraverseHeight` with, and
+        where it raises channels to Z safety, in mm. Defaults to what the recorded device reports.
+      simulate_motion_time: whether a command that moves the channels takes time at all, so a
+        viewer shows each step. Off, every command answers at once.
+      motion_time_scale: the share of the device's own time a move takes when it does: a quarter,
+        so a step is watched rather than waited for. 1.0 keeps the device's time.
+      liquid_class_lookup: as `PrepDriver`'s.
 
     Raises:
       ValueError: If the declared configuration holds no device.
     """
     super().__init__(
       deck=deck,
-      declared_configuration_json=declared_configuration_json or RECORDING_PREP,
+      declared_configuration_json=declared_configuration_json or RECORDING_PREP_HEAD8,
       io=_SimulatedIO(self),
+      liquid_class_lookup=liquid_class_lookup,
     )
+    # Its light stands where a real one would, but nobody is looking at it, so setup does not
+    # stand at its ready colour. Built here, so setup keeps it rather than making its own.
+    self.lights = Lights(self)
+    self.lights.default_ready_seconds = 0.0
     configuration = self.declared.get("device")
     if configuration is None:
       raise ValueError(
@@ -994,15 +1400,24 @@ class PrepSimulationDriver(PrepDriver):
     self.simulated_pipettes: Optional[PipettesConfiguration] = self.declared.get("pipettes")
     self.firmware_tree_json = firmware_tree_json or FIRMWARE_TREE_V1_2_2
     self.tree = _RecordedTree(
-      self.firmware_tree_json, head8_installed=bool(configuration.head8_installed)
+      self.firmware_tree_json,
+      head8_installed=bool(configuration.head8_installed),
+      heater_shaker_installed=configuration.heater_shaker_installed,
     )
     self.initialized = initialized
+    self.simulated_default_minimum_traverse_height = default_minimum_traverse_height
+    self.simulate_motion_time = simulate_motion_time
+    self.motion_time_scale = motion_time_scale
 
     # The features this device has, each answering for itself. Setup builds only the ones that are
     # not already there, so these stand in for the real ones throughout.
     self.x_arm = SimulatedXArm(self)
     if configuration.num_channels:
       self.pipettes = SimulatedPipettes(self)
+    if configuration.heater_shaker_installed:
+      self.hs = SimulatedHeaterShaker(self)
+    if configuration.head8_installed:
+      self.head8 = SimulatedHead8(self)
 
   def describe_link(self) -> str:
     return "simulation (no link)"
@@ -1025,18 +1440,66 @@ class PrepSimulationDriver(PrepDriver):
       return default
     return arm.resource.get_location_wrt(self.deck).x + arm.configuration.reference_point_from_left
 
+  def head8_location(self) -> Tuple[float, float, float]:
+    """Where the model has the head's probe 0, as (x, y, z) in mm on the deck.
+
+    Where the device reported it after initializing while nothing models it.
+    """
+    at = None if self.head8 is None else self.head8.get_reference_point_location()
+    if at is not None:
+      return at.x, at.y, at.z
+    x = self.modelled_x(default=SIMULATED_INITIALIZED_POSITIONS[0][0])
+    return (x + SIMULATED_HEAD8_X_PAST_CHANNELS, *SIMULATED_INITIALIZED_HEAD8_YZ)
+
   async def _answer(self, request: TCPCommand, path: str, method: str) -> Optional[Tuple[Any, str]]:
     """What the device would answer, asked of the feature the command is about.
 
     Each feature answers for its own model, so the logic stays where the model is; this only decides
-    who is asked, and answers what the device itself holds.
+    who is asked, and answers what the device itself holds. Keeping time, a move is recorded first
+    and then waited out, so whatever watches the model sees it for as long as the device takes.
     """
-    for feature in (self.pipettes, self.x_arm):
+    before = self._where_everything_is() if self.simulate_motion_time else None
+    answered = None
+    for feature in (self.head8, self.pipettes, self.x_arm, self.hs):
       if isinstance(feature, _Simulated):
         answered = await feature.answer(request, path, method)
         if answered is not None:
-          return answered
-    return self._answer_for_device(request, path, method)
+          break
+    if answered is None:
+      answered = self._answer_for_device(request, path, method)
+    if before is not None:
+      seconds = self._motion_time(before, self._where_everything_is()) * self.motion_time_scale
+      if seconds > 0:
+        await anyio.sleep(seconds)
+    return answered
+
+  def _where_everything_is(self) -> List[Tuple[float, float, float]]:
+    """Where the model has each channel, as (x, y, z) in mm: x is the arm's."""
+    if not isinstance(self.pipettes, SimulatedPipettes):
+      return []
+    count = self.simulated_configuration.num_channels or 0
+    return [self.pipettes._modelled_location(channel) for channel in range(count)]
+
+  @staticmethod
+  def _travel_time(distance: float, speed: float, acceleration: float) -> float:
+    """How long a move of `distance` takes, speeding up and slowing down at `acceleration`."""
+    distance = abs(distance)
+    if distance * acceleration < speed * speed:  # never reaches cruise
+      return 2 * math.sqrt(distance / acceleration)
+    return distance / speed + speed / acceleration
+
+  def _motion_time(
+    self, before: List[Tuple[float, float, float]], after: List[Tuple[float, float, float]]
+  ) -> float:
+    """How long the device takes from `before` to `after`, the slowest axis setting the time."""
+    return max(
+      [0.0]
+      + [
+        self._travel_time(end - start, speed, acceleration)
+        for was, now in zip(before, after)
+        for start, end, (speed, acceleration) in zip(was, now, _PROFILES)
+      ]
+    )
 
   def _answer_for_device(
     self, request: TCPCommand, path: str, method: str
@@ -1046,6 +1509,8 @@ class PrepSimulationDriver(PrepDriver):
     declared = "the declared configuration"
 
     if isinstance(request, PrepCmd.PrepInitialize):
+      if isinstance(self.pipettes, SimulatedPipettes) and self.pipettes._plate_held:
+        raise _DeviceRefuses(_INITIALIZE_WITH_A_PLATE)
       self.initialized = True
       return None
     if isinstance(request, PrepCmd.PrepGetIsInitialized):
@@ -1057,11 +1522,9 @@ class PrepSimulationDriver(PrepDriver):
     if isinstance(request, PrepCmd.PrepGetSafeSpeedsEnabled):
       return PrepCmd.PrepGetSafeSpeedsEnabled.Response(value=c.safe_speeds_enabled), declared
     if isinstance(request, PrepCmd.PrepGetDefaultTraverseHeight):
-      if c.default_traverse_height is None:
-        return None
       return PrepCmd.PrepGetDefaultTraverseHeight.Response(
-        value=c.default_traverse_height
-      ), declared
+        value=self.simulated_default_minimum_traverse_height
+      ), "the height it was told to travel at"
     if isinstance(request, PrepCmd.PrepGetDeckBounds):
       b = c.deck_bounds
       if b is None:
@@ -1108,7 +1571,7 @@ class PrepSimulationDriver(PrepDriver):
         present.append(int(PrepCmd.ChannelIndex.MPHChannel))
       return PrepCmd.PrepGetPresentChannels.Response(channels=present), declared
     if isinstance(request, (PrepCmd.PrepGetXSpeedScale, PrepCmd.PrepGetZSpeedScale)):
-      return type(request).Response(value=SIMULATED_SPEED_SCALE), "PRPAA1087's speed scale"
+      return type(request).Response(value=SIMULATED_SPEED_SCALE), "the device's speed scale"
     if isinstance(request, PrepCmd.PrepGetDeckLight):
       white, red, green, blue = SIMULATED_DECK_LIGHT
       return (
@@ -1123,6 +1586,8 @@ class PrepSimulationDriver(PrepDriver):
         return HoiParams().add(c.serial_number, Str), declared
       if method == "GetModuleVersion" and c.firmware_version is not None:
         return HoiParams().add(c.firmware_version, Str), declared
+      if method == "GetHHSAssemblyInstantiationErrors" and c.heater_shaker_installed:
+        return HoiParams(), declared
       if method in ("IsParked", "IsSpread"):
         # Neither is modelled: a simulated device's channels are where the model has them.
         return HoiParams().add(False, PaddedBool), "not modelled"

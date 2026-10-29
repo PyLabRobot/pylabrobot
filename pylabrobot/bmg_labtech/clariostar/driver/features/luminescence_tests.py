@@ -1,0 +1,270 @@
+"""Luminescence tests over a fake io: what the driver sends is pinned to the ground truth, but for
+the plate's geometry (a PLR plate; the plate block is tested with the other modes) and the emission
+band's edges, which this driver sends at their nominal values; the counts are the ground truth's.
+
+What every mode shares (plate block, scan and settling bytes, shaking, the run and its stop) is
+tested with absorbance and fluorescence; only luminescence's own fields and reply are here.
+"""
+
+from typing import Any, Dict, List
+
+import pytest
+
+from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
+from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
+from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
+  RUN_REPLY,
+  STATUS_MEASURED,
+  STATUS_MEASURING,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import make_plate_holder
+from pylabrobot.bmg_labtech.clariostar.driver.features.fluorescence_tests import (
+  TEMPERATURE_37_DATA_REPLY,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.features.luminescence import Luminescence
+from pylabrobot.bmg_labtech.clariostar.driver.features.measurement import (
+  Measurement,
+  MeasurementSettings,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
+  STATUS_IDLE,
+  FakeFTDI,
+  make_driver,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationLuminescence
+from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.resources import Plate, cor_96_wellplate_360uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
+
+# The ground truth: every well, 580-80 nm, gain 3500, focal height 8.5 mm, settling 0.0 s,
+# normalization 1.00 s, measurement interval 0.80 s.
+LUMINESCENCE_RUN_FRAME = bytes.fromhex(
+  "02009a0c0431e82164059604602c521d040c0800ffffffffffffffffffffffff00000000000000000000000000000000"
+  "00000000000000000000000000000000000000000a014000000000000000000000000000000000000000000000000000"
+  "00000000270f270f01035200000100000dac0001000100011834151c0005000000640000000000000000000001000000"
+  "0100500001000012f30d"
+)
+
+# Its data reply: layout 25, 96 values, ceiling 210,000,000, no temperature.
+LUMINESCENCE_DATA_REPLY = bytes.fromhex(
+  "0201aa0c02050626000025006000600c845880010001006001000100000001010000000000000000001c0000001c0000"
+  "00150000001200000011000000210000002100000010000000170000001400000008000000280000001e000000120000"
+  "001f00000012000000120000002300000015000000110000001f0000001a00000010000000160000000b000000100000"
+  "001b0000000d0000001f0000000b000000190000002300000029000000170000000f0000001900000020000000210000"
+  "0010000000100000000c000000110000001f0000001b00000016000000100000001f0000001400000017000000100000"
+  "001500000012000000150000001e000000190000001f0000001200000025000000120000001b000000150000001a0000"
+  "00100000003300000024000000230000001900000016000000150000001200000011000000150000001b000000160000"
+  "00370000001e000000190000000f000000160000001a0000001b0000001a000000140000001000000019000000200000"
+  "0012000000100000001700000016000000140000001200000015000000120000001100000011000c790d"
+)
+
+# The ground truth's counts, row by row.
+LUMINESCENCE_GROUND_TRUTH = [
+  [28, 28, 21, 18, 17, 33, 33, 16, 23, 20, 8, 40],
+  [30, 18, 31, 18, 18, 35, 21, 17, 31, 26, 16, 22],
+  [11, 16, 27, 13, 31, 11, 25, 35, 41, 23, 15, 25],
+  [32, 33, 16, 16, 12, 17, 31, 27, 22, 16, 31, 20],
+  [23, 16, 21, 18, 21, 30, 25, 31, 18, 37, 18, 27],
+  [21, 26, 16, 51, 36, 35, 25, 22, 21, 18, 17, 21],
+  [27, 22, 55, 30, 25, 15, 22, 26, 27, 26, 20, 16],
+  [25, 32, 18, 16, 23, 22, 20, 18, 21, 18, 17, 17],
+]
+
+
+def plate() -> Plate:
+  """The plate the tests read: a Corning 96 360 uL flat-bottom."""
+  return cor_96_wellplate_360uL_Fb("plate")
+
+
+def make_luminescence(io: FakeFTDI, plate: Plate) -> Luminescence:
+  """A luminescence feature whose drawer holds `plate` in its plate holder."""
+  driver = make_driver(io)
+  driver.configuration = decoded()
+  driver.drawer.plate_holder = make_plate_holder()
+  driver.drawer.plate_holder.assign_child_resource(plate)
+  return Luminescence(driver)
+
+
+def with_fields(ground_truth: bytes, fields: Dict[int, int]) -> bytes:
+  """`ground_truth`'s payload on `plate()`: its plate geometry, and each u16 in `fields` replaced.
+
+  `fields` maps payload offsets to values.
+  """
+  payload = bytearray(ftdi_extract_payload(ground_truth))
+  payload[1:13] = Measurement._encode_plate_geometry(plate())[:12]
+  for offset, value in fields.items():
+    payload[offset : offset + 2] = value.to_bytes(2, "big")
+  return bytes(payload)
+
+
+# Payload offsets of the luminescence fields, after the plate block, scan byte, pre-separator,
+# `27 0f 27 0f` and the settling byte.
+FOCAL_HEIGHT = 101
+GAIN = 108
+EMISSION_EDGES = 116
+NORMALIZATION_TIME = 124
+MEASUREMENT_INTERVAL = 141
+
+# mm, the ground truth's.
+GROUND_TRUTH_FOCAL_HEIGHT = 8.5
+
+# The ground truth as this driver sends it: the emission band at its nominal edges, 620.0 /
+# 540.0 nm; the ground truth has 619.6 / 540.4.
+NOMINAL_EDGES = {EMISSION_EDGES: 6200, EMISSION_EDGES + 2: 5400}
+
+
+async def read(io: FakeFTDI, **arguments):
+  """A read of the whole plate answered by the ground truth's reply; the result."""
+  io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, LUMINESCENCE_DATA_REPLY]
+  return await make_luminescence(io, plate()).measure(
+    **{"focal_height": GROUND_TRUTH_FOCAL_HEIGHT, **arguments}
+  )
+
+
+class TestLuminescence(AnyioTestBase):
+  async def test_the_defaults_are_the_ground_truth(self):
+    io = FakeFTDI()
+    await read(io)
+    assert ftdi_extract_payload(io.written[1]) == with_fields(
+      LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES
+    )
+
+  async def test_the_result_carries_the_focal_height_read_at(self):
+    assert (await read(FakeFTDI())).focal_height == GROUND_TRUTH_FOCAL_HEIGHT
+    feature = make_luminescence(FakeFTDI(), plate())
+    default = feature._get_default_focal_height(plate().get_all_items())
+    assert (await read(FakeFTDI(), focal_height=None)).focal_height == default
+
+  async def test_each_field_is_sent_where_the_ground_truth_has_it(self):
+    """Every luminescence field changed at once, to values a CLARIOstarPlus (firmware 1.35)
+    accepted."""
+    io = FakeFTDI()
+    await read(
+      io,
+      focal_height=4.0,
+      gain=2000,
+      emission_wavelength=560,
+      emission_bandwidth=40,
+      normalization_time=2.0,
+      measurement_interval=0.2,
+    )
+    fields = {
+      FOCAL_HEIGHT: 400,
+      GAIN: 2000,
+      EMISSION_EDGES: 5800,
+      EMISSION_EDGES + 2: 5400,
+      NORMALIZATION_TIME: 200,
+      MEASUREMENT_INTERVAL: 20,
+    }
+    assert ftdi_extract_payload(io.written[1]) == with_fields(LUMINESCENCE_RUN_FRAME, fields)
+
+  async def test_none_reads_a_quarter_up_the_well(self):
+    # Corning 96 360 uL: the well at 3.03 mm, its floor 0.50 mm, its depth 10.67 mm: 6.2 mm.
+    runs = []
+    for focal_height in (None, 6.2):
+      io = FakeFTDI()
+      io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED]
+      io.replies.append(LUMINESCENCE_DATA_REPLY)
+      feature = make_luminescence(io, cor_96_wellplate_360uL_Fb("plate"))
+      await feature.measure(focal_height=focal_height)
+      runs.append(io.written[1])
+    assert runs[0] == runs[1]
+    with pytest.raises(ValueError):
+      feature.default_focal_height_percent_of_well_depth = 101
+
+  async def test_counts_are_the_ground_truth(self):
+    result = await read(FakeFTDI())
+    expected = {
+      f"{'ABCDEFGH'[row]}{column + 1}": float(value)
+      for row, values in enumerate(LUMINESCENCE_GROUND_TRUTH)
+      for column, value in enumerate(values)
+    }
+    assert result.data == expected
+    assert result.temperature is None
+    with pytest.raises(ValueError):  # fluorescence's layout
+      make_luminescence(FakeFTDI(), plate())._decode_data_reply(
+        ftdi_extract_payload(TEMPERATURE_37_DATA_REPLY), 96
+      )
+
+  async def test_what_luminescence_cannot_read_sends_nothing(self):
+    io = FakeFTDI()
+    feature = make_luminescence(io, plate())
+    refused: List[Dict[str, Any]] = [
+      dict(measurement_settings=MeasurementSettings(well_scan="orbital")),
+      dict(measurement_settings=MeasurementSettings(pause_before_reading=5)),
+      dict(measurement_interval=0.805),  # not in 0.01 s steps
+    ]
+    for arguments in refused:
+      with pytest.raises(ValueError):
+        await feature.measure(**arguments)
+    assert io.written == []
+
+  async def test_without_a_monochromator_nothing_is_sent(self):
+    """Not a reader's configuration: linear variable filters reported absent."""
+    io = FakeFTDI()
+    feature = make_luminescence(io, plate())
+    feature._driver.configuration.linear_variable_filters = False
+    with pytest.raises(ValueError, match="no monochromator"):
+      await feature.measure(focal_height=GROUND_TRUTH_FOCAL_HEIGHT)
+    assert io.written == []
+    feature._driver.configuration.linear_variable_filters = None  # unknown: let through
+    assert feature._check_monochromator("luminescence") == []
+
+  def test_the_wavelength_limits_follow_the_photomultipliers(self):
+    # (extended red, dual, crossed over): the highest emission wavelength.
+    for photomultipliers, highest in (
+      ((True, True, False), 740),  # the reader of the hardware reads
+      ((True, True, True), 840),
+      ((True, False, False), 840),
+      ((False, False, False), 740),
+    ):
+      driver = make_driver(FakeFTDI())
+      driver.configuration = decoded()
+      driver.configuration.luminescence_channels = 1
+      (
+        driver.configuration.extended_red_photomultiplier_tube,
+        driver.configuration.dual_photomultiplier_tubes,
+        driver.configuration.photomultiplier_tube_crossover,
+      ) = photomultipliers
+      driver._discover_features()
+      assert driver.luminescence is not None
+      assert driver.luminescence.configuration.wavelength_range[1] == highest
+
+  def test_luminescence_is_built_only_when_reported(self):
+    for channels, built in ((1, True), (0, False)):
+      driver = make_driver(FakeFTDI())
+      driver.configuration = decoded()
+      driver.configuration.luminescence_channels = channels
+      driver._discover_features()
+      assert isinstance(driver.luminescence, Luminescence) == built
+
+
+class TestSimulatedLuminescence(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    reader = CLARIOstarPlus(simulation=True)
+    await stack.enter_async_context(reader.lifespan(accept_plate_left_in_device=True))
+    self.plate = cor_96_wellplate_360uL_Fb("plate")
+    await reader.drawer.open()
+    reader.plate_holder.assign_child_resource(self.plate)
+    await reader.drawer.close()
+    luminescence = reader.luminescence
+    assert isinstance(luminescence, CLARIOstarSimulationLuminescence)
+    self.luminescence = luminescence
+
+  async def test_a_read_is_checked_and_reads_within_the_detectors_range(self):
+    result = await self.luminescence.measure(wells=self.plate.get_items("A1:H1"), gain=2000)
+    assert list(result.data) == [f"{row}1" for row in "ABCDEFGH"]
+    assert all(0 <= value <= 210_000_000 for value in result.data.values())
+    assert (result.emission_wavelength, result.gain) == (580, 2000)
+    with pytest.raises(ValueError):  # `_check_arguments`
+      await self.luminescence.measure(measurement_interval=0.805)
+
+  async def test_earlier_results_are_returned_again(self):
+    earlier = await self.luminescence.measure()
+    column_1 = self.plate.get_items("A1:H1")
+    replayed = await self.luminescence.measure(wells=column_1, simulated_data=earlier)
+    assert replayed.data == {f"{row}1": earlier.data[f"{row}1"] for row in "ABCDEFGH"}
+    with pytest.raises(ValueError):  # another emission band
+      await self.luminescence.measure(emission_wavelength=560, simulated_data=earlier)

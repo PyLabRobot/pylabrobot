@@ -30,6 +30,7 @@ class FakeNativeAgrowPumpArray(HasLifespan):
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
     if kwargs:
       raise TypeError("FakeNativeAgrowPumpArray does not accept lifespan options")
+    await super()._enter_lifespan(stack)
     self.events.append("native.enter")
     if self.enter_error is not None:
       raise self.enter_error

@@ -171,78 +171,6 @@ def TIP_CAR_384_A00(name: str) -> TipCarrier:
   )
 
 
-def TIP_CAR_480(name: str) -> TipCarrier:
-  """Carrier for 5 Racks with 96 Tips landscape [revision A00]"""
-  return TipCarrier(
-    name=name,
-    size_x=135.0,
-    size_y=497.0,
-    size_z=130.0,
-    sites=create_homogeneous_resources(
-      klass=EmbeddedTipRackHolder,
-      locations=[
-        Coordinate(10.15, 14.3, 114.95),
-        Coordinate(10.15, 110.3, 114.95),
-        Coordinate(10.15, 206.3, 114.95),
-        Coordinate(10.15, 302.3, 114.95),
-        Coordinate(10.15, 398.3, 114.95),
-      ],
-      resource_size_x=114.5,
-      resource_size_y=74.0,
-      name_prefix=name,
-    ),
-    model="TIP_CAR_480",
-  )
-
-
-def TIP_CAR_480BC_A00(name: str) -> TipCarrier:
-  """Tip carrier with 5 tip rack positions landscape"""
-  return TipCarrier(
-    name=name,
-    size_x=135.0,
-    size_y=497.0,
-    size_z=130.0,
-    sites=create_homogeneous_resources(
-      klass=EmbeddedTipRackHolder,
-      locations=[
-        Coordinate(10.15, 14.3, 114.95),
-        Coordinate(10.15, 110.3, 114.95),
-        Coordinate(10.15, 206.3, 114.95),
-        Coordinate(10.15, 302.3, 114.95),
-        Coordinate(10.15, 398.3, 114.95),
-      ],
-      resource_size_x=114.5,
-      resource_size_y=74.0,
-      name_prefix=name,
-    ),
-    model="TIP_CAR_480BC_A00",
-  )
-
-
-def TIP_CAR_480_A00(name: str) -> TipCarrier:
-  """Carrier for 5 Racks with 96 Tips landscape [revision A00]"""
-  return TipCarrier(
-    name=name,
-    size_x=135.0,
-    size_y=497.0,
-    size_z=130.0,
-    sites=create_homogeneous_resources(
-      klass=EmbeddedTipRackHolder,
-      locations=[
-        Coordinate(10.15, 14.3, 114.95),
-        Coordinate(10.15, 110.3, 114.95),
-        Coordinate(10.15, 206.3, 114.95),
-        Coordinate(10.15, 302.3, 114.95),
-        Coordinate(10.15, 398.3, 114.95),
-      ],
-      resource_size_x=114.5,
-      resource_size_y=74.0,
-      name_prefix=name,
-    ),
-    model="TIP_CAR_480_A00",
-  )
-
-
 def TIP_CAR_72_4mlTF_C00(name: str) -> TipCarrier:
   """Tip carrier with 3 4ml tip with filter racks portrait  [revision C00]"""
   return TipCarrier(
@@ -333,6 +261,34 @@ def TIP_CAR_96BC_5mlT_A00(name: str) -> TipCarrier:
   )
 
 
+def hamilton_tip_carrier_L5(name: str) -> TipCarrier:
+  """Hamilton cat. no.: 182085
+  Hamilton name: 'TIP_CAR_480_A00'.
+  Carrier for 5 racks of 96 tips, landscape.
+  6 track(T) wide.
+  """
+  return TipCarrier(
+    name=name,
+    size_x=135.0,
+    size_y=497.0,
+    size_z=130.0,
+    sites=create_homogeneous_resources(
+      klass=EmbeddedTipRackHolder,
+      locations=[
+        Coordinate(10.15, 14.3, 114.95),
+        Coordinate(10.15, 110.3, 114.95),
+        Coordinate(10.15, 206.3, 114.95),
+        Coordinate(10.15, 302.3, 114.95),
+        Coordinate(10.15, 398.3, 114.95),
+      ],
+      resource_size_x=114.5,
+      resource_size_y=74.0,
+      name_prefix=name,
+    ),
+    model=hamilton_tip_carrier_L5.__name__,
+  )
+
+
 def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
   """Hamilton cat. no.: 182074
   Hamilton name: 'TIP_CAR_NTR_A00'.
@@ -393,3 +349,33 @@ def TIP_CAR_NTR_A00(name: str) -> TipCarrier:
     stacklevel=2,
   )
   return hamilton_tip_carrier_L5_ntr_a00(name)
+
+
+def TIP_CAR_480(name: str) -> TipCarrier:
+  """Deprecated alias for `hamilton_tip_carrier_L5`."""
+  warnings.warn(
+    "TIP_CAR_480 is deprecated. Use 'hamilton_tip_carrier_L5' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_tip_carrier_L5(name)
+
+
+def TIP_CAR_480BC_A00(name: str) -> TipCarrier:
+  """Deprecated alias for `hamilton_tip_carrier_L5`."""
+  warnings.warn(
+    "TIP_CAR_480BC_A00 is deprecated. Use 'hamilton_tip_carrier_L5' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_tip_carrier_L5(name)
+
+
+def TIP_CAR_480_A00(name: str) -> TipCarrier:
+  """Deprecated alias for `hamilton_tip_carrier_L5`."""
+  warnings.warn(
+    "TIP_CAR_480_A00 is deprecated. Use 'hamilton_tip_carrier_L5' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_tip_carrier_L5(name)

@@ -13,7 +13,7 @@ import struct
 import threading
 import unittest
 from typing import Callable, Dict, List, Optional, Tuple
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import anyio
 import pytest
@@ -22,6 +22,7 @@ from trio.testing import MockClock
 pytest.importorskip("numpy")
 pytest.importorskip("grpc")
 
+import grpc
 import numpy as np  # type: ignore[import-not-found]
 
 from pylabrobot.concurrency import HasLifespan
@@ -205,7 +206,7 @@ def _make_backend(
     filter_cubes=filter_cubes or {},
   )
   channel = _MockChannel()
-  backend._channel = channel
+  backend._channel = Mock(spec=grpc.Channel, wraps=channel)
   backend._lock_id = "pylabrobot"
   backend._locked = True
   return backend, channel

@@ -1,6 +1,6 @@
 """Tests for the Flex direct-motion surface: head jog + position read
-(``_FlexHead.position``/``_FlexHead.move_to``) and gripper motion + jaw
-control (``FlexGripper.move_to``/``grip``/``open_jaw``).
+(``_FlexHead.request_position``/``_FlexHead.move_to_position``) and gripper motion + jaw
+control (``FlexGripper.move_to_position``/``grip``/``open_jaw``).
 
 Drives ``Flex.setup()`` with an injected ``AsyncMock`` and
 asserts the exact wire commands: ``savePosition`` reads, ``moveToCoordinates``
@@ -64,14 +64,14 @@ def _flex_with_version(
 
 
 class TestHeadPosition(unittest.IsolatedAsyncioTestCase):
-  """position() reads the head's pose from a savePosition command result."""
+  """request_position() reads the head's pose from a savePosition command result."""
 
   async def test_position_reads_save_position_result(self):
     flex, api = _flex_with_gripper(self, saved_position={"x": 10.0, "y": 20.0, "z": 30.5})
     await flex.setup()
     head = _head(flex)
 
-    position = await head.position()
+    position = await head.request_position()
 
     self.assertEqual(position, Coordinate(10.0, 20.0, 30.5))
     save_cmds = _cmds(api, "savePosition")
@@ -80,7 +80,7 @@ class TestHeadPosition(unittest.IsolatedAsyncioTestCase):
 
 
 class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
-  """move_to fills unspecified axes from the current position and sends ONE
+  """move_to_position fills unspecified axes from the current position and sends ONE
   moveToCoordinates command. No tip is mounted in any of these tests: jogging
   is for teaching/recovery and must not require one.
   """
@@ -90,7 +90,7 @@ class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
     await flex.setup()
     head = _head(flex)
 
-    await head.move_to(x=50.0)
+    await head.move_to_position(x=50.0)
 
     self.assertEqual(len(_cmds(api, "savePosition")), 1)
     move_cmds = _cmds(api, "moveToCoordinates")
@@ -109,7 +109,7 @@ class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
   async def test_all_axes_given_skips_position_read(self):
     flex, api = _flex_with_gripper(self)
     await flex.setup()
-    await _head(flex).move_to(x=1.0, y=2.0, z=3.0)
+    await _head(flex).move_to_position(x=1.0, y=2.0, z=3.0)
 
     self.assertEqual(len(_cmds(api, "savePosition")), 0)
     move_cmds = _cmds(api, "moveToCoordinates")
@@ -119,7 +119,7 @@ class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
   async def test_minimum_z_height_override(self):
     flex, api = _flex_with_gripper(self)
     await flex.setup()
-    await _head(flex).move_to(x=1.0, y=2.0, z=3.0, minimum_z_height=35.0)
+    await _head(flex).move_to_position(x=1.0, y=2.0, z=3.0, minimum_z_height=35.0)
 
     move_cmds = _cmds(api, "moveToCoordinates")
     self.assertEqual(move_cmds[0].args[2]["minimumZHeight"], 35.0)
@@ -127,7 +127,7 @@ class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
   async def test_speed_passthrough(self):
     flex, api = _flex_with_gripper(self)
     await flex.setup()
-    await _head(flex).move_to(x=1.0, y=2.0, z=3.0, speed=40.0)
+    await _head(flex).move_to_position(x=1.0, y=2.0, z=3.0, speed=40.0)
 
     move_cmds = _cmds(api, "moveToCoordinates")
     self.assertEqual(move_cmds[0].args[2]["speed"], 40.0)
@@ -135,7 +135,7 @@ class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
   async def test_speed_omitted_by_default(self):
     flex, api = _flex_with_gripper(self)
     await flex.setup()
-    await _head(flex).move_to(x=1.0, y=2.0, z=3.0)
+    await _head(flex).move_to_position(x=1.0, y=2.0, z=3.0)
 
     move_cmds = _cmds(api, "moveToCoordinates")
     self.assertNotIn("speed", move_cmds[0].args[2])
@@ -144,21 +144,21 @@ class TestHeadMoveTo(unittest.IsolatedAsyncioTestCase):
     flex, api = _flex_with_gripper(self)
     await flex.setup()
     with self.assertRaises(ValueError):
-      await _head(flex).move_to()
+      await _head(flex).move_to_position()
 
     self.assertEqual(len(_cmds(api, "savePosition")), 0)
     self.assertEqual(len(_cmds(api, "moveToCoordinates")), 0)
 
 
 class TestGripperMoveTo(unittest.IsolatedAsyncioTestCase):
-  """Gripper move_to sends robot/moveTo with the extension mount."""
+  """Gripper move_to_position sends robot/moveTo with the extension mount."""
 
   async def asyncSetUp(self):
     self.flex, self.api = _flex_with_gripper(self)
     await self.flex.setup()
 
   async def test_exact_wire_params(self):
-    await _gripper(self.flex).move_to(100.0, 50.0, 75.5)
+    await _gripper(self.flex).move_to_position(100.0, 50.0, 75.5)
 
     move_cmds = _cmds(self.api, "robot/moveTo")
     self.assertEqual(len(move_cmds), 1)
@@ -168,7 +168,7 @@ class TestGripperMoveTo(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_speed_passthrough(self):
-    await _gripper(self.flex).move_to(1.0, 2.0, 3.0, speed=25.0)
+    await _gripper(self.flex).move_to_position(1.0, 2.0, 3.0, speed=25.0)
 
     move_cmds = _cmds(self.api, "robot/moveTo")
     self.assertEqual(move_cmds[0].args[2]["speed"], 25.0)
@@ -233,7 +233,7 @@ class TestRobotCommandsVersionGate(unittest.IsolatedAsyncioTestCase):
     gripper = _gripper(flex)
 
     with self.assertRaises(OpentronsError) as ctx:
-      await gripper.move_to(1.0, 2.0, 3.0)
+      await gripper.move_to_position(1.0, 2.0, 3.0)
     self.assertIn("8.2.0", str(ctx.exception))
     with self.assertRaises(OpentronsError):
       await gripper.grip()
@@ -309,7 +309,7 @@ class TestRobotCommandsVersionGate(unittest.IsolatedAsyncioTestCase):
   async def test_head_motion_is_not_gated(self):
     flex, api = _flex_with_version(self, "8.1.0")
     await flex.setup()
-    await _head(flex).move_to(x=1.0, y=2.0, z=3.0)
+    await _head(flex).move_to_position(x=1.0, y=2.0, z=3.0)
     self.assertEqual(len(_cmds(api, "moveToCoordinates")), 1)
 
   def test_unknown_version_raises(self):

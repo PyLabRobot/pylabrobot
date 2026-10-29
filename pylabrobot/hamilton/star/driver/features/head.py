@@ -23,6 +23,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
+from pylabrobot.concurrency import SiblingTaskErrors, non_cancelling_task_group
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
@@ -125,6 +126,10 @@ class HeadConfiguration:
   y_drive_acceleration_mm_per_increment: float = 0.015625
   z_drive_acceleration_mm_per_increment: float = 0.005
   dispensing_drive_mm_per_increment: float = 0.001025641026
+  # How many increments one unit of a `DQ` speed or acceleration field counts; a drive that counts
+  # in tens or thousands of increments says so here.
+  dispensing_drive_speed_increments_per_unit: int = 1
+  dispensing_drive_acceleration_increments_per_unit: int = 1
 
   # The Z windows both heads share. The Y ones differ, so each head states its own.
   z_speed_range_increments: Tuple[int, int] = (50, 20000)
@@ -179,6 +184,7 @@ class HeadConfiguration:
   y_drive_current_limit_default: int = 15
   z_drive_current_limit_default: int = 15
   current_limit_range: Tuple[int, int] = (0, 15)
+  dispensing_drive_current_limit_range: Tuple[int, int] = (0, 15)
 
   # What each drive starts from, in the increments it is written in. A head that documents
   # something else states its own.
@@ -225,6 +231,94 @@ class HeadConfiguration:
   def squeezer_drive_mm_per_increment(self) -> float:
     """How far one increment of the squeezer drive travels, in mm."""
     raise NotImplementedError("a head states how far one squeezer increment travels")
+
+  @property
+  def dispensing_drive_range(self) -> Tuple[float, float]:
+    """Dispensing-drive position window, as the volume the piston holds (uL)."""
+    raise NotImplementedError("a head states the positions its dispensing drive accepts")
+
+  @property
+  def dispensing_drive_speed_range(self) -> Tuple[float, float]:
+    """Dispensing-drive speed window (uL/s)."""
+    raise NotImplementedError("a head states the speeds its dispensing drive accepts")
+
+  @property
+  def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
+    """Dispensing-drive acceleration window (uL/s2)."""
+    raise NotImplementedError("a head states the accelerations its dispensing drive accepts")
+
+  # -- conversions: the wire counts in increments, the driver speaks mm and uL -------------------
+
+  def y_drive_increments_to_mm(self, increments: int) -> float:
+    """A Y-drive position in mm, from the increments the drive counts in."""
+    return round(increments * self.y_drive_mm_per_increment, 2)
+
+  def y_drive_mm_to_increments(self, mm: float) -> int:
+    """A Y-drive position in increments, from mm."""
+    return round(mm / self.y_drive_mm_per_increment)
+
+  def y_drive_acceleration_increments_to_mm(self, increments: int) -> float:
+    """A Y-drive acceleration in mm/s2, from the increments the drive counts it in."""
+    return round(increments * self.y_drive_acceleration_mm_per_increment, 2)
+
+  def y_drive_acceleration_mm_to_increments(self, mm: float) -> int:
+    """A Y-drive acceleration in the increments the drive counts it in, from mm/s2."""
+    return round(mm / self.y_drive_acceleration_mm_per_increment)
+
+  def z_drive_increments_to_mm(self, increments: int) -> float:
+    """A Z-drive position in mm, from increments."""
+    return round(increments * self.z_drive_mm_per_increment, 2)
+
+  def z_drive_mm_to_increments(self, mm: float) -> int:
+    """A Z-drive position in increments, from mm."""
+    return round(mm / self.z_drive_mm_per_increment)
+
+  def z_drive_acceleration_increments_to_mm(self, increments: int) -> float:
+    """A Z-drive acceleration in mm/s2, from the increments the drive counts it in."""
+    return round(increments * self.z_drive_acceleration_mm_per_increment, 2)
+
+  def z_drive_acceleration_mm_to_increments(self, mm: float) -> int:
+    """A Z-drive acceleration in the increments the drive counts it in, from mm/s2."""
+    return round(mm / self.z_drive_acceleration_mm_per_increment)
+
+  def dispensing_drive_increments_to_uL(self, increments: int) -> float:
+    """A dispensing-drive position as the volume it holds, from increments."""
+    return round(increments * self.dispensing_drive_uL_per_increment, 2)
+
+  def dispensing_drive_uL_to_increments(self, uL: float) -> int:
+    """A dispensing-drive position in increments, from the volume to hold."""
+    return round(uL / self.dispensing_drive_uL_per_increment)
+
+  def dispensing_drive_increments_to_mm(self, increments: int) -> float:
+    """A dispensing-drive position as how far the piston has travelled, from increments."""
+    return round(increments * self.dispensing_drive_mm_per_increment, 2)
+
+  def dispensing_drive_mm_to_increments(self, mm: float) -> int:
+    """A dispensing-drive position in increments, from how far the piston should travel."""
+    return round(mm / self.dispensing_drive_mm_per_increment)
+
+  def dispensing_drive_speed_uL_to_increments(self, uL: float) -> int:
+    """A dispensing-drive speed in the units the drive counts it in, from uL/s."""
+    per_unit = (
+      self.dispensing_drive_uL_per_increment * self.dispensing_drive_speed_increments_per_unit
+    )
+    return round(uL / per_unit)
+
+  def dispensing_drive_acceleration_uL_to_increments(self, uL: float) -> int:
+    """A dispensing-drive acceleration in the units the drive counts it in, from uL/s2."""
+    per_unit = (
+      self.dispensing_drive_uL_per_increment
+      * self.dispensing_drive_acceleration_increments_per_unit
+    )
+    return round(uL / per_unit)
+
+  def squeezer_drive_increments_to_mm(self, increments: int) -> float:
+    """A squeezer-drive position in mm, from increments."""
+    return round(increments * self.squeezer_drive_mm_per_increment, 2)
+
+  def squeezer_drive_mm_to_increments(self, mm: float) -> int:
+    """A squeezer-drive position in increments, from mm."""
+    return round(mm / self.squeezer_drive_mm_per_increment)
 
   # -- what each drive starts from, preferring what the head reported over what it documents -----
 
@@ -315,64 +409,6 @@ class HeadConfiguration:
     """How deep the channel array is: the first row's centre to the last's, in mm."""
     return (self.channel_rows - 1) * self.channel_pitch
 
-  # -- conversions: the wire counts in increments, the driver speaks mm and uL -------------------
-
-  def y_drive_increments_to_mm(self, increments: int) -> float:
-    """A Y-drive position in mm, from the increments the drive counts in."""
-    return round(increments * self.y_drive_mm_per_increment, 2)
-
-  def y_drive_mm_to_increments(self, mm: float) -> int:
-    """A Y-drive position in increments, from mm."""
-    return round(mm / self.y_drive_mm_per_increment)
-
-  def y_drive_acceleration_increments_to_mm(self, increments: int) -> float:
-    """A Y-drive acceleration in mm/s2, from the increments the drive counts it in."""
-    return round(increments * self.y_drive_acceleration_mm_per_increment, 2)
-
-  def y_drive_acceleration_mm_to_increments(self, mm: float) -> int:
-    """A Y-drive acceleration in the increments the drive counts it in, from mm/s2."""
-    return round(mm / self.y_drive_acceleration_mm_per_increment)
-
-  def z_drive_increments_to_mm(self, increments: int) -> float:
-    """A Z-drive position in mm, from increments."""
-    return round(increments * self.z_drive_mm_per_increment, 2)
-
-  def z_drive_mm_to_increments(self, mm: float) -> int:
-    """A Z-drive position in increments, from mm."""
-    return round(mm / self.z_drive_mm_per_increment)
-
-  def z_drive_acceleration_increments_to_mm(self, increments: int) -> float:
-    """A Z-drive acceleration in mm/s2, from the increments the drive counts it in."""
-    return round(increments * self.z_drive_acceleration_mm_per_increment, 2)
-
-  def z_drive_acceleration_mm_to_increments(self, mm: float) -> int:
-    """A Z-drive acceleration in the increments the drive counts it in, from mm/s2."""
-    return round(mm / self.z_drive_acceleration_mm_per_increment)
-
-  def dispensing_drive_increments_to_uL(self, increments: int) -> float:
-    """A dispensing-drive position as the volume it holds, from increments."""
-    return round(increments * self.dispensing_drive_uL_per_increment, 2)
-
-  def dispensing_drive_uL_to_increments(self, uL: float) -> int:
-    """A dispensing-drive position in increments, from the volume to hold."""
-    return round(uL / self.dispensing_drive_uL_per_increment)
-
-  def dispensing_drive_increments_to_mm(self, increments: int) -> float:
-    """A dispensing-drive position as how far the piston has travelled, from increments."""
-    return round(increments * self.dispensing_drive_mm_per_increment, 2)
-
-  def dispensing_drive_mm_to_increments(self, mm: float) -> int:
-    """A dispensing-drive position in increments, from how far the piston should travel."""
-    return round(mm / self.dispensing_drive_mm_per_increment)
-
-  def squeezer_drive_increments_to_mm(self, increments: int) -> float:
-    """A squeezer-drive position in mm, from increments."""
-    return round(increments * self.squeezer_drive_mm_per_increment, 2)
-
-  def squeezer_drive_mm_to_increments(self, mm: float) -> int:
-    """A squeezer-drive position in increments, from mm."""
-    return round(mm / self.squeezer_drive_mm_per_increment)
-
 
 class Head:
   """A head: the block of channels that works a whole plate at once.
@@ -383,6 +419,11 @@ class Head:
   written; the commands themselves are the same. Tip handling and liquid handling are not at this
   level and are not the same between the two, so each head carries its own.
   """
+
+  # Behind `default_dispensing_drive_speed` and `default_dispensing_drive_acceleration`, in uL. Each
+  # head starts them; None until it has.
+  _default_dispensing_drive_speed: Optional[float] = None
+  _default_dispensing_drive_acceleration: Optional[float] = None
 
   configuration: HeadConfiguration
   """The head's device facts. Each head narrows this to its own, so a subclass reads and writes
@@ -399,6 +440,10 @@ class Head:
     # arm it rides; moves keep it in step. Without a deck it stays None and nothing is modelled.
     self.resource: Optional[NChannelPipette] = None
     self.configuration = configuration
+    # Where the piston stands, in uL, as last read or moved; 0.0 at rest.
+    self.piston_position: float = 0.0
+
+  # -- the raw register access these share ---------------------------------------------------------
 
   def require_drive_parameter(self, parameter: str) -> int:
     """The width one of the head's stored drive parameters is written in.
@@ -418,76 +463,6 @@ class Head:
         f"unknown drive parameter {parameter!r}, expected one of {tuple(self.configuration.drive_parameters)}"
       )
     return self.configuration.drive_parameters[parameter]
-
-  # ----------------------------------------
-  # Setup
-  # ----------------------------------------
-
-  # -- discovery ---------------------------------------------------------------------------------
-
-  async def request_firmware_version(self) -> Tuple[str, datetime.date]:
-    """Request the head's firmware version and build date.
-
-    Returns:
-      The version string and its build date.
-    """
-    resp = await self._driver.send_command(module=self.configuration.module, command="RF")
-    return resp.split("rf")[-1], parse_firmware_version_date(resp)
-
-  async def request_hardware(self) -> List[str]:
-    """Request the head's configuration, undecoded.
-
-    The head returns ten blank-separated decimal values, of which index 0 is clot monitoring with
-    cLLD on every head. What the rest mean is the head's own; `_record_hardware` decodes them.
-
-    Returns:
-      The positional tokens, as reported.
-    """
-    resp: str = await self._driver.send_command(module=self.configuration.module, command="QU")
-    return resp.split("au")[-1].split()
-
-  def _apply_firmware_generation(self) -> None:
-    """Correct whatever depends on which firmware generation this head runs.
-
-    Called once the version is known and before any drive is read, since a generation can change
-    what an increment is worth and how wide a parameter is written.
-    """
-
-  def _record_hardware(self, hardware: List[str]) -> None:
-    """Record what this head's configuration bytes mean, past the clot-monitoring flag at index 0.
-
-    Args:
-      hardware: the tokens `request_hardware` read.
-    """
-    raise NotImplementedError("a head decodes its own configuration bytes")
-
-  async def request_head_type(self) -> str:
-    """Request which head is fitted.
-
-    Returns:
-      The head type, or "unknown" for a code this driver does not know.
-    """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="QG", fmt="qg#"
-    )
-    return self.configuration.head_types.get(cast(int, resp["qg"]), "unknown")
-
-  async def request_x_offset(self) -> float:
-    """Request the X distance from the X-arm carriage center to head channel A1.
-
-    Stored in the master EEPROM and read with the generic master-EEPROM read, mirroring the
-    iSWAP's elbow X offset. Needed to derive the carriage X from a target A1 X.
-
-    Returns:
-      The offset in mm.
-    """
-    # 4-digit field: a head's offset is ~10x the iSWAP's (hundreds of mm against ~34 mm), so it
-    # exceeds 3 digits in 0.1 mm units - a 3-digit field silently truncates 3684 -> 368.
-    parameter = self.configuration.x_offset_parameter
-    resp = await self._driver.send_command(
-      module="C0", command="RA", ra=parameter, fmt=f"{parameter}####"
-    )
-    return cast(int, resp[parameter]) / 10.0
 
   def _drive_parameter_to_mm(self, parameter: str, increments: int) -> float:
     """One of the head's stored drive parameters in mm/s or mm/s2, from what the drive counts in.
@@ -569,6 +544,88 @@ class Head:
     written: Dict[str, Any] = {parameter: f"{increments:0{width}}"}
     await self._driver.send_command(module=self.configuration.module, command="AA", **written)
 
+  async def _restore_drive_parameter(self, parameter: str, written: float, was: float) -> None:
+    """Put back what a move overwrote in the drive's volatile register.
+
+    Compared in increments rather than in mm, because that is what the drive holds: two values
+    that round to the same increment are the same write.
+
+    Args:
+      parameter: the parameter the move wrote.
+      written: what the move wrote, in standard units.
+      was: what was there before, in standard units.
+    """
+    if self._drive_parameter_to_increments(
+      parameter, written
+    ) != self._drive_parameter_to_increments(parameter, was):
+      await self.set_drive_parameter(parameter, was)
+
+  # -- session / discovery -------------------------------------------------------------------------
+
+  async def request_firmware_version(self) -> Tuple[str, datetime.date]:
+    """Request the head's firmware version and build date.
+
+    Returns:
+      The version string and its build date.
+    """
+    resp = await self._driver.send_command(module=self.configuration.module, command="RF")
+    return resp.split("rf")[-1], parse_firmware_version_date(resp)
+
+  async def request_hardware(self) -> List[str]:
+    """Request the head's configuration, undecoded.
+
+    The head returns ten blank-separated decimal values, of which index 0 is clot monitoring with
+    cLLD on every head. What the rest mean is the head's own; `_record_hardware` decodes them.
+
+    Returns:
+      The positional tokens, as reported.
+    """
+    resp: str = await self._driver.send_command(module=self.configuration.module, command="QU")
+    return resp.split("au")[-1].split()
+
+  def _apply_firmware_generation(self) -> None:
+    """Correct whatever depends on which firmware generation this head runs.
+
+    Called once the version is known and before any drive is read, since a generation can change
+    what an increment is worth and how wide a parameter is written.
+    """
+
+  def _record_hardware(self, hardware: List[str]) -> None:
+    """Record what this head's configuration bytes mean, past the clot-monitoring flag at index 0.
+
+    Args:
+      hardware: the tokens `request_hardware` read.
+    """
+    raise NotImplementedError("a head decodes its own configuration bytes")
+
+  async def request_head_type(self) -> str:
+    """Request which head is fitted.
+
+    Returns:
+      The head type, or "unknown" for a code this driver does not know.
+    """
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="QG", fmt="qg#"
+    )
+    return self.configuration.head_types.get(cast(int, resp["qg"]), "unknown")
+
+  async def request_x_offset(self) -> float:
+    """Request the X distance from the X-arm carriage center to head channel A1.
+
+    Stored in the master EEPROM and read with the generic master-EEPROM read, mirroring the
+    iSWAP's elbow X offset. Needed to derive the carriage X from a target A1 X.
+
+    Returns:
+      The offset in mm.
+    """
+    # 4-digit field: a head's offset is ~10x the iSWAP's (hundreds of mm against ~34 mm), so it
+    # exceeds 3 digits in 0.1 mm units - a 3-digit field silently truncates 3684 -> 368.
+    parameter = self.configuration.x_offset_parameter
+    resp = await self._driver.send_command(
+      module="C0", command="RA", ra=parameter, fmt=f"{parameter}####"
+    )
+    return cast(int, resp[parameter]) / 10.0
+
   async def _reported_drive_parameter(self, parameter: str) -> Optional[float]:
     """What the head currently holds for one drive parameter, or None if it will not say.
 
@@ -579,6 +636,50 @@ class Head:
     except Exception:
       logger.warning("the head did not report %s; keeping what its firmware documents", parameter)
       return None
+
+  async def request_predefined_y_positions(self) -> List[float]:
+    """Request the Y positions the head has stored, in mm.
+
+    The head keeps ten of them in non-volatile memory. The first is the home position the Y drive
+    parks at; the rest are further slots this feature sends no command against, so they are
+    returned as read rather than named. A head that stores them as offsets says so through
+    `configuration.predefined_y_position_origin`, which is added here so what comes back is
+    comparable with `request_y_position`.
+
+    Records what came back on the configuration, so a head read once carries its table.
+
+    Returns:
+      The ten stored positions in mm, the first being home.
+    """
+    c = self.configuration
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="RA", ra="py", fmt="py##### (n)"
+    )
+    increments = cast(List[int], resp["py"])
+    c.predefined_y_positions_increments = dict(zip(c.predefined_y_slots, increments))
+    return [c.y_drive_increments_to_mm(i + c.predefined_y_position_origin) for i in increments]
+
+  async def request_predefined_z_positions(self) -> List[float]:
+    """Request the Z positions the head has stored, in mm.
+
+    The head keeps ten of them in non-volatile memory. The first is the home position the Z drive
+    parks at; the rest are further slots this feature sends no command against, so they are
+    returned as read rather than named. A head that stores them as offsets says so through
+    `configuration.predefined_z_position_origin`, which is added here. These are positions of the
+    head's lowest fixed feature, as `request_z_position` is.
+
+    Records what came back on the configuration, so a head read once carries its table.
+
+    Returns:
+      The ten stored positions in mm, the first being home.
+    """
+    c = self.configuration
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="RA", ra="pz", fmt="pz##### (n)"
+    )
+    increments = cast(List[int], resp["pz"])
+    c.predefined_z_positions_increments = dict(zip(c.predefined_z_slots, increments))
+    return [c.z_drive_increments_to_mm(i + c.predefined_z_position_origin) for i in increments]
 
   async def discover(self):
     """Read what head this is and what it can do. Read-only: nothing moves."""
@@ -613,73 +714,6 @@ class Head:
     await self.request_predefined_y_positions()
     await self.request_predefined_z_positions()
 
-  def require_tip_discard_location(self, location: Optional[Coordinate]) -> Coordinate:
-    """Where tips are to be dropped, falling back to this head's configured trash.
-
-    Args:
-      location: what the caller asked for, in deck mm at head channel A1, or None to use the
-        configured trash.
-
-    Returns:
-      Where to drop them.
-
-    Raises:
-      ValueError: If nothing was given and no trash is configured.
-    """
-    if location is None:
-      location = self.configuration.tip_discard_location
-    if location is None:
-      raise ValueError(
-        "nowhere to discard tips: this head has no trash configured. Pass a location, or set "
-        "`configuration.tip_discard_location` to where its waste sits, at head channel A1."
-      )
-    return location
-
-  # -- initialization ----------------------------------------------------------------------------
-
-  async def initialize(
-    self,
-    tip_discard_location: Optional[Coordinate] = None,
-    z_position_at_the_command_end: Optional[float] = None,
-    read_timeout: int = 60,
-  ):
-    """Initialize the head, discarding whatever is mounted on it.
-
-    This moves the head: it travels to the position given and ejects there, so that position must
-    be somewhere tips may be dropped. The firmware wants the location of the head's channel A1.
-
-    Args:
-      tip_discard_location: where to eject, in deck mm, at head channel A1. Defaults to
-        `configuration.tip_discard_location`.
-      z_position_at_the_command_end: Z to leave the head at, in mm. Defaults to
-        `configuration.traversal_z_position`.
-    Raises:
-      ValueError: If no position was given and none is configured.
-    """
-    if z_position_at_the_command_end is None:
-      z_position_at_the_command_end = self.configuration.traversal_z_position
-    tip_discard_location = self.require_tip_discard_location(tip_discard_location)
-    parameters: Dict[str, Any] = {
-      "xs": f"{abs(round(tip_discard_location.x * 10)):05}",
-      "xd": 0 if tip_discard_location.x >= 0 else 1,
-      self.configuration.y_parameter: f"{abs(round(tip_discard_location.y * 10)):04}",
-      self.configuration.z_parameter: f"{round(tip_discard_location.z * 10):04}",
-      self.configuration.z_end_parameter: f"{round(z_position_at_the_command_end * 10):04}",
-    }
-    return await self._driver.send_command(
-      module="C0",
-      command=self.configuration.initialize_command,
-      subsystem=self.configuration.module,
-      read_timeout=read_timeout,
-      **parameters,
-    )
-
-  # ----------------------------------------
-  # Movement
-  # ----------------------------------------
-
-  # -- tips --------------------------------------------------------------------------------------
-
   async def request_tip_presence(self) -> bool:
     """Request what the firmware holds about the head carrying tips.
 
@@ -702,185 +736,29 @@ class Head:
     )
     return cast(int, resp[field]) == 1
 
-  async def request_location(self) -> Coordinate:
-    """Measure where head channel A1 is, with whatever it carries taken into account.
-
-    The master answers with the tip bottom rather than the drive's own reference, so with tips on
-    this reads lower than `request_z_position` by however far they stand proud of the head. With
-    none on, the two agree. Nothing is recorded: `request_z_position` is what the model follows,
-    and this is the reading it is checked against.
-
-    Returns:
-      Where channel A1 is, in deck mm, at the bottom of whatever is mounted.
-    """
-    c = self.configuration
-    resp = await self._driver.send_command(
-      module="C0",
-      command=c.position_command,
-      subsystem=self.configuration.module,
-      fmt=f"xs#####xd#{c.y_parameter}####{c.z_parameter}####",
-    )
-    x = cast(int, resp["xs"]) / 10
-    return Coordinate(
-      x=x if resp["xd"] == 0 else -x,
-      y=cast(int, resp[c.y_parameter]) / 10,
-      z=cast(int, resp[c.z_parameter]) / 10,
-    )
-
-  async def request_tip_overhang(self) -> float:
-    """Measure how far the tips the head carries stand below its own reference point.
-
-    Both readings are of the same head at the same moment, so the difference is the overhang
-    without anything having to move: `request_z_position` reports the head's lowest fixed feature,
-    `request_location` reports the bottom of what is mounted on it. This is what a Z target has to
-    be offset by for the tip end, rather than the head, to land where it is wanted.
-
-    Returns:
-      The overhang in mm. Legacy's tip length is this plus the tip's fitting depth.
-
-    Raises:
-      RuntimeError: If the head is carrying no tips, so there is nothing to measure.
-    """
-    if not await self.request_tip_presence():
-      raise RuntimeError("the head reports no tips mounted, so there is no overhang to measure")
-    reference = await self.request_z_position()
-    tip_bottom = (await self.request_location()).z
-    return round(reference - tip_bottom, 2)
-
-  # -- x position, carried by the arm the head rides ---------------------------------------------
-
-  @property
-  def arm(self) -> Optional["XArm"]:
-    """The arm carrying this head, on a device that has put it on one.
-
-    Not whichever arm is present: on a device with two, the head is on one of them and its X, its
-    travel and anything it might collide with are that one's.
-
-    Returns:
-      The arm carrying this head, or None when nothing carries it.
-    """
-    return next((a for a in self._driver.arms if a.head96 is self or a.head384 is self), None)
-
-  async def request_x_position(self) -> float:
-    """Request where along X channel A1 is, in deck mm.
-
-    The head has no X drive of its own: it rides the arm, and sits `configuration.x_offset` left of
-    the carriage reference point. So this asks the arm and applies the offset, rather than reading a
-    drive. Nothing is recorded either - the resource modelling the head is a child of the arm's, so
-    its X follows the arm without anything having to write it.
-
-    Returns:
-      The position in mm.
-
-    Raises:
-      RuntimeError: If no arm is installed, or the head's X offset was not read at discovery.
-    """
-    arm = self.arm
-    if arm is None:
-      raise RuntimeError("this head is not on either arm; have you called `star.setup()`?")
-    if self.configuration.x_offset is None:
-      raise RuntimeError("the head's X offset was not read; have you called `star.setup()`?")
-    return round(await arm.request_position() - self.configuration.x_offset, 2)
-
-  async def move_to_x_position(
-    self,
-    x: float,
-    acceleration_level: int = 3,
-    current_limit: int = 7,
-    settle_reads: int = 20,
-  ):
-    """Move channel A1 along X. The whole arm travels, with everything else it carries.
-
-    The head has no X drive. It rides the arm and sits `configuration.x_offset` left of the
-    carriage reference point, so the arm is sent to the carriage position that puts A1 at `x`.
+  def require_tip_discard_location(self, location: Optional[Coordinate]) -> Coordinate:
+    """Where tips are to be dropped, falling back to this head's configured trash.
 
     Args:
-      x: where to put channel A1, in mm.
-      acceleration_level: how hard to accelerate, 1 to 4.
-      current_limit: the motor current limit, 1 to 7.
-      settle_reads: how many reads to take before calling the arm stopped.
+      location: what the caller asked for, in deck mm at head channel A1, or None to use the
+        configured trash.
+
+    Returns:
+      Where to drop them.
 
     Raises:
-      ValueError: If the head cannot reach it.
-      RuntimeError: If no arm is installed, or the head's X offset was not read at discovery.
+      ValueError: If nothing was given and no trash is configured.
     """
-    self._check_reachable("x", x)
-    arm = self.arm
-    if arm is None:
-      raise RuntimeError("this head is not on either arm; have you called `star.setup()`?")
-    if self.configuration.x_offset is None:
-      raise RuntimeError("the head's X offset was not read; have you called `star.setup()`?")
-    return await arm.move_to_x_position(
-      round(x + self.configuration.x_offset, 2),
-      acceleration_level=acceleration_level,
-      current_limit=current_limit,
-      settle_reads=settle_reads,
-    )
+    if location is None:
+      location = self.configuration.tip_discard_location
+    if location is None:
+      raise ValueError(
+        "nowhere to discard tips: this head has no trash configured. Pass a location, or set "
+        "`configuration.tip_discard_location` to where its waste sits, at head channel A1."
+      )
+    return location
 
-  # -- y position --------------------------------------------------------------------------------
-
-  async def request_y_position(self) -> float:
-    """Request where along Y the head is.
-
-    The drive answers with two counters, the firmware's and the hardware's; the hardware's is what
-    this returns, as the Z read does.
-
-    Returns:
-      The position in mm.
-    """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="RY", fmt="ry##### (n)"
-    )
-    increments = cast(List[int], resp["ry"])[1]
-    y = self.configuration.y_drive_increments_to_mm(increments)
-    self.update_location_by_reference_point(y=y)
-    return y
-
-  async def request_predefined_y_positions(self) -> List[float]:
-    """Request the Y positions the head has stored, in mm.
-
-    The head keeps ten of them in non-volatile memory. The first is the home position the Y drive
-    parks at; the rest are further slots this feature sends no command against, so they are
-    returned as read rather than named. A head that stores them as offsets says so through
-    `configuration.predefined_y_position_origin`, which is added here so what comes back is
-    comparable with `request_y_position`.
-
-    Records what came back on the configuration, so a head read once carries its table.
-
-    Returns:
-      The ten stored positions in mm, the first being home.
-    """
-    c = self.configuration
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="RA", ra="py", fmt="py##### (n)"
-    )
-    increments = cast(List[int], resp["py"])
-    c.predefined_y_positions_increments = dict(zip(c.predefined_y_slots, increments))
-    return [c.y_drive_increments_to_mm(i + c.predefined_y_position_origin) for i in increments]
-
-  async def park(
-    self,
-    speed: Optional[float] = None,
-    acceleration: Optional[float] = None,
-  ) -> float:
-    """Send the head to its park position. This moves it in Z, then in Y.
-
-    In that order and separately, rather than through the firmware's own home command: the head
-    crosses the deck to get there, so it is raised clear first and only then moved across. Where it
-    parks is the first of the Y positions the head has stored, read rather than assumed, since an
-    adjusted head parks where its own memory says.
-
-    Args:
-      speed: how fast to travel in Y, in mm/s. Defaults to the drive's own.
-      acceleration: how hard, in mm/s2. Defaults to the drive's own.
-
-    Returns:
-      Where it parked, in mm.
-    """
-    await self.move_to_safe_z()
-    park_position = (await self.request_predefined_y_positions())[0]
-    await self.move_to_y_position(park_position, speed=speed, acceleration=acceleration)
-    return park_position
+  # -- where the head is ---------------------------------------------------------------------------
 
   def update_location_by_reference_point(
     self, y: Optional[float] = None, z: Optional[float] = None
@@ -907,15 +785,32 @@ class Head:
     arm = self.resource.parent
     if arm is None:
       return
-    shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT).location
-    if shaft is None:
-      return
+    # The drives report channel A1's axis: the shaft's centre, not the corner it is placed by.
+    shaft = self.resource.get_item(HEAD_REFERENCE_SHAFT).get_location_wrt(
+      self.resource, "c", "c", "b"
+    )
     here, on_the_arm = self.resource.location, arm.get_location_wrt(deck)
     self.resource.location = Coordinate(
       here.x,
       here.y if y is None else y - on_the_arm.y - shaft.y,
       here.z if z is None else z - on_the_arm.z - shaft.z,
     )
+
+  # ----------------------------------------
+  # Movement
+  # ----------------------------------------
+
+  @property
+  def arm(self) -> Optional["XArm"]:
+    """The arm carrying this head, on a device that has put it on one.
+
+    Not whichever arm is present: on a device with two, the head is on one of them and its X, its
+    travel and anything it might collide with are that one's.
+
+    Returns:
+      The arm carrying this head, or None when nothing carries it.
+    """
+    return next((a for a in self._driver.arms if a.head96 is self or a.head384 is self), None)
 
   def _check_reachable(self, axis: Literal["x", "y", "z"], value: float) -> None:
     """Raise if the head cannot be sent where it is being asked to go.
@@ -987,6 +882,86 @@ class Head:
         f"current_limit must be between {low_limit} and {high_limit}, is {current_limit}"
       )
 
+  # -- where the head stands: the reads, and the record of where it stopped ------------------------
+
+  async def request_y_position(self) -> float:
+    """Request where along Y the head is.
+
+    The drive answers with two counters, the firmware's and the hardware's; the hardware's is what
+    this returns, as the Z read does.
+
+    Returns:
+      The position in mm.
+    """
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="RY", fmt="ry##### (n)"
+    )
+    increments = cast(List[int], resp["ry"])[1]
+    y = self.configuration.y_drive_increments_to_mm(increments)
+    self.update_location_by_reference_point(y=y)
+    return y
+
+  async def request_z_position(self) -> float:
+    """Request the head's Z-drive position, at its lowest fixed feature.
+
+    This is the raw drive position regardless of tip state, not the tip bottom.
+
+    Returns:
+      The position in mm.
+    """
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="RZ", fmt="rz##### (n)"
+    )
+    increments = cast(List[int], resp["rz"])[1]  # [0] = firmware counter, [1] = hardware counter
+    z = self.configuration.z_drive_increments_to_mm(increments)
+    self.update_location_by_reference_point(z=z)
+    return z
+
+  async def request_location(self) -> Coordinate:
+    """Measure where head channel A1 is, with whatever it carries taken into account.
+
+    The master answers with the tip bottom rather than the drive's own reference, so with tips on
+    this reads lower than `request_z_position` by however far they stand proud of the head. With
+    none on, the two agree. Nothing is recorded: `request_z_position` is what the model follows,
+    and this is the reading it is checked against.
+
+    Returns:
+      Where channel A1 is, in deck mm, at the bottom of whatever is mounted.
+    """
+    c = self.configuration
+    resp = await self._driver.send_command(
+      module="C0",
+      command=c.position_command,
+      subsystem=self.configuration.module,
+      fmt=f"xs#####xd#{c.y_parameter}####{c.z_parameter}####",
+    )
+    x = cast(int, resp["xs"]) / 10
+    return Coordinate(
+      x=x if resp["xd"] == 0 else -x,
+      y=cast(int, resp[c.y_parameter]) / 10,
+      z=cast(int, resp[c.z_parameter]) / 10,
+    )
+
+  async def request_tip_overhang(self) -> float:
+    """Measure how far the tips the head carries stand below its own reference point.
+
+    Both readings are of the same head at the same moment, so the difference is the overhang
+    without anything having to move: `request_z_position` reports the head's lowest fixed feature,
+    `request_location` reports the bottom of what is mounted on it. This is what a Z target has to
+    be offset by for the tip end, rather than the head, to land where it is wanted.
+
+    Returns:
+      The overhang in mm, to 0.1 mm.
+
+    Raises:
+      RuntimeError: If the head is carrying no tips, so there is nothing to measure.
+    """
+    if not await self.request_tip_presence():
+      raise RuntimeError("the head reports no tips mounted, so there is no overhang to measure")
+    reference = await self.request_z_position()
+    tip_bottom = (await self.request_location()).z
+    return round(reference - tip_bottom, 1)
+
   async def _record_where_it_stopped(self, axis: Literal["y", "z"]) -> None:
     """Read where this head came to rest along one axis, and record it.
 
@@ -1004,6 +979,66 @@ class Head:
         await self.request_z_position()
     except Exception:
       logger.warning("could not read where the head stopped along %s; its model is stale", axis)
+
+  # -- x position ----------------------------------------------------------------------------------
+
+  async def request_x_position(self) -> float:
+    """Request where along X channel A1 is, in deck mm.
+
+    The head has no X drive of its own: it rides the arm, and sits `configuration.x_offset` left of
+    the carriage reference point. So this asks the arm and applies the offset, rather than reading a
+    drive. Nothing is recorded either - the resource modelling the head is a child of the arm's, so
+    its X follows the arm without anything having to write it.
+
+    Returns:
+      The position in mm.
+
+    Raises:
+      RuntimeError: If no arm is installed, or the head's X offset was not read at discovery.
+    """
+    arm = self.arm
+    if arm is None:
+      raise RuntimeError("this head is not on either arm; have you called `star.setup()`?")
+    if self.configuration.x_offset is None:
+      raise RuntimeError("the head's X offset was not read; have you called `star.setup()`?")
+    return round(await arm.request_position() - self.configuration.x_offset, 2)
+
+  async def move_to_x_position(
+    self,
+    x: float,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
+    settle_reads: int = 20,
+  ):
+    """Move channel A1 along X. The whole arm travels, with everything else it carries.
+
+    The head has no X drive. It rides the arm and sits `configuration.x_offset` left of the
+    carriage reference point, so the arm is sent to the carriage position that puts A1 at `x`.
+
+    Args:
+      x: where to put channel A1, in mm.
+      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the head.
+      current_limit: the motor current limit. Defaults to the X-arm that holds the head.
+      settle_reads: how many reads to take before calling the arm stopped.
+
+    Raises:
+      ValueError: If the head cannot reach it.
+      RuntimeError: If no arm is installed, or the head's X offset was not read at discovery.
+    """
+    self._check_reachable("x", x)
+    arm = self.arm
+    if arm is None:
+      raise RuntimeError("this head is not on either arm; have you called `star.setup()`?")
+    if self.configuration.x_offset is None:
+      raise RuntimeError("the head's X offset was not read; have you called `star.setup()`?")
+    return await arm.move_to_x_position(
+      round(x + self.configuration.x_offset, 2),
+      acceleration_level=acceleration_level,
+      current_limit=current_limit,
+      settle_reads=settle_reads,
+    )
+
+  # -- y position ----------------------------------------------------------------------------------
 
   async def move_to_y_position(
     self,
@@ -1054,61 +1089,105 @@ class Head:
       await self._restore_drive_parameter("yv", speed, was_speed)
       await self._restore_drive_parameter("yr", acceleration, was_acceleration)
 
-  async def _restore_drive_parameter(self, parameter: str, written: float, was: float) -> None:
-    """Put back what a move overwrote in the drive's volatile register.
+  # -- x and y together ----------------------------------------------------------------------------
 
-    Compared in increments rather than in mm, because that is what the drive holds: two values
-    that round to the same increment are the same write.
+  async def _require_iswap_parked(self) -> None:
+    """Raise unless the iSWAP on this head's arm is parked; nothing to check without one.
+
+    Raises:
+      RuntimeError: If it is not parked.
+    """
+    iswap = None if self.arm is None else self.arm.iswap
+    if iswap is not None and not await iswap.request_is_parked():
+      raise RuntimeError(
+        "the iSWAP is not parked, and the head moves where it stands. "
+        "Call `await star.iswap.park()` first."
+      )
+
+  async def move_to_xy_position(
+    self,
+    x: float,
+    y: float,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    x_acceleration_level: Optional[int] = None,
+    x_current_limit: int = 7,
+    y_speed: Optional[float] = None,
+    y_acceleration: Optional[float] = None,
+    y_current_limit: Optional[int] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+  ) -> None:
+    """Move head channel A1 over (x, y): the head up first, then X and Y together.
+
+    The head's lowest point is raised to `minimum_traverse_height_start` if below it, and the arm's
+    pipetting channels go up to their safe Z, since the head's own moves leave them where they are.
 
     Args:
-      parameter: the parameter the move wrote.
-      written: what the move wrote, in standard units.
-      was: what was there before, in standard units.
-    """
-    if self._drive_parameter_to_increments(
-      parameter, written
-    ) != self._drive_parameter_to_increments(parameter, was):
-      await self.set_drive_parameter(parameter, was)
+      x: where head channel A1 goes, in deck mm.
+      y: where head channel A1 goes, in deck mm.
+      minimum_traverse_height_start: the height to raise the head's lowest point to first, in mm:
+        the tip bottom with tips on, the stop disc without. The head's safe Z when None.
+      x_acceleration_level: the X acceleration curve, 1 to 4. 2 at a Y of 200 mm or less, where the
+        head stands furthest out from the X drive, else 3, when None.
+      x_current_limit: the X motor current limit, 1 to 7.
+      y_speed: in mm/s. `configuration.y_drive_speed_default` when None.
+      y_acceleration: in mm/s2. `configuration.y_drive_acceleration_default` when None.
+      y_current_limit: `configuration.y_drive_current_limit_default` when None.
+      z_speed: how fast the head goes up, in mm/s. The drive's default when None.
+      z_acceleration: in mm/s2. The drive's default when None.
 
-  # -- z position --------------------------------------------------------------------------------
-
-  async def request_z_position(self) -> float:
-    """Request the head's Z-drive position, at its lowest fixed feature.
-
-    This is the raw drive position regardless of tip state, not the tip bottom.
-
-    Returns:
-      The position in mm.
-    """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="RZ", fmt="rz##### (n)"
-    )
-    increments = cast(List[int], resp["rz"])[1]  # [0] = firmware counter, [1] = hardware counter
-    z = self.configuration.z_drive_increments_to_mm(increments)
-    self.update_location_by_reference_point(z=z)
-    return z
-
-  async def request_predefined_z_positions(self) -> List[float]:
-    """Request the Z positions the head has stored, in mm.
-
-    The head keeps ten of them in non-volatile memory. The first is the home position the Z drive
-    parks at; the rest are further slots this feature sends no command against, so they are
-    returned as read rather than named. A head that stores them as offsets says so through
-    `configuration.predefined_z_position_origin`, which is added here. These are positions of the
-    head's lowest fixed feature, as `request_z_position` is.
-
-    Records what came back on the configuration, so a head read once carries its table.
-
-    Returns:
-      The ten stored positions in mm, the first being home.
+    Raises:
+      RuntimeError: If the iSWAP is not parked.
+      ValueError: If X or Y is out of reach, or the head cannot put its lowest point at
+        `minimum_traverse_height_start`; before anything moves.
     """
     c = self.configuration
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="RA", ra="pz", fmt="pz##### (n)"
+    y_speed = c.y_drive_speed_default if y_speed is None else y_speed
+    y_acceleration = c.y_drive_acceleration_default if y_acceleration is None else y_acceleration
+    y_current_limit = (
+      c.y_drive_current_limit_default if y_current_limit is None else y_current_limit
     )
-    increments = cast(List[int], resp["pz"])
-    c.predefined_z_positions_increments = dict(zip(c.predefined_z_slots, increments))
-    return [c.z_drive_increments_to_mm(i + c.predefined_z_position_origin) for i in increments]
+    if x_acceleration_level is None:
+      x_acceleration_level = 2 if y <= 200.0 else 3
+    await self._require_iswap_parked()
+    self._check_reachable("x", x)
+    self._check_move("y", y, y_speed, y_acceleration, y_current_limit)
+    if minimum_traverse_height_start is None:
+      await self.move_to_safe_z(speed=z_speed, acceleration=z_acceleration)
+    else:
+      tips = await self.request_tip_presence()
+      stop_disc = minimum_traverse_height_start
+      if tips:
+        stop_disc += await self.request_tip_overhang()
+      if await self.request_z_position() < stop_disc:
+        # With tips, the move names the tip bottom, so a refusal says what the caller asked for.
+        if tips:
+          await self.move_tool_bottom_to_z_position(
+            minimum_traverse_height_start, speed=z_speed, acceleration=z_acceleration
+          )
+        else:
+          await self.move_stop_disc_to_z_position(
+            stop_disc, speed=z_speed, acceleration=z_acceleration
+          )
+    if self.arm is not None and self.arm.pipettes is not None:
+      await self.arm.pipettes.move_to_safe_z()
+    try:
+      async with non_cancelling_task_group() as group:
+        group.start_soon(
+          lambda: self.move_to_x_position(
+            x, acceleration_level=x_acceleration_level, current_limit=x_current_limit
+          )
+        )
+        group.start_soon(
+          lambda: self.move_to_y_position(
+            y, speed=y_speed, acceleration=y_acceleration, current_limit=y_current_limit
+          )
+        )
+    except SiblingTaskErrors as error:
+      raise error.exceptions[0]
+
+  # -- z position ----------------------------------------------------------------------------------
 
   async def probe_z_max(self, read_timeout: int = 30) -> float:
     """Retracts the head with the firmware's own retract and reads its stop disc z-position.
@@ -1128,32 +1207,6 @@ class Head:
       read_timeout=read_timeout,
     )
     return await self.request_z_position()
-
-  async def _unchecked_fw_move_to_coordinate(
-    self,
-    coordinate: Coordinate,
-    minimum_height_at_beginning_of_a_command: float = 342.5,
-  ):
-    """Move the head to a defined coordinate. Nothing is guarded and nothing is recorded.
-
-    One command for all three axes, where this driver sends one per axis. Kept for cross-testing
-    the two against each other on a device.
-
-    Args:
-      coordinate: coordinate of A1 in mm - the tip bottom on a head carrying tips, the channel
-        bottom on one that is not.
-      minimum_height_at_beginning_of_a_command: the height every channel is at before it travels,
-        in mm, whatever the tip pattern says.
-    """
-    return await self._driver.send_command(
-      module="C0",
-      command="EM",
-      xs=f"{abs(round(coordinate.x * 10)):05}",
-      xd="0" if coordinate.x >= 0 else "1",
-      yh=f"{round(coordinate.y * 10):04}",
-      za=f"{round(coordinate.z * 10):04}",
-      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
-    )
 
   async def move_stop_disc_to_z_position(
     self,
@@ -1235,13 +1288,12 @@ class Head:
       ValueError: If the head carries no tips, or it cannot put their bottom at `z`.
     """
     c = self.configuration
-    try:
-      overhang = await self.request_tip_overhang()
-    except RuntimeError as no_tips:
+    if not await self.request_tip_presence():
       raise ValueError(
         "the head carries no tips, so it has no tool bottom to place; "
         "`move_stop_disc_to_z_position` is the move for a head with nothing on it"
-      ) from no_tips
+      )
+    overhang = await self.request_tip_overhang()
 
     # The drive works in stop-disc terms over `z_range`, so what the tip bottom reaches is that
     # window shifted down by the overhang, and no lower than the head may put one.
@@ -1283,13 +1335,239 @@ class Head:
     await self.move_stop_disc_to_z_position(z_range[1], speed=speed, acceleration=acceleration)
     return await self.request_z_position()
 
-  # -- dispensing drive --------------------------------------------------------------------------
+  # -- dispensing drive position -------------------------------------------------------------------
+
+  @property
+  def default_dispensing_drive_speed(self) -> float:
+    """In uL/s: how fast the dispensing drive moves when a move names no speed.
+
+    Not read from the head, which answers with the speed its last command set. Checked against
+    `configuration.dispensing_drive_speed_range` when assigned.
+
+    Raises:
+      RuntimeError: If the head has not set one; the 384-head sets it at setup, from its type.
+    """
+    if self._default_dispensing_drive_speed is None:
+      raise RuntimeError("the head's default dispensing speed is not set; call `star.setup()`")
+    return self._default_dispensing_drive_speed
+
+  @default_dispensing_drive_speed.setter
+  def default_dispensing_drive_speed(self, speed: float) -> None:
+    low, high = self.configuration.dispensing_drive_speed_range
+    if not low <= speed <= high:
+      raise ValueError(
+        f"default_dispensing_drive_speed must be between {low} and {high}, is {speed}"
+      )
+    self._default_dispensing_drive_speed = speed
+
+  @property
+  def default_dispensing_drive_acceleration(self) -> float:
+    """In uL/s2: how hard the dispensing drive accelerates when a move names no acceleration.
+
+    Checked against `configuration.dispensing_drive_acceleration_range` when assigned.
+
+    Raises:
+      RuntimeError: If the head has not set one; the 384-head sets it at setup, from its type.
+    """
+    if self._default_dispensing_drive_acceleration is None:
+      raise RuntimeError(
+        "the head's default dispensing acceleration is not set; call `star.setup()`"
+      )
+    return self._default_dispensing_drive_acceleration
+
+  @default_dispensing_drive_acceleration.setter
+  def default_dispensing_drive_acceleration(self, acceleration: float) -> None:
+    low, high = self.configuration.dispensing_drive_acceleration_range
+    if not low <= acceleration <= high:
+      raise ValueError(
+        f"default_dispensing_drive_acceleration must be between {low} and {high}, is {acceleration}"
+      )
+    self._default_dispensing_drive_acceleration = acceleration
+
+  async def dispensing_drive_request_uL_position(self) -> float:
+    """Read where the head's dispensing drive stands, in uL, and record it. `RD`.
+
+    Returns:
+      The piston's position in uL, 0.0 at rest; air and liquid alike. Kept on `piston_position`.
+    """
+    resp = await self._driver.send_command(
+      module=self.configuration.module, command="RD", fmt="rd##### (n)"
+    )
+    increments = cast(List[int], resp["rd"])[1]  # [0] = firmware counter, [1] = hardware counter
+    self.piston_position = self.configuration.dispensing_drive_increments_to_uL(increments)
+    return self.piston_position
+
+  async def _record_piston_position(self) -> None:
+    """Read where the piston came to rest, and record it; a failed read is logged and swallowed."""
+    try:
+      await self.dispensing_drive_request_uL_position()
+    except Exception:
+      logger.warning("could not read where the head's piston stopped; its model is stale")
+
+  async def move_dispensing_drive_to_position(
+    self,
+    volume: float,
+    speed: Optional[float] = None,
+    stop_speed: float = 0.0,
+    acceleration: Optional[float] = None,
+    current_limit: int = 15,
+    read_timeout: int = 30,
+  ):
+    """Move the dispensing drive to an absolute piston position, and record it. `DQ`.
+
+    Where it was sent is kept on `piston_position`; after a failed move, it is read back.
+
+    Args:
+      volume: where to send the piston, as the volume it would hold, in uL.
+      speed: how fast, in uL/s. Defaults to `default_dispensing_drive_speed`.
+      stop_speed: what to slow to at the end, in uL/s.
+      acceleration: how hard, in uL/s2. Defaults to `default_dispensing_drive_acceleration`.
+      current_limit: the motor current limit.
+      read_timeout: how long to wait for the device to answer, in seconds.
+
+    Raises:
+      ValueError: If an argument is outside what the drive accepts.
+    """
+    c = self.configuration
+    if speed is None:
+      speed = self.default_dispensing_drive_speed
+    if acceleration is None:
+      acceleration = self.default_dispensing_drive_acceleration
+
+    for value, (low, high), name in (
+      (volume, c.dispensing_drive_range, "volume"),
+      (speed, c.dispensing_drive_speed_range, "speed"),
+      (stop_speed, (0.0, c.dispensing_drive_speed_range[1]), "stop_speed"),
+      (acceleration, c.dispensing_drive_acceleration_range, "acceleration"),
+    ):
+      if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
+    low_limit, high_limit = c.dispensing_drive_current_limit_range
+    if not low_limit <= current_limit <= high_limit:
+      raise ValueError(
+        f"current_limit must be between {low_limit} and {high_limit}, is {current_limit}"
+      )
+
+    # Each field is as wide as the largest value it takes.
+    dr_width = len(
+      str(
+        c.dispensing_drive_acceleration_uL_to_increments(c.dispensing_drive_acceleration_range[1])
+      )
+    )
+    increments = c.dispensing_drive_uL_to_increments(volume)
+    try:
+      resp = await self._driver.send_command(
+        module=c.module,
+        command="DQ",
+        dq=f"{increments:05}",
+        dv=f"{c.dispensing_drive_speed_uL_to_increments(speed):05}",
+        du=f"{c.dispensing_drive_speed_uL_to_increments(stop_speed):05}",
+        dr=f"{c.dispensing_drive_acceleration_uL_to_increments(acceleration):0{dr_width}}",
+        dw=f"{current_limit:0{len(str(high_limit))}}",
+        read_timeout=read_timeout,
+      )
+    except BaseException:
+      await self._record_piston_position()
+      raise
+    self.piston_position = c.dispensing_drive_increments_to_uL(increments)
+    return resp
+
+  # -- x, y and z together -------------------------------------------------------------------------
+
+  async def _unchecked_fw_move_to_coordinate(
+    self,
+    coordinate: Coordinate,
+    minimum_height_at_beginning_of_a_command: float = 342.5,
+  ):
+    """Move the head to a defined coordinate. Nothing is guarded and nothing is recorded.
+
+    One command for all three axes, where this driver sends one per axis. Kept for cross-testing
+    the two against each other on a device.
+
+    Args:
+      coordinate: coordinate of A1 in mm - the tip bottom on a head carrying tips, the channel
+        bottom on one that is not.
+      minimum_height_at_beginning_of_a_command: the height every channel is at before it travels,
+        in mm, whatever the tip pattern says.
+    """
+    return await self._driver.send_command(
+      module="C0",
+      command="EM",
+      xs=f"{abs(round(coordinate.x * 10)):05}",
+      xd="0" if coordinate.x >= 0 else "1",
+      yh=f"{round(coordinate.y * 10):04}",
+      za=f"{round(coordinate.z * 10):04}",
+      zh=f"{round(minimum_height_at_beginning_of_a_command * 10):04}",
+    )
+
+  async def park(
+    self,
+    speed: Optional[float] = None,
+    acceleration: Optional[float] = None,
+  ) -> float:
+    """Send the head to its park position. This moves it in Z, then in Y.
+
+    In that order and separately, rather than through the firmware's own home command: the head
+    crosses the deck to get there, so it is raised clear first and only then moved across. Where it
+    parks is the first of the Y positions the head has stored, read rather than assumed, since an
+    adjusted head parks where its own memory says.
+
+    Args:
+      speed: how fast to travel in Y, in mm/s. Defaults to the drive's own.
+      acceleration: how hard, in mm/s2. Defaults to the drive's own.
+
+    Returns:
+      Where it parked, in mm.
+    """
+    await self.move_to_safe_z()
+    park_position = (await self.request_predefined_y_positions())[0]
+    await self.move_to_y_position(park_position, speed=speed, acceleration=acceleration)
+    return park_position
+
+  # -- head initialization -------------------------------------------------------------------------
+
+  async def initialize(
+    self,
+    tip_discard_location: Optional[Coordinate] = None,
+    minimum_traverse_height_end: Optional[float] = None,
+    read_timeout: int = 60,
+  ):
+    """Initialize the head, discarding whatever is mounted on it.
+
+    This moves the head: it travels to the position given and ejects there, so that position must
+    be somewhere tips may be dropped. The firmware wants the location of the head's channel A1.
+
+    Args:
+      tip_discard_location: where to eject, in deck mm, at head channel A1. Defaults to
+        `configuration.tip_discard_location`.
+      minimum_traverse_height_end: Z to leave the head at, in mm. Defaults to
+        `configuration.traversal_z_position`.
+    Raises:
+      ValueError: If no position was given and none is configured.
+    """
+    if minimum_traverse_height_end is None:
+      minimum_traverse_height_end = self.configuration.traversal_z_position
+    tip_discard_location = self.require_tip_discard_location(tip_discard_location)
+    parameters: Dict[str, Any] = {
+      "xs": f"{abs(round(tip_discard_location.x * 10)):05}",
+      "xd": 0 if tip_discard_location.x >= 0 else 1,
+      self.configuration.y_parameter: f"{abs(round(tip_discard_location.y * 10)):04}",
+      self.configuration.z_parameter: f"{round(tip_discard_location.z * 10):04}",
+      self.configuration.z_end_parameter: f"{round(minimum_traverse_height_end * 10):04}",
+    }
+    return await self._driver.send_command(
+      module="C0",
+      command=self.configuration.initialize_command,
+      subsystem=self.configuration.module,
+      read_timeout=read_timeout,
+      **parameters,
+    )
 
   # ----------------------------------------
   # Probing
   # ----------------------------------------
 
-  # -- z probing (capacitive) --------------------------------------------------------------------
+  # -- z probing (capacitive) ----------------------------------------------------------------------
 
   # TODO: _unchecked_fw_ vs tip-presence-guarded versions (caveat: the head has no sleeve sensor,
   # so it only knows tip state based on firmware-written/stored state)

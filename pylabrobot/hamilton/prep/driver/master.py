@@ -4,17 +4,27 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, TypeVar, Union
+from dataclasses import dataclass, field, replace
+from typing import (
+  Any,
+  AsyncIterator,
+  Dict,
+  List,
+  Optional,
+  Tuple,
+  TypeVar,
+  Union,
+)
 
 import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
+from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
-from pylabrobot.hamilton.transport.tcp.hoi_error import parse_hamilton_error_entries
+from pylabrobot.hamilton.transport.tcp.hoi_error import HoiError, parse_hamilton_error_entries
 from pylabrobot.hamilton.transport.tcp.introspection import FirmwareTreeNode, MethodInfo
 from pylabrobot.hamilton.transport.tcp.messages import (
   CommandMessage,
@@ -27,25 +37,52 @@ from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import HamiltonDataType, HcResultEntry
 from pylabrobot.io.socket import Socket
+from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
+from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
 from pylabrobot.resources.hamilton.prep_decks import PrepDeck
+from pylabrobot.resources.hamilton.tip_creators import (
+  HamiltonTip,
+  TipPickupMethod,
+  TipSize,
+  hamilton_tip_10uL,
+  hamilton_tip_10uL_filter,
+  hamilton_tip_50uL,
+  hamilton_tip_50uL_filter,
+  hamilton_tip_300uL,
+  hamilton_tip_300uL_filter,
+  hamilton_tip_1000uL,
+  hamilton_tip_1000uL_filter,
+)
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.resource import Resource
 
 from . import prep_commands as PrepCmd
 from .configuration import DeviceConfiguration, read_configuration, to_jsonable
 from .errors import PREP_ERROR_CODES, PrepMethodNotFoundError
 from .features.calibration import Calibration
-from .features.core_grippers import CoreGripperArm, CoreGrippers
+from .features.core_grippers import CoreGrippers
 from .features.head8 import Head8
+from .features.heater_shaker import (
+  HEATER_SHAKER_FROM_SPOT,
+  HEATER_SHAKER_PLATE_XY,
+  HEATER_SHAKER_PLATE_Z,
+  HEATER_SHAKER_SIZE,
+  HEATER_SHAKER_SPOT,
+  PrepHamiltonHeaterShaker,
+)
+from .features.lights import Lights
 from .features.method import MethodLifecycle
-from .features.pipettes import Pipettes
+from .features.pipettes import TIP_FITTING_DEPTH, Pipettes, channels_named
 from .features.x_arm import XArm
 from .prep_commands import (
   _UNRESOLVED,
   DECK_CONFIGURATION_OBJECT_PATH,
+  HEATER_SHAKER_ROOT_PATH,
   MLPREP_CPU_OBJECT_PATH,
+  MLPREP_DEBUG_OBJECT_PATH,
   MLPREP_OBJECT_PATH,
   MLPREP_SERVICE_OBJECT_PATH,
   MODULE_INFORMATION_OBJECT_PATH,
@@ -57,7 +94,12 @@ logger = logging.getLogger(__name__)
 
 # What a declaration and a device have to agree on for the one to stand for the other: what is
 # fitted. Identity and set-up are the device's own.
-_DECLARATION_MUST_MATCH = ("num_channels", "head8_installed", "has_enclosure")
+_DECLARATION_MUST_MATCH = (
+  "num_channels",
+  "head8_installed",
+  "has_enclosure",
+  "heater_shaker_installed",
+)
 
 # The PrepDeck waste position for each channel a waste site names.
 _WASTE_SITE_NAMES = {
@@ -87,6 +129,18 @@ def _fragment_values(data: bytes) -> List[Any]:
   return values
 
 
+# How far each channel moves out to open the grippers before initializing, in mm.
+_OPEN_GRIPPERS_BY = 5.0
+
+
+def _confirm(question: str) -> bool:
+  """Ask the person at the device; only y or yes is a yes. No one to ask is a no."""
+  try:
+    return input(question).strip().lower() in ("y", "yes")
+  except EOFError:
+    return False
+
+
 class _PrepTCPClient(HamiltonTCPClient):
   """The TCP link to a Prep, describing firmware errors from the Prep's own error table."""
 
@@ -106,6 +160,44 @@ class _PrepTCPClient(HamiltonTCPClient):
     )
 
 
+def _hamilton_tip_for_reach(reach: float, has_filter: bool, name: str) -> Optional[HamiltonTip]:
+  """The Hamilton tip whose reach below the stop disc is `reach`, or None when none is within 0.3 mm.
+
+  A drop needs the tip's collar height, which only a known tip has. The filter flag breaks a tie
+  between the plain and filtered tip of one length, which share every other dimension.
+  """
+  candidates = (
+    hamilton_tip_10uL,
+    hamilton_tip_10uL_filter,
+    hamilton_tip_50uL,
+    hamilton_tip_50uL_filter,
+    hamilton_tip_300uL,
+    hamilton_tip_300uL_filter,
+    hamilton_tip_1000uL,
+    hamilton_tip_1000uL_filter,
+  )
+  matching = [
+    tip
+    for tip in (make(name) for make in candidates)
+    if abs(tip.get_size_z() - tip.fitting_depth - reach) <= 0.3
+  ]
+  if not matching:
+    return None
+  return next((tip for tip in matching if tip.has_filter == has_filter), matching[0])
+
+
+def _refused_with(error: BaseException, code: int) -> bool:
+  """Whether a device refusal carries `code` in any of its entries."""
+  if isinstance(error, HoiError):
+    entries: List[HcResultEntry] = error.entries
+  elif isinstance(error, ChannelizedError):
+    raw_entries = error.kwargs.get("hoi_entries")
+    entries = raw_entries if isinstance(raw_entries, list) else []
+  else:
+    entries = []
+  return any(entry.result == code for entry in entries)
+
+
 @dataclass(frozen=True)
 class ChannelDriveMap:
   """Cached channel-drive topology discovered from the firmware tree.
@@ -117,7 +209,8 @@ class ChannelDriveMap:
   The Y axis (``YAxis``) and its drive (``YAxis.YDrive``) are listed for the
   channels that have one; the 8-channel head's channels do not. So are the
   channel's ``Calibration`` object (which starts and stops continuous cLLD
-  detection), its ``CLld`` object (which reports it), and its Z axis (``ZAxis``).
+  detection), its ``CLld`` object (which reports it), its ``Tadm`` object (its TADM pressure
+  and buffer), its Z axis (``ZAxis``) and its dispensing drive (``Dispenser.DDrive``).
   """
 
   sleeve_sensor_addrs: List[Address]
@@ -128,6 +221,8 @@ class ChannelDriveMap:
   calibration_addrs: List[Address] = field(default_factory=list)
   clld_addrs: List[Address] = field(default_factory=list)
   zaxis_addrs: List[Address] = field(default_factory=list)
+  tadm_addrs: List[Address] = field(default_factory=list)
+  ddrive_addrs: List[Address] = field(default_factory=list)
 
   @property
   def num_channels_discovered(self) -> int:
@@ -145,6 +240,8 @@ class ChannelDriveMap:
       "calibration_addrs": list(self.calibration_addrs),
       "clld_addrs": list(self.clld_addrs),
       "zaxis_addrs": list(self.zaxis_addrs),
+      "tadm_addrs": list(self.tadm_addrs),
+      "ddrive_addrs": list(self.ddrive_addrs),
     }
 
 
@@ -248,17 +345,21 @@ class PrepDriver(HasLifespan):
     port: int = 2000,
     declared_configuration_json: Optional[str] = None,
     io: Optional[HamiltonTCPClient] = None,
+    liquid_class_lookup: Optional[LiquidClassLookup] = None,
   ):
     """
     Args:
       deck: the deck positions are measured from.
-      host: the address the Prep answers on. Required unless `io` is given.
+      host: the address the Prep answers on. Required unless `io` is given. Opens two connections
+        so each channel can receive a command while the other's is in flight.
       port: the port it answers on.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file. Against a
         physical device, discovery cross-checks it against what the device answers; against a
         simulated one, the device answers as it says.
       io: the link to drive the device through, instead of a TCP connection to `host`.
+      liquid_class_lookup: finds the class for `volumes` given without one, with
+        `get_star_liquid_class`'s keywords. `get_star_liquid_class`, the STAR's table, when None.
 
     Raises:
       ValueError: If neither `host` nor `io` is given.
@@ -269,19 +370,25 @@ class PrepDriver(HasLifespan):
     self.declared: Dict[str, Any] = (
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
+    self._second_io: Optional[HamiltonTCPClient] = None
     if io is None:
       if not host:
         raise ValueError("host must be provided to reach a Prep over TCP")
       io = _PrepTCPClient(host=host, port=port)
+      self._second_io = _PrepTCPClient(host=host, port=port)
     self.io: HamiltonTCPClient = io
     self._mlprep_address: Optional[Address] = None
     self.deck = deck
+    self.liquid_class_lookup: LiquidClassLookup = liquid_class_lookup or get_star_liquid_class
     # What the device reports about itself, read by `discover`. None until setup has run.
     self.configuration: Optional[DeviceConfiguration] = None
-    self._core_gripper_arm: Optional[CoreGripperArm] = None
+    # Where each tool the channels are carrying came from, so it goes back there when it is
+    # dropped. A tool is a resource: while the channels hold it, it is theirs.
     self.pipettes: Optional[Pipettes] = None
     self.head8: Optional[Head8] = None
     self.core_grippers: Optional[CoreGrippers] = None
+    self.lights: Optional[Lights] = None
+    self.hs: Optional[PrepHamiltonHeaterShaker] = None
     # How long to wait for a command's answer, in seconds. A command that takes longer than any
     # this device performs is one it is not going to answer, and a caller waiting on it cannot halt
     # the device or say so. Initializing names its own.
@@ -290,6 +397,8 @@ class PrepDriver(HasLifespan):
     self.calibration: Optional[Calibration] = None
     # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
     self.x_arm: Optional[XArm] = None
+    self._core_gripper_arm: Optional[XArm] = None
+    self._animation_tg: Optional[anyio.abc.TaskGroup] = None
     self._setup_finished: bool = False
     self._needs_safety = False
 
@@ -303,6 +412,34 @@ class PrepDriver(HasLifespan):
   # Connection and lifecycle
   # ----------------------------------------
 
+  async def _enter_link(self, stack: AsyncExitStackWithShielding) -> None:
+    """Open the links on `stack` and check that a Prep answers, initializing and moving nothing.
+
+    Raises:
+      RuntimeError: If the device's firmware root is not a Prep's.
+    """
+    self._mlprep_address = None
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._clear_connection_state)
+    root = await self.request_root_name()
+    if root != PREP_ROOT_NAME:
+      raise RuntimeError(
+        f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
+      )
+    self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+    if self._second_io is not None:
+      await stack.enter_async_context(self._second_io.lifespan())
+
+  @asynccontextmanager
+  async def _link(self) -> AsyncIterator[None]:
+    """Hold the links open for read-only tooling, without the driver lifespan's initialization.
+
+    Firmware queries work inside; features are not constructed and nothing moves on exit.
+    """
+    async with AsyncExitStackWithShielding() as stack:
+      await self._enter_link(stack)
+      yield
+
   async def _enter_lifespan(
     self,
     stack: AsyncExitStackWithShielding,
@@ -310,8 +447,9 @@ class PrepDriver(HasLifespan):
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
-    default_traverse_height: Optional[float] = None,
+    default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
+    enable_safe_speeds: bool = False,
     skip_raise_to_z_safety: bool = False,
   ) -> None:
     """Connect, discover the device, initialize MLPrep, construct peers.
@@ -319,38 +457,68 @@ class PrepDriver(HasLifespan):
     A device that reports itself initialized is left as it was found, so what the channels hold is read and
     logged, and they are raised to Z safety, before anything can move laterally.
 
+    MLPrep's X speed scale, which every X move inside a firmware command runs at, is set to the X-arm's
+    `default_speed`; each setup finds the device back at its own.
+
     Args:
       skip_device_initialization: do not run the device's own initialization procedure on a device that reports
         itself down. Its moves are then whatever the caller sends, and a device that has not initialized may
         refuse them.
+      default_minimum_traverse_height: the height the pipettes and the 8-channel head travel at when a command
+        names none, in mm. Replaces what the device reports.
+      enable_safe_speeds: MLPrep's safe speeds, switched to this when the device reports otherwise. Each
+        setup finds the device back on its own setting, so it is set every time.
+      skip_raise_to_z_safety: leave the channels where they stand when exiting the lifespan.
+
+    Raises:
+      RuntimeError: If the device records a plate gripped and has to initialize, and the person at it
+        does not confirm the grippers may open.
     """
     await super()._enter_lifespan(stack)
     logger.debug("Setting up Prep on %s ...", self.describe_link())
-    self._mlprep_address = None
     self._needs_safety = False
-    await stack.enter_async_context(self.io.lifespan())
-    stack.callback(self._clear_connection_state)
+    await self._enter_link(stack)
+    self._animation_tg = await stack.enter_task_group()
+    stack.callback(self._cancel_animations)
+    stack.push_shielded_async_callback(self._stop_lights, shield_timeout=30)
+    stack.push_shielded_async_callback(self._stop_hs, shield_timeout=60)
     stack.push_shielded_async_callback(self._stop_head8, shield_timeout=180)
     stack.push_shielded_async_callback(self._stop_pipettes, shield_timeout=180)
     stack.push_shielded_async_callback(self._leave_safe, skip_raise_to_z_safety, shield_timeout=240)
-    root = await self.request_root_name()
-    if root != PREP_ROOT_NAME:
-      raise RuntimeError(
-        f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
-      )
-    self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
 
     # 1. What is on the other end, and what does it carry?
     logger.debug("[PHASE 1] Discovery")
     await self.discover()
 
+    # The light as early as the device's method table allows, so the deck says the device is
+    # working for all of the initializing and bringing up that is left. A colour, not an
+    # animation: the host drives every frame down this same connection, and setup keeps it busy.
+    if self.lights is None and await self.request_deck_light_installed():
+      self.lights = Lights(self)
+    if self.lights is not None:
+      await self.lights.set_color("turquoise")
+
     # 2. Bring the device to a known state.
     logger.debug("[PHASE 2] Device initialization")
     self._needs_safety = True
+    # Kept across a power cycle: while it is set, the device refuses to initialize (0x0F0A) and to
+    # take the tools home (0x0F04).
+    plate_held = await self._request_plate_held()
     if skip_device_initialization:
       logger.warning("skipping the device initialization procedure, as asked")
     else:
-      await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+      if plate_held and (force_initialize or not await self.request_initialization_status()):
+        await self._release_held_plate_by_hand()
+        plate_held = False
+        # Known to need it, just asked: not asked again.
+        await self._initialize_instrument(smart=smart, force_initialize=True)
+      else:
+        await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+
+    assert self.configuration is not None
+    if self.configuration.safe_speeds_enabled != enable_safe_speeds:
+      await self._set_safe_speeds_enabled(enable_safe_speeds)
+      self.configuration.safe_speeds_enabled = enable_safe_speeds
 
     # 3. Each feature brings itself up.
     logger.debug("[PHASE 3] Feature initialization")
@@ -363,20 +531,28 @@ class PrepDriver(HasLifespan):
       self.calibration = Calibration(self)
     if self.pipettes is None:
       self.pipettes = Pipettes(self)
-    if default_traverse_height is not None:
-      self.pipettes.default_minimum_traverse_height = default_traverse_height
     if use_v1_aspirate_dispense:
       self.pipettes.configuration.use_v1_aspirate_dispense = True
     await self.pipettes._on_setup()
+    if default_minimum_traverse_height is not None:
+      self.pipettes.default_minimum_traverse_height = default_minimum_traverse_height
 
     if self.pipettes.head8_installed:
       if self.head8 is None:
-        self.head8 = Head8(
-          self,
-          default_traverse_height=default_traverse_height,
-          use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-        )
+        self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
+      elif use_v1_aspirate_dispense:
+        self.head8._use_v1_aspirate_dispense = True
       await self.head8._on_setup()
+      # One height governs the arm: the head rides the channels' gantry, so it travels at what
+      # they travel at rather than at a second number that happens to match.
+      self.head8.default_minimum_traverse_height = self.pipettes.default_minimum_traverse_height
+      if default_minimum_traverse_height is not None:
+        self.head8.default_minimum_traverse_height = default_minimum_traverse_height
+
+    if self.configuration is not None and self.configuration.heater_shaker_installed:
+      if self.hs is None:
+        self.hs = PrepHamiltonHeaterShaker(self)
+      await self.hs._on_setup()
 
     # What the device was left holding, and where it was left standing: read before anything moves laterally,
     # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
@@ -396,19 +572,70 @@ class PrepDriver(HasLifespan):
     if low:
       logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
     if self.head8 is not None:
+      # TODO: the head is left where it stands, and every lateral move travels it there. No move
+      # of its Z alone is known, so nothing here can lift it, though GetPositions reports where
+      # it is (its `MPHChannel` entry). `MoveZUpToSafe` takes ChannelIndex values
+      # and the MPH has one (3): try it on a device with a head fitted, and if it answers, raise
+      # the head in `Pipettes.move_to_xy_positions` and `XArm.move_to_x_position` as the channels
+      # are raised.
       logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
 
     if self.core_grippers is None:
       self.core_grippers = CoreGrippers(self)
     if self.x_arm is None:
       self.x_arm = XArm(self)
+    # Every X move inside a firmware command runs at MLPrep's X speed scale: the arm's default speed.
+    x_scale = self.x_arm.configuration.speed_to_scale_percent(self.x_arm.default_speed)
+    if await self.request_x_speed_scale() != x_scale:
+      await self.set_x_speed_scale(x_scale)
     # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
     if self.deck is not None:
       logger.debug("[PHASE 4] Feature resources")
       self._place_reported_sites()
       await self._create_capability_resources()
+      self._seat_heater_shaker()
+
+    if any(tips) and plate_held:
+      attached = await self.pipettes.request_attached_tip_information(tips.index(True))
+      if attached is not None and attached.is_tool and self.core_grippers is not None:
+        await self.core_grippers._adopt_mounted_tools()
+      logger.warning(
+        "the device records a plate gripped, so the tools stay on: lower it onto a free spot with "
+        "`pipettes.move_tool_bottom_to_z_positions` (both channels together), let go with "
+        "`core_grippers.release_plate()`, then return the tools"
+      )
+    elif any(tips):
+      try:
+        await self._return_or_discard_attached(tips)
+      except Exception:
+        # Setup still has to finish: the caller needs a driver to look at the device with.
+        logger.warning("could not clear what was attached at setup", exc_info=True)
+      # The device reports each channel's window for whatever is attached to it, so the windows
+      # recorded at discovery are that thing's. Read them again now the channels are clear.
+      still = await self.pipettes.sense_tip_presence()
+      carrying = [channel for channel, held in enumerate(still) if held]
+      if carrying:
+        logger.warning(
+          "%s still carries something, so the windows recorded are its, not an empty channel's",
+          channels_named(carrying),
+        )
+      else:
+        await self.pipettes._record_channel_bounds()
     self._setup_finished = True
     logger.info("%s", self.format_setup_summary())
+
+    # Setup got all the way here, so say so, and leave the deck as setup found it: dark. Setup
+    # stands at the green, so that a caller which stops or exits straight after still sees it.
+    if self.lights is not None:
+      await self.lights.hold("green", duration=self.lights.default_ready_seconds)
+
+  def _cancel_animations(self) -> None:
+    """Stop any running light animation before the animation task group exits."""
+    if self.lights is not None:
+      self.lights.stop_animation()
+    if self._animation_tg is not None:
+      self._animation_tg.cancel_scope.cancel()
+      self._animation_tg = None
 
   def _clear_connection_state(self) -> None:
     """Discard connection-local addresses and setup status after link cleanup."""
@@ -422,7 +649,7 @@ class PrepDriver(HasLifespan):
 
     Read back rather than taken on trust: a retract that answered without arriving leaves the device looking
     safe while a lateral move would drive whatever is still low into whatever is in the way. Each channel's stop
-    disc is held to the traverse height the device reports, so a mounted tip does not count as low. The 8-channel
+    disc is held to the pipettes' `default_minimum_traverse_height`, so a mounted tip does not count as low. The 8-channel
     head is not judged: no read of its height is known.
 
     Args:
@@ -430,13 +657,13 @@ class PrepDriver(HasLifespan):
 
     Returns:
       One entry per channel that is low, naming it and where it says it is. Empty when everything is up, or when
-      the device reported no traverse height to hold the channels to.
+      there are no pipettes.
     """
     low: List[str] = []
     pipettes = self.pipettes
-    safe = None if self.configuration is None else self.configuration.default_traverse_height
-    if pipettes is None or safe is None:
+    if pipettes is None:
       return low
+    safe = pipettes.default_minimum_traverse_height
     for channel in range(pipettes.num_channels):
       try:
         z = await pipettes.request_stop_disc_z_position(channel)
@@ -450,7 +677,8 @@ class PrepDriver(HasLifespan):
   async def _leave_safe(self, skip_raise_to_z_safety: bool) -> None:
     """Close the link, leaving the device safe to move laterally.
 
-    The device keeps its state; only this driver lets go of it. Every pipetting channel is moved up to Z safety
+    The device keeps its state, but not the deck light: it is darkened, since a colour stands on
+    the device with nobody holding it. Only this driver lets go. Every pipetting channel is moved up to Z safety
     first, and where the channels stopped is read back: a driver that let go with a channel low would leave the
     next lateral move to crash it. The 8-channel head is not raised: no move of its Z alone is known.
 
@@ -463,13 +691,17 @@ class PrepDriver(HasLifespan):
     if not self._needs_safety or self.io._session.state is SessionState.UNCERTAIN:
       return
     try:
-      if self._core_gripper_arm is not None:
-        logger.warning(
-          "PrepDriver lifespan exited with CoRe grippers still mounted. Exit raises the channels to Z "
-          "safety but does not return the tools. Call `await prep.return_core_grippers()` first if you "
-          "want them returned."
-        )
-        self._core_gripper_arm = None
+      # A plate in the jaws goes back first: parking spreads the channels and would tear it out.
+      holding = await self._return_held_resource()
+      # As at setup: a tool goes back in its holder, anything else into the waste.
+      if self.pipettes is not None:
+        try:
+          tips = await self.pipettes.sense_tip_presence()
+          if any(tips) and not holding:
+            await self._return_or_discard_attached(tips)
+        except Exception:
+          # The link closes either way.
+          logger.warning("could not clear what was attached before stopping", exc_info=True)
       if skip_raise_to_z_safety:
         low = await self.features_below_safe_z()
         logger.warning(
@@ -485,10 +717,41 @@ class PrepDriver(HasLifespan):
         low = await self.features_below_safe_z()
         if low:
           logger.warning("not everything is at Z safety: %s", "; ".join(low))
+      if holding:
+        logger.error(
+          "not parking: the device records a plate gripped, and parking spreads the channels. "
+          "They are left where they stand; put the plate down before moving them apart."
+        )
+      else:
+        await self.park_device()
     except Exception:
       logger.warning(
         "could not bring the device to a safe state; closing the link anyway", exc_info=True
       )
+
+  async def _stop_lights(self) -> None:
+    """Darken the deck light before the client lifespan exits."""
+    if not self._needs_safety or self.io._session.state is SessionState.UNCERTAIN:
+      if self.lights is not None:
+        self.lights.stop_animation()
+      return
+    if self.lights is not None:
+      # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
+      # would leave the deck lit for good.
+      try:
+        await self.lights.turn_off()
+      except Exception:
+        logger.warning("could not darken the deck light", exc_info=True)
+
+  async def _stop_hs(self) -> None:
+    """Stop the heater shaker before the client lifespan exits."""
+    if not self._needs_safety or self.io._session.state is SessionState.UNCERTAIN:
+      return
+    if self.hs is not None:
+      try:
+        await self.hs._on_stop()
+      except Exception:
+        logger.warning("could not stop the heater shaker", exc_info=True)
 
   async def _stop_head8(self) -> None:
     """Release head8 session state independently of the pipettes."""
@@ -573,6 +836,29 @@ class PrepDriver(HasLifespan):
       data = await session.execute(resolved, read_timeout=read_timeout)
       return command.parse_response_parameters(data)
     return await session.execute(command, read_timeout=read_timeout)
+
+  async def send_command_on_second_session(
+    self, command: TCPCommand[ResultT], *, read_timeout: Optional[float] = None
+  ) -> ResultT:
+    """Send a command on the second session, beside whatever the first has in flight.
+
+    Args:
+      command: the command, with its `dest` given, as each channel node's commands have it.
+      read_timeout: how long to wait for the answer, in seconds. `default_read_timeout` when None.
+
+    Returns:
+      The command's decoded response.
+
+    Raises:
+      RuntimeError: If there is no second session, or the command names a firmware path, not a
+        `dest`.
+    """
+    if self._second_io is None:
+      raise RuntimeError("no second session: built with an injected io")
+    if isinstance(command, PrepCommand) and command.dest == _UNRESOLVED:
+      raise RuntimeError(f"{type(command).__name__} needs a dest= on the second session")
+    read_timeout = self.default_read_timeout if read_timeout is None else read_timeout
+    return await self._second_io._session.execute(command, read_timeout=read_timeout)
 
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
@@ -675,6 +961,7 @@ class PrepDriver(HasLifespan):
     - ``<root>.Channel.ZAxis`` / ``.ZDrive`` → Z axis and Z drive
     - ``<root>.Channel.YAxis`` / ``.YDrive`` → Y axis and Y drive, where the channel has one
     - ``<root>.Channel.Calibration`` / ``.CLld`` → continuous cLLD detection and its status
+    - ``<root>.Channel.Tadm``               → TADM pressure and buffer
     - ``<root>.NodeInformation``            → per-channel firmware strings
 
     Uses ``get_subobject_address`` / ``get_object`` along the known path shape —
@@ -709,6 +996,8 @@ class PrepDriver(HasLifespan):
     calibration: List[Address] = []
     clld: List[Address] = []
     zaxis: List[Address] = []
+    tadm: List[Address] = []
+    ddrive: List[Address] = []
 
     for ch_root in channel_root_addrs:
       top = await intro.find_children_by_name(ch_root, "Channel", "NodeInformation")
@@ -721,7 +1010,7 @@ class PrepDriver(HasLifespan):
         continue
 
       axes = await intro.find_children_by_name(
-        channel_addr, "Squeeze", "ZAxis", "YAxis", "Calibration", "CLld"
+        channel_addr, "Squeeze", "ZAxis", "YAxis", "Calibration", "CLld", "Tadm", "Dispenser"
       )
       if (sq_parent := axes.get("Squeeze")) is not None:
         sq = await intro.find_children_by_name(sq_parent, "SDrive")
@@ -741,6 +1030,12 @@ class PrepDriver(HasLifespan):
         calibration.append(cal)
       if (cl := axes.get("CLld")) is not None:
         clld.append(cl)
+      if (td := axes.get("Tadm")) is not None:
+        tadm.append(td)
+      if (dispenser := axes.get("Dispenser")) is not None:
+        dd = await intro.find_children_by_name(dispenser, "DDrive")
+        if "DDrive" in dd:
+          ddrive.append(dd["DDrive"])
 
     logger.debug("Discovered %d %s channel drive pair(s)", len(channel_root_addrs), root_name)
     return ChannelDriveMap(
@@ -752,6 +1047,8 @@ class PrepDriver(HasLifespan):
       calibration_addrs=calibration,
       clld_addrs=clld,
       zaxis_addrs=zaxis,
+      tadm_addrs=tadm,
+      ddrive_addrs=ddrive,
     )
 
   # ----------------------------------------
@@ -842,10 +1139,8 @@ class PrepDriver(HasLifespan):
     mlprep = self.mlprep_address
     enc_resp = await self.send_command(PrepCmd.PrepGetIsEnclosurePresent(dest=mlprep))
     safe_resp = await self.send_command(PrepCmd.PrepGetSafeSpeedsEnabled(dest=mlprep))
-    height_resp = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=mlprep))
     has_enclosure = bool(enc_resp.value) if enc_resp else False
     safe_speeds_enabled = bool(safe_resp.value) if safe_resp else False
-    default_traverse_height = float(height_resp.value) if height_resp else None
 
     deck_bounds: Optional[PrepCmd.DeckBounds] = None
     deck_sites: Tuple[PrepCmd.DeckSiteInfo, ...] = ()
@@ -913,12 +1208,86 @@ class PrepDriver(HasLifespan):
       num_channels=num_channels,
       head8_installed=head8_installed,
       has_enclosure=has_enclosure,
+      heater_shaker_installed=await self.request_heater_shaker_installed(),
       safe_speeds_enabled=safe_speeds_enabled,
-      default_traverse_height=default_traverse_height,
       deck_bounds=deck_bounds,
       deck_sites=deck_sites,
       waste_sites=waste_sites,
     )
+
+  async def _release_held_plate_by_hand(self) -> None:
+    """Open the grippers with a person there to take the plate, so the device can initialize.
+
+    Before initializing only each channel's own relative Y move runs: the two move apart by
+    `_OPEN_GRIPPERS_BY`, then PrepReleasePlate clears the record.
+
+    Raises:
+      RuntimeError: If the person does not confirm, or the record is still set after.
+    """
+    print(
+      "\nThe Prep has a plate gripped written into its memory, which a power cycle does not clear. "
+      "It refuses to initialize (0x0F0A) until the grippers open, and until it initializes nothing "
+      "else can move."
+    )
+    if not _confirm(
+      "Take the plate out of the grippers, or have your hand under it to catch it as they open. "
+      "Ready for the grippers to open? [y/n] "
+    ):
+      raise RuntimeError(
+        "setup stopped: the device records a plate gripped and refuses to initialize until the "
+        "grippers open. Run setup again when someone can take the plate."
+      )
+    for channel, distance in ((1, -_OPEN_GRIPPERS_BY), (0, _OPEN_GRIPPERS_BY)):
+      try:
+        await self._move_relative_in_y(channel, distance)
+      except Exception:
+        logger.warning("channel %d did not move %+.1f mm", channel, distance, exc_info=True)
+    await self.send_command(PrepCmd.PrepReleasePlate())
+    if not _confirm("Have you moved your hands out of the device? [y/n] "):
+      raise RuntimeError(
+        "setup stopped before initializing: hands may be in the device. The grippers are open; run "
+        "setup again to initialize."
+      )
+    if await self._request_plate_held():
+      raise RuntimeError("the device still records a plate gripped after the grippers opened")
+
+  async def _return_held_resource(self) -> bool:
+    """Put back what the grippers hold, if this session knows where from. Whether one is still held.
+
+    A record that cannot be read counts as held.
+    """
+    try:
+      if not await self._request_plate_held():
+        return False
+      grippers = self.core_grippers
+      if grippers is not None and grippers._taken_from is not None:
+        held = grippers._held_resource
+        logger.warning(
+          "the grippers hold %s: putting it back before stopping",
+          "a resource" if held is None else held.name,
+        )
+        try:
+          await grippers.return_resource()
+        except Exception:
+          logger.error("could not put back what the grippers hold", exc_info=True)
+      return await self._request_plate_held()
+    except Exception:
+      logger.error("could not read whether a plate is held; treating it as held", exc_info=True)
+      return True
+
+  async def _move_relative_in_y(self, channel: int, distance: float) -> None:
+    """Move a channel along Y by `distance` mm with its own Y axis; runs before initializing.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+      distance: how far, in mm; positive is towards the back.
+    """
+    yaxes = (await self.request_channel_drives()).yaxis_addrs
+    await self.send_command(PrepCmd.PrepYAxisMoveRelative(dest=yaxes[channel], distance=distance))
+
+  async def _request_plate_held(self) -> bool:
+    """Whether the device records a plate gripped (PrepGetPlateHeld): its record, not a sensor."""
+    return bool((await self.send_command(PrepCmd.PrepGetPlateHeld())).value)
 
   async def request_initialization_status(self) -> bool:
     """Whether MLPrep reports as initialized (GetIsInitialized, cmd=2)."""
@@ -926,6 +1295,15 @@ class PrepDriver(HasLifespan):
     if result is None:
       return False
     return bool(result.value)
+
+  async def request_default_traverse_height(self) -> Optional[float]:
+    """The height MLPrep travels at when a command names none (GetDefaultTraverseHeight), in mm.
+
+    Returns:
+      The height, or None if the device does not answer it.
+    """
+    result = await self.send_command(PrepCmd.PrepGetDefaultTraverseHeight(dest=self.mlprep_address))
+    return None if result is None else round(float(result.value), 2)
 
   async def request_firmware_tree(self, refresh: bool = False) -> FirmwareTreeNode:
     """Firmware object tree. ``print(await prep.request_firmware_tree())`` for a diagnostic dump."""
@@ -942,7 +1320,10 @@ class PrepDriver(HasLifespan):
     )
     if result is None or not result.definitions:
       return ()
-    return tuple(result.definitions)
+    return tuple(
+      replace(tip, volume=round(tip.volume, 2), length=round(tip.length, 2))
+      for tip in result.definitions
+    )
 
   # ----------------------------------------
   # Discovery and initialization
@@ -963,10 +1344,20 @@ class PrepDriver(HasLifespan):
     declared = self.declared.get("device")
     if declared is None:
       return
+    checks = (
+      ("num_channels", declared.num_channels, discovered.num_channels),
+      ("head8_installed", declared.head8_installed, discovered.head8_installed),
+      ("has_enclosure", declared.has_enclosure, discovered.has_enclosure),
+      (
+        "heater_shaker_installed",
+        declared.heater_shaker_installed,
+        discovered.heater_shaker_installed,
+      ),
+    )
     differences = [
-      f"{name}: declared {getattr(declared, name)!r}, device answers {getattr(discovered, name)!r}"
-      for name in _DECLARATION_MUST_MATCH
-      if getattr(declared, name) != getattr(discovered, name)
+      f"{name}: declared {want!r}, device answers {got!r}"
+      for name, want, got in checks
+      if want != got
     ]
     if differences:
       raise ValueError(
@@ -999,6 +1390,32 @@ class PrepDriver(HasLifespan):
     self.configuration = configuration
     return configuration
 
+  async def _release_attached_over_waste(self, carrying: List[int]) -> None:
+    """Take the channels over their waste sites and let go with the squeeze drive alone.
+
+    A last resort, for what the Pipettor will not drop: after a power cycle it forgets what it
+    holds and refuses `DropTips` and its own initialization; a refused `PickUpTool` leaves a stale
+    definition behind. The X axis, each channel's Y axis and `ReleaseTips` all run regardless.
+
+    Args:
+      carrying: the channels sensing something, 0-indexed from the back.
+    """
+    if self.pipettes is None or self.x_arm is None:
+      raise RuntimeError("the pipettes and the arm are needed to release over the waste")
+    if not isinstance(self.deck, PrepDeck):
+      raise RuntimeError("the waste sites are placed on a PrepDeck; this driver has another deck")
+    names = ["waste_rear", "waste_front", "waste_mph"]
+    targets = {
+      ch: self.deck.waste_positions[names[ch]].get_location_wrt(self.deck, "c", "c", "t")
+      for ch in carrying
+    }
+    await self.x_arm.move_to_x_position(next(iter(targets.values())).x)
+    at = await self.pipettes.request_locations()
+    # The smaller target first, so a channel never has to pass the one ahead of it.
+    for ch in sorted(carrying, key=lambda c: targets[c].y):
+      await self._move_relative_in_y(ch, targets[ch].y - at[ch].y)
+    await self.pipettes.release_tips(carrying)
+
   async def _initialize_instrument(
     self, *, smart: bool, force_initialize: bool, read_timeout: float = 300.0
   ) -> None:
@@ -1021,18 +1438,37 @@ class PrepDriver(HasLifespan):
         return
 
       logger.debug("device reports not initialized - running the initialization procedure")
-    await self.send_command(
-      PrepCmd.PrepInitialize(
-        smart=smart,
-        tip_drop_params=PrepCmd.InitTipDropParameters(
-          default_values=True,
-          x_position=287.0,
-          rolloff_distance=3,
-          channel_parameters=[],
-        ),
+    initialize = PrepCmd.PrepInitialize(
+      smart=smart,
+      tip_drop_params=PrepCmd.InitTipDropParameters(
+        default_values=True,
+        x_position=287.0,
+        rolloff_distance=3,
+        channel_parameters=[],
       ),
-      read_timeout=read_timeout,
     )
+    try:
+      await self.send_command(initialize, read_timeout=read_timeout)
+    except HoiError as e:
+      # Tips on after a power cycle: the device has no definition for them, so its own drop inside
+      # the procedure computes a Z beyond travel (0x0F06), whatever drop parameters it is given.
+      if not _refused_with(e, 0x0F06):
+        raise
+      if self.pipettes is None:
+        self.pipettes = Pipettes(self)
+        await self.pipettes._on_setup()
+      if self.x_arm is None:
+        self.x_arm = XArm(self)
+      carrying = [ch for ch, on in enumerate(await self.pipettes.sense_tip_presence()) if on]
+      if not carrying:
+        raise
+      logger.warning(
+        "the device refused to initialize with something on %s it has no definition for: "
+        "releasing it over the waste, then initializing again",
+        channels_named(carrying),
+      )
+      await self._release_attached_over_waste(carrying)
+      await self.send_command(initialize, read_timeout=read_timeout)
     logger.debug("the device initialization procedure has run")
 
   def format_setup_summary(self) -> str:
@@ -1047,13 +1483,14 @@ class PrepDriver(HasLifespan):
     if c is None:
       return "[Hamilton Prep] not discovered yet"
 
-    traverse = "unknown" if c.default_traverse_height is None else f"{c.default_traverse_height} mm"
+    height = None if self.pipettes is None else self.pipettes.default_minimum_traverse_height
+    traverse = "unknown" if height is None else f"{height} mm"
     lines = [
-      f"[Hamilton Prep] Connected on {self.describe_link()}",
-      f"  Serial: {c.serial_number or 'unknown'}",
-      f"  Firmware: {c.firmware_version or 'unknown'}",
-      f"  Configuration: enclosure {'installed' if c.has_enclosure else 'none'}, "
-      f"safe speeds {'on' if c.safe_speeds_enabled else 'off'}, traverse height {traverse}",
+      f"[Hamilton Prep] Connected on {self.describe_link()}\n",
+      f"  Serial: {c.serial_number or 'unknown'}\n",
+      f"  Firmware: {c.firmware_version or 'unknown'}\n",
+      f"  Configuration: \n - enclosure {'installed' if c.has_enclosure else 'none'}, "
+      f" - safe speeds {'on' if c.safe_speeds_enabled else 'off'},\n - traverse height {traverse}",
     ]
     deck = f"{len(c.deck_sites)} sites, {len(c.waste_sites)} waste sites"
     if c.deck_bounds is not None:
@@ -1093,6 +1530,11 @@ class PrepDriver(HasLifespan):
     if c.head8_installed:
       head8 = "installed" if self.head8 is not None else "none, but the device reports it installed"
     lines.append(f"  8-channel head: {head8}")
+    if c.heater_shaker_installed:
+      hs = "installed" if self.hs is not None else "none, but the device reports it installed"
+      if self.hs is not None and self.hs.configuration.firmware_version:
+        hs += f", firmware {self.hs.configuration.firmware_version}"
+      lines.append(f"  heater shaker: {hs}")
     return "\n".join(lines)
 
   # ----------------------------------------
@@ -1129,6 +1571,97 @@ class PrepDriver(HasLifespan):
   # Resource model
   # ----------------------------------------
 
+  async def _return_or_discard_attached(self, tips: List[bool]) -> None:
+    """Put back or discard whatever the device was already holding when this session connected.
+
+    A tool goes back in its holder; anything else goes into the waste. What it was is read from the
+    firmware, which keeps it across a restart while the model knows nothing.
+
+    Args:
+      tips: whether each pipette senses something on it.
+    """
+    if self.pipettes is None:
+      return
+    carrying = [channel for channel, held in enumerate(tips) if held]
+    attached = await self.pipettes.request_attached_tip_information(carrying[0])
+    if attached is None:
+      return
+    logger.warning(
+      "something is still attached to %s: the firmware holds it as "
+      "%r, id %d, %.1f mm below the stop disc, %.1f uL, needle=%s, tool=%s",
+      channels_named(carrying),
+      attached.label,
+      attached.id,
+      attached.length,
+      attached.volume,
+      attached.is_needle,
+      attached.is_tool,
+    )
+    if attached.is_tool and self.core_grippers is not None:
+      logger.warning("it is a tool, so it goes back in its holder rather than into the waste")
+      try:
+        # Nothing parked to put back: only a tool on a channel to let go of.
+        await self.core_grippers.drop_tools()
+        return
+      except HoiError as e:
+        # A refused `PickUpTool` leaves its definition behind while the tips stay on: the device
+        # then says no tool is held, and what is on is treated as tips.
+        if not _refused_with(e, 0x0F07):
+          raise
+        logger.warning(
+          "the device holds no tool: the definition is stale, so it is treated as tips"
+        )
+    elif attached.is_tool:
+      logger.warning("it is a tool, but there is nothing here to put it back with")
+      return
+    waste = self.deck.waste_block if isinstance(self.deck, PrepDeck) else None
+    if waste is None:
+      logger.warning("this deck has no waste, so it stays on: take it off before running anything")
+      return
+    logger.warning("discarding it into the waste")
+    # The model holds nothing at setup and a drop needs it to, so it adopts what the firmware
+    # describes. The definition gives how far the tip reaches below the stop disc, not its fitting
+    # depth, which is 8 mm for every Hamilton tip but the 5 mL family's 10.
+    traverse = self.pipettes.default_minimum_traverse_height
+    for channel in carrying:
+      # A model that already knows keeps what it has; a fresh one adopts what the firmware describes.
+      # One tip per channel: a resource has one parent, so a shared one would leave all but the last.
+      if self.pipettes.get_mounted_tip(channel) is None:
+        # The Z window the device reports is shifted by what is physically on; the definition can
+        # be another thing's. The window wins where the two disagree.
+        length = attached.length
+        windows = self.pipettes.configuration.channels
+        window = windows[channel].z_range if channel < len(windows) else None
+        if window is not None:
+          physical = traverse - window[1]
+          if physical > 0.5 and abs(physical - length) > 0.5:
+            logger.warning(
+              "channel %d's window says %.1f mm below the stop disc, its definition %.1f: the window",
+              channel,
+              physical,
+              length,
+            )
+            length = physical
+        name = f"attached at setup ({attached.label}) on channel {channel}"
+        found = _hamilton_tip_for_reach(length, attached.has_filter, name) or HamiltonTip(
+          name=name,
+          has_filter=attached.has_filter,
+          size_z=length + TIP_FITTING_DEPTH,
+          maximal_volume=attached.volume,
+          nominal_volume=attached.volume,
+          tip_size=TipSize.STANDARD_VOLUME,
+          pickup_method=TipPickupMethod.OUT_OF_RACK,
+        )
+        self.pipettes._mount_tip(channel, found)
+    try:
+      await self.pipettes.drop_tips([waste] * len(carrying), use_channels=carrying)
+    except (HoiError, ValueError) as e:
+      # Last resort: the Pipettor forgets what it holds across a power cycle and refuses to drop it
+      # (0x0F03), computes its Z from a stale definition (0x0F06), or what is on matches no tip
+      # whose collar height a drop can be planned from. The squeeze drive lets go regardless.
+      logger.warning("the device refused to drop it (%s): releasing it over the waste instead", e)
+      await self._release_attached_over_waste(carrying)
+
   def _place_reported_sites(self) -> None:
     """Move the teaching needle and the waste positions to where the device reports them.
 
@@ -1140,10 +1673,9 @@ class PrepDriver(HasLifespan):
     if not isinstance(self.deck, PrepDeck) or self.configuration is None:
       return
     c = self.configuration
-    teaching_tip_name = self.get_component_name("teaching_tip")
-    if self.deck.has_resource(teaching_tip_name):
-      spot = self.deck.get_resource(teaching_tip_name)
-      footprint = (spot.get_absolute_size_x(), spot.get_absolute_size_y())
+    spot = self.deck.teaching_needle_spot
+    if spot is not None:
+      footprint = (spot.get_size_x(), spot.get_size_y())
       site = next((s for s in c.deck_sites if (s.length, s.width) == footprint), None)
       if site is not None and spot.location is not None and spot.parent is not None:
         parent = spot.parent.get_location_wrt(self.deck)
@@ -1153,15 +1685,50 @@ class PrepDriver(HasLifespan):
         logger.debug("teaching needle at deck site %d", site.id)
     for waste_site in c.waste_sites:
       name = _WASTE_SITE_NAMES.get(waste_site.index)
-      if name is None:
+      waste = self.deck.waste_positions.get(name) if name is not None else None
+      if waste is None:
         continue
-      name = self.get_component_name(name)
-      if not self.deck.has_resource(name):
-        continue
-      self.deck.get_resource(name).location = Coordinate(
+      waste.location = Coordinate(
         waste_site.x_position, waste_site.y_position, waste_site.z_position
       )
       logger.debug("%s at waste site %d", name, waste_site.index)
+
+  def _seat_heater_shaker(self) -> None:
+    """Make the spot the heater shaker stands in its plate holder: what it holds sits on the heater shaker.
+
+    The spot keeps its name; it takes the heater shaker's footprint and place, is as tall as where a
+    plate sits on it, and has no clips or pedestal. Whatever it held moves onto the heater shaker.
+    """
+    if self.hs is None or not isinstance(self.deck, PrepDeck):
+      return
+    name = self.get_component_name(HEATER_SHAKER_SPOT)
+    if not self.deck.has_resource(name):
+      return
+    spot = self.deck.get_resource(name)
+    if spot.location is None:
+      return
+    if isinstance(spot, PlateHolder) and spot.get_size_z() == HEATER_SHAKER_PLATE_Z:
+      self.hs.resource = spot
+      return
+    held = list(spot.children)
+    for child in held:
+      spot.unassign_child_resource(child)
+    size_x, size_y = HEATER_SHAKER_SIZE
+    plate_x, plate_y = HEATER_SHAKER_PLATE_XY
+    holder = PlateHolder(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=HEATER_SHAKER_PLATE_Z,
+      pedestal_size_z=0,
+      child_location=Coordinate(plate_x, plate_y, HEATER_SHAKER_PLATE_Z),
+    )
+    location = spot.location + HEATER_SHAKER_FROM_SPOT
+    self.deck.unassign_child_resource(spot)
+    self.deck.assign_child_resource(holder, location=location)
+    for child in held:
+      holder.assign_child_resource(child)
+    self.hs.resource = holder
 
   async def _create_capability_resources(self) -> None:
     """Put the X-arm on the deck where it is, and hang a resource for each pipetting channel from it.
@@ -1171,21 +1738,15 @@ class PrepDriver(HasLifespan):
     """
     if not isinstance(self.deck, PrepDeck) or self.x_arm is None or self.pipettes is None:
       return
-    positions = await self.pipettes.request_locations()
+    positions, head_at = await self.pipettes._unchecked_fw_request_positions_and_head()
     if not positions:
       logger.warning("the channels reported no positions, so the arm and channels are not modelled")
       return
     arm, c = self.x_arm, self.x_arm.configuration
     pipettes = self.pipettes.configuration
-    # The arm rides at the top of the channels' travel: what their bounds say, or the traverse height
-    # when no bounds were read.
-    tops = [c.z_range[1] for c in self.pipettes.configuration.channels if c.z_range is not None]
-    if tops:
-      z = max(tops)
-    elif self.configuration is not None and self.configuration.default_traverse_height is not None:
-      z = self.configuration.default_traverse_height
-    else:
-      z = self.deck.get_absolute_size_z()
+    # The arm rides at the height it was measured at, not at the top of the channels' travel: what
+    # the channels report is how far they travel, not where the arm sits.
+    z = c.ride_height
     # The Y the channels reach between them, which the arm's reference line spans.
     y_ranges = [c.y_range for c in pipettes.channels if c.y_range is not None]
     reach = (min(r[0] for r in y_ranges), max(r[1] for r in y_ranges)) if y_ranges else None
@@ -1223,77 +1784,44 @@ class PrepDriver(HasLifespan):
         )
       self.pipettes.add_tip_mounting_shaft(resource)
       self.pipettes.resources.append(resource)
+    # The 8-channel head rides the arm too, where the same read reports it; one there is reused.
+    if self.head8 is not None and head_at is not None:
+      head = next((c for c in arm.resource.children if c.name == self.head8.resource.name), None)
+      if isinstance(head, NChannelPipette):
+        self.head8.resource = head
+      elif head is None:
+        arm.resource.assign_child_resource(self.head8.resource, location=Coordinate.zero())
     # Seat each where it was read, now that there is something to record it on.
-    self.pipettes._record_positions(positions)
+    self.pipettes._record_positions(positions, head=head_at)
 
   # ----------------------------------------
   # CoRe grippers
   # ----------------------------------------
 
   @property
-  def core_gripper_arm(self) -> CoreGripperArm:
-    """The mounted CoRe gripper arm. Raises if grippers are not currently picked up."""
-    if self._core_gripper_arm is None:
-      raise RuntimeError(
-        "CoRe grippers not mounted. Call `await prep.pick_up_core_grippers()` first, "
-        "or use `async with prep.mounted_core_grippers() as arm:`."
-      )
-    return self._core_gripper_arm
+  def core_gripper_holder(self) -> Optional[HamiltonCoreGrippers]:
+    """The holder this Prep's deck parks its CO-RE grip tools in, by type, or None."""
+    if self.deck is None:
+      return None
+    return next(
+      (r for r in self.deck.get_all_children() if isinstance(r, HamiltonCoreGrippers)), None
+    )
 
   @property
   def core_grippers_mounted(self) -> bool:
-    return self._core_gripper_arm is not None
-
-  async def pick_up_core_grippers(self) -> CoreGripperArm:
-    """Pick up the CoRe gripper tools and return the mounted arm."""
-    if self._core_gripper_arm is not None:
-      raise RuntimeError("CoRe grippers already mounted")
-    if self.pipettes is None or self.core_grippers is None:
-      raise RuntimeError("PrepDriver.setup() has not run.")
-
-    mount_name = self.get_component_name("core_grippers")
-    mount = self.deck.get_resource(mount_name)
-    if not isinstance(mount, HamiltonCoreGrippers):
-      raise TypeError(
-        f"deck must have a resource named {mount_name!r} of type HamiltonCoreGrippers"
-      )
-
-    loc = mount.get_location_wrt(self.deck)
-    await self.core_grippers.pick_up_tool(
-      tool_position_x=loc.x,
-      tool_position_z=loc.z,
-      front_channel_position_y=loc.y + mount.front_channel_y_center,
-      rear_channel_position_y=loc.y + mount.back_channel_y_center,
-      tool_seek=loc.z + 10.0,
-    )
-
-    self._core_gripper_arm = CoreGripperArm(
-      backend=self.core_grippers, reference_resource=self.deck, grip_axis="y"
-    )
-    return self._core_gripper_arm
-
-  async def return_core_grippers(self) -> None:
-    if self._core_gripper_arm is None:
-      return
-    try:
-      await self._core_gripper_arm.backend.drop_tool()
-    finally:
-      self._core_gripper_arm = None
-
-  @asynccontextmanager
-  async def mounted_core_grippers(self) -> AsyncIterator[CoreGripperArm]:
-    arm = await self.pick_up_core_grippers()
-    try:
-      yield arm
-    finally:
-      await self.return_core_grippers()
+    """Whether the CoRe gripper tools are on the channels."""
+    return self.core_grippers is not None and self.core_grippers.tools_mounted
 
   # ----------------------------------------
   # Park and spread
   # ----------------------------------------
 
-  async def park(self) -> None:
-    await self.send_command(PrepCmd.PrepPark())
+  async def park_device(self) -> None:
+    try:
+      await self.send_command(PrepCmd.PrepPark())
+    finally:
+      if self.x_arm is not None:
+        await self.x_arm._record_where_it_stopped()
 
   async def spread(self) -> None:
     await self.send_command(PrepCmd.PrepSpread())
@@ -1335,32 +1863,119 @@ class PrepDriver(HasLifespan):
     await self.send_command(PrepCmd.PrepCancelPowerDown())
 
   # ----------------------------------------
+  # Door
+  # ----------------------------------------
+
+  async def set_door_state_override(
+    self, *, enabled: bool, enclosure_present: bool, door_open: bool
+  ) -> None:
+    """Override the enclosure and door states the sensors report; stays set until changed.
+
+    Args:
+      enabled: True to report the given states, False to report the sensors again.
+      enclosure_present: the enclosure state to report while enabled.
+      door_open: the door state to report while enabled.
+    """
+    debug = await self.resolve_path(MLPREP_DEBUG_OBJECT_PATH)
+    method = await self.request_method_by_name(debug, "OverrideDoorState")
+    await self.send_command(
+      PrepCmd.PrepOverrideDoorState(
+        dest=debug,
+        command_id=method.method_id,
+        interface_id=method.interface_id,
+        override_enable=enabled,
+        enclosure_present=enclosure_present,
+        door_open=door_open,
+      )
+    )
+
+  # ----------------------------------------
   # Deck light
   # ----------------------------------------
 
-  async def request_deck_light(self) -> Tuple[int, int, int, int]:
-    result = await self.send_command(PrepCmd.PrepGetDeckLight())
-    if result is None:
-      raise ValueError("No response from GetDeckLight.")
-    return (result.white, result.red, result.green, result.blue)
+  async def request_deck_light_installed(self) -> bool:
+    """Request whether this device has a deck light, by whether its firmware declares one.
 
-  async def set_deck_light(self, white: int, red: int, green: int, blue: int) -> None:
-    await self.send_command(PrepCmd.PrepSetDeckLight(white=white, red=red, green=green, blue=blue))
-
-  async def disco_mode(self) -> None:
-    """Easter egg: cycle deck lights then restore previous state."""
-    white, red, green, blue = await self.request_deck_light()
+    What the light stands at, and how to set it, is `lights`, built at setup if this answers True.
+    """
     try:
-      for _ in range(69):
-        await self.set_deck_light(
-          white=random.randint(1, 255),
-          red=random.randint(1, 255),
-          green=random.randint(1, 255),
-          blue=random.randint(1, 255),
-        )
-        await anyio.sleep(0.1)
-    finally:
-      await self.set_deck_light(white=white, red=red, green=green, blue=blue)
+      await self.request_method_by_name(MLPREP_OBJECT_PATH, "SetDeckLight")
+    except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    return True
+
+  # ----------------------------------------
+  # Heater shaker
+  # ----------------------------------------
+
+  async def request_heater_shaker_installed(self) -> bool:
+    """Request whether a heater shaker is fitted and assembled.
+
+    True when the firmware has a HeaterShakerRoot and MLPrepService reports no errors assembling it.
+    It is `hs`, built at setup if this answers True.
+    """
+    if await self._resolve_optional(HEATER_SHAKER_ROOT_PATH) is None:
+      return False
+    try:
+      errors = _fragment_values(
+        await self.request_by_name(MLPREP_SERVICE_OBJECT_PATH, "GetHHSAssemblyInstantiationErrors")
+      )
+    except (RuntimeError, PrepMethodNotFoundError):
+      return False
+    if errors:
+      logger.warning("the heater shaker is present but not assembled: %s", errors)
+      return False
+    return True
+
+  # ----------------------------------------
+  # Error lighting
+  # ----------------------------------------
+
+  async def signal_error(self, duration: Optional[float] = 8.0, wait: bool = False) -> None:
+    """Pulse the deck red, if this device has a light to say it with.
+
+    It says that something went wrong, and is not part of what went wrong: it never raises, and a
+    device with no light does nothing at all.
+
+    Args:
+      duration: how many seconds to pulse for, or None to pulse until the light is turned off or
+        set to something else, leaving the deck lit after the error.
+      wait: hold until the pulse is over and the deck is dark. The pulse otherwise runs in the
+        background, which is what a notebook or a running protocol wants; a script that exits the
+        moment it raises takes its event loop with it, and needs this to show anything.
+
+    Raises:
+      ValueError: If `wait` is asked of a pulse with no duration, which would never return.
+    """
+    if wait and duration is None:
+      raise ValueError("a pulse with no duration never ends, so it cannot be waited on")
+    if self.lights is None:
+      return
+    try:
+      await self.lights.animate_error_pulse(duration=duration)
+      if wait:
+        await self.lights.wait_for_animation()
+    except Exception:
+      logger.debug("could not signal an error on the deck light", exc_info=True)
+
+  @asynccontextmanager
+  async def error_lighting(
+    self, duration: Optional[float] = 8.0, wait: bool = False
+  ) -> AsyncIterator[None]:
+    """Pulse the deck red when something inside raises, and let it raise on.
+
+    Nothing is caught or hidden: the error carries on to whoever was going to handle it.
+
+    Args:
+      duration: how many seconds to pulse for, or None to leave the deck pulsing after the error,
+        until the light is turned off or set to something else.
+      wait: as `signal_error`.
+    """
+    try:
+      yield
+    except Exception:
+      await self.signal_error(duration=duration, wait=wait)
+      raise
 
   # ----------------------------------------
   # Speed scales
@@ -1373,6 +1988,23 @@ class PrepDriver(HasLifespan):
   async def request_z_speed_scale(self) -> int:
     """Request how fast MLPrep drives Z, as a percentage of its full speed."""
     return int((await self.send_command(PrepCmd.PrepGetZSpeedScale())).value)
+
+  async def _set_safe_speeds_enabled(self, enabled: bool) -> None:
+    """Switch MLPrep's safe speeds on or off. Stays set until changed.
+
+    On, the device holds the Z drives to a low acceleration and raises the X jerk; `discover` reads
+    the state into the configuration. The command's id is read from the method table by name.
+
+    Args:
+      enabled: True for safe speeds.
+    """
+    mlprep = self.mlprep_address
+    method = await self.request_method_by_name(mlprep, "SetSafeSpeedsEnabled")
+    await self.send_command(
+      PrepCmd.PrepSetSafeSpeedsEnabled(
+        dest=mlprep, command_id=method.method_id, interface_id=method.interface_id, value=enabled
+      )
+    )
 
   async def set_x_speed_scale(self, percent: int) -> None:
     """Set how fast MLPrep drives X, as a percentage of its full speed. Stays set until changed.

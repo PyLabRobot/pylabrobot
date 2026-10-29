@@ -43,12 +43,14 @@ from pylabrobot.hamilton.star.driver.errors import (
   check_fw_string_error,
 )
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm, XArmConfiguration
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.hamilton.star.resource_model import (
   ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z,
@@ -63,7 +65,7 @@ from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
+from pylabrobot.resources.hamilton.hamilton_decks import FRAME_BY_NUM_TRACKS, HamiltonDeck
 from pylabrobot.resources.hamilton.star_decks import HamiltonSTARDeck
 from pylabrobot.resources.hamilton.tip_creators import HamiltonTip, TipPickupMethod, TipSize
 from pylabrobot.resources.manipulator import LinkBody
@@ -102,6 +104,9 @@ def _range(values: Optional[Tuple[float, float]]) -> str:
 
 class STARDriver(HasLifespan):
   """Interface for the Hamilton STARDriver."""
+
+  # How a channel or a head senses the liquid: `star.driver.LLDMode.CAPACITIVE`.
+  LLDMode = LLDMode
 
   def _deck_component_name(self, name: str) -> str:
     """Resolve a built-in deck resource without changing its existing name."""
@@ -280,13 +285,10 @@ class STARDriver(HasLifespan):
     logger.debug("[PHASE 1] Discovery")
     await self.discover()
 
-    # 2. Bring the device to a known state. The autoload homes alongside it: it is its own
-    #    unit, and the device procedure holds every drive but its. Phase 3 reads its state
-    #    again, so a device that does home it there loses nothing but the overlap.
-    #    It runs alone. The autoload used to be brought up alongside it, to save the time the
-    #    procedure takes, and that put a C0 command and an I0 command in flight together: on
-    #    2026-09-04 the autoload answered one with the id of its own previous command, and the
-    #    caller waited for a reply that had already arrived. Legacy runs the procedure by itself
+    # 2. Bring the device to a known state.
+    #    It runs alone: putting a C0 command and an I0 command in flight together can cause
+    #    the autoload to answer with the id of its own previous command, leaving the caller
+    #    waiting for a reply that already arrived. Legacy runs the procedure by itself
     #    and gathers the modules afterwards; so does this.
     logger.debug("[PHASE 2] Device initialization")
     autoload = self.autoload if not skip_autoload else None
@@ -769,6 +771,12 @@ class STARDriver(HasLifespan):
     return arm.iswap if arm is not None else None
 
   @property
+  def core_grippers(self) -> Optional[CoreGrippers]:
+    """The CoRe grippers, on a device with one arm."""
+    arm = self._require_one_arm("core_grippers")
+    return arm.core_grippers if arm is not None else None
+
+  @property
   def x_arm(self) -> XArm:
     """The device's X-arm, on a device that has only one.
 
@@ -818,8 +826,8 @@ class STARDriver(HasLifespan):
     Returns:
       The serial number the device answers.
     """
-    # One `sn` field, not the two the older driver named: a repeated name parses to the first
-    # match, so the second was inert there and would be here. Whether the device answers a serial
+    # One `sn` field: a repeated name in the format string parses to the first match,
+    # so a second `sn` would be inert. Whether the device answers a serial
     # in two four-character halves is unsettled - if it does, this reads the first half only, and a
     # reading off a device is what will say.
     resp = await self.send_command(module="C0", command="RI", fmt="si####sn&&&&")
@@ -1128,13 +1136,28 @@ class STARDriver(HasLifespan):
     if declared is None:
       return
 
+    checks = (
+      ("num_pip_channels", declared.num_pip_channels, discovered.num_pip_channels),
+      ("instrument_size_slots", declared.instrument_size_slots, discovered.instrument_size_slots),
+      ("autoload_installed", declared.autoload_installed, discovered.autoload_installed),
+      ("kb_iswap_installed", declared.kb_iswap_installed, discovered.kb_iswap_installed),
+      ("head96_installed", declared.head96_installed, discovered.head96_installed),
+      ("head384_installed", declared.head384_installed, discovered.head384_installed),
+      (
+        "main_front_cover_monitoring_installed",
+        declared.main_front_cover_monitoring_installed,
+        discovered.main_front_cover_monitoring_installed,
+      ),
+    )
     differences = [
-      f"{name}: declared {getattr(declared, name)!r}, device answers {getattr(discovered, name)!r}"
-      for name in _DECLARATION_MUST_MATCH
-      if getattr(declared, name) != getattr(discovered, name)
+      f"{name}: declared {want!r}, device answers {got!r}"
+      for name, want, got in checks
+      if want != got
     ]
-    for side in ("left_arm", "right_arm"):
-      declared_arm, discovered_arm = getattr(declared, side), getattr(discovered, side)
+    for side, declared_arm, discovered_arm in (
+      ("left_arm", declared.left_arm, discovered.left_arm),
+      ("right_arm", declared.right_arm, discovered.right_arm),
+    ):
       if (declared_arm is None) != (discovered_arm is None):
         differences.append(
           f"{side}: declared {'an arm' if declared_arm else 'none'}, "
@@ -1143,17 +1166,37 @@ class STARDriver(HasLifespan):
       elif declared_arm is not None and discovered_arm is not None:
         # What the arm carries, not how big it is: geometry is the frame's, and a declaration off
         # another frame of the same build is still a fair description of what is bolted on.
+        declared_fields = dataclasses.asdict(declared_arm)
+        discovered_fields = dataclasses.asdict(discovered_arm)
         differences += [
-          f"{side}.{field.name}: declared {getattr(declared_arm, field.name)!r}, "
-          f"device answers {getattr(discovered_arm, field.name)!r}"
+          f"{side}.{field.name}: declared {declared_fields[field.name]!r}, "
+          f"device answers {discovered_fields[field.name]!r}"
           for field in dataclasses.fields(declared_arm)
           if field.name.endswith("_installed")
-          and getattr(declared_arm, field.name) != getattr(discovered_arm, field.name)
+          and declared_fields[field.name] != discovered_fields[field.name]
         ]
     if differences:
       raise ValueError(
         "the declared configuration does not describe this device:\n  " + "\n  ".join(differences)
       )
+
+  def _check_deck_against(self, discovered: DeviceConfiguration) -> None:
+    """Raise if the deck is not built for the number of slots the device answered.
+
+    Args:
+      discovered: what the device answered.
+
+    Raises:
+      ValueError: If the deck's track count differs from the device's slot count.
+    """
+    if self.deck is None or self.deck.num_tracks == discovered.instrument_size_slots:
+      return
+    slots = discovered.instrument_size_slots
+    frame = FRAME_BY_NUM_TRACKS.get(slots)
+    build = f": build it for the {frame} frame" if frame is not None else ""
+    raise ValueError(
+      f"this device has {slots} slots, the deck is built for {self.deck.num_tracks}{build}"
+    )
 
   async def discover(self):
     """Read what device is on the other end, and build the subsystems it turns out to have.
@@ -1161,6 +1204,7 @@ class STARDriver(HasLifespan):
     Read-only: nothing moves. Call `initialize` to bring the device up.
     """
     self.configuration = await self.request_device_configuration()
+    self._check_deck_against(self.configuration)
     # Which device answered, and what it is running. Read into the same configuration the rest of
     # discovery fills, so a saved one says where it came from. A device that will not answer keeps
     # nothing rather than failing setup: the identity is for telling recordings apart, and nothing
@@ -1199,6 +1243,8 @@ class STARDriver(HasLifespan):
         arm.head384 = Head384(self)
       if a.iswap_installed and arm.iswap is None:
         arm.iswap = iSWAP(self)
+      if arm.pipettes is not None and self._num_channels >= 2 and arm.core_grippers is None:
+        arm.core_grippers = CoreGrippers(self)
     if self.configuration.autoload_installed and self.autoload is None:
       self.autoload = Autoload(self)
     if self.configuration.main_front_cover_monitoring_installed and self.front_cover is None:
@@ -1398,6 +1444,8 @@ class STARDriver(HasLifespan):
         await arm.pipettes.initialize()
       else:
         logger.debug("channels: already up and nothing mounted - skipped")
+        # Initialization reads the pistons; skipped, they are read here, as they stand.
+        await arm.pipettes.dispensing_drives_request_uL_positions()
       # Probing how high the channels reach raises them, so it doubles as the safety raise and
       # runs on every setup rather than only the first.
       reached = await arm.pipettes.probe_z_max()
@@ -1423,7 +1471,7 @@ class STARDriver(HasLifespan):
         logger.debug("%s: initializing it was skipped", name)
         continue
       # A STAR deck carries a trash for the 96-head. A head told nowhere else to eject ejects there,
-      # centred over it, as legacy does.
+      # the channel array centred over it.
       if (
         name == "head96"
         and head.configuration.tip_discard_location is None
@@ -1445,6 +1493,9 @@ class STARDriver(HasLifespan):
         else:
           logger.debug("%s reports itself uninitialized - initializing", name)
           await head.initialize()
+      elif isinstance(head, Head96):
+        # Initialization reads the piston; skipped, it is read here, as it stands.
+        await head._record_piston_position()
       # Probing how far a head reaches retracts it, so it doubles as the safety retract and
       # runs on every setup rather than only the first. The floor is what the drive documents.
       retracted = await head.probe_z_max()

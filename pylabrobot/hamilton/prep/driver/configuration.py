@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 from .features.pipettes import PipettesConfiguration
 from .prep_commands import DeckBounds, DeckSiteInfo, WasteSiteInfo
 
+__all__ = ["DeviceConfiguration", "read_configuration", "to_jsonable"]
+
 # The JSON walk is the STAR's: it is written against dataclass field types, and nothing in it is
 # particular to that device.
 
@@ -83,9 +85,6 @@ def _restore(hint: Any, value: Any) -> Any:
   return value
 
 
-__all__ = ["DeviceConfiguration", "read_configuration", "to_jsonable"]
-
-
 @dataclass
 class DeviceConfiguration:
   """The device's installed hardware and geometry.
@@ -106,12 +105,13 @@ class DeviceConfiguration:
   """Whether the 8-channel head is fitted, from GetPresentChannels."""
   has_enclosure: bool = False
   """Whether MLPrep reports an enclosure."""
+  heater_shaker_installed: bool = False
+  """Whether a heater shaker is fitted: HeaterShakerRoot resolves and MLPrepService reports no
+  errors assembling it."""
 
   # -- how it is set up --
   safe_speeds_enabled: bool = False
   """Whether MLPrep reports its safe speeds on."""
-  default_traverse_height: Optional[float] = None
-  """The height the channels travel at between positions, in mm. None if it could not be read."""
   deck_bounds: Optional[DeckBounds] = None
   """The deck's extent on each axis, from the deck configuration."""
   deck_sites: Tuple[DeckSiteInfo, ...] = ()

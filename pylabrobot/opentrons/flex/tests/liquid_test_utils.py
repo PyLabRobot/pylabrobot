@@ -10,11 +10,7 @@ def pipetting_location(io: AsyncMock, target: Container, channels: int = 1) -> d
   commands = io.submit_command.await_args_list
   index = max(i for i, c in enumerate(commands) if c.args[1] == "moveToCoordinates")
   xy = commands[index].args[2]["coordinates"]
-  descent = next(c for c in commands[index + 1 :] if c.args[1] == "moveRelative")
-  assert descent.args[2]["axis"] == "z"
-  z = (io.get_command.return_value.result["position"] or {"z": 100})["z"] + descent.args[2][
-    "distance"
-  ]
+  z = xy["z"]
   origin = target.get_absolute_location(x="c", y="c", z="cavity_bottom")
   return {
     "origin": "bottom",

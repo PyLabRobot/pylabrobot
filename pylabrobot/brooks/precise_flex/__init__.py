@@ -3,9 +3,8 @@
 Why one package for the family - every PreciseFlex arm runs the same Guidance/TCS controller and
 speaks the same GPL command protocol, DataIDs, and error codes, so they share the bulk of this
 driver. They differ only in kinematics (per geometry, e.g. the c10's R-P-R-R joint order, the c8A's
-six axes) and gripper, which are handled by per-model device classes and per-geometry kinematics
-modules within the package. Grouping by the shared controller keeps that common driver in one place
-rather than duplicated per arm model.
+six axes), handled in ``kinematics``, and gripper. Grouping by the shared controller keeps that
+common driver in one place rather than duplicated per arm model.
 
 Scope - the PreciseFlex robot line. Implemented:
 
@@ -20,39 +19,64 @@ To be added here:
 - linear rail
 
 Everything here is PreciseFlex-specific, including the TCS controller protocol (``tcs_modules``),
-``error_codes``, and the controller DataIDs (``data_ids``) - the PreciseFlex line is the only user of
-the Guidance/TCS controller, so they live with it. A future, genuinely different Brooks device family
+``errors``, and the controller DataIDs (``data_ids``) - the PreciseFlex line is the only user of the
+Guidance/TCS controller, so they live with it. A future, genuinely different Brooks device family
 would get its own sibling package under ``brooks/``, and anything shared would be lifted up then.
 
-Re-exports the public classes so ``from pylabrobot.brooks.precise_flex import PreciseFlex400`` keeps
-working.
+Re-exports the public classes, so ``from pylabrobot.brooks.precise_flex import PreciseFlexDriver``
+works.
 """
 
-from pylabrobot.brooks.precise_flex.config import (
-  Axis,
-  PreciseFlexConfiguration,
+import warnings
+
+from pylabrobot.brooks.precise_flex.driver.configuration import PreciseFlexConfiguration
+from pylabrobot.brooks.precise_flex.driver.errors import (
+  OutOfRangeOfMotionError,
+  PreciseFlexCollisionError,
+  PreciseFlexError,
+  PreciseFlexNotReadyError,
+  PreciseFlexPowerError,
+  PreciseFlexReachError,
+  PreciseFlexServoError,
 )
-from pylabrobot.brooks.precise_flex.errors import OutOfRangeOfMotionError, PreciseFlexError
+from pylabrobot.brooks.precise_flex.driver.features.arm import MotionProfile, PreciseFlexArm
+from pylabrobot.brooks.precise_flex.driver.features.gripper import PreciseFlexGripper
+from pylabrobot.brooks.precise_flex.driver.features.rail import PreciseFlexRail
+from pylabrobot.brooks.precise_flex.driver.master import PreciseFlex, PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.kinematics import (
   ElbowOrientation,
+  PreciseFlexAxis,
   PreciseFlexCartesianPose,
   WorkEnvelope,
   Wrist,
 )
-from pylabrobot.brooks.precise_flex.precise_flex import (
-  MotionProfile,
-  PreciseFlex,
-)
 
 __all__ = [
-  "Axis",
   "ElbowOrientation",
   "MotionProfile",
   "OutOfRangeOfMotionError",
   "PreciseFlex",
+  "PreciseFlexDriver",
+  "PreciseFlexArm",
+  "PreciseFlexAxis",
   "PreciseFlexCartesianPose",
+  "PreciseFlexCollisionError",
   "PreciseFlexConfiguration",
   "PreciseFlexError",
+  "PreciseFlexGripper",
+  "PreciseFlexNotReadyError",
+  "PreciseFlexPowerError",
+  "PreciseFlexReachError",
+  "PreciseFlexRail",
+  "PreciseFlexServoError",
   "WorkEnvelope",
   "Wrist",
 ]
+
+
+def __getattr__(name: str) -> object:
+  """``Axis``, deprecated: it is ``PreciseFlexAxis``."""
+  if name == "Axis":
+    warnings.warn("`Axis` is deprecated, use `PreciseFlexAxis`.", DeprecationWarning, stacklevel=2)
+    return PreciseFlexAxis
+  raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

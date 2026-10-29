@@ -3,7 +3,12 @@ from typing import Any, Awaitable, Callable, Optional, cast
 import anyio
 import pytest
 
-from pylabrobot.brooks.precise_flex import PreciseFlex, PreciseFlexCartesianPose
+from pylabrobot.brooks.precise_flex import (
+  PreciseFlexCartesianPose,
+  PreciseFlexDriver,
+  PreciseFlexRail,
+)
+from pylabrobot.brooks.precise_flex.tests.wire_tests import _REPLIES, _SETUP
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.io.socket import Socket
@@ -35,6 +40,7 @@ class RecordingSocket(HasLifespan):
     self.exit_error = exit_error
     self._host = "ignored"
     self._port = 0
+    self._last_command = ""
 
   async def _enter_lifespan(
     self,
@@ -57,6 +63,7 @@ class RecordingSocket(HasLifespan):
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
     del timeout
     command = data.decode("ascii").rstrip()
+    self._last_command = command
     await anyio.lowlevel.checkpoint()
     self.events.append(f"write:{command}")
     if command == self.fail_command:
@@ -72,17 +79,15 @@ class RecordingSocket(HasLifespan):
   async def readline(self, timeout: Optional[float] = None) -> bytes:
     del timeout
     await anyio.lowlevel.checkpoint()
-    # Lifecycle commands ignore the value. The malformed first configuration value
-    # exercises setup's existing best-effort discovery path and ends discovery early.
-    return b"0 invalid\r\n"
+    return (_REPLIES.get(self._last_command, "0") + "\r\n").encode("ascii")
 
 
 def make_arm(
   events: list[str],
   **socket_kwargs: Any,
-) -> tuple[PreciseFlex, RecordingSocket]:
-  """Construct a PreciseFlex with its external Socket replaced by a recording double."""
-  arm = PreciseFlex(
+) -> tuple[PreciseFlexDriver, RecordingSocket]:
+  """Construct a PreciseFlexDriver with its external Socket replaced by a recording double."""
+  arm = PreciseFlexDriver(
     host="ignored",
     gripper_length=162.0,
     gripper_z_offset=0.0,
@@ -94,23 +99,15 @@ def make_arm(
   return arm, recording_socket
 
 
-ENTRY = [
-  "socket.enter",
-  "write:mode 0",
-  "write:hp 1 20",
-  "write:attach 1",
-  "write:home",
-  "write:freemode -1",
-  "write:pd 16078",
-]
+ENTRY = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP]]
 EXIT = ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]
 
 
 def test_managed_methods_are_inherited() -> None:
-  assert PreciseFlex.setup is HasLifespan.setup
-  assert PreciseFlex.stop is HasLifespan.stop
-  assert PreciseFlex.__aenter__ is HasLifespan.__aenter__
-  assert PreciseFlex.__aexit__ is HasLifespan.__aexit__
+  assert PreciseFlexDriver.setup is HasLifespan.setup
+  assert PreciseFlexDriver.stop is HasLifespan.stop
+  assert PreciseFlexDriver.__aenter__ is HasLifespan.__aenter__
+  assert PreciseFlexDriver.__aexit__ is HasLifespan.__aexit__
 
 
 class TestPreciseFlexLifecycle(AnyioTestBase):
@@ -389,14 +386,14 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     arm, _ = make_arm(events)
 
     async with arm.lifespan(skip_home=True):
-      async with arm.freedrive([1]):
+      async with arm.arm.freedrive([1]):
         with pytest.raises(RuntimeError, match="scope"):
-          await arm.start_freedrive_mode([2])
+          await arm.arm.start_freedrive_mode([2])
         with pytest.raises(RuntimeError, match="scope"):
-          await arm.stop_freedrive_mode()
+          await arm.arm.stop_freedrive_mode()
         with pytest.raises(RuntimeError, match="freedrive"):
           await arm.home()
-        await arm.halt()
+        await arm.arm.halt()
 
     scope_events = events[len([event for event in ENTRY if event != "write:home"]) : -len(EXIT)]
     assert scope_events == [
@@ -409,39 +406,39 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     "operation",
     [
       lambda arm: arm.recover_from_fault(),
-      lambda arm: arm.recover_axes_within_limits(),
+      lambda arm: arm.arm.recover_axes_within_limits(),
       lambda arm: arm.home(),
       lambda arm: arm.home_all(),
-      lambda arm: arm.release_brake(1),
-      lambda arm: arm.set_brake(1),
-      lambda arm: arm.zero_torque(True, 1),
-      lambda arm: arm.zero_torque(False),
-      lambda arm: arm.change_config(),
-      lambda arm: arm.change_config2(),
-      lambda arm: arm.move_to_joint_position({}),
-      lambda arm: arm.move_to_location(Coordinate(), 0),
-      lambda arm: arm.move_through_cartesian_poses(
+      lambda arm: arm.arm.release_brake(1),
+      lambda arm: arm.arm.reengage_brake(1),
+      lambda arm: arm.arm.start_zero_torque(1),
+      lambda arm: arm.arm.stop_zero_torque(),
+      lambda arm: arm.arm.change_elbow_orientation(),
+      lambda arm: arm.arm.change_elbow_orientation_by_algorithm(),
+      lambda arm: arm.arm.move_to_joint_state({}),
+      lambda arm: arm.arm.move_to_location(Coordinate(), 0),
+      lambda arm: arm.arm.move_through_cartesian_poses(
         [PreciseFlexCartesianPose(Coordinate(), Rotation())]
       ),
-      lambda arm: arm.move_gripper(80),
-      lambda arm: arm.move_gripper_joint_position(520),
-      lambda arm: arm.move_rail(10),
-      lambda arm: arm.pick_up_at_joint_position({}, 80),
-      lambda arm: arm.drop_at_joint_position({}, 80),
-      lambda arm: arm.pick_up_at_location(Coordinate(), 0, 80),
-      lambda arm: arm.drop_at_location(Coordinate(), 0, 80),
-      lambda arm: arm.park(),
+      lambda arm: arm.gripper.move_to_jaw_position(80),
+      lambda arm: arm.gripper.move_to_jaw_position_firmware_units(520),
+      lambda arm: arm.rail.move_rail(10) if arm.rail is not None else arm.home(),
+      lambda arm: arm.arm.pick_up_at_joint_state({}, 80),
+      lambda arm: arm.arm.drop_at_joint_state({}, 80),
+      lambda arm: arm.arm.pick_up_at_location(Coordinate(), 0, 80),
+      lambda arm: arm.arm.drop_at_location(Coordinate(), 0, 80),
+      lambda arm: arm.arm.park(),
     ],
   )
   async def test_scope_rejects_each_public_motion_before_device_mutation(
-    self, operation: Callable[[PreciseFlex], Awaitable[None]]
+    self, operation: Callable[[PreciseFlexDriver], Awaitable[None]]
   ) -> None:
     events: list[str] = []
     arm, _ = make_arm(events)
 
     async with arm.lifespan(skip_home=True):
-      arm._has_rail = True
-      async with arm.freedrive([1]):
+      arm.rail = PreciseFlexRail(arm)
+      async with arm.arm.freedrive([1]):
         before = list(events)
         with pytest.raises(RuntimeError, match="freedrive"):
           await operation(arm)
@@ -457,7 +454,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       command_started=command_started,
       release_command=release_command,
     )
-    scope = arm.freedrive([1])
+    scope = arm.arm.freedrive([1])
 
     async with arm.lifespan(skip_home=True):
       async with anyio.create_task_group() as task_group:
@@ -481,10 +478,10 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     scope_entered = anyio.Event()
     arm, _ = make_arm(events)
     lifespan = arm.lifespan(skip_home=True)
-    scope = arm.freedrive([1])
+    scope = arm.arm.freedrive([1])
 
-    async def pause_speed(speed_pct: float) -> None:
-      assert speed_pct == 10
+    async def pause_speed(speed_percent: float) -> None:
+      assert speed_percent == 10
       actions.append("motion.paused")
       motion_paused.set()
       await release_motion.wait()
@@ -499,11 +496,11 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       scope_entered.set()
 
     async def run_motion() -> None:
-      await arm.move_to_joint_position({}, 10)
+      await arm.arm.move_to_joint_state({}, 10)
 
     await lifespan.__aenter__()
-    arm._set_speed = pause_speed  # type: ignore[method-assign]
-    arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
+    arm.arm._set_speed = pause_speed  # type: ignore[method-assign]
+    arm.arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
     try:
       async with anyio.create_task_group() as task_group:
         task_group.start_soon(run_motion)
@@ -530,8 +527,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     scopes: list[anyio.CancelScope] = []
     arm, _ = make_arm(events)
 
-    async def pause_speed(speed_pct: float) -> None:
-      del speed_pct
+    async def pause_speed(speed_percent: float) -> None:
+      del speed_percent
       motion_paused.set()
       await release_motion.wait()
 
@@ -544,7 +541,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       await anyio.sleep_forever()
 
     async def enter_scope() -> None:
-      scope = arm.freedrive([1])
+      scope = arm.arm.freedrive([1])
       entered = False
       try:
         with anyio.CancelScope() as cancel_scope:
@@ -558,12 +555,12 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
         scope_finished.set()
 
     async def run_motion() -> None:
-      await arm.move_to_joint_position({}, 10)
+      await arm.arm.move_to_joint_state({}, 10)
 
     async with arm.lifespan(skip_home=True):
-      arm._set_speed = pause_speed  # type: ignore[method-assign]
-      arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
-      arm._start_freedrive_transition = start_freedrive  # type: ignore[method-assign]
+      arm.arm._set_speed = pause_speed  # type: ignore[method-assign]
+      arm.arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
+      arm.arm._start_freedrive_transition = start_freedrive  # type: ignore[method-assign]
       baseline = list(events)
       async with anyio.create_task_group() as task_group:
         task_group.start_soon(run_motion)
@@ -589,8 +586,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     arm, _ = make_arm(events)
     lifespan = arm.lifespan(skip_home=True)
 
-    async def pause_speed(speed_pct: float) -> None:
-      del speed_pct
+    async def pause_speed(speed_percent: float) -> None:
+      del speed_percent
       motion_paused.set()
       await release_motion.wait()
 
@@ -604,11 +601,11 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       parent_exited.set()
 
     async def run_motion() -> None:
-      await arm.move_to_joint_position({}, 10)
+      await arm.arm.move_to_joint_state({}, 10)
 
     await lifespan.__aenter__()
-    arm._set_speed = pause_speed  # type: ignore[method-assign]
-    arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
+    arm.arm._set_speed = pause_speed  # type: ignore[method-assign]
+    arm.arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
     try:
       async with anyio.create_task_group() as task_group:
         task_group.start_soon(run_motion)
@@ -630,11 +627,11 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     arm, _ = make_arm(events)
 
     async with arm.lifespan(skip_home=True):
-      await arm.start_freedrive_mode([1])
+      await arm.arm.start_freedrive_mode([1])
       with pytest.raises(RuntimeError, match="already active"):
-        async with arm.freedrive([2]):
+        async with arm.arm.freedrive([2]):
           pytest.fail("scope adopted durable freedrive")
-      await arm.stop_freedrive_mode()
+      await arm.arm.stop_freedrive_mode()
 
   async def test_failed_scope_cleanup_is_retryable_and_scope_state_is_reusable(self) -> None:
     events: list[str] = []
@@ -643,11 +640,11 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     async with arm.lifespan(skip_home=True):
       socket.fail_command = "freemode -1"
       with pytest.raises(RuntimeError, match="failed at freemode -1"):
-        async with arm.freedrive([1]):
+        async with arm.arm.freedrive([1]):
           pass
       socket.fail_command = None
-      await arm.stop_freedrive_mode()
-      async with arm.freedrive([2]):
+      await arm.arm.stop_freedrive_mode()
+      async with arm.arm.freedrive([2]):
         pass
 
     assert [event for event in events if event.startswith("write:freemode")] == [

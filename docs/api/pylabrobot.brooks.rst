@@ -13,12 +13,15 @@ PreciseFlex
   :nosignatures:
   :recursive:
 
-    PreciseFlex
+    PreciseFlexDriver
+    PreciseFlexArm
+    PreciseFlexGripper
+    PreciseFlexRail
     PreciseFlexConfiguration
     PreciseFlexCartesianPose
     WorkEnvelope
     MotionProfile
-    Axis
+    PreciseFlexAxis
     Wrist
     ElbowOrientation
     PreciseFlexError

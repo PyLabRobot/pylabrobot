@@ -209,6 +209,31 @@ class TestAgrowPumpArray(AnyioTestBase):
         "channel": 2,
       }
 
+  async def test_run_continuously_rejects_out_of_range_speed_before_writing(
+    self, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    """Reject invalid speeds without sending a command to the pump."""
+    client = SimulatedModbusClient()
+    device = make_device(monkeypatch, [client])
+    async with device:
+      for speed in (-0.1, -0.9, 100.1, 100.9, float("nan"), float("inf"), -float("inf")):
+        client.writes.clear()
+        with pytest.raises(ValueError):
+          await device.channels[0].run_continuously(speed=speed)
+        assert client.writes == []
+
+  async def test_run_continuously_valid_speed_conversion(
+    self, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    """Preserve integer conversion for valid fractional speeds and boundaries."""
+    client = SimulatedModbusClient()
+    device = make_device(monkeypatch, [client])
+    async with device:
+      for speed, expected in ((0.0, 0), (0.9, 0), (50.9, 50), (100.0, 100)):
+        client.writes.clear()
+        await device.channels[0].run_continuously(speed=speed)
+        assert client.writes == [(100, expected, {"unit": 1})]
+
   async def test_connection_failure_closes_client_and_clears_state(
     self, monkeypatch: pytest.MonkeyPatch
   ) -> None:

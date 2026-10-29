@@ -2,6 +2,7 @@ import struct
 import unittest
 from collections import deque
 from typing import Any, Awaitable, Callable, Optional, Sequence, cast
+from unittest.mock import AsyncMock, patch
 
 import anyio
 import pytest
@@ -17,9 +18,11 @@ from pylabrobot.byonoy.driver import (
   ByonoyDevice,
   ByonoyDriver,
   ByonoyMeasurementCancelledError,
+  ByonoySlotState,
   encode_well_bitmask,
 )
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.io.binary import Writer
 from pylabrobot.io.boundary import BoundaryRead
 from pylabrobot.io.hid import HID
 from pylabrobot.testing.concurrency import AnyioTestBase
@@ -53,6 +56,7 @@ class FakeHID(HasLifespan):
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
     if kwargs:
       raise TypeError("FakeHID does not accept lifespan options")
+    await super()._enter_lifespan(stack)
     self.events.append("hid.enter")
     if self.entry_error is not None:
       raise self.entry_error
@@ -114,6 +118,30 @@ def status_report(error_code: int = 0) -> bytes:
 def supported_reports_chunk(seq: int, seq_len: int, ids: list[int]) -> bytes:
   values = (ids + [0] * 29)[:29]
   return struct.pack("<HBB29H", 0x0010, seq, seq_len, *values).ljust(64, b"\x00")
+
+
+class TestStatus(AnyioTestBase):
+  """Verify status decoding with mocked device responses."""
+
+  async def test_firmware_slot_codes_are_translated_to_public_states(self) -> None:
+    """Translate firmware slot codes without disturbing adjacent status fields."""
+    for code, expected in (
+      (0, ByonoySlotState.EMPTY),
+      (1, ByonoySlotState.OCCUPIED),
+      (2, ByonoySlotState.UNDETERMINED),
+      (3, ByonoySlotState.UNKNOWN),
+      (255, ByonoySlotState.UNKNOWN),
+    ):
+      response = Writer().u16(0x0300).u8(0).u8(code).u8(1).u32(232).u8(0).u8(1).finish()
+      driver, _ = make_driver()
+      with patch.object(driver, "_send_command_locked", new=AsyncMock(return_value=response)):
+        status = await driver.request_status()
+      assert status.slot_state == expected
+      assert not status.is_initialized
+      assert status.error_code == 1
+      assert status.uptime_s == 232
+      assert not status.is_measuring
+      assert status.boot_completed
 
 
 class EncodeWellBitmaskTests(unittest.TestCase):
