@@ -98,7 +98,8 @@ class Incubator(Machine, Resource):
   async def _enter_lifespan(
     self, stack: AsyncExitStackWithShielding, **backend_kwargs: Any
   ) -> None:
-    await super()._enter_lifespan(stack, **backend_kwargs)
+    # Lifespan options are accepted and not forwarded to the backend.
+    await super()._enter_lifespan(stack)
     await self.backend.set_racks(self._racks)
 
   async def _pre_backend_stop(self) -> None:

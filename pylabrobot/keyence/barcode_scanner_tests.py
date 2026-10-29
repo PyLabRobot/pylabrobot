@@ -1,3 +1,4 @@
+import logging
 import sys
 from typing import Any, Awaitable, Callable, Optional, Union, cast
 
@@ -279,17 +280,23 @@ class TestKeyenceScanBarcode(AnyioTestBase):
       await scanner.scan_barcode()
     assert serial.write.calls == [((b"LON\r",), {}), ((b"LOFF\r",), {})]
 
-  async def test_loff_failure_is_logged_without_masking_success(self, caplog) -> None:
+  async def test_loff_failure_is_logged_without_masking_success(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     scanner, _ = make_scanner([], reads=[b"ABC123\r", RuntimeError("LOFF failed")])
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("WARNING", logger=KeyenceBarcodeScanner.__module__):
       barcode = await scanner.scan_barcode()
     assert barcode is not None
     assert barcode.data == "ABC123"
     assert "Failed to turn off barcode reader beam" in caplog.text
 
-  async def test_loff_failure_is_logged_without_masking_scan_error(self, caplog) -> None:
+  async def test_loff_failure_is_logged_without_masking_scan_error(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     scanner, _ = make_scanner([], reads=[b"NG\r", RuntimeError("LOFF failed")])
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("WARNING", logger=KeyenceBarcodeScanner.__module__):
       with pytest.raises(KeyenceBarcodeScannerError, match="reader is off"):
         await scanner.scan_barcode()
     assert "Failed to turn off barcode reader beam" in caplog.text
@@ -330,8 +337,9 @@ class TestKeyenceScanBarcode(AnyioTestBase):
     ]
 
   async def test_loff_operation_cancellation_after_success_is_logged_and_propagated(
-    self, caplog
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
   ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     read_count = 0
 
     async def read() -> bytes:
@@ -343,12 +351,15 @@ class TestKeyenceScanBarcode(AnyioTestBase):
       raise AssertionError("unreachable")
 
     scanner, _ = make_scanner([], reads=read)
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("WARNING", logger=KeyenceBarcodeScanner.__module__):
       with pytest.raises(anyio.get_cancelled_exc_class()):
         await scanner.scan_barcode()
     assert "Failed to turn off barcode reader beam" in caplog.text
 
-  async def test_loff_operation_cancellation_preserves_lon_failure(self, caplog) -> None:
+  async def test_loff_operation_cancellation_preserves_lon_failure(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     lon_error = RuntimeError("LON failed")
     read_count = 0
 
@@ -361,7 +372,7 @@ class TestKeyenceScanBarcode(AnyioTestBase):
       raise AssertionError("unreachable")
 
     scanner, _ = make_scanner([], reads=read)
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("WARNING", logger=KeyenceBarcodeScanner.__module__):
       with pytest.raises(BaseExceptionGroup) as error_info:
         await scanner.scan_barcode()
 

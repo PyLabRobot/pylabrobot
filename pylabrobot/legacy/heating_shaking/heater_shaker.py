@@ -39,5 +39,5 @@ class HeaterShaker(TemperatureController, Shaker):
   async def _pre_backend_stop(self) -> None:
     """Deactivate temperature, then force stop and unlock scoped shaking."""
     await attempt_in_order(
-      self.deactivate, partial(Shaker._pre_backend_stop, self, force_stop=True)
+      self.deactivate, partial(self._cleanup_shaking_before_backend_stop, force_stop=True)
     )

@@ -7,7 +7,6 @@ import anyio
 import pytest
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
-from pylabrobot.inheco.transport import sila as sila_transport
 from pylabrobot.inheco.transport.sila import InhecoSiLAInterface
 from pylabrobot.legacy.storage.inheco.scila import scila_backend as scila_module
 from pylabrobot.legacy.storage.inheco.scila.scila_backend import SCILABackend
@@ -103,9 +102,7 @@ def make_scila_backend(
 
 
 class TestSCILABackend(AnyioTestBase):
-  """Exercise the backend lifecycle on its supported asyncio backend."""
-
-  _anyio_backends = ["asyncio"]
+  """Exercise the backend lifecycle on both AnyIO backends."""
 
   async def test_managed_methods_are_inherited(self) -> None:
     """Kills retaining either custom setup or stop after native ownership is added."""
@@ -319,23 +316,3 @@ class TestSCILABackend(AnyioTestBase):
         await backend.close(invalid_drawer)
       with pytest.raises(ValueError, match="Invalid drawer ID"):
         await backend.request_drawer_status(invalid_drawer)
-
-
-class TestSCILATrioGuard(AnyioTestBase):
-  """Exercise the real Wave 8 backend guard without opening a socket."""
-
-  _anyio_backends = ["trio"]
-
-  async def test_trio_rejects_before_network_bind(self, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Kills moving the asyncio guard after callback-server construction."""
-    monkeypatch.setattr(scila_module, "InhecoSiLAInterface", InhecoSiLAInterface)
-
-    def unexpected_bind(*args: Any, **kwargs: Any) -> None:
-      raise AssertionError("callback server bind attempted")
-
-    monkeypatch.setattr(sila_transport, "_CallbackHTTPServer", unexpected_bind)
-    backend = SCILABackend(scila_ip="192.0.2.44", client_ip="127.0.0.1")
-
-    with pytest.raises(RuntimeError, match="requires the asyncio backend"):
-      async with backend:
-        pytest.fail("unsupported backend reached the body")

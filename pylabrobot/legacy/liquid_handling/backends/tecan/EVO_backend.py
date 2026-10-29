@@ -151,8 +151,8 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     module: str,
     command: Literal["RNT", "RPG", "RPR", "RPX", "RPY", "RPZ"],
     params: Optional[List[Optional[int]]] = None,
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
+    write_timeout: Optional[float] = None,
+    read_timeout: Optional[float] = None,
     wait: Literal[True] = True,
   ) -> Dict[str, Any]: ...
 
@@ -162,8 +162,8 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     module: str,
     command: str,
     params: Optional[List[Optional[int]]] = None,
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
+    write_timeout: Optional[float] = None,
+    read_timeout: Optional[float] = None,
     wait: bool = True,
   ) -> Optional[Dict[str, Union[str, int, List[Union[int, str]]]]]: ...
 
@@ -172,8 +172,8 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     module: str,
     command: str,
     params: Optional[List[Optional[int]]] = None,
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
+    write_timeout: Optional[float] = None,
+    read_timeout: Optional[float] = None,
     wait: bool = True,
   ) -> Optional[Dict[str, Union[str, int, List[Union[int, str]]]]]:
     """Send a firmware command to the Tecan machine. Caches `set` commands and ignores if

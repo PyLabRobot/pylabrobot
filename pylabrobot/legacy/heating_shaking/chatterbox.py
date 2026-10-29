@@ -8,4 +8,9 @@ class HeaterShakerChatterboxBackend(
   HeaterShakerBackend, ShakerChatterboxBackend, TemperatureControllerChatterboxBackend
 ):
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
-    await super()._enter_lifespan(stack)
+    # The device announces its lifespan once, as a shaker. Entering through
+    # ShakerChatterboxBackend would also run the temperature controller's chatter, and its
+    # stop message shares a name with the shaker's, so the shaker's would be pushed twice.
+    await super(TemperatureControllerChatterboxBackend, self)._enter_lifespan(stack)
+    print("Setting up shaker")
+    stack.push_shielded_async_callback(self._print_stop_message)
