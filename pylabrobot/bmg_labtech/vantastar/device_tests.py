@@ -20,7 +20,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   VOYAGER_OD600,
   load_flows,
 )
-from pylabrobot.resources import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources import cor_96_wellplate_2mL_Vb, cor_96_wellplate_360uL_Fb
 
 PHOTOCATALYST_WELLS = ["A1", "A6", "A12", "H1", "H6", "H12"]
 
@@ -72,6 +72,10 @@ class PlateTests(unittest.TestCase):
     self.assertAlmostEqual(geometry.last_x - geometry.first_x, 99.0, places=1)
     self.assertAlmostEqual(geometry.last_y - geometry.first_y, 63.0, places=1)
     self.assertLess(geometry.first_y, geometry.width / 2)
+
+  def test_square_wells(self):
+    self.assertEqual(get_plate_geometry(cor_96_wellplate_360uL_Fb(name="plate")).well_shape, 0)
+    self.assertEqual(get_plate_geometry(cor_96_wellplate_2mL_Vb(name="plate")).well_shape, 1)
 
   def test_measured_wells_are_in_row_order(self):
     plate = cor_96_wellplate_360uL_Fb(name="plate")
@@ -188,6 +192,21 @@ class RecordedReadTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(
         {w: round(min(v, 3.5), 3) for w, v in result.data.items()}, voyager[str(mode)]
       )
+
+
+class StopTests(unittest.IsolatedAsyncioTestCase):
+  async def test_drawer_open_when_a_plate_is_left_in(self):
+    device = make_device([])
+
+    async def stop(accept_plate_left_in_device: bool = False) -> None:
+      raise RuntimeError("a plate is still in the reader")
+
+    device.driver.stop = stop  # type: ignore[method-assign]
+    with self.assertRaises(RuntimeError):
+      await device.stop()
+    plate = device.plate_holder.resource
+    assert plate is not None
+    device.plate_holder.unassign_child_resource(plate)  # allowed: the drawer is open
 
 
 class ArgumentTests(unittest.IsolatedAsyncioTestCase):

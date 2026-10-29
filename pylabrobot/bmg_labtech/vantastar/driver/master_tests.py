@@ -7,7 +7,8 @@ from dataclasses import replace
 from typing import Any, Callable, Deque, Dict, List, Optional
 
 from pylabrobot.bmg_labtech.vantastar.driver.configuration_tests import HARDWARE_INFO
-from pylabrobot.bmg_labtech.vantastar.driver.errors import CommandRefusedError
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.vantastar.driver.errors import CommandRefusedError, DeviceError
 from pylabrobot.bmg_labtech.vantastar.driver.framing import (
   CONTINUATION,
   FIRST,
@@ -519,7 +520,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
 class RecordedReader:
   """Answers as the reader did in a recorded read (``load_flows``): STATUS (and STOP) and RUN with
   their recorded replies, each data block status poll with the next block status reply, and each
-  data request with the next reply recorded for it; the last again once they run out."""
+  other request (data requests, the block release) with the next reply recorded for it; the last
+  again once they run out."""
 
   def __init__(self, flow: Dict[str, Any]) -> None:
     self.status = bytes.fromhex(flow["status"])
@@ -538,7 +540,7 @@ class RecordedReader:
       return self.status
     if payload[0] == 0x04:
       return self.run_reply
-    if payload[0] == 0x2D:
+    if payload == MW_BLOCK_STATUS:
       return self._next(self.block_status)
     return self._next(self.replies[payload])
 
@@ -573,6 +575,10 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
         "0502010800018001",
       ],
     )
+    # Fetched part by part, the block is released after the last well.
+    sent = commands(driver)
+    release = sent.index(bytes.fromhex("2d0100010000"))
+    self.assertGreater(release, sent.index(bytes.fromhex("0502010800018001")))
 
   async def test_kinetic_read_returns_every_cycle(self):
     driver, run = self.make("absorbance_kinetic")
@@ -594,6 +600,60 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(TimeoutError):
       await driver.run_blocks(run, timeout=0)
     self.assertIn(STOP, commands(driver))
+
+
+class RobustnessTests(unittest.IsolatedAsyncioTestCase):
+  async def test_continuation_out_of_sequence_raises(self):
+    driver = make_driver(lambda p: ABSORBANCE_LAST_PAGE)
+    io = driver.io
+    assert isinstance(io, FakeUSB)
+    receive = io._receive
+
+    def renumber(payload: bytes) -> None:
+      receive(payload)
+      packet = io._continuations[1]
+      io._continuations[1] = packet[:3] + (3).to_bytes(4, "big") + packet[7:]
+
+    io._receive = renumber  # type: ignore[method-assign]
+    with self.assertRaises(FrameError):
+      await driver.exchange(bytes([0x80]))
+
+  async def test_status_with_the_error_bit_raises(self):
+    error = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x40]) + STATUS_IDLE[2:]
+    driver = make_driver(lambda p: error)
+    with self.assertRaises(DeviceError):
+      await driver.request_status()
+
+  async def test_status_of_a_reader_not_initialized_is_read(self):
+    driver = make_driver(lambda p: STATUS_NOT_INITIALIZED)
+    status = await driver.request_status()
+    self.assertFalse(status.busy)
+
+  async def test_stop_closes_the_connection_after_a_device_error(self):
+    error = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x40]) + STATUS_IDLE[2:]
+    driver = make_driver(lambda p: error)
+    closed = []
+
+    async def close() -> None:
+      closed.append(True)
+
+    driver._usb_close = close  # type: ignore[method-assign]
+    with self.assertRaises(DeviceError):
+      await driver.stop()
+    self.assertEqual(closed, [True])
+
+  def test_a_warning_that_clears_is_logged_again(self):
+    driver = make_driver(lambda p: b"")
+    warning = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x80]) + STATUS_IDLE[2:]
+    with self.assertLogs("pylabrobot.bmg_labtech.vantastar.driver.master", "WARNING") as logs:
+      for reply in (warning, warning, STATUS_IDLE, warning):
+        driver._check_reply(bytes([0x80]), reply)
+    self.assertEqual(len(logs.records), 2)
+
+  def test_well_mask_holds_up_to_384_wells(self):
+    self.assertEqual(len(encode_well_mask(24, 16)), 48)
+    with self.assertRaises(ValueError):
+      encode_well_mask(48, 32)
 
 
 class StatusTests(unittest.TestCase):

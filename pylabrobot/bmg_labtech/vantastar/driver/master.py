@@ -170,6 +170,9 @@ _NEXT_NEW_DATA_BLOCK = bytes([ValuesType.MEASUREMENT_DATA]) + bytes(6)
 _WITHOUT_CALIBRATION = 0x8000
 # MwBlockCommand GetStatusOfMeasDataBlock with a send block size of 65535.
 _MW_BLOCK_STATUS = bytes([CommandId.MW_BLOCK, 0x00, 0x00, 0x00, 0xFF, 0xFF])
+# MwBlockCommand ReleaseMeasDataBlock, of kinetic cycle 1, as Voyager sends it after the last well of
+# an absorbance spectrum.
+_RELEASE_BLOCK = bytes([0x01, 0x00, 0x01, 0x00, 0x00])
 
 # IncubatorCommand types.  Voyager switches heating off with temperature monitoring, which keeps
 # the incubator temperatures in the replies.
@@ -231,7 +234,8 @@ class WellScan:
 @dataclass(frozen=True)
 class PlateGeometry:
   """A plate as the reader sees it, in mm: its size, the centres of its first and last well (from
-  the plate's left and back edges), its grid, and its well size and shape (0 round, 1 square)."""
+  the plate's left and back edges), its grid, and its well size (a round well's diameter, a square
+  well's width) and shape (0 round, 1 square, as Voyager sends them)."""
 
   length: float
   width: float
@@ -425,7 +429,13 @@ def encode_well_mask(
   columns: int, rows: int, wells: Optional[Sequence[Tuple[int, int]]] = None
 ) -> bytes:
   """The 48-byte well mask.  ``wells`` are 0-based (row, column) pairs; None selects all wells.
-  Bit = row * columns + column, most significant bit first."""
+  Bit = row * columns + column, most significant bit first.
+
+  Raises:
+    ValueError: if the plate has more than 384 wells.
+  """
+  if columns * rows > 8 * 48:
+    raise ValueError(f"the well mask holds up to 384 wells, the plate has {columns * rows}")
   selected = None if wells is None else set(wells)
   mask = bytearray(48)
   for r in range(rows):
@@ -571,10 +581,14 @@ class VANTAstarDriver:
     total = get_packet_value(first)
     reply = bytearray(first[HEADER_SIZE:])
     await self.io.write(HOST_ACKNOWLEDGEMENT)
+    sequence = 0
     while len(reply) < total:
       packet = await self._read_packet()
       if get_packet_type(packet) != CONTINUATION:
         raise FrameError(f"expected a continuation packet, got {packet.hex()}")
+      sequence += 1
+      if get_packet_value(packet) != sequence:
+        raise FrameError(f"expected continuation packet {sequence}, got {packet.hex()}")
       reply.extend(packet[HEADER_SIZE:])
     return bytes(reply[:total])
 
@@ -625,6 +639,7 @@ class VANTAstarDriver:
     except ValueError as e:
       raise FrameError(str(e)) from e
     if not first & (_REFUSED_BIT | _ERROR_BIT | _WARNING_BIT):
+      self._last_warning = None
       return
     codes: Codes = (
       parse_confirmation(reply).codes if reply[0] == CONFIRMATION_ID else (0, 0, 0, 0, 0)
@@ -682,8 +697,19 @@ class VANTAstarDriver:
     )
 
   async def request_status(self, retries: int = 5) -> VANTAstarStatus:
-    """Request the reader's status flags."""
-    reply = await self._exchange_with_retries(bytes([CommandId.STATUS]), retries)
+    """Request the reader's status flags.
+
+    A reader not yet initialized refuses STATUS (quit code 201) and still reports its flags; a
+    refused reply is parsed as any other.
+
+    Raises:
+      DeviceError: if the reply carries the device-error bit.
+    """
+    payload = bytes([CommandId.STATUS])
+    reply = await self._exchange_with_retries(payload, retries)
+    if len(reply) > 1 and reply[1] & _ERROR_BIT:
+      codes = parse_confirmation(reply).codes if reply[0] == CONFIRMATION_ID else (0, 0, 0, 0, 0)
+      raise DeviceError(payload, codes)
     return self._parse_status(reply)
 
   async def _wait_until_ready(
@@ -831,7 +857,7 @@ class VANTAstarDriver:
       await self.io.drain()
       await self.stop_run()
       await self.io.drain()
-    except (CommandRefusedError, FrameError) as e:
+    except Exception as e:  # keep the error that ended the run
       logger.warning("STOP not accepted: %s", e)
 
   # -- RUN payload builders -------------------------------------------------
@@ -1192,8 +1218,9 @@ class VANTAstarDriver:
     """Run an absorbance spectrum from prebuilt RUN fields and return one block per well, in the
     order the reader reads the wells; the first carries the calibration values.
 
-    The reader stores the spectrum as one block too large for a page; as Voyager does, each well's
-    part is requested (MeasurementDataSpecificDataBlock) once the block status shows it saved.
+    The reader stores the spectrum as one block; as Voyager does, each well's part is requested
+    (MeasurementDataSpecificDataBlock) once the block status shows it saved, and the block is
+    released (MwBlockCommand ReleaseMeasDataBlock) after the last well.
 
     Raises:
       RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
@@ -1223,7 +1250,9 @@ class VANTAstarDriver:
 
     self._measuring = True
     try:
-      await self.send_command(CommandId.RUN, parameters)
+      # Sent once: the reader acts on the RUN and on each data request it answers, so sending one
+      # again after a lost reply would start a second read or skip a block.
+      await self.send_command(CommandId.RUN, parameters, retries=1)
       wells = parse_well_list(
         await self.send_command(
           CommandId.VALUES, bytes([ValuesType.LAYOUT_WELL_LIST]) + bytes(6), when_idle=False
@@ -1239,24 +1268,36 @@ class VANTAstarDriver:
         self._check_reply(_MW_BLOCK_STATUS, reply)
         status = self._parse_status(reply)
         progress = parse_mw_block_data(reply)
-        if by_well and self._count_saved_wells(progress, len(wells)) > len(blocks):
-          column, row = wells[len(blocks)]
-          sub_block = 1 if not blocks else 1 | _WITHOUT_CALIBRATION
-          body = (
-            bytes([ValuesType.MEASUREMENT_DATA, column, row])
-            + (1).to_bytes(2, "big")
-            + sub_block.to_bytes(2, "big")
+        if by_well:
+          saved = self._count_saved_wells(progress, len(wells))
+          if saved > len(blocks):
+            while len(blocks) < saved:
+              column, row = wells[len(blocks)]
+              sub_block = 1 if not blocks else 1 | _WITHOUT_CALIBRATION
+              body = (
+                bytes([ValuesType.MEASUREMENT_DATA, column, row])
+                + (1).to_bytes(2, "big")
+                + sub_block.to_bytes(2, "big")
+              )
+              page = await self.send_command(CommandId.VALUES, body, when_idle=False, retries=1)
+              blocks.append(parse_measurement_data(page))
+            if len(blocks) == len(wells):
+              # The block was fetched part by part, so it is released explicitly, as Voyager does;
+              # the reader stays busy until then.
+              await self.send_command(
+                CommandId.MW_BLOCK, _RELEASE_BLOCK, when_idle=False, retries=1
+              )
+              break
+          elif not status.busy:
+            raise RuntimeError("the run ended without its data")
+        elif status.new_data_ready:
+          page = await self.send_command(
+            CommandId.VALUES, _NEXT_NEW_DATA_BLOCK, when_idle=False, retries=1
           )
-          page = await self.send_command(CommandId.VALUES, body, when_idle=False)
-          blocks.append(parse_measurement_data(page))
-          if len(blocks) == len(wells):
-            break
-        elif not by_well and status.new_data_ready:
-          page = await self.send_command(CommandId.VALUES, _NEXT_NEW_DATA_BLOCK, when_idle=False)
           blocks.append(parse_measurement_data(page))
           if len(blocks) >= progress.required:
             break
-        elif not by_well and status.curr_state_meas_data_ready:
+        elif status.curr_state_meas_data_ready:
           await self.send_command(CommandId.VALUES, _CURRENT_DATA_BLOCK, when_idle=False)
         elif not status.busy:
           raise RuntimeError("the run ended without its data")
@@ -1459,32 +1500,29 @@ class VANTAstarDriver:
 
     Raises:
       RuntimeError: if a plate is still in the reader, unless ``accept_plate_left_in_device``;
-        the drawer is opened.
+        the drawer is opened.  The connection is closed either way.
     """
-    if self._measuring:
-      try:
-        await self._drain_and_stop()
-      except (CommandRefusedError, FrameError, TimeoutError):
-        logger.warning("could not stop the running measurement", exc_info=True)
-
     try:
-      status = await self.request_status()
-      if status.drawer_open:
-        try:
-          await self.close_drawer()
-        except (CommandRefusedError, TimeoutError):
-          logger.warning("the drawer did not close", exc_info=True)
+      if self._measuring:
+        await self._drain_and_stop()
+      try:
+        status = await self.request_status()
+        if status.drawer_open:
+          try:
+            await self.close_drawer()
+          except (CommandRefusedError, TimeoutError):
+            logger.warning("the drawer did not close", exc_info=True)
 
-      status = await self.request_status()
-      if not accept_plate_left_in_device and status.plate_detected:
-        try:
-          await self.open_drawer()
-        except (CommandRefusedError, TimeoutError):
-          logger.warning("the drawer did not open", exc_info=True)
-        raise RuntimeError(
-          "a plate is still in the reader; take it out, or pass accept_plate_left_in_device=True"
-        )
-    except (FrameError, TimeoutError):
-      logger.warning("could not query the reader's state before closing", exc_info=True)
-
-    await self._usb_close()
+        status = await self.request_status()
+        if not accept_plate_left_in_device and status.plate_detected:
+          try:
+            await self.open_drawer()
+          except (CommandRefusedError, TimeoutError):
+            logger.warning("the drawer did not open", exc_info=True)
+          raise RuntimeError(
+            "a plate is still in the reader; take it out, or pass accept_plate_left_in_device=True"
+          )
+      except (FrameError, TimeoutError):
+        logger.warning("could not query the reader's state before closing", exc_info=True)
+    finally:
+      await self._usb_close()

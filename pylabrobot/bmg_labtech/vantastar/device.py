@@ -8,7 +8,7 @@ from pylabrobot.io.usb import USB
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.lib.fluorescence.results import FluorescenceResult, FluorescenceSpectrumResult
 from pylabrobot.lib.luminescence.results import LuminescenceResult
-from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, Well
+from pylabrobot.resources import Coordinate, CrossSectionType, Plate, PlateHolder, Resource, Well
 
 from .driver.master import (
   DEFAULT_APERTURE_DISTANCE,
@@ -122,6 +122,7 @@ def get_plate_geometry(plate: Plate) -> PlateGeometry:
     columns=plate.num_items_x,
     rows=plate.num_items_y,
     well_size=min(first.get_size_x(), first.get_size_y()),
+    well_shape=1 if first.cross_section_type == CrossSectionType.RECTANGLE else 0,
   )
 
 
@@ -210,9 +211,15 @@ class VANTAstarDevice(Resource):
     """Stop a running measurement, close the drawer, and disconnect.
 
     Raises:
-      RuntimeError: if a plate is still in the reader, unless ``accept_plate_left_in_device``.
+      RuntimeError: if a plate is still in the reader, unless ``accept_plate_left_in_device``; the
+        drawer is then open for it to be taken out.
     """
-    await self.driver.stop(accept_plate_left_in_device=accept_plate_left_in_device)
+    try:
+      await self.driver.stop(accept_plate_left_in_device=accept_plate_left_in_device)
+    except RuntimeError:
+      self.plate_holder._drawer_open = True
+      raise
+    self.plate_holder._drawer_open = False
 
   async def open_drawer(self) -> None:
     """Move the drawer out (about 7 s)."""
