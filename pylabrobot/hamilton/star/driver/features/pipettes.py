@@ -4189,14 +4189,14 @@ class Pipettes:
           sorted(faulted),
           sensed,
         )
-      # Out of the rack before anything else touches the deck: the channels go to the height the
-      # command would have travelled at, by their stop discs, whatever state they were left in.
+      # Out of the rack before anything else touches the deck: a channel below the traverse
+      # height, by a device read, is raised to it; one already above stays where it is.
       try:
-        await self.move_stop_disc_to_z_positions(
-          {channel: traverse / 10 for channel in use_channels}
-        )
+        raises = await self._traverse_raise_targets(traverse / 10)
+        if raises:
+          await self.move_stop_disc_to_z_positions(raises)
       except BaseException:
-        logger.warning("could not lift the channels to %.1f mm after the failure", traverse / 10)
+        logger.warning("could not raise the channels to %.1f mm after the failure", traverse / 10)
       picked_up = sensed
       raise
     finally:
@@ -4457,14 +4457,14 @@ class Pipettes:
           sorted(faulted),
           {channel: bool(presence[channel]) for channel in use_channels},
         )
-      # Out of the rack before anything else touches the deck: the channels go to the height the
-      # command would have travelled at, by their stop discs, whatever state they were left in.
+      # Out of the rack before anything else touches the deck: a channel below the traverse
+      # height, by a device read, is raised to it; one already above stays where it is.
       try:
-        await self.move_stop_disc_to_z_positions(
-          {channel: traverse / 10 for channel in use_channels}
-        )
+        raises = await self._traverse_raise_targets(traverse / 10)
+        if raises:
+          await self.move_stop_disc_to_z_positions(raises)
       except BaseException:
-        logger.warning("could not lift the channels to %.1f mm after the failure", traverse / 10)
+        logger.warning("could not raise the channels to %.1f mm after the failure", traverse / 10)
       dropped = sensed
       raise
     finally:
