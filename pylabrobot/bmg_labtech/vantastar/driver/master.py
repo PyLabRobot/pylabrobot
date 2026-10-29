@@ -1184,51 +1184,6 @@ class VANTAstarDriver:
 
   # -- measurement flow -----------------------------------------------------
 
-  async def run_measurement(self, parameters: bytes, *, timeout: float) -> MeasurementData:
-    """Run a read of one data block (an endpoint read or a fluorescence scan) from prebuilt RUN
-    fields and return the block (``run_blocks``).
-
-    Raises:
-      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
-      TimeoutError: if the run takes longer than ``timeout`` seconds.
-      CommandRefusedError: if the reader refuses the RUN.
-    """
-    return (await self.run_blocks(parameters, timeout=timeout))[0]
-
-  async def run_blocks(self, parameters: bytes, *, timeout: float) -> List[MeasurementData]:
-    """Run a read from prebuilt RUN fields and return its finished data blocks: one, or one per
-    kinetic cycle.
-
-    The flow Voyager uses: RUN, then the well list and the timing (both requested), then the data
-    block status polled; the current block requested whenever a page of it is ready
-    (CurrStateMeasDataRdy), and the next new block whenever the reader announces a finished one
-    (NewMeasDataReady), until every block the read stores is in; then status polled until the
-    reader is idle.  Any failure, timeout or cancellation stops the run.
-
-    Raises:
-      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
-      TimeoutError: if the run takes longer than ``timeout`` seconds.
-      CommandRefusedError: if the reader refuses the RUN.
-    """
-    return await self._run(parameters, timeout=timeout, by_well=False)
-
-  async def run_absorbance_spectrum(
-    self, parameters: bytes, *, timeout: float
-  ) -> List[MeasurementData]:
-    """Run an absorbance spectrum from prebuilt RUN fields and return one block per well, in the
-    order the reader reads the wells; the first carries the calibration values.
-
-    The reader stores the spectrum as one block; as Voyager does, each well's part is requested
-    (MeasurementDataSpecificDataBlock) once the block status shows it saved, and the block is
-    released (MwBlockCommand ReleaseMeasDataBlock) after the last well.
-
-    Raises:
-      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
-      TimeoutError: if the run takes longer than ``timeout`` seconds.
-      CommandRefusedError: if the reader refuses the RUN.
-    """
-    return await self._run(parameters, timeout=timeout, by_well=True)
-
   @staticmethod
   def _count_saved_wells(progress: MwBlockStatus, wells: int) -> int:
     """The wells of a single-block read whose values the block status shows saved."""
@@ -1313,6 +1268,51 @@ class VANTAstarDriver:
       raise
     finally:
       self._measuring = False
+
+  async def run_blocks(self, parameters: bytes, *, timeout: float) -> List[MeasurementData]:
+    """Run a read from prebuilt RUN fields and return its finished data blocks: one, or one per
+    kinetic cycle.
+
+    The flow Voyager uses: RUN, then the well list and the timing (both requested), then the data
+    block status polled; the current block requested whenever a page of it is ready
+    (CurrStateMeasDataRdy), and the next new block whenever the reader announces a finished one
+    (NewMeasDataReady), until every block the read stores is in; then status polled until the
+    reader is idle.  Any failure, timeout or cancellation stops the run.
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
+      TimeoutError: if the run takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the RUN.
+    """
+    return await self._run(parameters, timeout=timeout, by_well=False)
+
+  async def run_measurement(self, parameters: bytes, *, timeout: float) -> MeasurementData:
+    """Run a read of one data block (an endpoint read or a fluorescence scan) from prebuilt RUN
+    fields and return the block (``run_blocks``).
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
+      TimeoutError: if the run takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the RUN.
+    """
+    return (await self.run_blocks(parameters, timeout=timeout))[0]
+
+  async def run_absorbance_spectrum(
+    self, parameters: bytes, *, timeout: float
+  ) -> List[MeasurementData]:
+    """Run an absorbance spectrum from prebuilt RUN fields and return one block per well, in the
+    order the reader reads the wells; the first carries the calibration values.
+
+    The reader stores the spectrum as one block; as Voyager does, each well's part is requested
+    (MeasurementDataSpecificDataBlock) once the block status shows it saved, and the block is
+    released (MwBlockCommand ReleaseMeasDataBlock) after the last well.
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
+      TimeoutError: if the run takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the RUN.
+    """
+    return await self._run(parameters, timeout=timeout, by_well=True)
 
   # -- shaking --------------------------------------------------------------
 
@@ -1439,6 +1439,15 @@ class VANTAstarDriver:
       + bytes([_ALL_INCUBATOR_CHANNELS])
     )
 
+  async def _wait_for_temperatures(self) -> None:
+    """Wait until the reader reports its incubator temperatures; it reports none (all zero) for up
+    to about a second after an IncubatorCommand."""
+    await self._wait_until_ready(
+      self.incubator_settle_timeout,
+      self.default_poll_interval,
+      until=lambda status: status.temperatures is not None,
+    )
+
   async def set_temperature(self, temperature: float) -> None:
     """Switch the incubator on, heating to ``temperature`` degrees C; returns once the reader
     reports its temperatures again.
@@ -1460,15 +1469,6 @@ class VANTAstarDriver:
     await self.send_command(CommandId.INCUBATOR, self.build_incubator(_INCUBATOR_MONITOR, 0))
     await self._wait_for_temperatures()
 
-  async def _wait_for_temperatures(self) -> None:
-    """Wait until the reader reports its incubator temperatures; it reports none (all zero) for up
-    to about a second after an IncubatorCommand."""
-    await self._wait_until_ready(
-      self.incubator_settle_timeout,
-      self.default_poll_interval,
-      until=lambda status: status.temperatures is not None,
-    )
-
   async def get_temperatures(self) -> Optional[Tuple[float, float, float]]:
     """The three incubator sensor readings in degrees C (the first is the one Voyager displays),
     or None when the reader reports none."""
@@ -1486,8 +1486,8 @@ class VANTAstarDriver:
     """Connect, initialize the reader (about 10 s), and read its configuration."""
     logger.warning(
       "the VANTAstar driver has been tested on one reader (firmware 1.12) only; its luminescence "
-      "read, spectra, kinetic reads and well scanning not yet. Please report how it behaves on "
-      "your reader."
+      "read, spectra, kinetic reads and well scanning not yet. If you verify them on your reader, "
+      "please report the result or open a pull request to update this warning."
     )
     await self._usb_setup()
     await self.io.drain()

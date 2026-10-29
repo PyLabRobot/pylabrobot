@@ -221,6 +221,10 @@ class FakeUSB(USB):
 
   # No super().__init__(): USB.__init__ looks for the device.
   def __init__(self, respond: Callable[[bytes], bytes]) -> None:
+    """
+    Args:
+      respond: returns the reply payload to a command payload.
+    """
     self.respond = respond
     self.commands: List[bytes] = []
     self._to_host: Deque[bytes] = deque()
@@ -228,19 +232,34 @@ class FakeUSB(USB):
     self._receiving: Optional[bytearray] = None
     self._receiving_length = 0
 
-  async def setup(self, empty_buffer: bool = True) -> None: ...
+  async def setup(self, empty_buffer: bool = True) -> None:
+    """Do nothing: there is no device to open."""
 
-  async def stop(self) -> None: ...
+  async def stop(self) -> None:
+    """Do nothing: there is no device to close."""
 
-  async def drain(self, *args, **kwargs) -> None: ...
+  async def drain(self, *args, **kwargs) -> None:
+    """Do nothing: there is no device buffer to empty."""
 
   def ctrl_transfer(self, *args, **kwargs) -> None:  # type: ignore[override]
-    pass
+    """Take a vendor request and do nothing."""
 
   def serialize(self) -> dict:
+    """The link as a serialized USB, with the reader's serial number."""
     return {"serial_number": "0421-000446"}
 
+  def _receive(self, payload: bytes) -> None:
+    """Record a whole command payload and queue its reply: the first packet at once, the
+    continuations after the host's acknowledgement."""
+    self.commands.append(payload)
+    packets = wrap_payload(self.respond(payload))
+    self._to_host.append(packets[0])
+    self._continuations = packets[1:]
+
   async def write(self, data: bytes, timeout: Optional[float] = None) -> None:  # type: ignore[override]
+    """Take one packet from the host: an acknowledgement releases the reply's continuations; a
+    command's packets are reassembled (the first of a long command acknowledged) and the whole
+    command answered."""
     if data == HOST_ACKNOWLEDGEMENT:
       self._to_host.extend(self._continuations)
       self._continuations = []
@@ -259,17 +278,13 @@ class FakeUSB(USB):
         self._receiving = None
         self._receive(payload)
 
-  def _receive(self, payload: bytes) -> None:
-    self.commands.append(payload)
-    packets = wrap_payload(self.respond(payload))
-    self._to_host.append(packets[0])
-    self._continuations = packets[1:]
-
   async def read(self, timeout: Optional[float] = None, size: Optional[int] = None) -> bytes:  # type: ignore[override]
+    """The next packet queued for the host."""
     return self._to_host.popleft()
 
 
 def make_driver(respond: Callable[[bytes], bytes]) -> VANTAstarDriver:
+  """A driver on a ``FakeUSB`` answering with ``respond``, polling without pauses."""
   driver = VANTAstarDriver(io=FakeUSB(respond))
   driver.default_poll_interval = 0
   driver.measurement_poll_interval = 0
@@ -277,17 +292,24 @@ def make_driver(respond: Callable[[bytes], bytes]) -> VANTAstarDriver:
 
 
 def commands(driver: VANTAstarDriver) -> List[bytes]:
+  """The command payloads ``driver`` sent through its ``FakeUSB``, in order."""
   assert isinstance(driver.io, FakeUSB)
   return driver.io.commands
 
 
 class CommandTests(unittest.TestCase):
+  """The commands the driver builds for endpoint reads, gain and focus adjustments and shaking,
+  compared with the commands Voyager sent where there is one."""
+
   def test_absorbance_run_matches_voyager(self):
+    """An absorbance read at 600 nm, 22 flashes and 0.5 s settling builds Voyager's RUN."""
     driver = make_driver(lambda p: b"")
     run = driver.build_absorbance_run([600], flashes=22, settling_time=0.5)
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE)
 
   def test_fluorescence_run_matches_voyager(self):
+    """A fluorescence read with Voyager's monochromator, gain 500 at 5 mm, 20 flashes and 0.5 s
+    settling builds Voyager's RUN."""
     driver = make_driver(lambda p: b"")
     run = driver.build_fluorescence_run(
       [VOYAGER_MONOCHROMATOR], gains=[500], focal_height=5.0, flashes=20, settling_time=0.5
@@ -295,6 +317,8 @@ class CommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, RUN_FLUORESCENCE)
 
   def test_enhanced_dynamic_range_run_matches_voyager(self):
+    """The same fluorescence read with enhanced dynamic range, at 4.03 mm (sent as 4.0 mm), builds
+    Voyager's RUN."""
     driver = make_driver(lambda p: b"")
     run = driver.build_fluorescence_run(
       [VOYAGER_MONOCHROMATOR],
@@ -307,6 +331,8 @@ class CommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, RUN_FLUORESCENCE_EDR)
 
   def test_luminescence_run_matches_the_serializer_layout(self):
+    """A luminescence read builds the RUN Voyager's command serializer builds with its defaults,
+    except for the kinetic delay, 0 as in Voyager's absorbance and fluorescence reads."""
     driver = make_driver(lambda p: b"")
     closed = MonochromatorSettings(0, 0, 0, 0, 0, excitation_slit=0, emission_slit=0)
     run = driver.build_luminescence_run(
@@ -323,6 +349,8 @@ class CommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, bytes(expected))
 
   def test_luminescence_automatic_gain(self):
+    """A luminescence read without gains asks for automatic gain, and carries the settling time, the
+    default 0.5 mm aperture distance and the 0.8 s integration time."""
     driver = make_driver(lambda p: b"")
     run = driver.build_luminescence_run(
       [LUMINESCENCE_NO_FILTER], gains=None, integration_time=0.8, settling_time=0.02
@@ -332,6 +360,7 @@ class CommandTests(unittest.TestCase):
     self.assertEqual(run[-5:-3], (80).to_bytes(2, "big"))  # 0.8 s
 
   def test_gain_focus_matches_voyager(self):
+    """A gain and focus adjustment on A1-H1 at an 88 % target and 5 mm builds Voyager's command."""
     driver = make_driver(lambda p: b"")
     reference_wells = encode_well_mask(12, 8, [(row, 0) for row in range(8)])
     parameters = driver.build_gain_focus(
@@ -344,21 +373,27 @@ class CommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x0C]) + parameters, GAIN_PLATE)
 
   def test_shake_matches_voyager(self):
+    """Double orbital shaking at 300 rpm for 10 s builds Voyager's command."""
     body = VANTAstarDriver.build_shake("double_orbital", 300, 10)
     self.assertEqual(bytes([0x27]) + body, SHAKE_DOUBLE_ORBITAL_300_10)
 
   def test_long_shake_pauses(self):
+    """A 600 s shake pauses 1 s every 59 s."""
     body = VANTAstarDriver.build_shake("orbital", 500, 600)
     self.assertEqual(body.hex(), "05040258" + "0001" + "003b")
 
   def test_shake_speed_must_be_a_multiple_of_100(self):
+    """A shake speed that is not a multiple of 100 rpm is refused."""
     with self.assertRaises(ValueError):
       VANTAstarDriver.build_shake("orbital", 250, 10)
 
   def test_plate_geometry(self):
+    """The standard 96-well plate encodes to the plate block of Voyager's absorbance RUN."""
     self.assertEqual(encode_plate_geometry(STANDARD_96), RUN_ABSORBANCE[1:18])
 
   def test_automatic_dichroic(self):
+    """The dichroic defaults to midway between the excitation's upper and the emission's lower band
+    edge."""
     self.assertEqual(compute_monochromator_settings(365, 8, 400, 10).dichroic, 382.0)
     self.assertEqual(compute_monochromator_settings(483, 14, 530, 30).dichroic, 502.5)
 
@@ -368,18 +403,24 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
   them (``RUN_ABSORBANCE_SPECTRUM`` and the constants after it)."""
 
   def setUp(self):
+    """A driver, and the well masks of A1, A6, A12, H1, H6 and H12 (``six``), of A1, A6 and A12
+    (``ir``), and of H1, H6 and H12 (``ru``)."""
     self.driver = make_driver(lambda p: b"")
     self.six = encode_well_mask(12, 8, [(0, 0), (0, 5), (0, 11), (7, 0), (7, 5), (7, 11)])
     self.ir = encode_well_mask(12, 8, [(0, 0), (0, 5), (0, 11)])
     self.ru = encode_well_mask(12, 8, [(7, 0), (7, 5), (7, 11)])
 
   def test_absorbance_spectrum(self):
+    """An absorbance spectrum from 220 to 1000 nm in 1 nm steps on the six wells builds Voyager's
+    RUN."""
     run = self.driver.build_absorbance_spectrum_run(
       220, 1000, 1, flashes=22, settling_time=0.5, well_mask=self.six
     )
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_SPECTRUM)
 
   def test_absorbance_spectrum_orbital(self):
+    """The same spectrum with 3 mm orbital averaging, 16 flashes and 0.1 s settling builds Voyager's
+    RUN."""
     run = self.driver.build_absorbance_spectrum_run(
       220,
       1000,
@@ -392,6 +433,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_SPECTRUM_ORBITAL)
 
   def test_excitation_scans(self):
+    """Excitation scans with Voyager's band edges build Voyager's RUNs: 106 points on the six wells,
+    and 46 points with 3 mm spiral averaging on A1, A6 and A12."""
     last = MonochromatorSettings(422.1, 427.9, 449.0, 469.2, 480.8, 2, 3)
     run = self.driver.build_fluorescence_scan_run(
       MonochromatorSettings(317.1, 322.9, 396.5, 469.2, 480.8, 2, 3),
@@ -418,6 +461,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, RUN_EXCITATION_SCAN_SPIRAL)
 
   def test_emission_scans(self):
+    """Emission scans on H1, H6 and H12 with Voyager's band edges build Voyager's RUNs: 111 points
+    with the dichroic following the scan, and 201 points with the dichroic fixed at 471.5 nm."""
     run = self.driver.build_fluorescence_scan_run(
       MonochromatorSettings(442.3, 457.7, 466.5, 475.2, 484.8, 3, 2),
       MonochromatorSettings(442.3, 457.7, 576.5, 695.3, 704.7, 3, 2),
@@ -442,6 +487,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, RUN_EMISSION_SCAN_DICHROIC)
 
   def test_scan_monochromators(self):
+    """A scan's first and last point get nominal band edges, the dichroic computed for each point or
+    the one given, and slit 2 on the scanned side and 3 on the fixed one."""
     # Nominal edges, the dichroic Voyager chose at both ends, and its scan slits.
     first, last = compute_scan_monochromators(
       "excitation", 320, 425, 475, excitation_bandwidth=8, emission_bandwidth=12
@@ -455,16 +502,20 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     self.assertEqual(last, MonochromatorSettings(442, 458, 471.5, 685, 715, 3, 2))
 
   def test_absorbance_three_wavelengths(self):
+    """Absorbance at 300, 450 and 600 nm on every well builds Voyager's RUN."""
     run = self.driver.build_absorbance_run([300, 450, 600], flashes=22, settling_time=0.5)
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_THREE_WAVELENGTHS)
 
   def test_absorbance_kinetic(self):
+    """Kinetic absorbance at 450 nm, 6 cycles 10 s apart on A1, A6 and A12, builds Voyager's RUN."""
     run = self.driver.build_absorbance_run(
       [450], flashes=22, settling_time=0.5, well_mask=self.ir, cycles=6, cycle_time=10
     )
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_KINETIC)
 
   def test_fluorescence_with_voyager_edges(self):
+    """A fluorescence read with Voyager's band edges for 380/8 and 475/10, gain 600 at 4.5 mm,
+    builds Voyager's RUN."""
     run = self.driver.build_fluorescence_run(
       [MonochromatorSettings(378.0, 382.0, 427.0, 473.2, 476.8)],
       gains=[600],
@@ -476,6 +527,9 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x04]) + run, RUN_FLUORESCENCE_VOYAGER_EDGES)
 
   def test_gain_adjustments(self):
+    """Gain adjustments build Voyager's commands: gain and focus on A1 at a 10 % target, the focus
+    alone on the six wells, the focus alone with spiral averaging, and the gain alone on A1 at a
+    90 % target and 4.5 mm."""
     monochromator = MonochromatorSettings(388.1, 391.9, 431.5, 469.3, 480.7)
     a1 = encode_well_mask(12, 8, [(0, 0)])
     build = self.driver.build_gain_focus
@@ -507,10 +561,12 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     self.assertEqual(bytes([0x0C]) + gain, GAIN_PLATE_GAIN)
 
   def test_kinetic_cycles_out_of_range(self):
+    """A kinetic read of 0 cycles is refused."""
     with self.assertRaises(ValueError):
       self.driver.build_absorbance_run([450], flashes=22, settling_time=0.5, cycles=0)
 
   def test_well_scan_diameter_out_of_range(self):
+    """A well scan of 0 mm diameter is refused."""
     with self.assertRaises(ValueError):
       self.driver.build_absorbance_run(
         [450], flashes=22, settling_time=0.5, well_scan=WellScan("orbital", 0)
@@ -524,6 +580,10 @@ class RecordedReader:
   again once they run out."""
 
   def __init__(self, flow: Dict[str, Any]) -> None:
+    """
+    Args:
+      flow: one recorded read from ``load_flows``.
+    """
     self.status = bytes.fromhex(flow["status"])
     self.run_reply = bytes.fromhex(flow["run_reply"])
     self.block_status: Deque[bytes] = deque(bytes.fromhex(h) for h in flow["block_status"])
@@ -533,9 +593,11 @@ class RecordedReader:
 
   @staticmethod
   def _next(replies: Deque[bytes]) -> bytes:
+    """The next reply of ``replies``; the last one stays for any further request."""
     return replies.popleft() if len(replies) > 1 else replies[0]
 
   def __call__(self, payload: bytes) -> bytes:
+    """The reply to ``payload``, as the reader gave it in the read."""
     if payload[0] in (0x80, 0x0B):
       return self.status
     if payload[0] == 0x04:
@@ -553,13 +615,18 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
 
   @classmethod
   def setUpClass(cls):
+    """Load the recorded reads once for all the tests."""
     cls.flows = load_flows()
 
   def make(self, name: str):
+    """A driver answering as the reader did in the recorded read ``name``, and that read's RUN
+    fields."""
     flow = self.flows[name]
     return make_driver(RecordedReader(flow)), bytes.fromhex(flow["run"])[1:]
 
   async def test_absorbance_spectrum_requests_each_well_in_reading_order(self):
+    """An absorbance spectrum fetches each well's part of the block in reading order, A1 with the
+    calibration values, then releases the block."""
     driver, run = self.make("absorbance_spectrum")
     blocks = await driver.run_absorbance_spectrum(run, timeout=10)
     self.assertEqual([b.well for b in blocks], [(1, 1), (6, 1), (12, 1), (12, 8), (6, 8), (1, 8)])
@@ -581,6 +648,7 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertGreater(release, sent.index(bytes.fromhex("0502010800018001")))
 
   async def test_kinetic_read_returns_every_cycle(self):
+    """A kinetic read returns one complete block per cycle, the cycles starting 10 s apart."""
     driver, run = self.make("absorbance_kinetic")
     blocks = await driver.run_blocks(run, timeout=10)
     self.assertEqual([b.cycle for b in blocks], [1, 2, 3, 4, 5, 6])
@@ -588,6 +656,8 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(b.complete for b in blocks))
 
   async def test_emission_spectrum_is_one_block(self):
+    """An emission spectrum returns one complete block of 201 points for its 3 wells, fetched as the
+    next new block."""
     driver, run = self.make("emission_spectrum")
     data = await driver.run_measurement(run, timeout=10)
     self.assertEqual((data.chromatics, data.wells), ((201,), 3))
@@ -596,6 +666,7 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(requests[-1], VALUES_NEXT_NEW_BLOCK)
 
   async def test_timeout_stops_the_run(self):
+    """A read that runs past its timeout raises TimeoutError and sends STOP."""
     driver, run = self.make("absorbance_kinetic")
     with self.assertRaises(TimeoutError):
       await driver.run_blocks(run, timeout=0)
@@ -603,13 +674,18 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RobustnessTests(unittest.IsolatedAsyncioTestCase):
+  """The driver's handling of malformed replies, device errors and warnings, and the well mask's
+  size limit."""
+
   async def test_continuation_out_of_sequence_raises(self):
+    """A reply whose continuation packets come out of sequence raises FrameError."""
     driver = make_driver(lambda p: ABSORBANCE_LAST_PAGE)
     io = driver.io
     assert isinstance(io, FakeUSB)
     receive = io._receive
 
     def renumber(payload: bytes) -> None:
+      """Answer ``payload`` as the fake does, with the second continuation packet numbered 3."""
       receive(payload)
       packet = io._continuations[1]
       io._continuations[1] = packet[:3] + (3).to_bytes(4, "big") + packet[7:]
@@ -619,22 +695,26 @@ class RobustnessTests(unittest.IsolatedAsyncioTestCase):
       await driver.exchange(bytes([0x80]))
 
   async def test_status_with_the_error_bit_raises(self):
+    """A status reply with the device-error bit raises DeviceError."""
     error = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x40]) + STATUS_IDLE[2:]
     driver = make_driver(lambda p: error)
     with self.assertRaises(DeviceError):
       await driver.request_status()
 
   async def test_status_of_a_reader_not_initialized_is_read(self):
+    """The refused status reply of a reader not yet initialized is parsed as any other."""
     driver = make_driver(lambda p: STATUS_NOT_INITIALIZED)
     status = await driver.request_status()
     self.assertFalse(status.busy)
 
   async def test_stop_closes_the_connection_after_a_device_error(self):
+    """Stopping closes the connection even when the status reply reports a device error."""
     error = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x40]) + STATUS_IDLE[2:]
     driver = make_driver(lambda p: error)
     closed = []
 
     async def close() -> None:
+      """Record that the connection was closed."""
       closed.append(True)
 
     driver._usb_close = close  # type: ignore[method-assign]
@@ -643,6 +723,7 @@ class RobustnessTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(closed, [True])
 
   def test_a_warning_that_clears_is_logged_again(self):
+    """A warning is logged once while it lasts, and again after a reply without it."""
     driver = make_driver(lambda p: b"")
     warning = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x80]) + STATUS_IDLE[2:]
     with self.assertLogs("pylabrobot.bmg_labtech.vantastar.driver.master", "WARNING") as logs:
@@ -651,27 +732,34 @@ class RobustnessTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(logs.records), 2)
 
   def test_well_mask_holds_up_to_384_wells(self):
+    """The well mask covers a 384-well plate and refuses a 1536-well one."""
     self.assertEqual(len(encode_well_mask(24, 16)), 48)
     with self.assertRaises(ValueError):
       encode_well_mask(48, 32)
 
 
 class StatusTests(unittest.TestCase):
+  """Parsing status replies (drawer, motors, busy command, temperatures) and refused replies."""
+
   def test_drawer_open(self):
+    """A status with the drawer open shows the motors enabled and the reader not busy."""
     status = VANTAstarDriver._parse_status(STATUS_DRAWER_OPEN)
     self.assertTrue(status.drawer_open)
     self.assertTrue(status.motors_enabled)
     self.assertFalse(status.busy)
 
   def test_busy_command(self):
+    """A status while INIT runs shows the reader busy with INIT."""
     status = VANTAstarDriver._parse_status(STATUS_INIT_RUNNING)
     self.assertTrue(status.busy)
     self.assertEqual(status.busy_command, "INIT")
 
   def test_temperatures(self):
+    """A status while heating carries the three incubator temperatures."""
     self.assertEqual(VANTAstarDriver._parse_status(STATUS_HEATING).temperatures, (30.1, 30.6, 30.5))
 
   def test_refused_reply_raises_with_quit_codes(self):
+    """A refused reply raises CommandRefusedError carrying its quit codes."""
     driver = make_driver(lambda p: b"")
     with self.assertRaises(CommandRefusedError) as cm:
       driver._check_reply(bytes([0x80]), STATUS_NOT_INITIALIZED)
@@ -679,7 +767,11 @@ class StatusTests(unittest.TestCase):
 
 
 class FlowTests(unittest.IsolatedAsyncioTestCase):
+  """The driver's command flows against the reader's replies: initializing, the drawer, shaking, the
+  incubator, an absorbance read and a gain and focus adjustment."""
+
   async def test_initialize(self):
+    """Initializing sends STATUS, then INIT, and keeps the INIT reply for ``discover``."""
     replies = deque([STATUS_IDLE, HARDWARE_INFO, STATUS_INIT_RUNNING, STATUS_IDLE])
     driver = make_driver(lambda p: replies.popleft())
     await driver.initialize()
@@ -687,6 +779,7 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(driver.discover().serial_number, "0421-000446")
 
   async def test_drawer(self):
+    """Opening and closing the drawer send Voyager's plate out and plate in commands."""
     replies = deque(
       [STATUS_IDLE, STATUS_IDLE, STATUS_DRAWER_OPEN, STATUS_DRAWER_OPEN, STATUS_IDLE, STATUS_IDLE]
     )
@@ -697,6 +790,7 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sent, [PLATE_OUT, PLATE_IN])
 
   async def test_shake_moves_the_plate_in_when_the_motors_are_off(self):
+    """Shaking with the motors off moves the plate in first, then shakes."""
     replies = deque([STATUS_MOTORS_OFF] + [STATUS_IDLE] * 6)
     driver = make_driver(lambda p: replies.popleft())
     await driver.shake("double_orbital", 300, 10)
@@ -704,6 +798,8 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sent, [PLATE_IN, SHAKE_DOUBLE_ORBITAL_300_10])
 
   async def test_temperature(self):
+    """Setting the temperature and stopping temperature control send Voyager's incubator
+    commands."""
     driver = make_driver(lambda p: STATUS_IDLE)
     await driver.set_temperature(30)
     await driver.stop_temperature_control()
@@ -711,6 +807,7 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sent, [INCUBATOR_ON_30, INCUBATOR_OFF])
 
   async def test_temperature_commands_return_once_temperatures_are_reported(self):
+    """Setting the temperature returns only once a status reply reports temperatures again."""
     replies = deque([STATUS_IDLE] + [STATUS_AFTER_INCUBATOR_COMMAND] * 3)
     driver = make_driver(lambda p: replies.popleft() if replies else STATUS_HEATING)
     await driver.set_temperature(30)
@@ -718,16 +815,22 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await driver.get_temperatures(), (30.1, 30.6, 30.5))
 
   async def test_temperature_command_times_out_without_temperatures(self):
+    """Setting the temperature raises TimeoutError when no status reply reports temperatures."""
     driver = make_driver(lambda p: STATUS_AFTER_INCUBATOR_COMMAND)
     driver.incubator_settle_timeout = 0
     with self.assertRaises(TimeoutError):
       await driver.set_temperature(30)
 
   async def test_measurement(self):
+    """A 96-well absorbance read requests the well list and the timing, polls the block status,
+    requests the current block when a page is ready and the next new block once the block is
+    finished."""
     block_status = deque([MW_BLOCK_BUSY, MW_BLOCK_PAGE_READY, MW_BLOCK_LAST_PAGE])
     pages = deque([ABSORBANCE_FIRST_PAGE, ABSORBANCE_LAST_PAGE])
 
     def respond(payload: bytes) -> bytes:
+      """Answer STATUS with an idle status, block status polls and data requests in turn, the well
+      list request with the 96-well list, and anything else with the RUN reply."""
       if payload[0] == 0x80:
         return STATUS_IDLE
       if payload[0] == 0x04:
@@ -760,7 +863,10 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_gain_and_focus(self):
+    """A gain and focus adjustment returns the gain and focal height of the reader's gain data."""
+
     def respond(payload: bytes) -> bytes:
+      """Answer the gain data request with the gain data, anything else with an idle status."""
       return GAIN_DATA if payload == VALUES_GAIN_DATA else STATUS_IDLE
 
     driver = make_driver(respond)

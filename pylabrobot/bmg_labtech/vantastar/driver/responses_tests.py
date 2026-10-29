@@ -275,37 +275,53 @@ MW_BLOCK_SPECTRUM_STORED = bytes.fromhex(
 
 
 class SplitReplyTests(unittest.TestCase):
+  """Splitting a reply into its header's first byte, its status flag bytes and its payload."""
+
   def test_header_counts_its_first_byte(self):
+    """The header length in the first byte counts that byte: a 5-byte header leaves 4 status bytes
+    before the payload."""
     first, status_bytes, payload = split_reply(STATUS_INIT_RUNNING)
     self.assertEqual(first, 0x25)
     self.assertEqual(status_bytes, bytes.fromhex("00040000"))
     self.assertEqual(payload[0], 5)
 
   def test_short_reply_raises(self):
+    """A reply shorter than its header is refused."""
     with self.assertRaises(ValueError):
       split_reply(bytes.fromhex("0105"))
 
 
 class ConfirmationTests(unittest.TestCase):
+  """Parsing ConfirmationResponse replies: their codes and incubator temperatures."""
+
   def test_not_initialized_quit_code(self):
+    """A reader not yet initialized refuses STATUS with quit code 201."""
     self.assertEqual(parse_confirmation(STATUS_NOT_INITIALIZED).codes, (201, 0, 0, 0, 0))
 
   def test_busy_code_is_the_running_command(self):
+    """While INIT runs, the first code is INIT's command id."""
     self.assertEqual(parse_confirmation(STATUS_INIT_RUNNING).codes, (1, 0, 0, 0, 0))
 
   def test_incubator_temperatures(self):
+    """A reply while heating carries the three incubator temperatures."""
     self.assertEqual(parse_confirmation(STATUS_HEATING).temperatures, (30.1, 30.6, 30.5))
 
   def test_zero_temperatures_are_none(self):
+    """The zero temperatures of the reply right after a temperature command are None."""
     self.assertIsNone(parse_confirmation(STATUS_AFTER_INCUBATOR_COMMAND).temperatures)
 
   def test_other_reply_raises(self):
+    """A reply other than a ConfirmationResponse is refused."""
     with self.assertRaises(ValueError):
       parse_confirmation(GAIN_DATA)
 
 
 class AbsorbanceDataTests(unittest.TestCase):
+  """Parsing the data pages of a 96-well absorbance read at 600 nm, and its optical densities."""
+
   def test_block_layout(self):
+    """The last page holds the whole block: 392 values for 96 wells, with 8 calibration values and
+    the temperature."""
     data = parse_measurement_data(ABSORBANCE_LAST_PAGE)
     self.assertEqual(data.total_values, 392)
     self.assertTrue(data.complete)
@@ -315,17 +331,24 @@ class AbsorbanceDataTests(unittest.TestCase):
     self.assertEqual(len(data.calibration), 8)
 
   def test_first_page_is_incomplete(self):
+    """The first page holds 4 valid values and is incomplete."""
     data = parse_measurement_data(ABSORBANCE_FIRST_PAGE)
     self.assertEqual(data.valid_values, 4)
     self.assertFalse(data.complete)
 
   def test_optical_densities_match_voyager(self):
+    """The optical densities, rounded to 3 decimals, equal Voyager's."""
     densities = compute_optical_densities(parse_measurement_data(ABSORBANCE_LAST_PAGE))
     self.assertEqual([round(d, 3) for d in densities], VOYAGER_OD600)
 
 
 class FluorescenceDataTests(unittest.TestCase):
+  """Parsing the data page of a 96-well fluorescence read, and telling measurement pages from focus
+  scan pages."""
+
   def test_counts_match_voyager(self):
+    """The page holds one chromatic for 96 wells; row A's counts equal Voyager's, and it carries the
+    temperature and the overflow value."""
     data = parse_measurement_data(FLUORESCENCE_LAST_PAGE)
     self.assertEqual(data.chromatics, (1,))
     self.assertEqual(data.wells, 96)
@@ -334,52 +357,72 @@ class FluorescenceDataTests(unittest.TestCase):
     self.assertEqual(data.overflow, 260000)
 
   def test_focus_scan_page_is_not_a_measurement_page(self):
+    """A focus scan page is not a measurement page, and parsing it as one raises ValueError."""
     self.assertTrue(is_measurement_page(FLUORESCENCE_LAST_PAGE))
     self.assertFalse(is_measurement_page(FOCUS_SCAN_PAGE))
     with self.assertRaises(ValueError):
       parse_measurement_data(FOCUS_SCAN_PAGE)
 
   def test_absorbance_needs_a_reference_channel(self):
+    """Optical densities of a fluorescence page, which has no reference channel, are refused."""
     with self.assertRaises(ValueError):
       compute_optical_densities(parse_measurement_data(FLUORESCENCE_LAST_PAGE))
 
 
 class GainDataTests(unittest.TestCase):
+  """Parsing the reply to a gain or gain and focus adjustment."""
+
   def test_gain_and_focal_height(self):
+    """A gain and focus adjustment's reply gives the gain and focal height Voyager showed: 2904 at
+    3.0 mm."""
     result = parse_gain_data(GAIN_DATA)
     self.assertEqual(result.gain, 2904)
     self.assertEqual(result.focal_height, 3.0)
 
   def test_gain_alone_has_no_focal_height(self):
+    """A gain adjustment's reply gives the gain and no focal height."""
     result = parse_gain_data(GAIN_DATA_GAIN)
     self.assertEqual(result.gain, 719)
     self.assertIsNone(result.focal_height)
 
 
 class WellListTests(unittest.TestCase):
+  """Parsing the well list of a read."""
+
   def test_wells_in_reading_order(self):
+    """The wells come as 1-based (column, row) in reading order: A1, A6, A12, then H12, H6, H1."""
     self.assertEqual(
       parse_well_list(WELL_LIST_SPECTRUM), [(1, 1), (6, 1), (12, 1), (12, 8), (6, 8), (1, 8)]
     )
 
   def test_other_reply_raises(self):
+    """A reply other than a well list is refused."""
     with self.assertRaises(ValueError):
       parse_well_list(GAIN_DATA)
 
 
 class MwBlockTests(unittest.TestCase):
+  """Parsing the data block status of an absorbance spectrum."""
+
   def test_started(self):
+    """As the read starts: one block of 6272 values, 1568 of them calibration values, block 1 being
+    measured, nothing stored, sent or saved."""
     status = parse_mw_block_data(MW_BLOCK_SPECTRUM_STARTED)
     self.assertEqual((status.required, status.size, status.calibration_values), (1, 6272, 1568))
     self.assertEqual((status.stored, status.sent, status.current, status.saved), (0, 0, 1, 0))
 
   def test_stored(self):
+    """Once the block is stored: one block stored, none sent, none being measured."""
     status = parse_mw_block_data(MW_BLOCK_SPECTRUM_STORED)
     self.assertEqual((status.stored, status.sent, status.current, status.saved), (1, 0, 0, 0))
 
 
 class AbsorbanceSpectrumDataTests(unittest.TestCase):
+  """Parsing the recorded absorbance spectrum's pages, one per well, and its optical densities."""
+
   def setUp(self):
+    """Parse the recorded absorbance spectrum's data pages and keep Voyager's optical densities for
+    it."""
     flow = load_flows()["absorbance_spectrum"]
     self.voyager = flow["voyager_optical_densities"]
     self.pages = [
@@ -389,6 +432,7 @@ class AbsorbanceSpectrumDataTests(unittest.TestCase):
     ]
 
   def test_one_block_per_well(self):
+    """Each page holds one well, in reading order; the first also carries the calibration values."""
     first = self.pages[0]
     self.assertEqual(first.chromatics, (783, 1))  # 781 wavelengths and two reference wavelengths
     self.assertEqual((first.wells, first.well, first.total_values), (1, (1, 1), 2352))
@@ -396,6 +440,7 @@ class AbsorbanceSpectrumDataTests(unittest.TestCase):
     self.assertEqual({p.total_values for p in self.pages[1:]}, {784})
 
   def test_optical_densities_match_voyager(self):
+    """Each well's optical densities, rounded to 3 decimals, equal Voyager's."""
     # Voyager reports optical densities above 3.5 as 3.5.
     spectra = compute_spectrum_optical_densities(self.pages, 781)
     for page, spectrum in zip(self.pages, spectra):

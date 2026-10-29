@@ -46,6 +46,8 @@ def make_device(pages: List[bytes]) -> VANTAstarDevice:
   )
 
   def respond(payload: bytes) -> bytes:
+    """Answer STATUS with an idle status, block status polls and data requests in turn, the well
+    list request with the 96-well list, and anything else with the RUN reply."""
     if payload[0] == 0x80:
       return master_tests.STATUS_IDLE
     if payload == master_tests.MW_BLOCK_STATUS:
@@ -65,7 +67,12 @@ def make_recorded_device(name: str) -> VANTAstarDevice:
 
 
 class PlateTests(unittest.TestCase):
+  """The plate geometry the reader takes from a PyLabRobot plate, and the order of measured
+  wells."""
+
   def test_geometry_from_the_back_left_corner(self):
+    """Well centres are measured from the plate's left and back edges: A1 lies in the back half, the
+    last well 99 mm right of it and 63 mm in front of it."""
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     geometry = get_plate_geometry(plate)
     self.assertEqual((geometry.columns, geometry.rows), (12, 8))
@@ -74,17 +81,23 @@ class PlateTests(unittest.TestCase):
     self.assertLess(geometry.first_y, geometry.width / 2)
 
   def test_square_wells(self):
+    """Round wells are sent as shape 0, square wells as shape 1."""
     self.assertEqual(get_plate_geometry(cor_96_wellplate_360uL_Fb(name="plate")).well_shape, 0)
     self.assertEqual(get_plate_geometry(cor_96_wellplate_2mL_Vb(name="plate")).well_shape, 1)
 
   def test_measured_wells_are_in_row_order(self):
+    """Measured wells come in the reader's data order, row by row, as 0-based (row, column)."""
     plate = cor_96_wellplate_360uL_Fb(name="plate")
     wells = plate.get_items(["B2", "A3", "A1"])
     self.assertEqual(_get_measured_wells(plate, wells), [(0, 0), (0, 2), (1, 1)])
 
 
 class MeasurementTests(unittest.IsolatedAsyncioTestCase):
+  """Endpoint reads through the device, against the values Voyager exported for the same reads."""
+
   async def test_absorbance_results(self):
+    """An absorbance read at 600 nm gives the temperature and Voyager's optical densities, keyed by
+    well, row by row."""
     device = make_device([ABSORBANCE_FIRST_PAGE, ABSORBANCE_LAST_PAGE])
     (result,) = await device.measure_absorbance([600])
     self.assertEqual(result.wavelength, 600)
@@ -93,6 +106,7 @@ class MeasurementTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([round(v, 3) for v in result.data.values()], VOYAGER_OD600)
 
   async def test_fluorescence_results(self):
+    """A fluorescence read gives Voyager's counts for row A and the temperature."""
     device = make_device([FLUORESCENCE_LAST_PAGE])
     result = await device.measure_fluorescence(
       365, 400, excitation_bandwidth=8, emission_bandwidth=10, focal_height=5.0, gain=500
@@ -101,6 +115,8 @@ class MeasurementTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result.temperature, 26.3)
 
   async def test_optics_out_of_the_limits_are_refused(self):
+    """Fluorescence optics out of the limits are refused before anything is sent: a bandwidth below
+    8 nm, an excitation below 320 nm, an emission overlapping the excitation."""
     device = make_device([])
     for excitation, excitation_bandwidth, emission, emission_bandwidth in (
       (365, 5, 400, 10),  # bandwidth below 8 nm
@@ -127,9 +143,12 @@ class RecordedReadTests(unittest.IsolatedAsyncioTestCase):
 
   @classmethod
   def setUpClass(cls):
+    """Load the recorded reads once for all the tests."""
     cls.flows = load_flows()
 
   async def test_absorbance_spectrum(self):
+    """An absorbance spectrum gives each well's optical densities from 220 to 1000 nm as Voyager
+    exported them, the wells row by row."""
     device = make_recorded_device("absorbance_spectrum")
     plate = device.plate_holder.resource
     assert plate is not None
@@ -144,6 +163,8 @@ class RecordedReadTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual([round(min(v, 3.5), 3) for v in spectrum.values()], voyager[well])
 
   async def test_absorbance_kinetic(self):
+    """A kinetic absorbance read gives each cycle's optical densities as Voyager exported them, the
+    cycles starting 10 s apart."""
     device = make_recorded_device("absorbance_kinetic")
     plate = device.plate_holder.resource
     assert plate is not None
@@ -159,6 +180,8 @@ class RecordedReadTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([(s - starts[0]).total_seconds() for s in starts], [0, 10, 20, 30, 40, 50])
 
   async def test_emission_spectrum(self):
+    """An emission spectrum of H1, H6 and H12 gives counts whose H6 to H1 ratio matches Voyager's
+    export wherever both exceed 1000 counts."""
     device = make_recorded_device("emission_spectrum")
     plate = device.plate_holder.resource
     assert plate is not None
@@ -185,6 +208,8 @@ class RecordedReadTests(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(h6 / h1, voyager["H6"][i] / voyager["H1"][i], places=2)
 
   async def test_absorbance_at_three_wavelengths(self):
+    """An absorbance read at 300, 450 and 600 nm gives the optical densities Voyager exported for
+    each wavelength."""
     device = make_recorded_device("absorbance_three_wavelengths")
     results = await device.measure_absorbance([300, 450, 600])
     voyager = self.flows["absorbance_three_wavelengths"]["voyager_optical_densities"]
@@ -195,10 +220,15 @@ class RecordedReadTests(unittest.IsolatedAsyncioTestCase):
 
 
 class StopTests(unittest.IsolatedAsyncioTestCase):
+  """Stopping the device while a plate is in the reader."""
+
   async def test_drawer_open_when_a_plate_is_left_in(self):
+    """When the driver's stop fails over a plate left in, the plate holder counts the drawer as
+    open, so the plate can be taken off."""
     device = make_device([])
 
     async def stop(accept_plate_left_in_device: bool = False) -> None:
+      """Fail as the driver does when a plate is still in the reader."""
       raise RuntimeError("a plate is still in the reader")
 
     device.driver.stop = stop  # type: ignore[method-assign]
@@ -210,14 +240,20 @@ class StopTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ArgumentTests(unittest.IsolatedAsyncioTestCase):
+  """Arguments the device refuses."""
+
   async def test_spectrum_step_must_divide_the_range(self):
+    """An absorbance spectrum is refused before anything is sent when its step does not divide the
+    range or its end is not above its start."""
     device = make_device([])
     with self.assertRaises(ValueError):
-      await device.measure_absorbance_spectrum(220, 1000, 3)
+      await device.measure_absorbance_spectrum(220, 1000, 7)  # 780 nm is not a multiple of 7
     with self.assertRaises(ValueError):
       await device.measure_absorbance_spectrum(600, 500)
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
   async def test_fluorescence_spectrum_takes_one_fixed_wavelength(self):
+    """A fluorescence spectrum is refused without a fixed wavelength, or with one on both sides."""
     device = make_device([])
     for excitation, emission in ((None, None), (450, 600)):
       with self.assertRaises(ValueError):
@@ -232,8 +268,11 @@ class ArgumentTests(unittest.IsolatedAsyncioTestCase):
           gain=800,
           focal_height=6.6,
         )
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
   async def test_fluorescence_spectrum_refuses_an_overlap_at_either_end(self):
+    """A fluorescence spectrum whose bands overlap at its start is refused: emission from 470 nm
+    against excitation 450/16."""
     device = make_device([])
     with self.assertRaises(ValueError):  # emission from 470 nm overlaps excitation 450/16
       await device.measure_fluorescence_spectrum(
@@ -246,13 +285,17 @@ class ArgumentTests(unittest.IsolatedAsyncioTestCase):
         gain=800,
         focal_height=6.6,
       )
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
   async def test_kinetic_needs_two_cycles(self):
+    """A kinetic read of one cycle is refused."""
     device = make_device([])
     with self.assertRaises(ValueError):
       await device.measure_absorbance_kinetic([450], cycles=1, cycle_time=10)
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
   async def test_adjust_something(self):
+    """A gain and focus adjustment that adjusts neither is refused before anything is sent."""
     device = make_device([])
     plate = device.plate_holder.resource
     assert plate is not None
@@ -269,7 +312,10 @@ class ArgumentTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
   async def test_focus_alone_sends_no_gain_target(self):
+    """A focus adjustment alone sends the focus flags and a gain target of 0."""
+
     def respond(payload: bytes) -> bytes:
+      """Answer the gain data request with the gain data, anything else with an idle status."""
       return GAIN_DATA if payload == master_tests.VALUES_GAIN_DATA else master_tests.STATUS_IDLE
 
     device = make_device_answering(respond)

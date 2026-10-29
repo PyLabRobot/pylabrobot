@@ -26,7 +26,11 @@ HARDWARE_INFO = bytes.fromhex(
 
 
 class ConfigurationTests(unittest.TestCase):
+  """Parsing the INIT reply (HardwareInfoResponse) into the configuration."""
+
   def test_mainboard_module(self):
+    """The mainboard module gives the firmware version, build and package, the protocol version and
+    the serial number."""
     c = parse_hardware_info(HARDWARE_INFO)
     self.assertEqual(c.firmware_version, 1120)
     self.assertEqual(c.firmware_build, 1)
@@ -35,15 +39,19 @@ class ConfigurationTests(unittest.TestCase):
     self.assertEqual(c.serial_number, "0421-000446")
 
   def test_modules_fill_the_reply(self):
+    """The reply's payload splits into its 13 numbered modules, module 47 starting with
+    ``EX_SP:1=open``."""
     modules = get_modules(split_reply(HARDWARE_INFO)[2])
     self.assertEqual(sorted(modules), [2, 9, 13, 14, 15, 31, 32, 46, 47, 49, 61, 84, 98])
     self.assertTrue(modules[47].startswith(b"EX_SP:1=open"))
 
   def test_truncated_module_raises(self):
+    """A reply cut off inside a module is refused."""
     with self.assertRaises(ValueError):
       parse_hardware_info(HARDWARE_INFO[:120])
 
   def test_other_reply_raises(self):
+    """A reply other than a HardwareInfoResponse is refused."""
     with self.assertRaises(ValueError):
       parse_hardware_info(bytes.fromhex("012500040000050100000000000901010102010400004f0000"))
 

@@ -550,6 +550,91 @@ class VANTAstarDevice(Resource):
       end_timestamp=end,
     )
 
+  def _build_fluorescence_run(
+    self,
+    excitation_wavelength: float,
+    emission_wavelength: float,
+    *,
+    excitation_bandwidth: float,
+    emission_bandwidth: float,
+    focal_height: float,
+    gain: Optional[int],
+    dichroic_split_wavelength: Optional[float],
+    monochromator: Optional[MonochromatorSettings],
+    enhanced_dynamic_range: bool,
+    plate: Plate,
+    wells: Optional[Sequence[Well]],
+    flashes: int,
+    settling_time: float,
+    well_scan: Optional[WellScan],
+    cycles: int = 1,
+    cycle_time: int = 0,
+  ) -> bytes:
+    """Check a fluorescence intensity read's arguments and build its RUN fields.
+
+    Raises:
+      ValueError: if an argument is out of range.
+    """
+    self._check_optics(
+      excitation_wavelength, excitation_bandwidth, emission_wavelength, emission_bandwidth
+    )
+    if gain is None and not enhanced_dynamic_range:
+      raise ValueError("a gain is required unless enhanced_dynamic_range")
+    self._check_flashes(flashes)
+    self._check_settling_time(settling_time)
+    if monochromator is None:
+      monochromator = compute_monochromator_settings(
+        excitation_wavelength,
+        excitation_bandwidth,
+        emission_wavelength,
+        emission_bandwidth,
+        dichroic_split_wavelength,
+      )
+    return self.driver.build_fluorescence_run(
+      [monochromator],
+      gains=[gain or 0],
+      focal_height=focal_height,
+      flashes=flashes,
+      settling_time=settling_time,
+      enhanced_dynamic_range=enhanced_dynamic_range,
+      geometry=get_plate_geometry(plate),
+      well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
+      cycles=cycles,
+      cycle_time=cycle_time,
+    )
+
+  def _get_fluorescence_result(
+    self,
+    data: MeasurementData,
+    measured: List[Tuple[int, int]],
+    optics: Tuple[float, float, float, float],
+    start: datetime,
+    end: datetime,
+  ) -> FluorescenceResult:
+    """The ``FluorescenceResult`` of a fluorescence block; warns of saturated wells.  ``optics``
+    is excitation wavelength and bandwidth, emission wavelength and bandwidth."""
+    self._check_wells(data, measured)
+    counts = data.group(0)
+    saturated = sum(1 for count in counts if count >= data.overflow)
+    if saturated:
+      logger.warning(
+        "%d of %d wells read at the reader's ceiling of %d counts",
+        saturated,
+        len(counts),
+        data.overflow,
+      )
+    return FluorescenceResult(
+      data={_get_identifier(r, c): float(v) for (r, c), v in zip(measured, counts)},
+      excitation_wavelength=optics[0],
+      excitation_bandwidth=optics[1],
+      emission_wavelength=optics[2],
+      emission_bandwidth=optics[3],
+      temperature=data.temperature,
+      start_timestamp=start,
+      end_timestamp=end,
+    )
+
   async def measure_fluorescence(
     self,
     excitation_wavelength: float,
@@ -717,91 +802,6 @@ class VANTAstarDevice(Resource):
       )
       for block in blocks
     ]
-
-  def _build_fluorescence_run(
-    self,
-    excitation_wavelength: float,
-    emission_wavelength: float,
-    *,
-    excitation_bandwidth: float,
-    emission_bandwidth: float,
-    focal_height: float,
-    gain: Optional[int],
-    dichroic_split_wavelength: Optional[float],
-    monochromator: Optional[MonochromatorSettings],
-    enhanced_dynamic_range: bool,
-    plate: Plate,
-    wells: Optional[Sequence[Well]],
-    flashes: int,
-    settling_time: float,
-    well_scan: Optional[WellScan],
-    cycles: int = 1,
-    cycle_time: int = 0,
-  ) -> bytes:
-    """Check a fluorescence intensity read's arguments and build its RUN fields.
-
-    Raises:
-      ValueError: if an argument is out of range.
-    """
-    self._check_optics(
-      excitation_wavelength, excitation_bandwidth, emission_wavelength, emission_bandwidth
-    )
-    if gain is None and not enhanced_dynamic_range:
-      raise ValueError("a gain is required unless enhanced_dynamic_range")
-    self._check_flashes(flashes)
-    self._check_settling_time(settling_time)
-    if monochromator is None:
-      monochromator = compute_monochromator_settings(
-        excitation_wavelength,
-        excitation_bandwidth,
-        emission_wavelength,
-        emission_bandwidth,
-        dichroic_split_wavelength,
-      )
-    return self.driver.build_fluorescence_run(
-      [monochromator],
-      gains=[gain or 0],
-      focal_height=focal_height,
-      flashes=flashes,
-      settling_time=settling_time,
-      enhanced_dynamic_range=enhanced_dynamic_range,
-      geometry=get_plate_geometry(plate),
-      well_mask=self._get_well_mask(plate, wells),
-      well_scan=well_scan,
-      cycles=cycles,
-      cycle_time=cycle_time,
-    )
-
-  def _get_fluorescence_result(
-    self,
-    data: MeasurementData,
-    measured: List[Tuple[int, int]],
-    optics: Tuple[float, float, float, float],
-    start: datetime,
-    end: datetime,
-  ) -> FluorescenceResult:
-    """The ``FluorescenceResult`` of a fluorescence block; warns of saturated wells.  ``optics``
-    is excitation wavelength and bandwidth, emission wavelength and bandwidth."""
-    self._check_wells(data, measured)
-    counts = data.group(0)
-    saturated = sum(1 for count in counts if count >= data.overflow)
-    if saturated:
-      logger.warning(
-        "%d of %d wells read at the reader's ceiling of %d counts",
-        saturated,
-        len(counts),
-        data.overflow,
-      )
-    return FluorescenceResult(
-      data={_get_identifier(r, c): float(v) for (r, c), v in zip(measured, counts)},
-      excitation_wavelength=optics[0],
-      excitation_bandwidth=optics[1],
-      emission_wavelength=optics[2],
-      emission_bandwidth=optics[3],
-      temperature=data.temperature,
-      start_timestamp=start,
-      end_timestamp=end,
-    )
 
   async def measure_fluorescence_spectrum(
     self,
