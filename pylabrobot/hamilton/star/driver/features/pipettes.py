@@ -413,9 +413,9 @@ class Pipettes:
   default_minimum_traverse_height: float = 245.0
   # Containers within this X distance are probed in one batch, in mm.
   default_x_grouping_tolerance: float = 0.1
-  # Immersion of a tip whose liquid the driver found, below the surface, in mm, when none is
-  # given; no lower than the floor sent.
-  default_immersion_depth_after_search: float = 2.0
+  # Immersion below the surface the driver's own search found, in mm, unless the call gives one;
+  # no lower than the floor sent. OFF and ZTOUCH find no surface and take 0.0 unless given.
+  default_immersion_depth: float = 2.0
   # How far above a container's top a liquid search starts, in mm: enough to clear a brim-full
   # well; more above a trough or tube, whose fill can dome.
   search_start_clearance: float = 5.0
@@ -5220,8 +5220,8 @@ class Pipettes:
       searched: the jobs whose liquid the driver found.
       surfaces: per job, in mm on the deck.
       sent_floors: per job, the floor sent, in mm on the deck.
-      immersion_depths: per job, in mm; None for `default_immersion_depth_after_search` where
-        searched, else 0.0.
+      immersion_depths: per job, in mm; None for `default_immersion_depth` where searched,
+        else 0.0.
 
     Returns:
       Per job of the batch, the start height in mm on the deck and the immersion depth sent.
@@ -5231,7 +5231,7 @@ class Pipettes:
     for job in jobs:
       given = None if immersion_depths is None else immersion_depths[job]
       if job in searched:
-        depth = self.default_immersion_depth_after_search if given is None else given
+        depth = self.default_immersion_depth if given is None else given
         starts.append(max(round(surfaces[job] - depth, 2), sent_floors[job]))
         sent.append(0.0)
       else:
@@ -6142,7 +6142,7 @@ class Pipettes:
     bottom when None, with no immersion and no following unless given. The firmware never
     searches: CAPACITIVE and PRESSURE search first, as `probe_liquid_heights`, from
     `well_search_start_clearance` above a well's top or `search_start_clearance` above any
-    other's, draw `default_immersion_depth_after_search` under the surface found, set the
+    other's, draw `default_immersion_depth` under the surface found, set the
     tracker to the measured volume, warning when it is 20 % off, and refuse a container without
     liquid; their blow-out air is drawn beforehand at the traverse height, by `Px DC`, since the
     command would draw it with the tip on the liquid; ZTOUCH touches the floor first, as
@@ -6179,7 +6179,7 @@ class Pipettes:
       blow_out_air_volumes: air drawn before the liquid, in uL. The class's, else 0.0, when None.
         Under an LLD mode drawn beforehand, at most 468.7 uL.
       immersion_depths: how far into the liquid each tip goes, in mm; negative is out of it.
-        `default_immersion_depth_after_search` where the driver searched, else 0.0, when None.
+        `default_immersion_depth` where the driver searched, else 0.0, when None.
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None. Below the cavity bottom is allowed: the tip
         then presses onto the well's floor and draws with suction, as a harvest wants.
@@ -6979,7 +6979,7 @@ class Pipettes:
     or 0: OFF dispenses at `liquid_heights` above the cavity bottom, the cavity bottom when
     None, with no immersion and no following unless given. The firmware never searches:
     CAPACITIVE searches first, as `probe_liquid_heights`, dispenses
-    `default_immersion_depth_after_search` under the surface found and sets the tracker to the
+    `default_immersion_depth` under the surface found and sets the tracker to the
     measured volume, warning when it is 20 % off; ZTOUCH touches the cavity bottom first and
     dispenses `ztouch_dispense_height_above_bottom` above it; PRESSURE
     and DUAL are for aspirating. A dispense past what a tip holds goes ahead and pushes air,
@@ -7014,7 +7014,7 @@ class Pipettes:
       approach_speed: down to that search's start, `lp` or the top, in mm/s.
       side_touch_off_distance: sideways move against the wall to shed the drop, in mm; 0 for none.
       immersion_depths: how far into the liquid each tip goes, in mm; negative is out of it.
-        `default_immersion_depth_after_search` where the driver searched, else 0.0, when None.
+        `default_immersion_depth` where the driver searched, else 0.0, when None.
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None.
       transport_air_volumes: air drawn after each dispense, in uL, pushed out ahead of the next.
