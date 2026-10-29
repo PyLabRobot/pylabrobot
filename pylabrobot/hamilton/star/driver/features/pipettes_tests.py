@@ -1264,12 +1264,14 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.safe_z.await_count, 2, "up before the first batch and at the end")
 
   async def test_two_columns_are_two_batches_with_safe_z_between(self):
-    # A search leaves its channel down; the stubbed link records nothing, so the model is told.
-    self.pipettes._get_channels_below_safe_z = unittest.mock.Mock(return_value=[0])  # type: ignore[method-assign]
+    # A search leaves its channel down and, as with the real driver, nothing records it: the model
+    # still has the channel up, and the lift before the next column must not trust it.
+    order: List[str] = []
+    self.safe_z.side_effect = lambda *args, **kwargs: order.append("safe_z")
+    self.xy.side_effect = lambda *args, **kwargs: order.append("xy")
     await self.pipettes.probe_liquid_heights(self._wells("A1", "A2"))
-    self.assertEqual(self.xy.await_count, 2)
     self.assertEqual([c[:4] for c in self.sent], ["P1ZL", "C0RL", "P2ZL", "C0RL"])
-    self.assertEqual(self.safe_z.await_count, 3, "before, between, and at the end")
+    self.assertEqual(order, ["safe_z", "xy", "safe_z", "xy", "safe_z"], "up before each column")
 
   async def test_a_traverse_height_raises_the_low_channels_instead_of_safe_z(self):
     self.pipettes._traverse_raise_targets = unittest.mock.AsyncMock(  # type: ignore[method-assign]
