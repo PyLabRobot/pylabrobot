@@ -34,7 +34,8 @@ _CONTROLLER_REPLIES: Dict[str, str] = {
   "StereoParam 1 1": f"0 {_STEREO_PARAMETERS}",
   "StereoLocate 1 1": "-4030",
   "VToolProperty System Info": "-4016",
-  "Vprocess Camera1": "-4012 0",  # the arm's answer to a process that failed (`Vprocess snap`)
+  "Vprocess Camera1": "0 1",  # the arm's answer to a frame saved
+  "Vprocess Camera2": "-4012 0",  # its answer to a process that failed (`Vprocess snap`)
 }
 
 _ACQUIRE_PROPERTIES = (
@@ -100,6 +101,8 @@ _VISION_SERVER_REPLIES: Dict[str, str] = {
   "property get system.listprojects": f"0 {_PROJECTS}",
   "property get system.projectname": "0 VisionTest",
   "property get system.listprocesses": f"0 {_PROCESSES}",
+  "property get acq1.acquiremode": "0 NORMAL_ACQUIRE",
+  "property get acq1.0.acquiremode": "-4017 PropertyNotFound",
 }
 
 
@@ -285,9 +288,15 @@ _CASES: List[_Case] = [
   ),
   (
     "request_vision_tool_property_value",
-    lambda arm: _vision(arm).request_vision_tool_property_value("acq1", "exposure"),
-    ["vision: property get acq1.exposure"],
-    _UNCHECKED,
+    lambda arm: _vision(arm).request_vision_tool_property_value("acq1", "acquiremode"),
+    ["vision: property get acq1.acquiremode"],
+    "NORMAL_ACQUIRE",
+  ),
+  (
+    "request_vision_tool_property_value, a property the vision server lacks",
+    lambda arm: _vision(arm).request_vision_tool_property_value("acq1.0", "acquiremode"),
+    ["vision: property get acq1.0.acquiremode"],
+    PreciseFlexVisionError,
   ),
   (
     "request_vision_tool_properties",
@@ -369,23 +378,23 @@ _CASES: List[_Case] = [
   ),
   (
     "save_image",
-    lambda arm: _vision(arm).save_image("bottom", acquire_prefix="p", acquire_path="/rd"),
+    lambda arm: _vision(arm).save_image("front", acquire_prefix="p", acquire_path="/rd"),
     [
-      "controller: VToolProperty acq2 acquiremode ACQUIRE_AND_SAVE",
-      "controller: VToolProperty acq2 acquirepath /rd",
-      "controller: VToolProperty acq2 acquireprefix p",
-      "controller: Vprocess Camera2",
-      "controller: VToolProperty acq2 acquiremode NORMAL_ACQUIRE",
+      "controller: VToolProperty acq1 acquiremode ACQUIRE_AND_SAVE",
+      "controller: VToolProperty acq1 acquirepath /rd",
+      "controller: VToolProperty acq1 acquireprefix p",
+      "controller: Vprocess Camera1",
+      "controller: VToolProperty acq1 acquiremode NORMAL_ACQUIRE",
     ],
-    _UNCHECKED,
+    "1",
   ),
   (
     "save_image, the process fails",
-    lambda arm: _vision(arm).save_image("front"),
+    lambda arm: _vision(arm).save_image("bottom"),
     [
-      "controller: VToolProperty acq1 acquiremode ACQUIRE_AND_SAVE",
-      "controller: Vprocess Camera1",
-      "controller: VToolProperty acq1 acquiremode NORMAL_ACQUIRE",
+      "controller: VToolProperty acq2 acquiremode ACQUIRE_AND_SAVE",
+      "controller: Vprocess Camera2",
+      "controller: VToolProperty acq2 acquiremode NORMAL_ACQUIRE",
     ],
     PreciseFlexVisionError,
   ),
