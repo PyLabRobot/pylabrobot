@@ -404,9 +404,8 @@ class PreciseFlexArm:
   async def _unchecked_fw_move_one_axis(self, axis: PreciseFlexAxis, position: float) -> None:
     """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
 
-    Used for recovery: the controller blocks a normal move while an axis is out of
-    range, but allows a single-axis move heading back into range. Does not wait for
-    the motion to complete.
+    The controller blocks a normal move while an axis is out of range, but allows a single-axis
+    move heading back into range. Does not wait for the motion to complete.
     """
     await self._driver.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
 
@@ -1133,6 +1132,19 @@ class PreciseFlexArm:
       f"{axis.name} at {value} (soft limit {limit})" for axis, (value, limit) in axes.items()
     )
 
+  def _refuse_closing_the_gripper(self, current: JointState, target: JointState) -> None:
+    """Refuse a joint move that would close the jaws: a joint move senses no force.
+
+    Raises:
+      ValueError: If the target's gripper axis is below the live one.
+    """
+    if target[PreciseFlexAxis.GRIPPER] < current[PreciseFlexAxis.GRIPPER]:
+      raise ValueError(
+        f"the joint move would close the gripper from {current[PreciseFlexAxis.GRIPPER]} to "
+        f"{target[PreciseFlexAxis.GRIPPER]} without sensing force; close it with "
+        f"gripper.move_to_jaw_position, or pass close_gripper_without_force_sensing=True"
+      )
+
   def _assert_within_soft_limits(self, current: JointState, target: JointState) -> None:
     """Raise if the current pose or the target is outside the soft limits; -1012 on the controller.
 
@@ -1479,7 +1491,8 @@ class PreciseFlexArm:
     Returns:
       The axes moved, as ``axis -> recovered target``. Empty when nothing recoverable
       is out of range or the configuration was not discovered. The wrist and rail are
-      never auto-recovered (see :attr:`_RECOVERY_ORDER`).
+      never auto-recovered (see :attr:`_RECOVERY_ORDER`), nor a gripper open past its limit:
+      bringing it in would close the jaws without sensing force.
     """
     if speed_percent is None:
       speed_percent = self.default_recovery_speed_percent
@@ -1496,6 +1509,8 @@ class PreciseFlexArm:
           continue
         value, (lo, hi) = outside[axis]
         above = value > hi  # which limit is violated; both moves below hinge on this
+        if axis == PreciseFlexAxis.GRIPPER and above:
+          continue  # bringing it in would close the jaws without sensing force
         overshoot = (value - hi) if above else (lo - value)
         if max_distance is not None and overshoot > max_distance:
           continue  # too far out to move unattended; left for the post-condition to raise
@@ -1628,7 +1643,7 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.move_to_joint_position",
-    lambda self, joint_state, speed_percent=None: {
+    lambda self, joint_state, speed_percent=None, close_gripper_without_force_sensing=False: {
       "device": self._driver._controller_reference(),
       "target_joint_position": _joint_state_reference(joint_state),
       "speed_percent": speed_percent,
@@ -1638,6 +1653,8 @@ class PreciseFlexArm:
     self,
     joint_state: JointState,
     speed_percent: Optional[float] = None,
+    *,
+    close_gripper_without_force_sensing: bool = False,
   ) -> None:
     """Move the arm to the specified joint state. A partial spec is merged over the live pose;
     the move is guarded against out-of-range axes (see ``_guarded_move``).
@@ -1646,12 +1663,23 @@ class PreciseFlexArm:
       joint_state: Target joint state. Omitted axes keep their live values.
       speed_percent: Movement speed override as a percentage (0-100). If None, uses the current
         speed setting. It stays set afterwards; use ``at_speed`` to scope a speed to one move.
+      close_gripper_without_force_sensing: allow a gripper axis below the live one. A joint move
+        senses no force; close the jaws with ``gripper.move_to_jaw_position``.
+
+    Raises:
+      ValueError: If the move would close the jaws, unless asked.
     """
     if speed_percent is not None:
       await self._set_speed(speed_percent)
+
+    def build_targets(current: JointState) -> List[JointState]:
+      target = {**current, **joint_state}
+      if not close_gripper_without_force_sensing:
+        self._refuse_closing_the_gripper(current, target)
+      return [target]
+
     await self._guarded_move(
-      lambda current: [{**current, **joint_state}],
-      lambda targets: self._unchecked_fw_move_j(self.profile_index, targets[0]),
+      build_targets, lambda targets: self._unchecked_fw_move_j(self.profile_index, targets[0])
     )
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
@@ -1913,7 +1941,9 @@ class PreciseFlexArm:
     """Change righty to lefty or back through the customizable locations. Nothing is guarded."""
     await self._driver.send_command(f"ChangeConfig {grip_mode}")
 
-  async def change_elbow_orientation(self, grip_mode: int = 0) -> None:
+  async def change_elbow_orientation(
+    self, grip_mode: int = 0, *, close_gripper_without_force_sensing: bool = False
+  ) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using customizable locations.
 
     Uses customizable locations to avoid hitting robot during change.
@@ -1924,15 +1954,26 @@ class PreciseFlexArm:
       grip_mode: Gripper control mode.
       0 = do not change gripper (default)
       1 = open gripper
-      2 = close gripper
+      2 = close gripper, by position: refused unless asked
+      close_gripper_without_force_sensing: allow ``grip_mode=2``.
+
+    Raises:
+      ValueError: If ``grip_mode`` is 2, unless asked.
     """
+    if grip_mode == 2 and not close_gripper_without_force_sensing:
+      raise ValueError(
+        "grip_mode=2 closes the gripper without sensing force; pass "
+        "close_gripper_without_force_sensing=True"
+      )
     await self._unchecked_fw_change_elbow_orientation(grip_mode)
 
   async def _unchecked_fw_change_elbow_orientation_by_algorithm(self, grip_mode: int) -> None:
     """Change righty to lefty or back by the controller's algorithm. Nothing is guarded."""
     await self._driver.send_command(f"ChangeConfig2 {grip_mode}")
 
-  async def change_elbow_orientation_by_algorithm(self, grip_mode: int = 0) -> None:
+  async def change_elbow_orientation_by_algorithm(
+    self, grip_mode: int = 0, *, close_gripper_without_force_sensing: bool = False
+  ) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using algorithm.
 
     Uses an algorithm to avoid hitting robot during change.
@@ -1943,8 +1984,17 @@ class PreciseFlexArm:
       grip_mode: Gripper control mode.
       0 = do not change gripper (default)
       1 = open gripper
-      2 = close gripper
+      2 = close gripper, by position: refused unless asked
+      close_gripper_without_force_sensing: allow ``grip_mode=2``.
+
+    Raises:
+      ValueError: If ``grip_mode`` is 2, unless asked.
     """
+    if grip_mode == 2 and not close_gripper_without_force_sensing:
+      raise ValueError(
+        "grip_mode=2 closes the gripper without sensing force; pass "
+        "close_gripper_without_force_sensing=True"
+      )
     await self._unchecked_fw_change_elbow_orientation_by_algorithm(grip_mode)
 
   # -- pick up and drop ----------------------------------------------------------------------------
@@ -2268,9 +2318,11 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.park",
-    lambda self: {"device": self._driver._controller_reference()},
+    lambda self, close_gripper_without_force_sensing=False: {
+      "device": self._driver._controller_reference()
+    },
   )
-  async def park(self) -> None:
+  async def park(self, *, close_gripper_without_force_sensing: bool = False) -> None:
     """Move to ``self.parking_position``; defaults at setup, reassignable at runtime.
 
     ``parking_position`` is filled at setup with ``PARKING_POSITION_RIGHT`` (a planar fold facing
@@ -2282,8 +2334,20 @@ class PreciseFlexArm:
     an arm that is modelled, a pose whose way there is refused is tried a full turn either side,
     the shorter turn first; the pose as written is taken whenever its way is clear. The arm is read
     for that, and again by the move.
+
+    Args:
+      close_gripper_without_force_sensing: allow a parking pose whose gripper axis is below the live
+        one, and the ``movetosafe`` fallback, which closes the jaws by position first.
+
+    Raises:
+      ValueError: If parking would close the jaws, unless asked.
     """
     if self.parking_position is None:
+      if not close_gripper_without_force_sensing:
+        raise ValueError(
+          "parking with no parking_position sends movetosafe, which closes the gripper without "
+          "sensing force; set parking_position, or pass close_gripper_without_force_sensing=True"
+        )
       # Where the controller's own safe position is, the driver does not know: only read it after.
       try:
         await self._unchecked_fw_park()
@@ -2317,4 +2381,6 @@ class PreciseFlexArm:
         pose = {**pose, PreciseFlexAxis.WRIST: wrist}
         break
     # A pose no turn of which is clear is sent as written, and refused there with where it fails.
-    await self.move_to_joint_state(joint_state=pose)
+    await self.move_to_joint_state(
+      joint_state=pose, close_gripper_without_force_sensing=close_gripper_without_force_sensing
+    )

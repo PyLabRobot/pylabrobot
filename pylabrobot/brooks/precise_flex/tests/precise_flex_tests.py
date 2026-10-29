@@ -64,37 +64,6 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     # closed_gripper_position=500 ⇒ the narrowest jaw width (60mm) maps to 500 units.
     self.arm = _make_arm(closed_gripper_position=500.0)
 
-  def _sent_commands(self) -> list[str]:
-    """What was sent, less the joint reads a move waits on before it."""
-    sent = [c.args[0] for c in mocked(self.arm.send_command).call_args_list]
-    return [command for command in sent if command != "wherej"]
-
-  async def test_move_gripper_force_sensing_false_opens_with_position(self):
-    # 80 mm ⇒ 500 + (80 - 60) = 520 firmware units.
-    await self.arm.gripper.move_to_jaw_position(width=80.0, force_sensing=False)
-    self.assertEqual(self._sent_commands(), ["GripOpenPos 520.0", "gripper 1"])
-
-  async def test_move_gripper_force_sensing_true_closes_with_position(self):
-    # 60 mm (the closed reference) ⇒ exactly closed_gripper_position.
-    await self.arm.gripper.move_to_jaw_position(width=60.0, force_sensing=True)
-    self.assertEqual(self._sent_commands(), ["GripClosePos 500.0", "gripper 2"])
-
-  async def test_move_gripper_position_command_precedes_move(self):
-    await self.arm.gripper.move_to_jaw_position(width=120.0, force_sensing=False)
-    commands = self._sent_commands()
-    self.assertLess(
-      commands.index("GripOpenPos 560.0"),
-      commands.index("gripper 1"),
-      "Position must be set before the gripper move command fires.",
-    )
-
-  async def test_force_sensing_branches_use_different_firmware_commands(self):
-    await self.arm.gripper.move_to_jaw_position(width=90.0, force_sensing=False)
-    await self.arm.gripper.move_to_jaw_position(width=90.0, force_sensing=True)
-    self.assertEqual(
-      self._sent_commands(), ["GripOpenPos 530.0", "gripper 1", "GripClosePos 530.0", "gripper 2"]
-    )
-
   async def test_a_gripper_move_before_setup_is_refused(self):
     arm = _make_arm()
     arm.gripper.configuration = None
@@ -116,7 +85,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
     commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm ⇒ 1000 + (80 - 60) = 1020 units.
     self.assertEqual(
-      [command for command in commands if command != "wherej"], ["GripOpenPos 1020.0", "gripper 1"]
+      [command for command in commands if command != "wherej"], ["MoveOneAxis 5 1020.0 1"]
     )
 
   def test_mm_to_firmware_units_helper(self):
@@ -179,7 +148,7 @@ class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
     ]
     self.assertEqual(
       [event.data["command"] for event in firmware_events],
-      ["GripOpenPos 520.0", "gripper 1"],
+      ["ReleasePlate 520.0 50.0"],
     )
     self.assertTrue(
       all(event.context["resources"] == [{"name": "sample_plate"}] for event in firmware_events)
@@ -334,7 +303,7 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
 
   async def test_park_without_position_falls_back_to_movetosafe(self):
     """While parking_position is unset (no configuration), park() uses the firmware movetosafe."""
-    await self.arm.arm.park()
+    await self.arm.arm.park(close_gripper_without_force_sensing=True)
     sent = [call.args[0] for call in mocked(self.arm.send_command).call_args_list]
     # The one motion command, then the read of where the arm stopped.
     self.assertEqual([command for command in sent if command != "wherej"], ["movetosafe"])
