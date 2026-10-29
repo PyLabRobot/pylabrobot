@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexSimulationDriver.start\_freedrive\_mode
+==================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexSimulationDriver.start_freedrive_mode

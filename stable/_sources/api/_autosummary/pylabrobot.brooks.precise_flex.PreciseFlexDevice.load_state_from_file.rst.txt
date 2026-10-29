@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDevice.load\_state\_from\_file
+=========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDevice.load_state_from_file

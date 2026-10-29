@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDevice.rotated
+=========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDevice.rotated

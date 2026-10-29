@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexSimulationDriver.configuration
+=========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoproperty:: PreciseFlexSimulationDriver.configuration

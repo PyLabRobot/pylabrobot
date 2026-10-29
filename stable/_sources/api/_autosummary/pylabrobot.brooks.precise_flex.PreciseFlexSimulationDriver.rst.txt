@@ -1,0 +1,148 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexSimulationDriver
+===========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexSimulationDriver
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexSimulationDriver.PARKING_POSITION_BACK
+      ~PreciseFlexSimulationDriver.PARKING_POSITION_FRONT
+      ~PreciseFlexSimulationDriver.PARKING_POSITION_RIGHT
+      ~PreciseFlexSimulationDriver.ResponseMode
+      ~PreciseFlexSimulationDriver.closed_gripper_position
+      ~PreciseFlexSimulationDriver.configuration
+      ~PreciseFlexSimulationDriver.horizontal_compliance
+      ~PreciseFlexSimulationDriver.horizontal_compliance_torque
+      ~PreciseFlexSimulationDriver.location_index
+      ~PreciseFlexSimulationDriver.max_gripper_width
+      ~PreciseFlexSimulationDriver.min_gripper_width
+      ~PreciseFlexSimulationDriver.parking_position
+      ~PreciseFlexSimulationDriver.profile_index
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexSimulationDriver.__init__
+      ~PreciseFlexSimulationDriver.are_grippers_closed
+      ~PreciseFlexSimulationDriver.attach
+      ~PreciseFlexSimulationDriver.change_config
+      ~PreciseFlexSimulationDriver.change_config2
+      ~PreciseFlexSimulationDriver.connect
+      ~PreciseFlexSimulationDriver.dest_c
+      ~PreciseFlexSimulationDriver.dest_j
+      ~PreciseFlexSimulationDriver.detach
+      ~PreciseFlexSimulationDriver.disconnect
+      ~PreciseFlexSimulationDriver.discover
+      ~PreciseFlexSimulationDriver.drop_at_joint_position
+      ~PreciseFlexSimulationDriver.drop_at_location
+      ~PreciseFlexSimulationDriver.halt
+      ~PreciseFlexSimulationDriver.here_c
+      ~PreciseFlexSimulationDriver.here_j
+      ~PreciseFlexSimulationDriver.home
+      ~PreciseFlexSimulationDriver.home_all
+      ~PreciseFlexSimulationDriver.initialize
+      ~PreciseFlexSimulationDriver.is_gripper_closed
+      ~PreciseFlexSimulationDriver.move_gripper
+      ~PreciseFlexSimulationDriver.move_gripper_joint_position
+      ~PreciseFlexSimulationDriver.move_rail
+      ~PreciseFlexSimulationDriver.move_through_cartesian_poses
+      ~PreciseFlexSimulationDriver.move_to_joint_position
+      ~PreciseFlexSimulationDriver.move_to_location
+      ~PreciseFlexSimulationDriver.nop
+      ~PreciseFlexSimulationDriver.park
+      ~PreciseFlexSimulationDriver.pick_up_at_joint_position
+      ~PreciseFlexSimulationDriver.pick_up_at_location
+      ~PreciseFlexSimulationDriver.power_off_robot
+      ~PreciseFlexSimulationDriver.power_on_robot
+      ~PreciseFlexSimulationDriver.recover_axes_within_limits
+      ~PreciseFlexSimulationDriver.recover_from_fault
+      ~PreciseFlexSimulationDriver.release_brake
+      ~PreciseFlexSimulationDriver.request_axis_count
+      ~PreciseFlexSimulationDriver.request_axis_mask
+      ~PreciseFlexSimulationDriver.request_base
+      ~PreciseFlexSimulationDriver.request_controller_model
+      ~PreciseFlexSimulationDriver.request_controller_serial
+      ~PreciseFlexSimulationDriver.request_extra_axis_count
+      ~PreciseFlexSimulationDriver.request_gpl_version
+      ~PreciseFlexSimulationDriver.request_gripper_pose
+      ~PreciseFlexSimulationDriver.request_hardware_version
+      ~PreciseFlexSimulationDriver.request_joint_limits
+      ~PreciseFlexSimulationDriver.request_joint_position
+      ~PreciseFlexSimulationDriver.request_kinematic_parameters
+      ~PreciseFlexSimulationDriver.request_link_lengths
+      ~PreciseFlexSimulationDriver.request_manufacturer
+      ~PreciseFlexSimulationDriver.request_max_acceleration_percent
+      ~PreciseFlexSimulationDriver.request_max_deceleration_percent
+      ~PreciseFlexSimulationDriver.request_max_speed_percent
+      ~PreciseFlexSimulationDriver.request_mode
+      ~PreciseFlexSimulationDriver.request_monitor_speed
+      ~PreciseFlexSimulationDriver.request_motion_profile_values
+      ~PreciseFlexSimulationDriver.request_parameter
+      ~PreciseFlexSimulationDriver.request_payload
+      ~PreciseFlexSimulationDriver.request_power_state
+      ~PreciseFlexSimulationDriver.request_profile_acceleration
+      ~PreciseFlexSimulationDriver.request_profile_acceleration_ramp
+      ~PreciseFlexSimulationDriver.request_profile_deceleration
+      ~PreciseFlexSimulationDriver.request_profile_deceleration_ramp
+      ~PreciseFlexSimulationDriver.request_profile_in_range
+      ~PreciseFlexSimulationDriver.request_profile_speed
+      ~PreciseFlexSimulationDriver.request_profile_speed2
+      ~PreciseFlexSimulationDriver.request_profile_straight
+      ~PreciseFlexSimulationDriver.request_reference_acceleration
+      ~PreciseFlexSimulationDriver.request_reference_cartesian_acceleration
+      ~PreciseFlexSimulationDriver.request_reference_cartesian_speed
+      ~PreciseFlexSimulationDriver.request_reference_speed
+      ~PreciseFlexSimulationDriver.request_robot_name
+      ~PreciseFlexSimulationDriver.request_robot_type
+      ~PreciseFlexSimulationDriver.request_selected_robot
+      ~PreciseFlexSimulationDriver.request_signal
+      ~PreciseFlexSimulationDriver.request_state
+      ~PreciseFlexSimulationDriver.request_system_state
+      ~PreciseFlexSimulationDriver.request_tool_length
+      ~PreciseFlexSimulationDriver.request_tool_transformation_values
+      ~PreciseFlexSimulationDriver.request_version
+      ~PreciseFlexSimulationDriver.reset
+      ~PreciseFlexSimulationDriver.save_configuration
+      ~PreciseFlexSimulationDriver.select_robot
+      ~PreciseFlexSimulationDriver.send_command
+      ~PreciseFlexSimulationDriver.set_axis_parameter
+      ~PreciseFlexSimulationDriver.set_base
+      ~PreciseFlexSimulationDriver.set_brake
+      ~PreciseFlexSimulationDriver.set_monitor_speed
+      ~PreciseFlexSimulationDriver.set_motion_profile_values
+      ~PreciseFlexSimulationDriver.set_parameter
+      ~PreciseFlexSimulationDriver.set_payload
+      ~PreciseFlexSimulationDriver.set_power
+      ~PreciseFlexSimulationDriver.set_profile_acceleration
+      ~PreciseFlexSimulationDriver.set_profile_acceleration_ramp
+      ~PreciseFlexSimulationDriver.set_profile_deceleration
+      ~PreciseFlexSimulationDriver.set_profile_deceleration_ramp
+      ~PreciseFlexSimulationDriver.set_profile_in_range
+      ~PreciseFlexSimulationDriver.set_profile_speed
+      ~PreciseFlexSimulationDriver.set_profile_speed2
+      ~PreciseFlexSimulationDriver.set_profile_straight
+      ~PreciseFlexSimulationDriver.set_response_mode
+      ~PreciseFlexSimulationDriver.set_signal
+      ~PreciseFlexSimulationDriver.setup
+      ~PreciseFlexSimulationDriver.start_freedrive_mode
+      ~PreciseFlexSimulationDriver.stop
+      ~PreciseFlexSimulationDriver.stop_freedrive_mode
+      ~PreciseFlexSimulationDriver.zero_torque
+   
+   

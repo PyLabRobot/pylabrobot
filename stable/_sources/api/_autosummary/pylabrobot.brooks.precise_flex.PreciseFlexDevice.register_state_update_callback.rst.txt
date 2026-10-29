@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDevice.register\_state\_update\_callback
+===================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDevice.register_state_update_callback

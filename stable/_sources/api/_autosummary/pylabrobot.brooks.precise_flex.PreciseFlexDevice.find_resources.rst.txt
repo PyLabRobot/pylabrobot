@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDevice.find\_resources
+=================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDevice.find_resources

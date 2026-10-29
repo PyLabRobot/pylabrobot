@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexDevice.assign\_child\_by\_anchor
+===========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexDevice.assign_child_by_anchor

@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexSimulationDriver.recover\_from\_fault
+================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexSimulationDriver.recover_from_fault

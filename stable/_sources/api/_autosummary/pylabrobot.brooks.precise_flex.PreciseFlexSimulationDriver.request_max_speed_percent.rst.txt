@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexSimulationDriver.request\_max\_speed\_percent
+========================================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexSimulationDriver.request_max_speed_percent
