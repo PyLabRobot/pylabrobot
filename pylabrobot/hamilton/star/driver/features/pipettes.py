@@ -3752,8 +3752,8 @@ class Pipettes:
       As `probe_liquid_heights`.
 
     Returns:
-      The volume in each container, in uL, in the order given; what its function makes of a
-      height of 0.0 where no liquid was met.
+      The volume in each container, in uL, in the order given; 0.0 where no liquid was met above
+      the cavity bottom.
 
     Raises:
       ValueError: If a container has no height-to-volume function, or as `probe_liquid_heights`.
@@ -3774,8 +3774,10 @@ class Pipettes:
       minimum_traverse_height_end=minimum_traverse_height_end,
       x_grouping_tolerance=x_grouping_tolerance,
     )
+    # No liquid above the cavity bottom holds nothing, whatever range the container's data covers.
     return [
-      container.compute_volume_from_height(height) for container, height in zip(containers, heights)
+      0.0 if height <= 0.0 else container.compute_volume_from_height(height)
+      for container, height in zip(containers, heights)
     ]
 
   @staticmethod
@@ -6921,8 +6923,8 @@ class Pipettes:
     Raises:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
-        liquid height beside an LLD mode, a pressure or dual LLD mode, a piston without the travel
-        for its dispenses, a container without room for them, or auto surface following beside a
+        liquid height beside an LLD mode, a pressure or dual LLD mode, a piston pushed past its
+        bottom limit, a container without room for them, or auto surface following beside a
         distance, under OFF without a liquid height, or over a surface outside the container's
         height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
@@ -7017,6 +7019,8 @@ class Pipettes:
     blow_out_air = per_container_settings["blow_out_air_volumes"] or [0.0] * n
     # From where it stands, each piston has to have the travel for its dispenses, and each
     # container the room for them, cycle by cycle.
+    c = self.configuration
+    bottom = c.dispensing_drive_increments_to_uL(c.dispensing_drive_position_range_increments[0])
     standing = {channel: self.piston_positions[channel] for channel in channel_of}
     air = {channel: self._held_transport_air.get(channel, 0.0) for channel in channel_of}
     air_ahead: List[float] = []
@@ -7028,12 +7032,12 @@ class Pipettes:
         air[channel] + pushed[job] + (blow_out_air[job] if dispensing_modes[job] in (1, 3) else 0.0)
       )
       air[channel] = transport_air[job]
-      # A piston is kept to 0.1 uL and a travel to 0.01 uL, so 0.05 uL between them is rounding
-      # alone: compared in hundredths, so float noise at that edge refuses nothing.
-      if dispensing_modes[job] != 4 and round(travels[job] - standing[channel], 2) > 0.05:
+      # Past where it stood is air, and a drive rests a few increments off zero: only the drive's
+      # bottom limit stops a piston.
+      if dispensing_modes[job] != 4 and standing[channel] - travels[job] < bottom - 1e-6:
         raise ValueError(
-          f"channel {channel}'s piston holds {standing[channel]:.1f} uL of travel for the "
-          f"{travels[job]:.1f} uL it is to push out into {containers[job].name}"
+          f"channel {channel}'s piston stands at {standing[channel]:.1f} uL and cannot push out "
+          f"{travels[job]:.1f} uL into {containers[job].name}: past its {bottom:.1f} uL limit"
         )
       if liquid[job] > room[id(containers[job])] + 1e-6:
         raise ValueError(
@@ -7172,7 +7176,7 @@ class Pipettes:
       )
 
     def piston_after(standing: float, job: int) -> float:
-      left = 0.0 if dispensing_modes[job] == 4 else max(standing - travels[job], 0.0)
+      left = 0.0 if dispensing_modes[job] == 4 else standing - travels[job]
       return float(round(left + transport_air[job], 1))
 
     async def run(batch: ChannelBatch) -> None:

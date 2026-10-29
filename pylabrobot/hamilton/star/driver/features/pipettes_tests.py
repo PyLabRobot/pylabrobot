@@ -1307,6 +1307,24 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.assertGreater(heights[0], 0.0)
     self.assertIn("C0RL", self.sent)
 
+  async def test_a_container_where_nothing_was_found_holds_0_uL(self):
+    # A trough's data can start above its floor; nothing found is no liquid, not a height to look
+    # up in it.
+    self.fail_with["P2"] = ["P2ZLid0001er70"]
+    wells = self._wells("A1", "B1")
+
+    def starts_above_the_floor(height: float) -> float:
+      if height < 1.0:
+        raise ValueError(f"x={height} below range 1.0-40.0")
+      return height * 10
+
+    for well in wells:
+      well._compute_volume_from_height = starts_above_the_floor  # type: ignore[method-assign]
+      well._compute_height_from_volume = lambda volume: volume / 10  # type: ignore[method-assign]
+    volumes = await self.pipettes.probe_liquid_volumes(wells)
+    self.assertEqual(volumes[1], 0.0)
+    self.assertGreater(volumes[0], 0.0)
+
   async def test_a_dual_search_that_finds_nothing_stands_at_zero_too(self):
     self.fail_with["P1"] = ["P1ZLid0001er73"]
     self.assertEqual(await self.pipettes.probe_liquid_heights(self._wells("A1")), [0.0])
@@ -4487,11 +4505,12 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
       await self.pipettes.dispense(self.wells[:1], piston_volumes=[10.0], use_channels=[9])
     self.assertEqual(sent, [])
 
-  async def test_a_piston_without_travel_is_refused_before_anything_moves(self):
+  async def test_a_piston_pushed_past_its_bottom_limit_is_refused_before_anything_moves(self):
     sent = self._record()
     with self.assertRaises(ValueError) as refused:
-      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[10.0])
-    self.assertIn("holds 0.0 uL of travel", str(refused.exception))
+      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[50.0])
+    self.assertIn("stands at 0.0 uL and cannot push out 50.0 uL", str(refused.exception))
+    self.assertIn("past its -45.0 uL limit", str(refused.exception))
     self.assertEqual(sent, [])
 
   async def test_a_well_without_room_is_refused_before_anything_moves(self):
@@ -4567,11 +4586,11 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
       self.assertEqual(self.pipettes.piston_positions[0], standing)
       self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[0], standing)
 
-  async def test_a_piston_without_the_travel_for_the_air_it_holds_is_refused(self):
+  async def test_the_air_a_piston_holds_counts_toward_its_bottom_limit(self):
     await self.pipettes.aspirate(self.wells[:1], piston_volumes=[19.0], transport_air_volumes=[5.0])
     sent = self._record()
-    with self.assertRaisesRegex(ValueError, "holds 24.0 uL of travel for the 25.0 uL"):
-      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[20.0])
+    with self.assertRaisesRegex(ValueError, "stands at 24.0 uL and cannot push out 70.0 uL"):
+      await self.pipettes.dispense(self.wells[3:4], piston_volumes=[65.0])
     self.assertEqual(sent, [])
 
   async def test_a_tip_command_leaves_the_pistons_where_a_device_did(self):
@@ -4644,9 +4663,8 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
   async def asyncTearDown(self):
     await self.driver.stop()
 
-  async def test_321_uL_of_water_drawn_is_dispensed(self):
-    # The class corrects 321 uL to 337.449 uL: kept as 337.4 once drawn, pushed as 337.45. The
-    # 0.05 uL between them is rounding alone, and the dispense goes ahead.
+  def _jet_water(self):
+    """The jet water class for the mounted tip, as a protocol looks it up."""
     from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
     from pylabrobot.resources.liquid import Liquid
 
@@ -4662,8 +4680,27 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
       blow_out=False,
     )
     assert water is not None
+    return water
+
+  async def test_321_uL_of_water_drawn_is_dispensed(self):
+    # The class corrects 321 uL to 337.449 uL: kept as 337.4 once drawn, pushed as 337.45. The
+    # 0.05 uL between them is rounding alone, and the dispense goes ahead.
+    water = self._jet_water()
     await self.pipettes.aspirate([self.source], volumes=[321.0], hamilton_liquid_classes=[water])
     await self.pipettes.dispense(
       [self.target], volumes=[321.0], hamilton_liquid_classes=[water], jet=[True]
     )
     self.assertAlmostEqual(self.target.tracker.get_used_volume(), 321.0)
+
+  async def test_a_drive_resting_below_zero_dispenses_what_it_drew(self):
+    # As a device reads after a reset: 2 increments under zero. The 889.8 uL drawn then pushes out
+    # 0.1 uL past where the piston stood, which is air, not a reason to refuse.
+    water = self._jet_water()
+    c = self.pipettes.configuration
+    self.driver.dispensing_drive_uL[0] = 2 * -c.dispensing_drive_uL_per_increment
+    await self.pipettes.dispensing_drive_request_uL_position(0)
+    await self.pipettes.aspirate([self.source], volumes=[889.8], hamilton_liquid_classes=[water])
+    await self.pipettes.dispense(
+      [self.target], volumes=[889.8], hamilton_liquid_classes=[water], jet=[True]
+    )
+    self.assertAlmostEqual(self.target.tracker.get_used_volume(), 889.8)
