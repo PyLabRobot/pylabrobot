@@ -1856,22 +1856,6 @@ class Pipettes:
 
   # -- x and y together ----------------------------------------------------------------------------
 
-  def _get_channels_below_safe_z(self) -> List[int]:
-    """The channels the model does not have at Z safety, so a raise there would move them.
-
-    A channel the model knows nothing about counts as below, so the raise runs.
-
-    Returns:
-      The channels, 0-indexed from the back.
-    """
-    top = self.configuration.z_range[1]
-    below = []
-    for channel in range(self.num_channels):
-      point = self.get_reference_point_location(channel)
-      if point is None or point.z < top - 0.1:
-        below.append(channel)
-    return below
-
   async def _traverse_raise_targets(self, height: float) -> Dict[int, float]:
     """The stop disc target of every channel whose lowest point is below `height`, checked.
 
@@ -3455,8 +3439,8 @@ class Pipettes:
   ) -> List[T]:
     """Take the channels to each batch in turn and run `func` there; Z safety on any failure.
 
-    Between batches: up to `minimum_traverse_height_during`, or Z safety when None and the model
-    has a channel below it; then `X0 XP` and `C0 JY` to the batch.
+    Between batches: up to `minimum_traverse_height_during`, or Z safety when None, whatever the
+    model has; then `X0 XP` and `C0 JY` to the batch.
 
     Args:
       func: what to do at a batch. It moves nothing in X or Y.
@@ -3472,8 +3456,9 @@ class Pipettes:
       for index, batch in enumerate(batches):
         if index > 0:
           if minimum_traverse_height_during is None:
-            if self._get_channels_below_safe_z():
-              await self.move_to_safe_z()
+            # Always, as legacy does: a liquid search records nothing, so the model can have the
+            # channels up while they still stand in the container they searched.
+            await self.move_to_safe_z()
           else:
             raises = await self._traverse_raise_targets(minimum_traverse_height_during)
             if raises:
