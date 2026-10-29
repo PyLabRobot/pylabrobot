@@ -1,12 +1,12 @@
 """BMG Labtech VANTAstar plate reader as a PyLabRobot resource."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Sequence, Tuple
 
 from pylabrobot.io.usb import USB
-from pylabrobot.lib.absorbance.results import AbsorbanceResult
-from pylabrobot.lib.fluorescence.results import FluorescenceResult
+from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
+from pylabrobot.lib.fluorescence.results import FluorescenceResult, FluorescenceSpectrumResult
 from pylabrobot.lib.luminescence.results import LuminescenceResult
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, Well
 
@@ -15,12 +15,20 @@ from .driver.master import (
   LUMINESCENCE_NO_FILTER,
   MonochromatorSettings,
   PlateGeometry,
+  ScanSide,
   ShakeMode,
   VANTAstarDriver,
+  WellScan,
   compute_monochromator_settings,
+  compute_scan_monochromators,
   encode_well_mask,
 )
-from .driver.responses import GainFocus, MeasurementData, compute_optical_densities
+from .driver.responses import (
+  GainFocus,
+  MeasurementData,
+  compute_optical_densities,
+  compute_spectrum_optical_densities,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +44,9 @@ MAXIMUM_BANDWIDTH = 100.0
 MINIMUM_EXCITATION = 320.0
 MINIMUM_EXCITATION_EDGE = 310.0
 MAXIMUM_WAVELENGTH = 840.0
+# Absorbance wavelengths Voyager offers, in nm.
+MINIMUM_ABSORBANCE_WAVELENGTH = 220
+MAXIMUM_ABSORBANCE_WAVELENGTH = 1000
 
 
 class _VANTAstarPlateHolder(PlateHolder):
@@ -280,6 +291,70 @@ class VANTAstarDevice(Resource):
     if data.wells != len(measured):
       raise RuntimeError(f"the reader measured {data.wells} wells, {len(measured)} were asked for")
 
+  @staticmethod
+  def _check_flashes(flashes: int) -> None:
+    """Raise unless ``flashes`` is 1-200."""
+    if not 1 <= flashes <= 200:
+      raise ValueError(f"flashes must be 1-200, got {flashes}")
+
+  @staticmethod
+  def _check_absorbance_wavelengths(wavelengths: Sequence[int]) -> None:
+    """Raise unless 1 to 8 wavelengths, each 220-1000 nm."""
+    if not 1 <= len(wavelengths) <= 8:
+      raise ValueError(f"1 to 8 wavelengths, got {len(wavelengths)}")
+    for wavelength in wavelengths:
+      if not MINIMUM_ABSORBANCE_WAVELENGTH <= wavelength <= MAXIMUM_ABSORBANCE_WAVELENGTH:
+        raise ValueError(
+          f"wavelength must be {MINIMUM_ABSORBANCE_WAVELENGTH}-{MAXIMUM_ABSORBANCE_WAVELENGTH} nm, "
+          f"got {wavelength}"
+        )
+
+  @staticmethod
+  def _check_cycles(cycles: int, cycle_time: int) -> None:
+    """Raise unless a kinetic read has 2-65535 cycles and a cycle time of 1-65535 whole s."""
+    if not 2 <= cycles <= 0xFFFF:
+      raise ValueError(f"cycles must be 2-65535, got {cycles}")
+    if not 1 <= cycle_time <= 0xFFFF:
+      raise ValueError(f"cycle_time must be 1-65535 s, got {cycle_time}")
+
+  @staticmethod
+  def _get_scan_wavelengths(
+    start_wavelength: int, end_wavelength: int, step_size: int
+  ) -> List[int]:
+    """The wavelengths of a spectrum from ``start_wavelength`` to ``end_wavelength``.
+
+    Raises:
+      ValueError: unless the step is a whole nm of at least 1 dividing the range, and the end is
+        above the start.
+    """
+    if end_wavelength <= start_wavelength:
+      raise ValueError(f"end_wavelength {end_wavelength} must be above {start_wavelength}")
+    if step_size < 1 or (end_wavelength - start_wavelength) % step_size:
+      raise ValueError(f"step_size {step_size} must be a whole nm of at least 1 dividing the range")
+    return list(range(start_wavelength, end_wavelength + 1, step_size))
+
+  def _get_absorbance_results(
+    self,
+    data: MeasurementData,
+    measured: List[Tuple[int, int]],
+    wavelengths: Sequence[int],
+    start: datetime,
+    end: datetime,
+  ) -> List[AbsorbanceResult]:
+    """One ``AbsorbanceResult`` per wavelength of an absorbance block."""
+    self._check_wells(data, measured)
+    identifiers = [_get_identifier(r, c) for r, c in measured]
+    return [
+      AbsorbanceResult(
+        data=dict(zip(identifiers, compute_optical_densities(data, i))),
+        wavelength=wavelength,
+        temperature=data.temperature,
+        start_timestamp=start,
+        end_timestamp=end,
+      )
+      for i, wavelength in enumerate(wavelengths)
+    ]
+
   async def measure_absorbance(
     self,
     wavelengths: Sequence[int],
@@ -288,12 +363,14 @@ class VANTAstarDevice(Resource):
     wells: Optional[Sequence[Well]] = None,
     flashes: int = 22,
     settling_time: float = 0.5,
+    well_scan: Optional[WellScan] = None,
     timeout: float = 300.0,
   ) -> List[AbsorbanceResult]:
-    """Measure the absorbance of the plate at each wavelength (endpoint, point read).
+    """Measure the absorbance of the plate at each wavelength (endpoint).
 
     The defaults are Voyager's "precise" preset.  The optical density is computed as Voyager
     computes it, against the reader's 100% and reference values; it is not pathlength-corrected.
+    Voyager reports optical densities above 3.5 as 3.5; these are the computed values.
 
     Args:
       wavelengths: 1 to 8 wavelengths in nm (220-1000).
@@ -301,6 +378,7 @@ class VANTAstarDevice(Resource):
       wells: the wells to measure; None measures every well.
       flashes: flashes per well (1-200).
       settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take.
 
     Returns:
@@ -310,13 +388,8 @@ class VANTAstarDevice(Resource):
       RuntimeError: if no plate is on the plate holder or the run ends without its data.
       ValueError: if an argument is out of range.
     """
-    if not 1 <= len(wavelengths) <= 8:
-      raise ValueError(f"1 to 8 wavelengths, got {len(wavelengths)}")
-    for wavelength in wavelengths:
-      if not 220 <= wavelength <= 1000:
-        raise ValueError(f"wavelength must be 220-1000 nm, got {wavelength}")
-    if not 1 <= flashes <= 200:
-      raise ValueError(f"flashes must be 1-200, got {flashes}")
+    self._check_absorbance_wavelengths(wavelengths)
+    self._check_flashes(flashes)
     self._check_settling_time(settling_time)
     plate = self._get_plate(plate)
     measured = _get_measured_wells(plate, wells)
@@ -326,25 +399,149 @@ class VANTAstarDevice(Resource):
       settling_time=settling_time,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
     )
     start = datetime.now()
     data = await self.driver.run_measurement(parameters, timeout=timeout)
     end = datetime.now()
-    self._check_wells(data, measured)
-    identifiers = [_get_identifier(r, c) for r, c in measured]
-    results = []
-    for i, wavelength in enumerate(wavelengths):
-      densities = compute_optical_densities(data, i)
-      results.append(
-        AbsorbanceResult(
-          data=dict(zip(identifiers, densities)),
-          wavelength=wavelength,
-          temperature=data.temperature,
-          start_timestamp=start,
-          end_timestamp=end,
-        )
+    return self._get_absorbance_results(data, measured, wavelengths, start, end)
+
+  async def measure_absorbance_kinetic(
+    self,
+    wavelengths: Sequence[int],
+    *,
+    cycles: int,
+    cycle_time: int,
+    plate: Optional[Plate] = None,
+    wells: Optional[Sequence[Well]] = None,
+    flashes: int = 22,
+    settling_time: float = 0.5,
+    well_scan: Optional[WellScan] = None,
+    timeout: Optional[float] = None,
+  ) -> List[List[AbsorbanceResult]]:
+    """Measure the absorbance of the plate at each wavelength ``cycles`` times, the reader starting
+    a cycle every ``cycle_time`` seconds (plate-mode kinetic, as ``measure_absorbance``).
+
+    Args:
+      wavelengths: 1 to 8 wavelengths in nm (220-1000).
+      cycles: reads of the plate (2-65535).
+      cycle_time: whole seconds from one cycle's start to the next (1-65535); a cycle that takes
+        longer delays the next.
+      plate: the plate to measure; None uses the plate on the plate holder.
+      wells: the wells to measure; None measures every well.
+      flashes: flashes per well (1-200).
+      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      timeout: seconds the run may take; None allows the cycles plus 300 s.
+
+    Returns:
+      Per cycle, one ``AbsorbanceResult`` per wavelength in the order given; a cycle's
+      ``start_timestamp`` is when the reader started it, its ``end_timestamp`` when the run's data
+      was in.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      ValueError: if an argument is out of range.
+    """
+    self._check_absorbance_wavelengths(wavelengths)
+    self._check_cycles(cycles, cycle_time)
+    self._check_flashes(flashes)
+    self._check_settling_time(settling_time)
+    plate = self._get_plate(plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self.driver.build_absorbance_run(
+      wavelengths,
+      flashes=flashes,
+      settling_time=settling_time,
+      geometry=get_plate_geometry(plate),
+      well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
+      cycles=cycles,
+      cycle_time=cycle_time,
+    )
+    start = datetime.now()
+    blocks = await self.driver.run_blocks(
+      parameters, timeout=cycles * cycle_time + 300.0 if timeout is None else timeout
+    )
+    end = datetime.now()
+    return [
+      self._get_absorbance_results(
+        block, measured, wavelengths, start + timedelta(seconds=block.start_time), end
       )
-    return results
+      for block in blocks
+    ]
+
+  async def measure_absorbance_spectrum(
+    self,
+    start_wavelength: int,
+    end_wavelength: int,
+    step_size: int = 1,
+    *,
+    plate: Optional[Plate] = None,
+    wells: Optional[Sequence[Well]] = None,
+    flashes: int = 22,
+    settling_time: float = 0.5,
+    well_scan: Optional[WellScan] = None,
+    timeout: float = 600.0,
+  ) -> AbsorbanceSpectrumResult:
+    """Measure the absorbance spectrum of the plate: every wavelength at once, well by well (the
+    reader's spectrometer).  The optical densities are computed as in ``measure_absorbance``.
+
+    Args:
+      start_wavelength: the first wavelength in nm (220-1000).
+      end_wavelength: the last wavelength in nm, above ``start_wavelength`` (220-1000).
+      step_size: nm between wavelengths, a whole nm dividing the range.
+      plate: the plate to measure; None uses the plate on the plate holder.
+      wells: the wells to measure; None measures every well.
+      flashes: flashes per well (1-200).
+      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      timeout: seconds the run may take.
+
+    Returns:
+      Each measured well's spectrum, keyed by well identifier.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      ValueError: if an argument is out of range.
+    """
+    self._check_absorbance_wavelengths([start_wavelength, end_wavelength])
+    scanned = self._get_scan_wavelengths(start_wavelength, end_wavelength, step_size)
+    self._check_flashes(flashes)
+    self._check_settling_time(settling_time)
+    plate = self._get_plate(plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self.driver.build_absorbance_spectrum_run(
+      start_wavelength,
+      end_wavelength,
+      step_size,
+      flashes=flashes,
+      settling_time=settling_time,
+      geometry=get_plate_geometry(plate),
+      well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
+    )
+    start = datetime.now()
+    blocks = await self.driver.run_absorbance_spectrum(parameters, timeout=timeout)
+    end = datetime.now()
+    positions: List[Tuple[int, int]] = []
+    for block in blocks:
+      if block.well is None:
+        raise RuntimeError("an absorbance spectrum block holds no single well")
+      positions.append((block.well[1] - 1, block.well[0] - 1))
+    if sorted(positions) != measured:
+      raise RuntimeError(f"the reader sent wells {positions}, {measured} were asked for")
+    spectra = compute_spectrum_optical_densities(blocks, len(scanned))
+    data = {
+      _get_identifier(*position): dict(zip(scanned, spectrum))
+      for position, spectrum in sorted(zip(positions, spectra))
+    }
+    return AbsorbanceSpectrumResult(
+      data=data,
+      temperature=blocks[0].temperature,
+      start_timestamp=start,
+      end_timestamp=end,
+    )
 
   async def measure_fluorescence(
     self,
@@ -362,9 +559,10 @@ class VANTAstarDevice(Resource):
     wells: Optional[Sequence[Well]] = None,
     flashes: int = 20,
     settling_time: float = 0.5,
+    well_scan: Optional[WellScan] = None,
     timeout: float = 300.0,
   ) -> FluorescenceResult:
-    """Measure the fluorescence intensity of the plate from the top (endpoint, point read).
+    """Measure the fluorescence intensity of the plate from the top (endpoint).
 
     The monochromator band edges are the nominal ones, wavelength +/- bandwidth / 2.  Voyager places
     them closer together, by an amount its filter software computes from the wavelength, bandwidth
@@ -388,6 +586,7 @@ class VANTAstarDevice(Resource):
       wells: the wells to measure; None measures every well.
       flashes: flashes per well (1-200).
       settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take.
 
     Returns:
@@ -397,13 +596,152 @@ class VANTAstarDevice(Resource):
       RuntimeError: if no plate is on the plate holder or the run ends without its data.
       ValueError: if an argument is out of range.
     """
+    plate = self._get_plate(plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self._build_fluorescence_run(
+      excitation_wavelength,
+      emission_wavelength,
+      excitation_bandwidth=excitation_bandwidth,
+      emission_bandwidth=emission_bandwidth,
+      focal_height=focal_height,
+      gain=gain,
+      dichroic_split_wavelength=dichroic_split_wavelength,
+      monochromator=monochromator,
+      enhanced_dynamic_range=enhanced_dynamic_range,
+      plate=plate,
+      wells=wells,
+      flashes=flashes,
+      settling_time=settling_time,
+      well_scan=well_scan,
+    )
+    start = datetime.now()
+    data = await self.driver.run_measurement(parameters, timeout=timeout)
+    end = datetime.now()
+    return self._get_fluorescence_result(
+      data,
+      measured,
+      (excitation_wavelength, excitation_bandwidth, emission_wavelength, emission_bandwidth),
+      start,
+      end,
+    )
+
+  async def measure_fluorescence_kinetic(
+    self,
+    excitation_wavelength: float,
+    emission_wavelength: float,
+    *,
+    cycles: int,
+    cycle_time: int,
+    excitation_bandwidth: float,
+    emission_bandwidth: float,
+    focal_height: float,
+    gain: Optional[int] = None,
+    dichroic_split_wavelength: Optional[float] = None,
+    monochromator: Optional[MonochromatorSettings] = None,
+    enhanced_dynamic_range: bool = False,
+    plate: Optional[Plate] = None,
+    wells: Optional[Sequence[Well]] = None,
+    flashes: int = 20,
+    settling_time: float = 0.5,
+    well_scan: Optional[WellScan] = None,
+    timeout: Optional[float] = None,
+  ) -> List[FluorescenceResult]:
+    """Measure the fluorescence intensity of the plate ``cycles`` times, the reader starting a
+    cycle every ``cycle_time`` seconds (plate-mode kinetic, as ``measure_fluorescence``).
+
+    Args:
+      excitation_wavelength: nm.
+      emission_wavelength: nm.
+      cycles: reads of the plate (2-65535).
+      cycle_time: whole seconds from one cycle's start to the next (1-65535); a cycle that takes
+        longer delays the next.
+      excitation_bandwidth: nm, 8-100.
+      emission_bandwidth: nm, 8-100.
+      focal_height: mm, in 0.1 mm steps.
+      gain: the detector gain; required unless ``enhanced_dynamic_range``.
+      dichroic_split_wavelength: nm; None as in ``measure_fluorescence``.
+      monochromator: band edges, dichroic and slits to read with instead of the computed ones.
+      enhanced_dynamic_range: read with enhanced dynamic range; no gain is sent.
+      plate: the plate to measure; None uses the plate on the plate holder.
+      wells: the wells to measure; None measures every well.
+      flashes: flashes per well (1-200).
+      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      timeout: seconds the run may take; None allows the cycles plus 300 s.
+
+    Returns:
+      One result per cycle; its ``start_timestamp`` is when the reader started the cycle, its
+      ``end_timestamp`` when the run's data was in.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      ValueError: if an argument is out of range.
+    """
+    self._check_cycles(cycles, cycle_time)
+    plate = self._get_plate(plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self._build_fluorescence_run(
+      excitation_wavelength,
+      emission_wavelength,
+      excitation_bandwidth=excitation_bandwidth,
+      emission_bandwidth=emission_bandwidth,
+      focal_height=focal_height,
+      gain=gain,
+      dichroic_split_wavelength=dichroic_split_wavelength,
+      monochromator=monochromator,
+      enhanced_dynamic_range=enhanced_dynamic_range,
+      plate=plate,
+      wells=wells,
+      flashes=flashes,
+      settling_time=settling_time,
+      well_scan=well_scan,
+      cycles=cycles,
+      cycle_time=cycle_time,
+    )
+    start = datetime.now()
+    blocks = await self.driver.run_blocks(
+      parameters, timeout=cycles * cycle_time + 300.0 if timeout is None else timeout
+    )
+    end = datetime.now()
+    optics = (excitation_wavelength, excitation_bandwidth, emission_wavelength, emission_bandwidth)
+    return [
+      self._get_fluorescence_result(
+        block, measured, optics, start + timedelta(seconds=block.start_time), end
+      )
+      for block in blocks
+    ]
+
+  def _build_fluorescence_run(
+    self,
+    excitation_wavelength: float,
+    emission_wavelength: float,
+    *,
+    excitation_bandwidth: float,
+    emission_bandwidth: float,
+    focal_height: float,
+    gain: Optional[int],
+    dichroic_split_wavelength: Optional[float],
+    monochromator: Optional[MonochromatorSettings],
+    enhanced_dynamic_range: bool,
+    plate: Plate,
+    wells: Optional[Sequence[Well]],
+    flashes: int,
+    settling_time: float,
+    well_scan: Optional[WellScan],
+    cycles: int = 1,
+    cycle_time: int = 0,
+  ) -> bytes:
+    """Check a fluorescence intensity read's arguments and build its RUN fields.
+
+    Raises:
+      ValueError: if an argument is out of range.
+    """
     self._check_optics(
       excitation_wavelength, excitation_bandwidth, emission_wavelength, emission_bandwidth
     )
     if gain is None and not enhanced_dynamic_range:
       raise ValueError("a gain is required unless enhanced_dynamic_range")
-    if not 1 <= flashes <= 200:
-      raise ValueError(f"flashes must be 1-200, got {flashes}")
+    self._check_flashes(flashes)
     self._check_settling_time(settling_time)
     if monochromator is None:
       monochromator = compute_monochromator_settings(
@@ -413,9 +751,7 @@ class VANTAstarDevice(Resource):
         emission_bandwidth,
         dichroic_split_wavelength,
       )
-    plate = self._get_plate(plate)
-    measured = _get_measured_wells(plate, wells)
-    parameters = self.driver.build_fluorescence_run(
+    return self.driver.build_fluorescence_run(
       [monochromator],
       gains=[gain or 0],
       focal_height=focal_height,
@@ -424,10 +760,21 @@ class VANTAstarDevice(Resource):
       enhanced_dynamic_range=enhanced_dynamic_range,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
+      cycles=cycles,
+      cycle_time=cycle_time,
     )
-    start = datetime.now()
-    data = await self.driver.run_measurement(parameters, timeout=timeout)
-    end = datetime.now()
+
+  def _get_fluorescence_result(
+    self,
+    data: MeasurementData,
+    measured: List[Tuple[int, int]],
+    optics: Tuple[float, float, float, float],
+    start: datetime,
+    end: datetime,
+  ) -> FluorescenceResult:
+    """The ``FluorescenceResult`` of a fluorescence block; warns of saturated wells.  ``optics``
+    is excitation wavelength and bandwidth, emission wavelength and bandwidth."""
     self._check_wells(data, measured)
     counts = data.group(0)
     saturated = sum(1 for count in counts if count >= data.overflow)
@@ -440,9 +787,124 @@ class VANTAstarDevice(Resource):
       )
     return FluorescenceResult(
       data={_get_identifier(r, c): float(v) for (r, c), v in zip(measured, counts)},
-      excitation_wavelength=excitation_wavelength,
+      excitation_wavelength=optics[0],
+      excitation_bandwidth=optics[1],
+      emission_wavelength=optics[2],
+      emission_bandwidth=optics[3],
+      temperature=data.temperature,
+      start_timestamp=start,
+      end_timestamp=end,
+    )
+
+  async def measure_fluorescence_spectrum(
+    self,
+    scan: ScanSide,
+    start_wavelength: int,
+    end_wavelength: int,
+    *,
+    excitation_bandwidth: float,
+    emission_bandwidth: float,
+    gain: int,
+    focal_height: float,
+    excitation_wavelength: Optional[float] = None,
+    emission_wavelength: Optional[float] = None,
+    step_size: int = 1,
+    dichroic_split_wavelength: Optional[float] = None,
+    plate: Optional[Plate] = None,
+    wells: Optional[Sequence[Well]] = None,
+    flashes: int = 20,
+    settling_time: float = 0.5,
+    well_scan: Optional[WellScan] = None,
+    timeout: float = 1800.0,
+  ) -> FluorescenceSpectrumResult:
+    """Measure a top fluorescence spectrum: excitation or emission scanned, the other fixed.
+
+    The band edges are the nominal ones, as in ``measure_fluorescence``; the dichroic follows each
+    point unless ``dichroic_split_wavelength`` is given; the slits are those Voyager sets in a
+    scan.  The counts are the reader's raw counts.  Voyager shows spectra multiplied by BMG's
+    instrument correction curve (a factor per wavelength for the excitation or the emission
+    side), so its exported spectra differ from these by that factor.
+
+    Args:
+      scan: "excitation" or "emission", scanned from ``start_wavelength`` to ``end_wavelength``.
+      start_wavelength: the first wavelength, a whole nm.
+      end_wavelength: the last wavelength, above ``start_wavelength``.
+      excitation_bandwidth: nm, 8-100.
+      emission_bandwidth: nm, 8-100.
+      gain: the detector gain (``adjust_gain_and_focus`` at a representative wavelength pair finds
+        one).
+      focal_height: mm, in 0.1 mm steps.
+      excitation_wavelength: nm, the fixed excitation of an emission spectrum; None when
+        excitation is scanned.
+      emission_wavelength: nm, the fixed emission of an excitation spectrum; None when emission is
+        scanned.
+      step_size: nm between wavelengths, a whole nm dividing the range.
+      dichroic_split_wavelength: nm for every point; None to set it per point.
+      plate: the plate to measure; None uses the plate on the plate holder.
+      wells: the wells to measure; None measures every well.
+      flashes: flashes per well and wavelength (1-200).
+      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      timeout: seconds the run may take.
+
+    Returns:
+      Each measured well's spectrum, keyed by well identifier.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      ValueError: if an argument is out of range, or the fixed wavelength is missing or given for
+        the scanned side.
+    """
+    if scan not in ("excitation", "emission"):
+      raise ValueError(f"scan must be 'excitation' or 'emission', got {scan!r}")
+    fixed = emission_wavelength if scan == "excitation" else excitation_wavelength
+    other = excitation_wavelength if scan == "excitation" else emission_wavelength
+    if fixed is None or other is not None:
+      raise ValueError(f"a {scan} spectrum takes a fixed wavelength for the other side only")
+    scanned = self._get_scan_wavelengths(start_wavelength, end_wavelength, step_size)
+    for wavelength in (start_wavelength, end_wavelength):
+      excitation, emission = (wavelength, fixed) if scan == "excitation" else (fixed, wavelength)
+      self._check_optics(excitation, excitation_bandwidth, emission, emission_bandwidth)
+    self._check_flashes(flashes)
+    self._check_settling_time(settling_time)
+    first, last = compute_scan_monochromators(
+      scan,
+      start_wavelength,
+      end_wavelength,
+      fixed,
       excitation_bandwidth=excitation_bandwidth,
-      emission_wavelength=emission_wavelength,
+      emission_bandwidth=emission_bandwidth,
+      dichroic=dichroic_split_wavelength,
+    )
+    plate = self._get_plate(plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self.driver.build_fluorescence_scan_run(
+      first,
+      last,
+      len(scanned),
+      gain=gain,
+      focal_height=focal_height,
+      flashes=flashes,
+      settling_time=settling_time,
+      geometry=get_plate_geometry(plate),
+      well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
+    )
+    start = datetime.now()
+    data = await self.driver.run_measurement(parameters, timeout=timeout)
+    end = datetime.now()
+    self._check_wells(data, measured)
+    if data.chromatics[0] != len(scanned):
+      raise RuntimeError(f"the reader sent {data.chromatics[0]} points, {len(scanned)} expected")
+    groups = [data.group(i) for i in range(len(scanned))]  # per point, one count per well
+    return FluorescenceSpectrumResult(
+      data={
+        _get_identifier(r, c): {w: float(groups[i][k]) for i, w in enumerate(scanned)}
+        for k, (r, c) in enumerate(measured)
+      },
+      excitation_wavelength=None if scan == "excitation" else fixed,
+      excitation_bandwidth=excitation_bandwidth,
+      emission_wavelength=None if scan == "emission" else fixed,
       emission_bandwidth=emission_bandwidth,
       temperature=data.temperature,
       start_timestamp=start,
@@ -523,17 +985,22 @@ class VANTAstarDevice(Resource):
     wells: Sequence[Well],
     focal_height: float = 5.0,
     adjust_focus: bool = True,
+    adjust_gain: bool = True,
     target_percent: float = 88.0,
     dichroic_split_wavelength: Optional[float] = None,
     monochromator: Optional[MonochromatorSettings] = None,
     plate: Optional[Plate] = None,
+    well_scan: Optional[WellScan] = None,
+    flashes: int = 20,
     timeout: float = 300.0,
   ) -> GainFocus:
-    """Find the gain, and the focal height, for a top fluorescence read on reference wells.
+    """Find the gain and the focal height, or either, for a top fluorescence read on reference
+    wells.
 
     The reader scans the focal height from 16 mm down in 0.2 mm steps and sets the gain so the
     brightest reference well reads at ``target_percent`` of the detector range, as Voyager's
-    automatic gain and focus does.
+    automatic gain and focus does.  Voyager's autofocus adjusts the focus once more on every well
+    of the read, without the gain (``adjust_gain=False``), and reads at the height found.
 
     Args:
       excitation_wavelength: nm.
@@ -542,20 +1009,29 @@ class VANTAstarDevice(Resource):
       emission_bandwidth: nm, 8-100.
       wells: the reference wells.
       focal_height: mm; the gain is adjusted at this height when ``adjust_focus`` is False.
-      adjust_focus: also find the focal height.
-      target_percent: the gain's target, percent of the detector range.
+      adjust_focus: find the focal height.
+      adjust_gain: find the gain.
+      target_percent: the gain's target, percent of the detector range (1-100).
       dichroic_split_wavelength: nm; None as in ``measure_fluorescence``.
       monochromator: band edges, dichroic and slits instead of the computed ones.
       plate: the plate; None uses the plate on the plate holder.
+      well_scan: adjust over the orbit or spiral a well-scanning read uses; None at the centre.
+      flashes: flashes per well, sent with ``well_scan`` (1-200).
       timeout: seconds the adjustment may take.
 
     Returns:
-      The gain and focal height found; pass them to ``measure_fluorescence``.
+      The gain found (0 when not adjusted) and the focal height found (None when not adjusted);
+      pass them to ``measure_fluorescence``.
 
     Raises:
       RuntimeError: if no plate is on the plate holder.
-      ValueError: if the optics are out of the limits (`_check_optics`).
+      ValueError: if neither is adjusted, or an argument is out of range (`_check_optics`).
     """
+    if not adjust_gain and not adjust_focus:
+      raise ValueError("adjust the gain, the focus, or both")
+    if adjust_gain and not 1 <= target_percent <= 100:
+      raise ValueError(f"target_percent must be 1-100, got {target_percent}")
+    self._check_flashes(flashes)
     self._check_optics(
       excitation_wavelength, excitation_bandwidth, emission_wavelength, emission_bandwidth
     )
@@ -571,10 +1047,12 @@ class VANTAstarDevice(Resource):
     parameters = self.driver.build_gain_focus(
       monochromator,
       focal_height=focal_height,
-      target_percent=target_percent,
+      target_percent=target_percent if adjust_gain else 0,
       adjust_focus=adjust_focus,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
+      well_scan=well_scan,
+      flashes=flashes,
     )
     return await self.driver.adjust_gain_and_focus(parameters, timeout=timeout)
 

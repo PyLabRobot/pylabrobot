@@ -1,16 +1,41 @@
-"""Tests for the VANTAstar reply parsers, on replies captured from the reader and the values Voyager
-exported for the same reads."""
+"""Tests for the VANTAstar reply parsers, on replies of the reader and the values Voyager exported
+for the same reads."""
 
+import gzip
+import json
+import os
 import unittest
+from typing import Any, Dict
 
 from pylabrobot.bmg_labtech.vantastar.driver.responses import (
   compute_optical_densities,
+  compute_spectrum_optical_densities,
   is_measurement_page,
   parse_confirmation,
   parse_gain_data,
   parse_measurement_data,
+  parse_mw_block_data,
+  parse_well_list,
   split_reply,
 )
+
+
+def load_flows() -> Dict[str, Any]:
+  """Reads as the reader answered them, keyed by read: ``run`` (the RUN payload), ``status`` and
+  ``run_reply`` (the replies to STATUS and RUN), ``block_status`` (the MwBlockData replies in turn,
+  repeats dropped), ``values`` (each data request and its reply, in turn), and what Voyager
+  exported for the read (``voyager_optical_densities`` or ``voyager_counts``).
+
+  The reads (photocatalyst plate, Ir complex in A1, A6, A12, Ru complex in H1, H6, H12):
+  absorbance_spectrum (220-1000 nm, 1 nm steps, the six wells), absorbance_kinetic (450 nm, 6 cycles
+  10 s apart, A1, A6, A12), emission_spectrum (excitation 450/16, emission 500-700 nm at 30 nm
+  bandwidth, H1, H6, H12) and absorbance_three_wavelengths (300, 450 and 600 nm, every well).
+  """
+  path = os.path.join(os.path.dirname(__file__), "test_data", "measurement_flows.json.gz")
+  with gzip.open(path, "rt", encoding="utf-8") as f:
+    flows: Dict[str, Any] = json.load(f)
+  return flows
+
 
 # STATUS replies: a reader not yet initialized (firmware 1.11), INIT running, the incubator at 30 C,
 # and the reply right after a temperature command.
@@ -231,6 +256,22 @@ GAIN_DATA = bytes.fromhex(
   "9000000154000046be00000140000045810000012c000045c300000118000046770000010400004d3c000000f0000042"
   "89"
 )
+# The reply to a gain adjustment alone on A1 (target 90 %, focal height 4.5 mm): gain 719.
+GAIN_DATA_GAIN = bytes.fromhex("0525202600000002cf00038ddf22fe01010000")
+
+# The well list of an absorbance spectrum of A1, A6, A12, H1, H6 and H12, and its block status as
+# the read starts and once the block is stored.
+WELL_LIST_SPECTRUM = bytes.fromhex(
+  "1d25042600000c0800000000074b000001b300050006010106010c010c0806080108"
+)
+MW_BLOCK_SPECTRUM_STARTED = bytes.fromhex(
+  "2a250426000000000001000018800205050000125a040000000603000000010100000001000000000105050000000604"
+  "00000006030000000101000000010000000001062000000000000100000000"
+)
+MW_BLOCK_SPECTRUM_STORED = bytes.fromhex(
+  "2a251726000000000001000018800205050000125a040000000603000000010100000001000000000105050000000604"
+  "00000006030000000101000000010000000001062000010000000000000000"
+)
 
 
 class SplitReplyTests(unittest.TestCase):
@@ -308,6 +349,59 @@ class GainDataTests(unittest.TestCase):
     result = parse_gain_data(GAIN_DATA)
     self.assertEqual(result.gain, 2904)
     self.assertEqual(result.focal_height, 3.0)
+
+  def test_gain_alone_has_no_focal_height(self):
+    result = parse_gain_data(GAIN_DATA_GAIN)
+    self.assertEqual(result.gain, 719)
+    self.assertIsNone(result.focal_height)
+
+
+class WellListTests(unittest.TestCase):
+  def test_wells_in_reading_order(self):
+    self.assertEqual(
+      parse_well_list(WELL_LIST_SPECTRUM), [(1, 1), (6, 1), (12, 1), (12, 8), (6, 8), (1, 8)]
+    )
+
+  def test_other_reply_raises(self):
+    with self.assertRaises(ValueError):
+      parse_well_list(GAIN_DATA)
+
+
+class MwBlockTests(unittest.TestCase):
+  def test_started(self):
+    status = parse_mw_block_data(MW_BLOCK_SPECTRUM_STARTED)
+    self.assertEqual((status.required, status.size, status.calibration_values), (1, 6272, 1568))
+    self.assertEqual((status.stored, status.sent, status.current, status.saved), (0, 0, 1, 0))
+
+  def test_stored(self):
+    status = parse_mw_block_data(MW_BLOCK_SPECTRUM_STORED)
+    self.assertEqual((status.stored, status.sent, status.current, status.saved), (1, 0, 0, 0))
+
+
+class AbsorbanceSpectrumDataTests(unittest.TestCase):
+  def setUp(self):
+    flow = load_flows()["absorbance_spectrum"]
+    self.voyager = flow["voyager_optical_densities"]
+    self.pages = [
+      parse_measurement_data(bytes.fromhex(reply))
+      for request, reply in flow["values"]
+      if request.startswith("0502")
+    ]
+
+  def test_one_block_per_well(self):
+    first = self.pages[0]
+    self.assertEqual(first.chromatics, (783, 1))  # 781 wavelengths and two reference wavelengths
+    self.assertEqual((first.wells, first.well, first.total_values), (1, (1, 1), 2352))
+    self.assertEqual([p.well for p in self.pages[1:]], [(6, 1), (12, 1), (12, 8), (6, 8), (1, 8)])
+    self.assertEqual({p.total_values for p in self.pages[1:]}, {784})
+
+  def test_optical_densities_match_voyager(self):
+    # Voyager reports optical densities above 3.5 as 3.5.
+    spectra = compute_spectrum_optical_densities(self.pages, 781)
+    for page, spectrum in zip(self.pages, spectra):
+      assert page.well is not None
+      well = f"{chr(ord('A') + page.well[1] - 1)}{page.well[0]}"
+      self.assertEqual([round(min(v, 3.5), 3) for v in spectrum], self.voyager[well])
 
 
 if __name__ == "__main__":

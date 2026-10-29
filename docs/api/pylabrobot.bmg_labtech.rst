@@ -17,6 +17,7 @@ VANTAstar
    driver.master.VANTAstarStatus
    driver.master.MonochromatorSettings
    driver.master.PlateGeometry
+   driver.master.WellScan
    driver.responses.GainFocus
    driver.configuration.VANTAstarConfiguration
    driver.errors.CommandRefusedError

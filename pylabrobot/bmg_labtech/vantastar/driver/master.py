@@ -12,8 +12,8 @@ The commands are sent with the fields and in the order BMG's Voyager software us
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, Literal, Optional, Sequence, Tuple
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.io.usb import USB
@@ -44,9 +44,12 @@ from .responses import (
   CONFIRMATION_ID,
   GainFocus,
   MeasurementData,
+  MwBlockStatus,
   parse_confirmation,
   parse_gain_data,
   parse_measurement_data,
+  parse_mw_block_data,
+  parse_well_list,
   split_reply,
 )
 
@@ -162,6 +165,9 @@ _INIT_READ_MICROPLATE_SENSOR = 0x10
 # MeasurementDataNextNewDataBlock); the reader refuses the first then (quit code 100).
 _CURRENT_DATA_BLOCK = bytes([ValuesType.MEASUREMENT_DATA]) + b"\xff" * 6
 _NEXT_NEW_DATA_BLOCK = bytes([ValuesType.MEASUREMENT_DATA]) + bytes(6)
+# A ValuesCommand for one well's part of a block (MeasurementDataSpecificDataBlock) sets this bit
+# of its sub-block number to leave out the 0%/100% calibration values.
+_WITHOUT_CALIBRATION = 0x8000
 # MwBlockCommand GetStatusOfMeasDataBlock with a send block size of 65535.
 _MW_BLOCK_STATUS = bytes([CommandId.MW_BLOCK, 0x00, 0x00, 0x00, 0xFF, 0xFF])
 
@@ -178,15 +184,26 @@ _SHAKE_LONG = 300
 _SHAKE_ON_OFF = (59, 1)
 
 # Gain and focus adjustment settings Voyager sends: a focus scan from 16 mm down in 0.2 mm steps
-# (1 mm stop, unused), a smoothed and interpolated focal curve, integration time 12.
+# (1 mm stop, unused), a smoothed and interpolated focal curve, integration time 12.  Without the
+# focus it leaves the scan start at the field's default, 15 mm.
 _FOCUS_SCAN_START = 1600
+_FOCUS_SCAN_START_UNUSED = 1500
 _FOCUS_SCAN_STEP = 20
 _FOCUS_SCAN_STOP = 100
 _FOCAL_CURVE_FLAGS = 0x03
 _GAIN_FOCUS_INTEGRATION_TIME = 12
+# GainPlateCommand flag bytes: UseFocusAdjust; AutoSetFocalHeight (the well scan mode in bits 0-2).
+_USE_FOCUS_ADJUST = 0x20
+_AUTO_SET_FOCAL_HEIGHT = 0x40
 
 # Monochromator positions per chromatic, for a monochromator without fixed filters.
 _MONO_POSITIONS = 7
+# RUN chromatic configuration of a fluorescence scan: ChromaticScan1 and ChromaticsType; the scan
+# sends the monochromator settings of its first and its last point.
+_FLUORESCENCE_SCAN = 0x82
+# Slits Voyager sets in a fluorescence scan: 2 on the scanned side, 3 on the fixed one.
+_SCANNED_SLIT = 2
+_FIXED_SLIT = 3
 
 # RUN option byte after the mode byte: UseAutoGain, Voyager's enhanced dynamic range (fluorescence)
 # and automatic gain (luminescence); no gain is sent with it.
@@ -195,6 +212,20 @@ _USE_AUTO_GAIN = 0x40
 DEFAULT_APERTURE_DISTANCE = 0.5
 
 ShakeMode = Literal["orbital", "double_orbital", "linear"]
+WellScanMode = Literal["orbital", "spiral"]
+ScanSide = Literal["excitation", "emission"]
+
+# WellScanningMode values (RUN and GainPlateCommand).
+_WELL_SCAN_MODES = {"orbital": 3, "spiral": 4}
+
+
+@dataclass(frozen=True)
+class WellScan:
+  """Averaging over an area of each well instead of reading its centre: the reader reads along an
+  orbit, or a spiral, of ``diameter`` mm around the centre."""
+
+  mode: WellScanMode
+  diameter: int
 
 
 @dataclass(frozen=True)
@@ -282,6 +313,63 @@ def compute_monochromator_settings(
     emission_lower=emission_lower,
     emission_upper=emission_wavelength + emission_bandwidth / 2,
   )
+
+
+def compute_scan_monochromators(
+  scan: ScanSide,
+  start_wavelength: float,
+  end_wavelength: float,
+  fixed_wavelength: float,
+  *,
+  excitation_bandwidth: float,
+  emission_bandwidth: float,
+  dichroic: Optional[float] = None,
+) -> Tuple[MonochromatorSettings, MonochromatorSettings]:
+  """The monochromator settings of a fluorescence scan's first and last point: nominal band edges,
+  the dichroic as ``compute_monochromator_settings`` sets it for each point unless given, and the
+  slits Voyager sets in a scan (2 on the scanned side, 3 on the fixed one).
+
+  Args:
+    scan: the scanned side; the other stays at ``fixed_wavelength``.
+    start_wavelength: the first point's wavelength in nm.
+    end_wavelength: the last point's wavelength in nm.
+    fixed_wavelength: nm.
+    excitation_bandwidth: nm.
+    emission_bandwidth: nm.
+    dichroic: nm for every point; None to compute it per point.
+  """
+  points = []
+  for wavelength in (start_wavelength, end_wavelength):
+    excitation, emission = (
+      (wavelength, fixed_wavelength) if scan == "excitation" else (fixed_wavelength, wavelength)
+    )
+    settings = compute_monochromator_settings(
+      excitation, excitation_bandwidth, emission, emission_bandwidth, dichroic
+    )
+    points.append(
+      replace(
+        settings,
+        excitation_slit=_SCANNED_SLIT if scan == "excitation" else _FIXED_SLIT,
+        emission_slit=_SCANNED_SLIT if scan == "emission" else _FIXED_SLIT,
+      )
+    )
+  return points[0], points[1]
+
+
+def encode_well_scan(well_scan: Optional[WellScan]) -> bytes:
+  """The RUN well scanning fields: the mode, then for a scan the matrix width (0) and the diameter
+  in mm; a point read is mode 0 alone.
+
+  Raises:
+    ValueError: if the mode is unknown or the diameter not 1-255 mm.
+  """
+  if well_scan is None:
+    return b"\x00"
+  if well_scan.mode not in _WELL_SCAN_MODES:
+    raise ValueError(f"well scan mode must be one of {sorted(_WELL_SCAN_MODES)}")
+  if not 1 <= well_scan.diameter <= 0xFF:
+    raise ValueError(f"well scan diameter must be 1-255 mm, got {well_scan.diameter}")
+  return bytes([_WELL_SCAN_MODES[well_scan.mode], 0, well_scan.diameter])
 
 
 def _tenth_nm(wavelength: float) -> bytes:
@@ -756,12 +844,13 @@ class VANTAstarDriver:
     geometry: PlateGeometry,
     well_mask: Optional[bytes],
     settling_time: float,
+    well_scan: Optional[WellScan] = None,
   ) -> bytes:
     """RUN bytes shared by every measurement mode: plate(17) + layout mode(1) + well mask(48) +
     reading mode (0x02: WellPlateModeKinetic, not CalcTimeOnly) + mode byte (MeasurementMode in
     bits 0-1, BottomMeas bit 6) + option byte (UseAutoGain bit 6) + 1 + TimeStampMatchValue(4) +
     shaking(20, off: Voyager shakes with a separate command) + shaking position 9999/9999 + well
-    scanning (point) + settling time (20 ms steps)."""
+    scanning (``encode_well_scan``) + settling time (20 ms steps)."""
     mask = well_mask if well_mask is not None else encode_well_mask(geometry.columns, geometry.rows)
     return (
       encode_plate_geometry(geometry)
@@ -771,22 +860,41 @@ class VANTAstarDriver:
       + bytes(4)
       + bytes(20)
       + bytes.fromhex("270f270f")
-      + b"\x00"
+      + encode_well_scan(well_scan)
       + bytes([round(settling_time / 0.02)])
     )
 
   @staticmethod
-  def _encode_run_tail(per_value: int) -> bytes:
-    """RUN bytes ending every mode: Pause(4) + IdleMove(6) + one kinetic window (start 0, one
-    value, ``per_value``, delay 0) + no volume groups.  ``per_value`` is the flashes per well, or
-    luminescence's integration time in 10 ms steps."""
+  def _encode_run_tail(per_value: int, cycles: int = 1, cycle_time: int = 0) -> bytes:
+    """RUN bytes ending every mode: Pause(4) + IdleMove(6) + one kinetic window (start 0,
+    ``cycles`` values, ``per_value``, ``cycle_time`` s between cycle starts) + no volume groups.
+    ``per_value`` is the flashes per well, or luminescence's integration time in 10 ms steps.
+
+    Raises:
+      ValueError: if ``cycles`` is not 1-65535 or ``cycle_time`` not 0-65535 s.
+    """
+    if not 1 <= cycles <= 0xFFFF:
+      raise ValueError(f"cycles must be 1-65535, got {cycles}")
+    if not 0 <= cycle_time <= 0xFFFF:
+      raise ValueError(f"cycle_time must be 0-65535 s, got {cycle_time}")
     window = (
       (0).to_bytes(2, "big")
-      + (1).to_bytes(2, "big")
+      + cycles.to_bytes(2, "big")
       + per_value.to_bytes(2, "big")
-      + (0).to_bytes(2, "big")
+      + cycle_time.to_bytes(2, "big")
     )
     return bytes(4) + bytes(6) + b"\x01" + window + b"\x00"
+
+  @staticmethod
+  def _encode_absorbance_references() -> bytes:
+    """The absorbance reference wavelengths: 900 and 993 nm (Voyager's pathlength-correction
+    pair), no third, at 10.0 nm resolution."""
+    return (
+      (9000).to_bytes(2, "big")
+      + (9930).to_bytes(2, "big")
+      + (0).to_bytes(2, "big")
+      + (100).to_bytes(2, "big")
+    )
 
   def build_absorbance_run(
     self,
@@ -796,8 +904,12 @@ class VANTAstarDriver:
     settling_time: float,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
+    well_scan: Optional[WellScan] = None,
+    cycles: int = 1,
+    cycle_time: int = 0,
   ) -> bytes:
-    """RUN fields for an absorbance endpoint read (MeasurementMode 2).
+    """RUN fields for an absorbance endpoint read (MeasurementMode 2), or a kinetic one with
+    ``cycles`` reads ``cycle_time`` s apart.
 
     Besides the wavelengths the reader reads two reference wavelengths, 900 and 993 nm (Voyager's
     pathlength-correction pair), and a reference channel.
@@ -808,15 +920,15 @@ class VANTAstarDriver:
       settling_time: seconds to settle before reading each well (20 ms steps).
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
+      well_scan: average over an area of each well; None reads the centre.
+      cycles: reads of the plate (kinetic cycles).
+      cycle_time: whole seconds from one cycle's start to the next.
     """
     optics = (
       bytes([len(wavelengths)])
       + b"".join(_tenth_nm(w) for w in wavelengths)
       + (100).to_bytes(2, "big")  # wavelength resolution, 10.0 nm
-      + (9000).to_bytes(2, "big")  # reference wavelength 1, 900.0 nm
-      + (9930).to_bytes(2, "big")  # reference wavelength 2, 993.0 nm
-      + (0).to_bytes(2, "big")  # reference wavelength 3, none
-      + (100).to_bytes(2, "big")  # reference resolution, 10.0 nm
+      + self._encode_absorbance_references()
     )
     return (
       self._encode_run_start(
@@ -825,6 +937,52 @@ class VANTAstarDriver:
         geometry=geometry,
         well_mask=well_mask,
         settling_time=settling_time,
+        well_scan=well_scan,
+      )
+      + optics
+      + self._encode_run_tail(flashes, cycles, cycle_time)
+    )
+
+  def build_absorbance_spectrum_run(
+    self,
+    start_wavelength: float,
+    end_wavelength: float,
+    step_size: float,
+    *,
+    flashes: int,
+    settling_time: float,
+    geometry: PlateGeometry = STANDARD_96,
+    well_mask: Optional[bytes] = None,
+    well_scan: Optional[WellScan] = None,
+  ) -> bytes:
+    """RUN fields for an absorbance spectrum (MeasurementMode 2 with no discrete wavelengths): start,
+    stop and step in 0.1 nm, then the reference wavelengths of an endpoint read.
+
+    Args:
+      start_wavelength: nm.
+      end_wavelength: nm.
+      step_size: nm between wavelengths.
+      flashes: flashes per well.
+      settling_time: seconds to settle before reading each well (20 ms steps).
+      geometry: the plate.
+      well_mask: the wells to read (``encode_well_mask``); None reads every well.
+      well_scan: average over an area of each well; None reads the centre.
+    """
+    optics = (
+      b"\x00"
+      + _tenth_nm(start_wavelength)
+      + _tenth_nm(end_wavelength)
+      + _tenth_nm(step_size)
+      + self._encode_absorbance_references()
+    )
+    return (
+      self._encode_run_start(
+        0x42,
+        options=0x00,
+        geometry=geometry,
+        well_mask=well_mask,
+        settling_time=settling_time,
+        well_scan=well_scan,
       )
       + optics
       + self._encode_run_tail(flashes)
@@ -841,8 +999,12 @@ class VANTAstarDriver:
     enhanced_dynamic_range: bool = False,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
+    well_scan: Optional[WellScan] = None,
+    cycles: int = 1,
+    cycle_time: int = 0,
   ) -> bytes:
-    """RUN fields for a top fluorescence-intensity endpoint read (MeasurementMode 0).
+    """RUN fields for a top fluorescence-intensity endpoint read (MeasurementMode 0), or a kinetic
+    one with ``cycles`` reads ``cycle_time`` s apart.
 
     Args:
       monochromators: one ``MonochromatorSettings`` per chromatic.
@@ -853,6 +1015,9 @@ class VANTAstarDriver:
       enhanced_dynamic_range: read with enhanced dynamic range.
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
+      well_scan: average over an area of each well; None reads the centre.
+      cycles: reads of the plate (kinetic cycles).
+      cycle_time: whole seconds from one cycle's start to the next.
     """
     if len(gains) != len(monochromators):
       raise ValueError(f"{len(monochromators)} chromatics but {len(gains)} gains")
@@ -876,6 +1041,64 @@ class VANTAstarDriver:
         geometry=geometry,
         well_mask=well_mask,
         settling_time=settling_time,
+        well_scan=well_scan,
+      )
+      + optics
+      + self._encode_run_tail(flashes, cycles, cycle_time)
+    )
+
+  def build_fluorescence_scan_run(
+    self,
+    first: MonochromatorSettings,
+    last: MonochromatorSettings,
+    points: int,
+    *,
+    gain: int,
+    focal_height: float,
+    flashes: int,
+    settling_time: float,
+    geometry: PlateGeometry = STANDARD_96,
+    well_mask: Optional[bytes] = None,
+    well_scan: Optional[WellScan] = None,
+  ) -> bytes:
+    """RUN fields for a top fluorescence scan (MeasurementMode 0, ChromaticScan1): the number of
+    points, then the monochromator settings of the first and the last point; the reader steps
+    evenly between them.
+
+    Args:
+      first: the first point's settings (``compute_scan_monochromators``).
+      last: the last point's settings.
+      points: points of the scan, the first and the last included.
+      gain: the detector gain.
+      focal_height: mm, in 0.1 mm steps.
+      flashes: flashes per well and point.
+      settling_time: seconds to settle before reading each well (20 ms steps).
+      geometry: the plate.
+      well_mask: the wells to read (``encode_well_mask``); None reads every well.
+      well_scan: average over an area of each well; None reads the centre.
+
+    Raises:
+      ValueError: if ``points`` is not 2-65535.
+    """
+    if not 2 <= points <= 0xFFFF:
+      raise ValueError(f"a scan has 2-65535 points, got {points}")
+    optics = (
+      _focal_height_bytes(focal_height)
+      + bytes([_FLUORESCENCE_SCAN])
+      + points.to_bytes(2, "big")
+      + (0).to_bytes(2, "big")
+      + bytes([_MONO_POSITIONS])
+    )
+    for settings in (first, last):
+      optics += bytes(4) + gain.to_bytes(2, "big") + encode_monochromator(settings)
+    return (
+      self._encode_run_start(
+        0x00,
+        options=0x00,
+        geometry=geometry,
+        well_mask=well_mask,
+        settling_time=settling_time,
+        well_scan=well_scan,
       )
       + optics
       + self._encode_run_tail(flashes)
@@ -936,19 +1159,64 @@ class VANTAstarDriver:
   # -- measurement flow -----------------------------------------------------
 
   async def run_measurement(self, parameters: bytes, *, timeout: float) -> MeasurementData:
-    """Run a read from prebuilt RUN fields and return its finished data block.
-
-    The flow Voyager uses: RUN, then the well list and the timing (both requested, not used), then
-    the data block status polled; the current data block requested whenever a page of it is ready,
-    and the next new data block once the reader announces new data, until the block is complete;
-    then status polled until the reader is idle.  Any failure, timeout or cancellation stops the
-    run.
+    """Run a read of one data block (an endpoint read or a fluorescence scan) from prebuilt RUN
+    fields and return the block (``run_blocks``).
 
     Raises:
       RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
       TimeoutError: if the run takes longer than ``timeout`` seconds.
       CommandRefusedError: if the reader refuses the RUN.
     """
+    return (await self.run_blocks(parameters, timeout=timeout))[0]
+
+  async def run_blocks(self, parameters: bytes, *, timeout: float) -> List[MeasurementData]:
+    """Run a read from prebuilt RUN fields and return its finished data blocks: one, or one per
+    kinetic cycle.
+
+    The flow Voyager uses: RUN, then the well list and the timing (both requested), then the data
+    block status polled; the current block requested whenever a page of it is ready
+    (CurrStateMeasDataRdy), and the next new block whenever the reader announces a finished one
+    (NewMeasDataReady), until every block the read stores is in; then status polled until the
+    reader is idle.  Any failure, timeout or cancellation stops the run.
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
+      TimeoutError: if the run takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the RUN.
+    """
+    return await self._run(parameters, timeout=timeout, by_well=False)
+
+  async def run_absorbance_spectrum(
+    self, parameters: bytes, *, timeout: float
+  ) -> List[MeasurementData]:
+    """Run an absorbance spectrum from prebuilt RUN fields and return one block per well, in the
+    order the reader reads the wells; the first carries the calibration values.
+
+    The reader stores the spectrum as one block too large for a page; as Voyager does, each well's
+    part is requested (MeasurementDataSpecificDataBlock) once the block status shows it saved.
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing sent) or the run ends without its data.
+      TimeoutError: if the run takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the RUN.
+    """
+    return await self._run(parameters, timeout=timeout, by_well=True)
+
+  @staticmethod
+  def _count_saved_wells(progress: MwBlockStatus, wells: int) -> int:
+    """The wells of a single-block read whose values the block status shows saved."""
+    if progress.stored >= progress.required:
+      return wells
+    per_well = (progress.size - progress.calibration_values) // wells
+    if per_well <= 0:
+      return 0
+    return max(0, (progress.saved - progress.calibration_values) // per_well)
+
+  async def _run(
+    self, parameters: bytes, *, timeout: float, by_well: bool
+  ) -> List[MeasurementData]:
+    """Run a read and collect its data: whole blocks, or each well's part of a single block
+    (``run_blocks``, ``run_absorbance_spectrum``)."""
     status = await self.request_status()
     if status.drawer_open:
       raise RuntimeError("the drawer is open; close it first")
@@ -956,26 +1224,40 @@ class VANTAstarDriver:
     self._measuring = True
     try:
       await self.send_command(CommandId.RUN, parameters)
-      await self.send_command(
-        CommandId.VALUES, bytes([ValuesType.LAYOUT_WELL_LIST]) + bytes(6), when_idle=False
+      wells = parse_well_list(
+        await self.send_command(
+          CommandId.VALUES, bytes([ValuesType.LAYOUT_WELL_LIST]) + bytes(6), when_idle=False
+        )
       )
       await self.send_command(
         CommandId.VALUES, bytes([ValuesType.TIME_DATA]) + bytes(6), when_idle=False
       )
       start = time.monotonic()
-      data: Optional[MeasurementData] = None
-      while data is None or not data.complete:
+      blocks: List[MeasurementData] = []
+      while True:
         reply = await self._exchange_with_retries(_MW_BLOCK_STATUS, retries=5)
         self._check_reply(_MW_BLOCK_STATUS, reply)
         status = self._parse_status(reply)
-        # While the read runs a page of the current block is ready (CurrStateMeasDataRdy); as it
-        # finishes, the reader announces the complete block as new data (NewMeasDataReady).
-        if status.new_data_ready:
+        progress = parse_mw_block_data(reply)
+        if by_well and self._count_saved_wells(progress, len(wells)) > len(blocks):
+          column, row = wells[len(blocks)]
+          sub_block = 1 if not blocks else 1 | _WITHOUT_CALIBRATION
+          body = (
+            bytes([ValuesType.MEASUREMENT_DATA, column, row])
+            + (1).to_bytes(2, "big")
+            + sub_block.to_bytes(2, "big")
+          )
+          page = await self.send_command(CommandId.VALUES, body, when_idle=False)
+          blocks.append(parse_measurement_data(page))
+          if len(blocks) == len(wells):
+            break
+        elif not by_well and status.new_data_ready:
           page = await self.send_command(CommandId.VALUES, _NEXT_NEW_DATA_BLOCK, when_idle=False)
-          data = parse_measurement_data(page)
-        elif status.curr_state_meas_data_ready:
-          page = await self.send_command(CommandId.VALUES, _CURRENT_DATA_BLOCK, when_idle=False)
-          data = parse_measurement_data(page)
+          blocks.append(parse_measurement_data(page))
+          if len(blocks) >= progress.required:
+            break
+        elif not by_well and status.curr_state_meas_data_ready:
+          await self.send_command(CommandId.VALUES, _CURRENT_DATA_BLOCK, when_idle=False)
         elif not status.busy:
           raise RuntimeError("the run ended without its data")
         if time.monotonic() - start >= timeout:
@@ -984,7 +1266,7 @@ class VANTAstarDriver:
       await self._wait_until_ready(
         max(timeout - (time.monotonic() - start), 1.0), self.measurement_poll_interval
       )
-      return data
+      return blocks
     except BaseException:
       await self._drain_and_stop()
       raise
@@ -1047,26 +1329,37 @@ class VANTAstarDriver:
     adjust_focus: bool,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
+    well_scan: Optional[WellScan] = None,
+    flashes: int = 0,
   ) -> bytes:
-    """GainPlateCommand fields for a top fluorescence gain (and focus) adjustment.
+    """GainPlateCommand fields for a top fluorescence gain and focus adjustment, either alone.
 
     Args:
       monochromator: the read's monochromator settings.
       focal_height: mm; the height the gain is adjusted at when the focus is not.
-      target_percent: the gain's target, percent of the detector range.
+      target_percent: the gain's target, percent of the detector range; 0 adjusts only the focus.
       adjust_focus: also find the focal height (a scan from 16 mm down in 0.2 mm steps).
       geometry: the plate.
       well_mask: the reference wells (``encode_well_mask``); None uses every well.
+      well_scan: adjust over the area a well-scanning read reads; None at the centre.
+      flashes: flashes per well, sent with ``well_scan``.
+
+    Raises:
+      ValueError: if ``target_percent`` is not 0-100.
     """
+    if not 0 <= target_percent <= 100:
+      raise ValueError(f"target_percent must be 0-100, got {target_percent}")
     mask = well_mask if well_mask is not None else encode_well_mask(geometry.columns, geometry.rows)
+    scan = encode_well_scan(well_scan)
+    flags = (_AUTO_SET_FOCAL_HEIGHT if adjust_focus else 0x00) | scan[0]
     return (
       encode_plate_geometry(geometry)
       + mask
-      + bytes([0x20 if adjust_focus else 0x00])  # fluorescence; UseFocusAdjust
-      + bytes([0x40 if adjust_focus else 0x00])  # AutoSetFocalHeight
+      + bytes([_USE_FOCUS_ADJUST if adjust_focus else 0x00])  # fluorescence
+      + bytes([flags])
       + bytes([_FOCAL_CURVE_FLAGS])
       + _focal_height_bytes(focal_height)
-      + _FOCUS_SCAN_START.to_bytes(2, "big")
+      + (_FOCUS_SCAN_START if adjust_focus else _FOCUS_SCAN_START_UNUSED).to_bytes(2, "big")
       + _FOCUS_SCAN_STEP.to_bytes(2, "big")
       + _FOCUS_SCAN_STOP.to_bytes(2, "big")
       + round(target_percent * 100).to_bytes(2, "big")
@@ -1074,6 +1367,7 @@ class VANTAstarDriver:
       + _GAIN_FOCUS_INTEGRATION_TIME.to_bytes(2, "big")
       + bytes([_MONO_POSITIONS])
       + encode_monochromator(monochromator)
+      + (scan[1:] + flashes.to_bytes(2, "big") if well_scan is not None else b"")
     )
 
   async def adjust_gain_and_focus(self, parameters: bytes, *, timeout: float = 300.0) -> GainFocus:
@@ -1150,8 +1444,9 @@ class VANTAstarDriver:
   async def setup(self) -> None:
     """Connect, initialize the reader (about 10 s), and read its configuration."""
     logger.warning(
-      "the VANTAstar driver has been tested on one reader (firmware 1.12) only, and its "
-      "luminescence read not at all. Please report how it behaves on your reader."
+      "the VANTAstar driver has been tested on one reader (firmware 1.12) only; its luminescence "
+      "read, spectra, kinetic reads and well scanning not yet. Please report how it behaves on "
+      "your reader."
     )
     await self._usb_setup()
     await self.io.drain()
