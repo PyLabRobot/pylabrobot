@@ -413,6 +413,9 @@ class Pipettes:
   default_minimum_traverse_height: float = 245.0
   # Containers within this X distance are probed in one batch, in mm.
   default_x_grouping_tolerance: float = 0.1
+  # Immersion of a tip whose liquid the driver found, below the surface, in mm, when none is
+  # given; no lower than the floor sent.
+  default_immersion_depth_after_search: float = 2.0
   # How far above a container's top a liquid search starts, in mm: enough to clear a brim-full
   # well; more above a trough or tube, whose fill can dome.
   search_start_clearance: float = 5.0
@@ -5155,6 +5158,75 @@ class Pipettes:
       )
     return floors, sent_floors, tops, searches, surfaces
 
+  def _get_immersed_starts(
+    self,
+    jobs: Sequence[int],
+    searched: Sequence[int],
+    surfaces: Sequence[float],
+    sent_floors: Sequence[float],
+    immersion_depths: Optional[Sequence[float]],
+  ) -> Tuple[List[float], List[float]]:
+    """Where each tip of a batch starts its stroke, and the immersion depth sent for it.
+
+    The firmware immerses only after a search of its own, and the driver sends its commands with
+    the firmware's LLD off: a searched tip starts its immersion depth under the surface instead,
+    no lower than the floor sent, and is sent 0.
+
+    Args:
+      jobs: the batch's jobs.
+      searched: the jobs whose liquid the driver found.
+      surfaces: per job, in mm on the deck.
+      sent_floors: per job, the floor sent, in mm on the deck.
+      immersion_depths: per job, in mm; None for `default_immersion_depth_after_search` where
+        searched, else 0.0.
+
+    Returns:
+      Per job of the batch, the start height in mm on the deck and the immersion depth sent.
+    """
+    starts: List[float] = []
+    sent: List[float] = []
+    for job in jobs:
+      given = None if immersion_depths is None else immersion_depths[job]
+      if job in searched:
+        depth = self.default_immersion_depth_after_search if given is None else given
+        starts.append(max(round(surfaces[job] - depth, 2), sent_floors[job]))
+        sent.append(0.0)
+      else:
+        starts.append(surfaces[job])
+        sent.append(0.0 if given is None else given)
+    return starts, sent
+
+  async def _move_searched_tips_to_starts(
+    self,
+    channels: Sequence[int],
+    jobs: Sequence[int],
+    searched: Sequence[int],
+    surfaces: Sequence[float],
+    starts: Sequence[float],
+    overhangs: Dict[int, float],
+    speed: float,
+  ) -> None:
+    """Take each searched tip from the surface it found to where its stroke starts (`Px ZA`).
+
+    Args:
+      channels: the batch's channels, in the order of `jobs`.
+      jobs: the batch's jobs.
+      searched: the jobs whose liquid the driver found.
+      surfaces: per job, in mm on the deck.
+      starts: per job of the batch, the tip bottom's start in mm on the deck.
+      overhangs: each channel's tip overhang in mm, keyed by channel.
+      speed: in mm/s.
+    """
+    zs = {
+      channel: round(start + overhangs[channel], 2)
+      for channel, job, start in zip(channels, jobs, starts)
+      if job in searched and start != surfaces[job]
+    }
+    if zs:
+      # A `Px ZA` keeps its speed as the drive's: the defaults go back once the tips are in.
+      async with self._temporary_z_drive_profile(speed=speed, channels=list(zs)):
+        await self.move_stop_disc_to_z_positions(zs, speed=speed)
+
   async def _touch_floors_of_batch(
     self,
     batch: ChannelBatch,
@@ -6027,10 +6099,11 @@ class Pipettes:
     bottom when None, with no immersion and no following unless given. The firmware never
     searches: CAPACITIVE and PRESSURE search first, as `probe_liquid_heights`, from
     `well_search_start_clearance` above a well's top or `search_start_clearance` above any
-    other's, draw at the surface found, set the tracker to the measured volume, warning when it
-    is 20 % off, and refuse a container without liquid; their blow-out air is drawn beforehand
-    at the traverse height, by `Px DC`, since the command would draw it with the tip on the
-    liquid; ZTOUCH touches the floor first, as `probe_z_heights_using_ztouch`, draws
+    other's, draw `default_immersion_depth_after_search` under the surface found, set the
+    tracker to the measured volume, warning when it is 20 % off, and refuse a container without
+    liquid; their blow-out air is drawn beforehand at the traverse height, by `Px DC`, since the
+    command would draw it with the tip on the liquid; ZTOUCH touches the floor first, as
+    `probe_z_heights_using_ztouch`, draws
     `ztouch_aspirate_height_above_bottom` above it, and refuses a container whose floor is not
     met; DUAL is not implemented. A draw past what a container holds goes ahead and takes air,
     with a warning, an info line under ZTOUCH, where emptying is the point. `volumes` with a
@@ -6057,11 +6130,13 @@ class Pipettes:
       jet: whether the later dispense is a jet, for the lookup. False when None.
       blow_out: whether the later dispense blows out, for the lookup. False when None.
       piston_volumes: what each piston draws, in uL, as given. One of this and `volumes`.
-      search_speed: of the driver's own search, liquid or floor, in mm/s.
+      search_speed: of the driver's own search, liquid or floor, and of the immersion after it, in
+        mm/s.
       approach_speed: down to that search's start, `lp` or the top, in mm/s.
       blow_out_air_volumes: air drawn before the liquid, in uL. The class's, else 0.0, when None.
         Under an LLD mode drawn beforehand, at most 468.7 uL.
       immersion_depths: how far into the liquid each tip goes, in mm; negative is out of it.
+        `default_immersion_depth_after_search` where the driver searched, else 0.0, when None.
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None. Below the cavity bottom is allowed: the tip
         then presses onto the well's floor and draws with suction, as a harvest wants.
@@ -6313,23 +6388,31 @@ class Pipettes:
         for name, values in per_container_settings.items()
         if values is not None
       }
-      down = [job for job in jobs if job in searched or job in touched]
-      raised_to = start if batch is batches[0] else during
-      kwargs_to_start_from_current_positions: Dict[str, Any] = {
-        "minimum_traverse_height_start": min(surfaces[job] for job in down) if down else raised_to,
-        "lld_modes": [self.LLDMode.OFF] * len(jobs),
-      }
       # The surfaces the tips start from are known only now, after the batch's search.
       here = [containers[job] for job in jobs]
       heights_now = [max(round(surfaces[job] - floors[job], 2), 0.0) for job in jobs]
-      immersion = per_container_settings["immersion_depths"] or [0.0] * n
+      starts, immersion = self._get_immersed_starts(
+        jobs, searched, surfaces, sent_floors, per_container_settings["immersion_depths"]
+      )
+      per_channel_settings["immersion_depths"] = immersion
+      # The firmware immerses only after a search of its own: the searched tips go in here, at the
+      # search's speed, and the command starts from where they stand.
+      await self._move_searched_tips_to_starts(
+        batch.channels, jobs, searched, surfaces, starts, overhangs, search_speed
+      )
+      down = [i for i, job in enumerate(jobs) if job in searched or job in touched]
+      raised_to = start if batch is batches[0] else during
+      kwargs_to_start_from_current_positions: Dict[str, Any] = {
+        "minimum_traverse_height_start": min(starts[i] for i in down) if down else raised_to,
+        "lld_modes": [self.LLDMode.OFF] * len(jobs),
+      }
       mix_depth = per_container_settings["mix_positions_from_liquid_surface"] or [0.0] * n
       if auto_surface_following:
         batch_following: Optional[List[float]] = self._get_auto_followings(
           here,
           [-liquid[job] for job in jobs],
           heights_now,
-          [surfaces[job] - immersion[job] - sent_floors[job] for job in jobs],
+          [start - depth - sent_floors[job] for start, depth, job in zip(starts, immersion, jobs)],
         )
       else:
         batch_following = None if following is None else [following[job] for job in jobs]
@@ -6337,13 +6420,13 @@ class Pipettes:
         here,
         [mixes[job] for job in jobs],
         heights_now,
-        [surfaces[job] - mix_depth[job] - sent_floors[job] for job in jobs],
+        [start - mix_depth[job] - sent_floors[job] for start, job in zip(starts, jobs)],
       )
       await self._aspirate_in_one_move(
         batch.channels,
         [
-          Coordinate(batch.x_position, batch.y_positions[ch], surfaces[job])
-          for ch, job in zip(batch.channels, jobs)
+          Coordinate(batch.x_position, batch.y_positions[ch], start)
+          for ch, start in zip(batch.channels, starts)
         ],
         [searches[job] for job in jobs],
         [sent_floors[job] for job in jobs],
@@ -6852,9 +6935,10 @@ class Pipettes:
     Batched as `aspirate`, one `C0 DS` per batch. Every height in the command is what is given,
     or 0: OFF dispenses at `liquid_heights` above the cavity bottom, the cavity bottom when
     None, with no immersion and no following unless given. The firmware never searches:
-    CAPACITIVE searches first, as `probe_liquid_heights`, dispenses at the surface found and
-    sets the tracker to the measured volume, warning when it is 20 % off; ZTOUCH touches the
-    cavity bottom first and dispenses `ztouch_dispense_height_above_bottom` above it; PRESSURE
+    CAPACITIVE searches first, as `probe_liquid_heights`, dispenses
+    `default_immersion_depth_after_search` under the surface found and sets the tracker to the
+    measured volume, warning when it is 20 % off; ZTOUCH touches the cavity bottom first and
+    dispenses `ztouch_dispense_height_above_bottom` above it; PRESSURE
     and DUAL are for aspirating. A dispense past what a tip holds goes ahead and pushes air,
     with a warning. `volumes` with a liquid class, which corrects the piston volume and fills
     what is not given, or `piston_volumes` as given; `jet`, `blow_out` and `empty` pick the
@@ -6882,10 +6966,12 @@ class Pipettes:
       empty: whether the tip is emptied where it stands, air and all; the model then books what
         the tip holds. False when None.
       piston_volumes: what each piston pushes out, in uL, as given. One of this and `volumes`.
-      search_speed: of the driver's own search, liquid or floor, in mm/s.
+      search_speed: of the driver's own search, liquid or floor, and of the immersion after it, in
+        mm/s.
       approach_speed: down to that search's start, `lp` or the top, in mm/s.
       side_touch_off_distance: sideways move against the wall to shed the drop, in mm; 0 for none.
       immersion_depths: how far into the liquid each tip goes, in mm; negative is out of it.
+        `default_immersion_depth_after_search` where the driver searched, else 0.0, when None.
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None.
       transport_air_volumes: air drawn after each dispense, in uL, pushed out ahead of the next.
@@ -7120,15 +7206,24 @@ class Pipettes:
         for name, values in per_container_settings.items()
         if values is not None
       }
-      down = [job for job in jobs if job in searched or job in touched]
-      raised_to = start if batch is batches[0] else during
-      kwargs_to_start_from_current_positions: Dict[str, Any] = {
-        "minimum_traverse_height_start": min(surfaces[job] for job in down) if down else raised_to,
-        "lld_modes": [self.LLDMode.OFF] * len(jobs),
-      }
       # The surfaces the tips start from are known only now, after the batch's search.
       here = [containers[job] for job in jobs]
       heights_now = [max(round(surfaces[job] - floors[job], 2), 0.0) for job in jobs]
+      starts, immersion = self._get_immersed_starts(
+        jobs, searched, surfaces, sent_floors, per_container_settings["immersion_depths"]
+      )
+      per_channel_settings["immersion_depths"] = immersion
+      # The firmware immerses only after a search of its own: the searched tips go in here, at the
+      # search's speed, and the command starts from where they stand.
+      await self._move_searched_tips_to_starts(
+        batch.channels, jobs, searched, surfaces, starts, overhangs, search_speed
+      )
+      down = [i for i, job in enumerate(jobs) if job in searched or job in touched]
+      raised_to = start if batch is batches[0] else during
+      kwargs_to_start_from_current_positions: Dict[str, Any] = {
+        "minimum_traverse_height_start": min(starts[i] for i in down) if down else raised_to,
+        "lld_modes": [self.LLDMode.OFF] * len(jobs),
+      }
       if auto_surface_following:
         batch_following: Optional[List[float]] = self._get_auto_followings(
           here,
@@ -7152,14 +7247,15 @@ class Pipettes:
         [mixes[job] for job in jobs],
         [height + rise for height, rise in zip(heights_now, rises)],
         [
-          surfaces[job] + rise - mix_depth[job] - sent_floors[job] for rise, job in zip(rises, jobs)
+          start + rise - mix_depth[job] - sent_floors[job]
+          for start, rise, job in zip(starts, rises, jobs)
         ],
       )
       await self._dispense_in_one_move(
         batch.channels,
         [
-          Coordinate(batch.x_position, batch.y_positions[ch], surfaces[job])
-          for ch, job in zip(batch.channels, jobs)
+          Coordinate(batch.x_position, batch.y_positions[ch], start)
+          for ch, start in zip(batch.channels, starts)
         ],
         [searches[job] for job in jobs],
         [sent_floors[job] for job in jobs],
