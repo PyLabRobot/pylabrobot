@@ -59,6 +59,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexArm
       ~PreciseFlexArm.request_monitor_speed
       ~PreciseFlexArm.request_motion_profile_values
       ~PreciseFlexArm.request_payload
+      ~PreciseFlexArm.request_pose
       ~PreciseFlexArm.request_profile_acceleration
       ~PreciseFlexArm.request_profile_acceleration_ramp
       ~PreciseFlexArm.request_profile_deceleration
@@ -91,5 +92,6 @@ pylabrobot.brooks.precise\_flex.PreciseFlexArm
       ~PreciseFlexArm.start_zero_torque
       ~PreciseFlexArm.stop_freedrive_mode
       ~PreciseFlexArm.stop_zero_torque
+      ~PreciseFlexArm.update_joint_state
    
    

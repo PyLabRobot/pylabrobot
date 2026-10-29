@@ -33,5 +33,6 @@ pylabrobot.brooks.precise\_flex.PreciseFlexGripper
       ~PreciseFlexGripper.move_to_jaw_position_firmware_units
       ~PreciseFlexGripper.sense_each_fully_closed
       ~PreciseFlexGripper.sense_fully_closed
+      ~PreciseFlexGripper.update_width
    
    

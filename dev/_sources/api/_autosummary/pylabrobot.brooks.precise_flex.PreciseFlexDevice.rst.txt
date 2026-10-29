@@ -1,0 +1,88 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexDevice
+=================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexDevice
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexDevice.arm
+      ~PreciseFlexDevice.gripper
+      ~PreciseFlexDevice.location
+      ~PreciseFlexDevice.name
+      ~PreciseFlexDevice.rail
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexDevice.__init__
+      ~PreciseFlexDevice.assign_child_by_anchor
+      ~PreciseFlexDevice.assign_child_resource
+      ~PreciseFlexDevice.at
+      ~PreciseFlexDevice.center
+      ~PreciseFlexDevice.centers
+      ~PreciseFlexDevice.check_can_drop_resource_here
+      ~PreciseFlexDevice.copy
+      ~PreciseFlexDevice.deregister_did_assign_resource_callback
+      ~PreciseFlexDevice.deregister_did_unassign_resource_callback
+      ~PreciseFlexDevice.deregister_state_update_callback
+      ~PreciseFlexDevice.deregister_will_assign_resource_callback
+      ~PreciseFlexDevice.deregister_will_unassign_resource_callback
+      ~PreciseFlexDevice.deserialize
+      ~PreciseFlexDevice.find_resource
+      ~PreciseFlexDevice.find_resources
+      ~PreciseFlexDevice.get_absolute_location
+      ~PreciseFlexDevice.get_absolute_rotation
+      ~PreciseFlexDevice.get_absolute_size_x
+      ~PreciseFlexDevice.get_absolute_size_y
+      ~PreciseFlexDevice.get_absolute_size_z
+      ~PreciseFlexDevice.get_all_children
+      ~PreciseFlexDevice.get_anchor
+      ~PreciseFlexDevice.get_highest_known_point
+      ~PreciseFlexDevice.get_location_wrt
+      ~PreciseFlexDevice.get_resource
+      ~PreciseFlexDevice.get_root
+      ~PreciseFlexDevice.get_size_x
+      ~PreciseFlexDevice.get_size_y
+      ~PreciseFlexDevice.get_size_z
+      ~PreciseFlexDevice.has_resource
+      ~PreciseFlexDevice.is_in_subtree_of
+      ~PreciseFlexDevice.load_all_state
+      ~PreciseFlexDevice.load_from_json_file
+      ~PreciseFlexDevice.load_state
+      ~PreciseFlexDevice.load_state_from_file
+      ~PreciseFlexDevice.named
+      ~PreciseFlexDevice.register_did_assign_resource_callback
+      ~PreciseFlexDevice.register_did_unassign_resource_callback
+      ~PreciseFlexDevice.register_state_update_callback
+      ~PreciseFlexDevice.register_will_assign_resource_callback
+      ~PreciseFlexDevice.register_will_unassign_resource_callback
+      ~PreciseFlexDevice.rotate
+      ~PreciseFlexDevice.rotate_to
+      ~PreciseFlexDevice.rotated
+      ~PreciseFlexDevice.save
+      ~PreciseFlexDevice.save_state_to_file
+      ~PreciseFlexDevice.serialize
+      ~PreciseFlexDevice.serialize_all_state
+      ~PreciseFlexDevice.serialize_state
+      ~PreciseFlexDevice.setup
+      ~PreciseFlexDevice.stop
+      ~PreciseFlexDevice.unassign
+      ~PreciseFlexDevice.unassign_child_resource
+   
+   
