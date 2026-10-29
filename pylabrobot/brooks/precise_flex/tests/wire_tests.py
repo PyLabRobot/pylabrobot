@@ -1824,17 +1824,21 @@ class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
         await call(arm, True)
         self.assertEqual([c for c in fake.sent if c != "wherej"], [sent])
 
-  async def test_only_a_close_on_nothing_warns(self):
+  async def test_a_close_on_nothing_warns_and_moves_back_to_the_width(self):
     logger = "pylabrobot.brooks.precise_flex.driver.features.gripper"
     arm, fake = await _arm_after_homing()
     fake._replies["GraspPlate 80.0 50.0 10.0"] = "0 0"  # the arm's answer with the jaws empty
     with self.assertLogs(logger, "WARNING") as logs:
       await arm.gripper.move_to_jaw_position_firmware_units(80.0)
     self.assertIn("closed on nothing", logs.output[0])
+    # On nothing the jaws ran past 80 (to 72.9 on the arm), so they are moved back to it.
+    jaw_moves = [c for c in fake.sent if c.startswith(("GraspPlate", "ReleasePlate"))]
+    self.assertEqual(jaw_moves, ["GraspPlate 80.0 50.0 10.0", "ReleasePlate 80.0 50.0"])
     arm, fake = await _arm_after_homing()
     fake._replies["GraspPlate 80.0 50.0 10.0"] = "0 -1"  # its answer holding a block
     with self.assertNoLogs(logger, "WARNING"):
       await arm.gripper.move_to_jaw_position_firmware_units(80.0)
+    self.assertNotIn("ReleasePlate 80.0 50.0", fake.sent)
 
   async def test_recovery_leaves_an_over_open_gripper(self):
     arm, fake = await _arm_after_homing()

@@ -227,6 +227,8 @@ class PreciseFlexGripper:
           "[PreciseFlex %s] the jaws closed on nothing, so their force is no longer limited",
           self._driver.io._host,
         )
+        # On nothing the jaws run past `units` to the grasp's narrower set point: back to `units`.
+        await self._unchecked_fw_release_plate(units, speed_percent)
 
     # Held within the gripper's limits above; another axis out of range does not stop the jaws.
     await arm._guarded_move(
@@ -250,7 +252,7 @@ class PreciseFlexGripper:
 
     A move that closes them limits its force (``GraspPlate``, at ``default_grasp_force`` and
     ``default_finger_speed_percent``): the jaws stop on what they meet, and with nothing between
-    them end a little narrower than the width. A move that opens them lifts that limit
+    them run past the width and are moved back to it. A move that opens them lifts that limit
     (``ReleasePlate``). With ``force_sensing=False`` it is a position move (``MoveOneAxis``) either
     way, with no limit on force: closed onto something rigid, the motor stalls (-3105).
 
