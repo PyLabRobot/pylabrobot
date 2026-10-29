@@ -165,3 +165,6 @@ class PreciseFlexSimulationDriver(PreciseFlexDriver):
         PreciseFlexAxis.GRIPPER: configuration.gripper.soft_limit_range[1],
       }
     return configuration
+
+  async def _setup_vision(self, vision_host: Optional[str]) -> None:
+    """A simulated arm has no vision server."""

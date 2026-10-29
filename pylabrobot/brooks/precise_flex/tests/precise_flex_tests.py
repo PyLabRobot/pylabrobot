@@ -10,6 +10,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexCartesianPose,
   PreciseFlexDriver,
 )
+from pylabrobot.brooks.precise_flex.driver.features.vision import PreciseFlexVision
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -595,6 +596,16 @@ class TestSendCommandSerialization(unittest.IsolatedAsyncioTestCase):
     events: list = []
     arm = _recording_arm(events)
     await asyncio.gather(arm.send_command("A"), arm.send_command("B"))
+    self.assertEqual([kind for kind, _ in events], ["w", "r", "w", "r"])
+
+  async def test_bare_vision_read_shares_the_lock_with_send_command(self):
+    """The bare VToolProperty read goes through the same _locked_exchange, so it serializes too."""
+    events: list = []
+    arm = _recording_arm(events)
+    await asyncio.gather(
+      arm.send_command("A"),
+      PreciseFlexVision(arm).request_vision_tool_property("led", "Brightness"),
+    )
     self.assertEqual([kind for kind, _ in events], ["w", "r", "w", "r"])
 
   async def test_lock_released_after_an_error(self):

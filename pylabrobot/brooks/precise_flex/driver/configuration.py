@@ -70,6 +70,16 @@ class PreciseFlexConfiguration:
   def has_vision_gripper(self) -> bool:
     return self.camera_count > 0
 
+  @property
+  def has_vision_server(self) -> bool:
+    """Whether the controller is set up for a vision server: its IntelliGuide TCS module is loaded.
+
+    The module relays ``VToolProperty``/``StereoParam``/``StereoLocate`` to the server; without it
+    those return ``-2805 *Unknown command*``. Read from the module list ``version`` reports; whether
+    the server itself answers is ``PreciseFlexDriver.vision_server_connected``.
+    """
+    return any("intelliguide" in m.lower() for m in self.modules)
+
   # -- deprecated: moved to the arm, gripper and rail configurations --
 
   @property

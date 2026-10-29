@@ -365,7 +365,7 @@ emit separate resource-transfer operations when it knows the moved PLR resource.
 
 | Operation | Fields |
 | --- | --- |
-| `precise_flex.setup` | `device`, `skip_home` |
+| `precise_flex.setup` | `device`, `skip_home`, `skip_vision` |
 | `precise_flex.stop` | `device` |
 | `precise_flex.power_on` | `device` |
 | `precise_flex.power_off` | `device` |
