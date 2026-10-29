@@ -7028,7 +7028,9 @@ class Pipettes:
         air[channel] + pushed[job] + (blow_out_air[job] if dispensing_modes[job] in (1, 3) else 0.0)
       )
       air[channel] = transport_air[job]
-      if dispensing_modes[job] != 4 and standing[channel] - travels[job] < -0.05:
+      # A piston is kept to 0.1 uL and a travel to 0.01 uL, so 0.05 uL between them is rounding
+      # alone: compared in hundredths, so float noise at that edge refuses nothing.
+      if dispensing_modes[job] != 4 and round(travels[job] - standing[channel], 2) > 0.05:
         raise ValueError(
           f"channel {channel}'s piston holds {standing[channel]:.1f} uL of travel for the "
           f"{travels[job]:.1f} uL it is to push out into {containers[job].name}"

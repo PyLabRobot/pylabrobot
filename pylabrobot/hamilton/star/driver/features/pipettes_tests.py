@@ -4608,3 +4608,62 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     self.assertEqual([w.tracker.volume for w in self.wells[2:4]], [100.0, 0.0])
     tips = [self.pipettes.get_mounted_tip(channel) for channel in (0, 1)]
     self.assertEqual([tip.tracker.volume for tip in tips if tip is not None], [0.0, 20.0])
+
+
+class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
+  """1000 uL filter tips over a 2 mL plate: a jet dispense pushes what the same class drew."""
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources import set_tip_tracking, set_volume_tracking
+    from pylabrobot.resources.corning.plates import cor_96_wellplate_2mL_Vb
+    from pylabrobot.resources.hamilton import (
+      PLT_CAR_L5AC_A00,
+      TIP_CAR_480_A00,
+      hamilton_96_tiprack_1000uL_filter,
+    )
+
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+    self.addCleanup(set_tip_tracking, False)
+    self.addCleanup(set_volume_tracking, False)
+    self.deck = STARDeck()
+    tips = TIP_CAR_480_A00(name="tips")
+    tips[1] = self.rack = hamilton_96_tiprack_1000uL_filter(name="rack")
+    self.deck.assign_child_resource(tips, track=22)
+    plates = PLT_CAR_L5AC_A00(name="plates")
+    plates[0] = self.plate = cor_96_wellplate_2mL_Vb(name="plate")
+    self.deck.assign_child_resource(plates, track=30)
+    self.driver = STARSimulationDriver(deck=self.deck, declared_configuration_json=RECORDING_STAR)
+    await self.driver.setup()
+    assert self.driver.pipettes is not None
+    self.pipettes = self.driver.pipettes
+    self.source, self.target = self.plate.get_well("A1"), self.plate.get_well("B1")
+    self.source.tracker.set_volume(1500.0)
+    await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
+
+  async def asyncTearDown(self):
+    await self.driver.stop()
+
+  async def test_321_uL_of_water_drawn_is_dispensed(self):
+    # The class corrects 321 uL to 337.449 uL: kept as 337.4 once drawn, pushed as 337.45. The
+    # 0.05 uL between them is rounding alone, and the dispense goes ahead.
+    from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
+    from pylabrobot.resources.liquid import Liquid
+
+    tip = self.pipettes.get_mounted_tip(0)
+    assert tip is not None
+    water = get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=False,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      liquid=Liquid.WATER,
+      jet=True,
+      blow_out=False,
+    )
+    assert water is not None
+    await self.pipettes.aspirate([self.source], volumes=[321.0], hamilton_liquid_classes=[water])
+    await self.pipettes.dispense(
+      [self.target], volumes=[321.0], hamilton_liquid_classes=[water], jet=[True]
+    )
+    self.assertAlmostEqual(self.target.tracker.get_used_volume(), 321.0)
