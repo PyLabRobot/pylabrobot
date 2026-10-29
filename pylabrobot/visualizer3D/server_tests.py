@@ -269,6 +269,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     ws, _, _ = await self.connect()
     try:
       kept = self.plate.location
+      assert kept is not None
       self.plate.location = Coordinate(400, 300, 0)
       self.assertEqual((await self.next_state(ws))["locations"]["plate"]["x"], 400)
       self.plate.location = kept
