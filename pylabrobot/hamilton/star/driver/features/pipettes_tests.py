@@ -4260,6 +4260,119 @@ class TestBlowOutAirBeforeTheSearch(_SimulatedPlateWithWater):
     self.assertAlmostEqual(self.wells[0].tracker.volume, 100.0, delta=2.0)
 
 
+class TestSearchStartAboveFoundSurface(_SimulatedPlateWithWater):
+  """`search_start_clearance_above_found_surface`: a search starts that far above the surface last
+  found in its container, unless liquid may have entered it since."""
+
+  def _watch_searches(self) -> List[Tuple[float, Optional[float]]]:
+    """The start and the surface found of every search of A1, in order."""
+    searches: List[Tuple[float, Optional[float]]] = []
+    probe = self.pipettes._probe_batch_liquid_heights
+
+    async def watched(batch, containers, **kwargs):
+      found = await probe(batch, containers, **kwargs)
+      for job in batch.indices:
+        if containers[job] is self.wells[0]:
+          searches.append((kwargs["z_start"][job], found[job][0]))
+      return found
+
+    self.pipettes._probe_batch_liquid_heights = watched  # type: ignore[method-assign]
+    return searches
+
+  def _top_start(self) -> float:
+    top = self.wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    return round(top + self.pipettes.well_search_start_clearance, 2)
+
+  async def _draw(self, volume: float = 20.0) -> None:
+    await self.pipettes.aspirate(self.wells[:1], [volume], lld_mode=Pipettes.LLDMode.CAPACITIVE)
+
+  async def test_the_next_search_starts_the_clearance_above_the_surface_found(self):
+    self.pipettes.search_start_clearance_above_found_surface = 5.0
+    searches = self._watch_searches()
+    await self._draw()
+    await self._draw()
+    found = searches[0][1]
+    assert found is not None
+    self.assertEqual(searches[0][0], self._top_start())
+    self.assertEqual(searches[1][0], round(found + 5.0, 2))
+    self.assertLess(searches[1][0], self._top_start())
+
+  async def test_the_start_is_never_above_the_top_start(self):
+    self.pipettes.search_start_clearance_above_found_surface = 50.0
+    searches = self._watch_searches()
+    await self._draw()
+    await self._draw()
+    self.assertEqual([start for start, _ in searches], [self._top_start()] * 2)
+
+  async def test_by_default_every_search_starts_from_the_top(self):
+    searches = self._watch_searches()
+    await self._draw()
+    await self._draw()
+    self.assertEqual([start for start, _ in searches], [self._top_start()] * 2)
+
+  async def test_a_dispense_into_the_container_puts_the_start_back_at_the_top(self):
+    self.pipettes.search_start_clearance_above_found_surface = 5.0
+    searches = self._watch_searches()
+    await self._draw()
+    await self.pipettes.dispense(self.wells[:1], piston_volumes=[5.0])
+    await self._draw()
+    self.assertEqual(searches[1][0], self._top_start())
+
+  async def test_a_top_up_of_the_tracker_puts_the_start_back_at_the_top(self):
+    self.pipettes.search_start_clearance_above_found_surface = 5.0
+    searches = self._watch_searches()
+    await self._draw()
+    self.wells[0].tracker.set_volume(200.0)
+    await self._draw()
+    self.assertEqual(searches[1][0], self._top_start())
+
+  async def test_a_search_that_finds_nothing_puts_the_start_back_at_the_top(self):
+    self.pipettes.search_start_clearance_above_found_surface = 5.0
+    searches = self._watch_searches()
+    await self._draw()
+    self.wells[0].tracker.set_volume(0.0)
+    with self.assertRaises(RuntimeError):
+      await self._draw()
+    # The miss from above the first surface is searched again from the top before it is refused.
+    self.assertLess(searches[1][0], self._top_start())
+    self.assertEqual(searches[2], (self._top_start(), None))
+    self.wells[0].tracker.set_volume(100.0)
+    await self._draw()
+    self.assertEqual(searches[3][0], self._top_start())
+
+  async def test_a_miss_from_above_the_last_surface_is_searched_again_from_the_top(self):
+    self.pipettes.search_start_clearance_above_found_surface = 5.0
+    searches = self._watch_searches()
+    await self._draw()
+    # As if the search had begun in liquid: nothing found from the lowered start.
+    watched = self.pipettes._probe_batch_liquid_heights
+    top = self._top_start()
+
+    async def missing_low(batch, containers, **kwargs):
+      found = await watched(batch, containers, **kwargs)
+      return {
+        job: [None] if kwargs["z_start"][job] < top else heights for job, heights in found.items()
+      }
+
+    self.pipettes._probe_batch_liquid_heights = missing_low  # type: ignore[method-assign]
+    with self.assertLogs("pylabrobot.hamilton.star.driver.features.pipettes", "WARNING") as logs:
+      await self._draw()
+    self.assertIn("searching again from the top", logs.output[0])
+    self.assertLess(searches[1][0], top)
+    self.assertEqual(searches[2][0], top)
+    self.assertIsNotNone(searches[2][1])
+
+  async def test_without_tracking_every_search_starts_from_the_top(self):
+    from pylabrobot.resources import no_volume_tracking
+
+    self.pipettes.search_start_clearance_above_found_surface = 5.0
+    searches = self._watch_searches()
+    with no_volume_tracking():
+      await self._draw()
+      await self._draw()
+    self.assertEqual([start for start, _ in searches], [self._top_start()] * 2)
+
+
 class TestDispenseFirmware(unittest.IsolatedAsyncioTestCase):
   """`C0 DS` as legacy sends it: every field in the same order, at the same width."""
 

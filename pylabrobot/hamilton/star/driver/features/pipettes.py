@@ -420,6 +420,9 @@ class Pipettes:
   # well; more above a trough or tube, whose fill can dome.
   search_start_clearance: float = 5.0
   well_search_start_clearance: float = 2.0
+  # When set, a pipetting search starts this far above the surface last found in its container,
+  # in mm, if the tracker shows no liquid entered since; None searches from the top every time.
+  search_start_clearance_above_found_surface: Optional[float] = None
   # A liquid search stops looking this far below the modelled cavity bottom, in mm: the seating
   # error of a plate, no more.
   search_limit_below_cavity_bottom: float = 1.0
@@ -456,6 +459,9 @@ class Pipettes:
     # The transport air each channel's tip holds, in uL, by channel: an aspirate adds its own, and
     # the next dispense pushes it all out ahead of the liquid, then draws its own.
     self._held_transport_air: Dict[int, float] = {}
+    # The surface each pipetting search last found, by id of the container: the container, its
+    # height above the cavity bottom in mm, and the tracker's volume then in uL.
+    self._found_surfaces: Dict[int, Tuple[Container, float, float]] = {}
     self.configuration = configuration or PipettesConfiguration()
 
   # -- addressing ------------------------------------------------------------
@@ -5337,6 +5343,52 @@ class Pipettes:
       if given_floors is None:
         sent_floors[job] = height
 
+  def _get_search_starts_above_found_surfaces(
+    self,
+    containers: Sequence[Container],
+    jobs: Sequence[int],
+    z_start: Sequence[float],
+    tracking: bool,
+  ) -> List[float]:
+    """Per job, `z_start`, lowered to `search_start_clearance_above_found_surface` above the
+    surface last found in its container while the tracker shows no liquid entered since.
+
+    Args:
+      containers: per job.
+      jobs: the jobs searched.
+      z_start: per job, the tip bottom's start from the top, on the deck in mm.
+      tracking: whether volumes are tracked; without it nothing is lowered.
+
+    Returns:
+      Per job, the start on the deck in mm; never above `z_start`.
+
+    Raises:
+      ValueError: A clearance that is not positive.
+    """
+    starts = list(z_start)
+    clearance = self.search_start_clearance_above_found_surface
+    deck = self._driver.deck
+    if clearance is None or not tracking or deck is None:
+      return starts
+    if clearance <= 0:
+      raise ValueError(
+        f"search_start_clearance_above_found_surface must be positive, is {clearance}"
+      )
+    for job in jobs:
+      container = containers[job]
+      found = self._found_surfaces.get(id(container))
+      if found is None:
+        continue
+      kept, above_bottom, volume = found
+      # Liquid in since that search may have raised the surface: the start stays at the top.
+      tracker = container.tracker
+      if kept is not container or tracker.is_disabled or tracker.get_used_volume() > volume + 1e-6:
+        continue
+      # From the cavity bottom as it stands now, so a container moved since is searched right.
+      bottom = container.get_location_wrt(deck, "c", "c", "cavity_bottom").z
+      starts[job] = min(starts[job], round(bottom + above_bottom + clearance, 2))
+    return starts
+
   async def _search_liquid_of_batch(
     self,
     batch: ChannelBatch,
@@ -5362,7 +5414,8 @@ class Pipettes:
       containers: per job.
       overhangs: each channel's tip overhang in mm, keyed by channel.
       z_cavity_bottom: per job, on the deck in mm.
-      z_start: per job, tip bottom height the search starts from, on the deck in mm.
+      z_start: per job, tip bottom height the search starts from, on the deck in mm; lower
+        where `search_start_clearance_above_found_surface` allows.
       lld_modes: per job, capacitive or pressure.
       search_speed: in mm/s.
       approach_speed: down to the starts, in mm/s.
@@ -5371,7 +5424,7 @@ class Pipettes:
         cavity bottom, unless the caller gave a floor.
       given_floors: the floors the caller gave, per job; None when none.
       tracking: whether volumes are tracked; the container's tracker then takes the measured
-        volume, warning when 20 % off.
+        volume, warning when 20 % off, and the surface found is kept for the next search.
 
     Raises:
       RuntimeError: No liquid found.
@@ -5382,17 +5435,48 @@ class Pipettes:
     subset = dataclasses.replace(
       batch, channels=[ch for ch, _ in pairs], indices=[job for _, job in pairs]
     )
+    starts = self._get_search_starts_above_found_surfaces(
+      containers, subset.indices, z_start, tracking
+    )
+    # A surface is kept only from a search that found it, so a failure or a miss leaves none.
+    for _, job in pairs:
+      self._found_surfaces.pop(id(containers[job]), None)
     found = await self._probe_batch_liquid_heights(
       subset,
       containers,
       overhangs=overhangs,
       z_cavity_bottom=z_cavity_bottom,
-      z_start=z_start,
+      z_start=starts,
       lld_modes=lld_modes,
       search_speed=search_speed,
       n_replicates=1,
       approach_speed=approach_speed,
     )
+    # Nothing found from a start above the last surface may mean the search began in liquid that
+    # has risen since: those channels search again from the top before the container is refused.
+    again = [(ch, job) for ch, job in pairs if found[job][0] is None and starts[job] < z_start[job]]
+    if again:
+      logger.warning(
+        "channels %s found no liquid in %s from above the last surface found; searching again "
+        "from the top",
+        [ch for ch, _ in again],
+        [containers[job].name for _, job in again],
+      )
+      found.update(
+        await self._probe_batch_liquid_heights(
+          dataclasses.replace(
+            batch, channels=[ch for ch, _ in again], indices=[job for _, job in again]
+          ),
+          containers,
+          overhangs=overhangs,
+          z_cavity_bottom=z_cavity_bottom,
+          z_start=z_start,
+          lld_modes=lld_modes,
+          search_speed=search_speed,
+          n_replicates=1,
+          approach_speed=approach_speed,
+        )
+      )
     for channel, job in pairs:
       height = found[job][0]
       if height is None:
@@ -5438,6 +5522,23 @@ class Pipettes:
             expected,
           )
         containers[job].tracker.set_volume(measured)
+    if not tracking or self.search_start_clearance_above_found_surface is None:
+      return
+    deck = self._driver.deck
+    assert deck is not None
+    for _, job in pairs:
+      container = containers[job]
+      bottom = container.get_location_wrt(deck, "c", "c", "cavity_bottom").z
+      above_bottom = round(surfaces[job] - bottom, 2)
+      kept = self._found_surfaces.get(id(container))
+      # Channels sharing a container: the highest surface any found, the start furthest from it.
+      if kept is not None:
+        above_bottom = max(above_bottom, kept[1])
+      self._found_surfaces[id(container)] = (
+        container,
+        above_bottom,
+        container.tracker.get_used_volume(),
+      )
 
   async def _pipette_batch(
     self,
@@ -6142,11 +6243,11 @@ class Pipettes:
     bottom when None, with no immersion and no following unless given. The firmware never
     searches: CAPACITIVE and PRESSURE search first, as `probe_liquid_heights`, from
     `well_search_start_clearance` above a well's top or `search_start_clearance` above any
-    other's, draw `default_immersion_depth` under the surface found, set the
-    tracker to the measured volume, warning when it is 20 % off, and refuse a container without
-    liquid; their blow-out air is drawn beforehand at the traverse height, by `Px DC`, since the
-    command would draw it with the tip on the liquid; ZTOUCH touches the floor first, as
-    `probe_z_heights_using_ztouch`, draws
+    other's, or `search_start_clearance_above_found_surface` above the last surface found, draw
+    `default_immersion_depth` under the surface found, set the tracker to the measured volume,
+    warning when it is 20 % off, and refuse a container without liquid; their blow-out air is
+    drawn beforehand at the traverse height, by `Px DC`, since the command would draw it with the
+    tip on the liquid; ZTOUCH touches the floor first, as `probe_z_heights_using_ztouch`, draws
     `ztouch_aspirate_height_above_bottom` above it, and refuses a container whose floor is not
     met; DUAL is not implemented. A draw past what a container holds goes ahead and takes air,
     with a warning, an info line under ZTOUCH, where emptying is the point. `volumes` with a
@@ -7321,26 +7422,31 @@ class Pipettes:
     async def run(batch: ChannelBatch) -> None:
       # The tip gives before the device pushes; a tip holding less gives what it holds, the rest
       # is air.
-      await self._pipette_batch(
-        batch,
-        search,
-        send,
-        containers,
-        liquid,
-        givers=[tip.tracker for tip in tips],
-        takers=[container.tracker for container in containers],
-        shortfall_expected=[],
-        air_before_liquid=air_ahead,
-        piston_sign=-1,
-        piston_after=piston_after,
-        tracking=tracking,
-        held_less_message=(
-          "channel %d dispenses %.1f uL into %s from a tip holding %.1f uL; the rest is air"
-        ),
-        moved_before_failure_message=(
-          "channel %d gave %.1f uL into %s before the command failed; the model has it"
-        ),
-      )
+      try:
+        await self._pipette_batch(
+          batch,
+          search,
+          send,
+          containers,
+          liquid,
+          givers=[tip.tracker for tip in tips],
+          takers=[container.tracker for container in containers],
+          shortfall_expected=[],
+          air_before_liquid=air_ahead,
+          piston_sign=-1,
+          piston_after=piston_after,
+          tracking=tracking,
+          held_less_message=(
+            "channel %d dispenses %.1f uL into %s from a tip holding %.1f uL; the rest is air"
+          ),
+          moved_before_failure_message=(
+            "channel %d gave %.1f uL into %s before the command failed; the model has it"
+          ),
+        )
+      finally:
+        # Liquid in raises the surface, whatever the trackers book: the next search is from the top.
+        for job in batch.indices:
+          self._found_surfaces.pop(id(containers[job]), None)
       for channel, job in zip(batch.channels, batch.indices):
         self._held_transport_air[channel] = transport_air[job]
 
