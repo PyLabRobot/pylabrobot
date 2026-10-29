@@ -382,12 +382,12 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
       speed=46.3, acceleration_level=1, channels=[7]
     ):
       self.assertEqual(self.sent, ["P8AAyv1000", "P8AAyr1"])
-    self.assertEqual(self.sent[2:], ["P8AAyv5399", "P8AAyr3"])
+    self.assertEqual(self.sent[2:], ["P8AAyv7559", "P8AAyr4"])
 
   async def test_profile_touches_only_the_named_channels(self):
     async with self.pipettes._temporary_y_drive_profile(acceleration_level=1, channels=[6, 7]):
       pass
-    self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr3", "P8AAyr3"])
+    self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr4", "P8AAyr4"])
 
 
 class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
@@ -396,8 +396,8 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
   async def test_every_channel_holds_the_defaults_after_setup(self):
     pipettes = await simulated_channels()
     for channel in range(pipettes.num_channels):
-      self.assertEqual(await pipettes.request_y_speed(channel), 249.98)
-      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 3)
+      self.assertEqual(await pipettes.request_y_speed(channel), 350.0)
+      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 4)
       self.assertEqual(await pipettes.request_z_speed(channel), 125.0)
       self.assertEqual(await pipettes.request_z_acceleration(channel), 804.6)
 
@@ -415,7 +415,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     await driver.setup()
     written = [command for command in sent if command[0] == "P"]
     self.assertEqual(len(written), 32)
-    self.assertEqual(written[:4], ["P1AAyv5399", "P1AAyr3", "P1AAzv11652", "P1AAzr075"])
+    self.assertEqual(written[:4], ["P1AAyv7559", "P1AAyr4", "P1AAzv11652", "P1AAzr075"])
 
   async def test_a_repeated_setup_puts_back_what_a_session_changed(self):
     pipettes = await simulated_channels()
@@ -423,7 +423,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     await pipettes._set_y_acceleration_level(2, 1)
     await pipettes._driver.setup()
     self.assertEqual(await pipettes.request_z_speed(2), 125.0)
-    self.assertEqual(await pipettes.request_y_acceleration_level(2), 3)
+    self.assertEqual(await pipettes.request_y_acceleration_level(2), 4)
 
   async def test_a_channel_move_writes_what_it_moved_with(self):
     pipettes = await simulated_channels()
@@ -1425,6 +1425,26 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     )
     self.tool_bottoms.assert_not_awaited()
     self.assertEqual(self.safe_z.await_count, 2)
+
+  async def test_with_tracking_an_empty_well_is_touched_from_half_its_depth(self):
+    from pylabrobot.resources import set_volume_tracking
+
+    set_volume_tracking(True)
+    self.addCleanup(set_volume_tracking, False)
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    wells = self._wells("A1", "B1")
+    wells[1].tracker.set_volume(450.0)
+    await self.pipettes.probe_z_heights_using_ztouch(wells)
+
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    # The empty well from half its depth; the one holding liquid this plate cannot place, from
+    # the top.
+    half_way = round(bottom + 0.5 * (top - bottom), 2)
+    self.assertFalse(wells[1].supports_compute_height_volume_functions())
+    self.stop_discs.assert_awaited_once_with(
+      {0: round(half_way + 51.9, 2), 1: round(top + 51.9, 2)}, speed=125.0
+    )
 
   async def test_a_floor_search_ends_no_lower_than_the_drive_reaches(self):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
@@ -3900,6 +3920,19 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     bottom = self._surface_field(self.wells[0], 0.0)
     b1 = int(self._surface_field(self.wells[1], 100.0)) - 20
     self.assertIn(f"zl{bottom} {b1:04} {bottom} {floor}", sent[-1])
+
+  async def test_a_z_touch_starts_above_the_liquid_a_well_holds(self):
+    sent = self._record_aspirations("P1ZH")
+    well = self.wells[0]
+    await self.pipettes.aspirate([well], [10.0], lld_mode=Pipettes.LLDMode.ZTOUCH)
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    top = well.get_location_wrt(self.deck, "c", "c", "t").z
+    # Half its depth would be in A1's 150 uL: the touch starts 2 mm over the liquid instead.
+    above_liquid = round(bottom + well.compute_height_from_volume(150.0) + 2.0, 2)
+    self.assertGreater(above_liquid, bottom + 0.5 * (top - bottom))
+    overhang = await self.pipettes.request_tip_overhang(0)
+    start = self.pipettes.configuration.z_drive_mm_to_increments(round(above_liquid + overhang, 2))
+    self.assertIn(f"zb{start:05}", sent[0])
 
   async def test_a_z_touch_draws_just_off_the_floor(self):
     sent = self._record_aspirations("P1ZA", "P1ZH")

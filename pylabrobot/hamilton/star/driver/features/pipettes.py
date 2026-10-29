@@ -399,10 +399,10 @@ class Pipettes:
     LIQUID = 0
     FOAM = 1
 
-  # Y speed when the caller names none, in mm/s.
-  default_y_speed: float = 250.0
+  # Y speed when the caller names none, in mm/s: high enough that Y never holds up an X move.
+  default_y_speed: float = 350.0
   # Y acceleration level when the caller names none, 1 (gentlest) to 4.
-  default_y_acceleration_level: int = 3
+  default_y_acceleration_level: int = 4
   # Z speed when the caller names none, in mm/s.
   default_z_speed: float = 125.0
   # Z acceleration when the caller names none, in mm/s2.
@@ -413,9 +413,9 @@ class Pipettes:
   default_minimum_traverse_height: float = 245.0
   # Containers within this X distance are probed in one batch, in mm.
   default_x_grouping_tolerance: float = 0.1
-  # Immersion of a tip whose liquid the driver found, below the surface, in mm, when none is
-  # given; no lower than the floor sent.
-  default_immersion_depth_after_search: float = 2.0
+  # Immersion below the surface the driver's own search found, in mm, unless the call gives one;
+  # no lower than the floor sent. OFF and ZTOUCH find no surface and take 0.0 unless given.
+  default_immersion_depth: float = 2.0
   # How far above a container's top a liquid search starts, in mm: enough to clear a brim-full
   # well; more above a trough or tube, whose fill can dome.
   search_start_clearance: float = 5.0
@@ -423,6 +423,9 @@ class Pipettes:
   # A liquid search stops looking this far below the modelled cavity bottom, in mm: the seating
   # error of a plate, no more.
   search_limit_below_cavity_bottom: float = 1.0
+  # A Z-touch starts this fraction of the cavity depth above the cavity bottom: the channels get
+  # there fast, then touch slowly. Never under the tracked liquid; the top when tracking is off.
+  ztouch_search_start_fraction: float = 0.5
   # A Z-touch looks this far below the modelled cavity bottom, in mm: a floor off the model is
   # still met; each end no lower than the channel reaches.
   ztouch_search_limit_below_cavity_bottom: float = 10.0
@@ -3790,21 +3793,60 @@ class Pipettes:
       await asyncio.sleep(delay)
     return await search
 
+  def _get_ztouch_starts(
+    self,
+    containers: Sequence[Container],
+    z_cavity_bottom: Sequence[float],
+    z_top: Sequence[float],
+  ) -> List[float]:
+    """Where each Z-touch starts, the tip bottom in mm on the deck.
+
+    `ztouch_search_start_fraction` of the cavity depth above the cavity bottom, raised to the
+    tracked liquid plus its search clearance, and no higher than the top. The top when volume
+    tracking is off, or a container holding liquid has no height-volume functions.
+
+    Args:
+      containers: per job.
+      z_cavity_bottom: per job, on the deck in mm.
+      z_top: per job, on the deck in mm.
+    """
+    tracking = does_volume_tracking()
+    starts = []
+    for container, bottom, top in zip(containers, z_cavity_bottom, z_top):
+      start = top
+      if tracking:
+        start = bottom + self.ztouch_search_start_fraction * (top - bottom)
+        used = container.tracker.get_used_volume()
+        if used > 0:
+          clearance = (
+            self.well_search_start_clearance
+            if isinstance(container, Well)
+            else self.search_start_clearance
+          )
+          liquid = (
+            bottom + container.compute_height_from_volume(used) + clearance
+            if container.supports_compute_height_volume_functions()
+            else top
+          )
+          start = max(start, liquid)
+      starts.append(round(min(start, top), 2))
+    return starts
+
   async def _probe_batch_floors(
     self,
     batch: ChannelBatch,
     *,
     overhangs: Dict[int, float],
     z_cavity_bottom: Sequence[float],
-    z_top: Sequence[float],
+    z_start: Sequence[float],
     search_speed: float,
     approach_speed: float,
     n_replicates: int,
   ) -> Dict[int, List[Optional[float]]]:
     """Z-touch the floor of every container of one batch, the channels in a cascade, n times.
 
-    From the top to `ztouch_search_limit_below_cavity_bottom` under the cavity bottom, on the stop
-    disc. The channels go to their starts together at `approach_speed`, then set off
+    From `z_start` to `ztouch_search_limit_below_cavity_bottom` under the cavity bottom, on the
+    stop disc. The channels go to their starts together at `approach_speed`, then set off
     `ztouch_cascade_interval` apart, lowest channel first. None where a channel reached the limit.
     They stay where they stopped; the next round approaches again.
 
@@ -3812,7 +3854,7 @@ class Pipettes:
       batch: the channels and which container each has, by job index.
       overhangs: each channel's tip overhang in mm, keyed by channel.
       z_cavity_bottom: per job, on the deck in mm.
-      z_top: per job, on the deck in mm.
+      z_start: per job, the tip bottom the touch starts from, on the deck in mm.
       search_speed: in mm/s.
       approach_speed: down to the starts, in mm/s.
       n_replicates: how many rounds.
@@ -3825,7 +3867,7 @@ class Pipettes:
       STARFirmwareError: As a channel answered.
     """
     searches = self._get_stop_disc_search_windows(
-      batch, overhangs, z_cavity_bottom, z_top, self.ztouch_search_limit_below_cavity_bottom
+      batch, overhangs, z_cavity_bottom, z_start, self.ztouch_search_limit_below_cavity_bottom
     )
     found: Dict[int, List[Optional[float]]] = {job: [] for job in batch.indices}
     for _ in range(n_replicates):
@@ -3919,12 +3961,13 @@ class Pipettes:
     )
     z_cavity_bottom = [c.get_location_wrt(deck, "c", "c", "cavity_bottom").z for c in containers]
     z_top = [c.get_location_wrt(deck, "c", "c", "t").z for c in containers]
+    z_start = self._get_ztouch_starts(containers, z_cavity_bottom, z_top)
     per_batch = await self._execute_batched(
       lambda batch: self._probe_batch_floors(
         batch,
         overhangs=overhangs,
         z_cavity_bottom=z_cavity_bottom,
-        z_top=z_top,
+        z_start=z_start,
         search_speed=search_speed,
         approach_speed=approach_speed,
         n_replicates=n_replicates,
@@ -5177,8 +5220,8 @@ class Pipettes:
       searched: the jobs whose liquid the driver found.
       surfaces: per job, in mm on the deck.
       sent_floors: per job, the floor sent, in mm on the deck.
-      immersion_depths: per job, in mm; None for `default_immersion_depth_after_search` where
-        searched, else 0.0.
+      immersion_depths: per job, in mm; None for `default_immersion_depth` where searched,
+        else 0.0.
 
     Returns:
       Per job of the batch, the start height in mm on the deck and the immersion depth sent.
@@ -5188,7 +5231,7 @@ class Pipettes:
     for job in jobs:
       given = None if immersion_depths is None else immersion_depths[job]
       if job in searched:
-        depth = self.default_immersion_depth_after_search if given is None else given
+        depth = self.default_immersion_depth if given is None else given
         starts.append(max(round(surfaces[job] - depth, 2), sent_floors[job]))
         sent.append(0.0)
       else:
@@ -5271,7 +5314,7 @@ class Pipettes:
       subset,
       overhangs=overhangs,
       z_cavity_bottom=z_cavity_bottom,
-      z_top=z_top,
+      z_start=self._get_ztouch_starts(containers, z_cavity_bottom, z_top),
       search_speed=search_speed,
       approach_speed=approach_speed,
       n_replicates=1,
@@ -5283,7 +5326,7 @@ class Pipettes:
           f"channel {channel} met no floor in {containers[job].name} down to "
           f"{self.ztouch_search_limit_below_cavity_bottom} mm under its modelled cavity bottom"
         )
-      logger.info(
+      logger.debug(
         "channel %d touched the floor of %s at %.2f mm, the model has it at %.2f mm",
         channel,
         containers[job].name,
@@ -6099,7 +6142,7 @@ class Pipettes:
     bottom when None, with no immersion and no following unless given. The firmware never
     searches: CAPACITIVE and PRESSURE search first, as `probe_liquid_heights`, from
     `well_search_start_clearance` above a well's top or `search_start_clearance` above any
-    other's, draw `default_immersion_depth_after_search` under the surface found, set the
+    other's, draw `default_immersion_depth` under the surface found, set the
     tracker to the measured volume, warning when it is 20 % off, and refuse a container without
     liquid; their blow-out air is drawn beforehand at the traverse height, by `Px DC`, since the
     command would draw it with the tip on the liquid; ZTOUCH touches the floor first, as
@@ -6136,7 +6179,7 @@ class Pipettes:
       blow_out_air_volumes: air drawn before the liquid, in uL. The class's, else 0.0, when None.
         Under an LLD mode drawn beforehand, at most 468.7 uL.
       immersion_depths: how far into the liquid each tip goes, in mm; negative is out of it.
-        `default_immersion_depth_after_search` where the driver searched, else 0.0, when None.
+        `default_immersion_depth` where the driver searched, else 0.0, when None.
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None. Below the cavity bottom is allowed: the tip
         then presses onto the well's floor and draws with suction, as a harvest wants.
@@ -6679,7 +6722,7 @@ class Pipettes:
         )
     on_ztouch = [ch for ch, mode in zip(use_channels, modes) if mode == self.LLDMode.ZTOUCH]
     if on_ztouch:
-      logger.warning(
+      logger.debug(
         "channels %s dispense on Z touch, which finds a floor, not a liquid: the tips go to the "
         "bottom and dispense there",
         on_ztouch,
@@ -6936,7 +6979,7 @@ class Pipettes:
     or 0: OFF dispenses at `liquid_heights` above the cavity bottom, the cavity bottom when
     None, with no immersion and no following unless given. The firmware never searches:
     CAPACITIVE searches first, as `probe_liquid_heights`, dispenses
-    `default_immersion_depth_after_search` under the surface found and sets the tracker to the
+    `default_immersion_depth` under the surface found and sets the tracker to the
     measured volume, warning when it is 20 % off; ZTOUCH touches the cavity bottom first and
     dispenses `ztouch_dispense_height_above_bottom` above it; PRESSURE
     and DUAL are for aspirating. A dispense past what a tip holds goes ahead and pushes air,
@@ -6971,7 +7014,7 @@ class Pipettes:
       approach_speed: down to that search's start, `lp` or the top, in mm/s.
       side_touch_off_distance: sideways move against the wall to shed the drop, in mm; 0 for none.
       immersion_depths: how far into the liquid each tip goes, in mm; negative is out of it.
-        `default_immersion_depth_after_search` where the driver searched, else 0.0, when None.
+        `default_immersion_depth` where the driver searched, else 0.0, when None.
       minimum_allowed_z_positions_during: how low each tip bottom may go, in mm on the deck. The
         cavity bottom plus the offset's z when None.
       transport_air_volumes: air drawn after each dispense, in uL, pushed out ahead of the next.
@@ -7050,7 +7093,7 @@ class Pipettes:
     channel_of = self._get_channel_of_each_container(n, use_channels)
     presence, tips = await self._check_channels_before_pipetting(channel_of, touched, "a dispense")
     if touched:
-      logger.warning(
+      logger.debug(
         "channels %s dispense on Z touch: onto the floor of %s",
         sorted({channel_of[job] for job in touched}),
         [containers[job].name for job in touched],
