@@ -1273,6 +1273,19 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual([c[:4] for c in self.sent], ["P1ZL", "C0RL", "P2ZL", "C0RL"])
     self.assertEqual(order, ["safe_z", "xy", "safe_z", "xy", "safe_z"], "up before each column")
 
+  async def test_a_search_leaves_the_model_where_the_channels_stopped(self):
+    # From what the device answered, with no read: the surface found plus the overhang, or the
+    # window's end for a channel that found nothing. Not still up at the start of the search.
+    self.fail_with["P2"] = ["P2ZLid0001er70"]
+    wells = self._wells("A1", "B1")
+    await self.pipettes.probe_liquid_heights(wells)
+    overhang = 334.7 - 282.8
+    found, nothing = (self.pipettes.get_reference_point_location(ch) for ch in (0, 1))
+    assert found is not None and nothing is not None
+    self.assertAlmostEqual(found.z, 150.0 + overhang)
+    bottom = wells[1].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    self.assertAlmostEqual(nothing.z, bottom - 1.0 + overhang, places=1)
+
   async def test_a_traverse_height_raises_the_low_channels_instead_of_safe_z(self):
     self.pipettes._traverse_raise_targets = unittest.mock.AsyncMock(  # type: ignore[method-assign]
       return_value={0: 300.0}

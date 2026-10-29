@@ -3578,7 +3578,8 @@ class Pipettes:
     """Search for the liquid in every container of one batch, the channels together, n times.
 
     From `z_start` to `search_limit_below_cavity_bottom` under the cavity bottom, on the stop disc.
-    One `C0 RL` per round; None where a channel found nothing.
+    One `C0 RL` per round; None where a channel found nothing. Each channel is then modelled where
+    its search left it: its stop disc an overhang above the surface found, or at its window's end.
 
     Args:
       batch: the channels and which container each has, by job index.
@@ -3618,15 +3619,20 @@ class Pipettes:
         return_exceptions=True,
       )
       heights = await self.request_last_lld_z_positions()
-      for (channel, job, _, _), result in zip(searches, results):
+      for (channel, job, end, _), result in zip(searches, results):
         if isinstance(result, STARFirmwareError) and self._found_nothing(
           result, self.channel_id(channel)
         ):
           found[job].append(None)
+          stopped = end
         elif isinstance(result, BaseException):
           raise result
         else:
           found[job].append(heights[channel])
+          stopped = heights[channel] + overhangs[channel]
+        # No post-detection move, so the stop disc stays where the search left it: the model has
+        # it there, not still up at the start.
+        self.update_location_by_reference_point(channel, z=round(stopped, 2))
     return found
 
   async def probe_liquid_heights(
