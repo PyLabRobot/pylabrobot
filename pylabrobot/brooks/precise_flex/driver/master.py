@@ -10,8 +10,10 @@ from typing import (
   Any,
   ClassVar,
   Dict,
+  List,
   Literal,
   Optional,
+  Sequence,
   cast,
 )
 
@@ -245,16 +247,17 @@ class PreciseFlexDriver:
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
     ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
-    modelled, and axes outside their limits are dealt with.
+    modelled, before homing so the jaws' opening is checked, and axes outside their limits are
+    dealt with.
 
     Args:
       skip_home: If True, skip the homing step during setup.
     """
     await self.connect()
     configuration = await self.initialize()
+    self._create_feature_resources(configuration)
     if not skip_home:
       await self.home()
-    self._create_feature_resources(configuration)
     await self.arm._handle_out_of_range_axes()
 
   async def connect(self) -> None:
@@ -528,12 +531,31 @@ class PreciseFlexDriver:
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
+    Only the jaws move: the other joints read their position. The jaws open to their stop and back
+    off, so on a modelled arm their opening to the hard limit is first checked against the column
+    and the base plate. Closing never carries a finger outward.
+
     Note:
       Requires power to be enabled.
       Requires robot to be attached.
       Waits until the homing is complete.
     """
-    await self.send_command("home")
+    gripper = self.gripper.configuration
+
+    def build_targets(current: JointState) -> List[JointState]:
+      if gripper is None:
+        return []
+      return [{**current, PreciseFlexAxis.GRIPPER: gripper.hard_limit_range[1]}]
+
+    async def unchecked_fw_move(_targets: Sequence[JointState]) -> None:
+      await self.send_command("home")
+
+    await self.arm._guarded_move(
+      build_targets,
+      unchecked_fw_move,
+      check_soft_limits=False,
+      retry_out_of_range=False,
+    )
 
   async def home_all(self) -> None:
     """Home all robots.
