@@ -976,8 +976,7 @@ class ModelTests(ServerTestCase):
     with self.assertRaises(ServerError) as refused:
       await self.server.get_or_create("hamilton_96_tiprack_300uL_filter", "a")
     self.assertEqual(refused.exception.problem, pb.PROBLEM_NAME_CONFLICT)
-    carrier = await self.server.get("plate_carrier", ROOT)
-    assert isinstance(carrier, handles.Carrier)
+    carrier = await self.server.get("plate_carrier", ROOT, kind=handles.Carrier)
     held = await self.server.get_or_create("cor_96_wellplate_360uL_Fb", "plate", parent=carrier[0])
     self.assertEqual(held, await self.server.get("plate", ROOT))
 

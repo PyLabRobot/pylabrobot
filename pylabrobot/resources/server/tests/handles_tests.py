@@ -18,6 +18,7 @@ from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import Carrier, PlateCarrier
 from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck, track_for_x_coordinate
+from pylabrobot.resources.hamilton.plate_carriers import hamilton_plate_carrier_L5_ac
 from pylabrobot.resources.plate import Plate as PLRPlate
 from pylabrobot.resources.resource import Resource as PLRResource
 from pylabrobot.resources.server import build
@@ -25,6 +26,7 @@ from pylabrobot.resources.server import handles as h
 from pylabrobot.resources.server.definitions import kind_of
 from pylabrobot.resources.server.errors import ServerError
 from pylabrobot.resources.server.tests.server_tests import ROOT, ServerTestCase, build_deck
+from pylabrobot.resources.server.v1 import server_pb2 as spb
 from pylabrobot.resources.server.v1 import types_pb2 as pb
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.well import Well as PLRWell
@@ -56,7 +58,7 @@ class HandleTestCase(ServerTestCase):
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
     self.plr = build_deck()
-    self.deck = await self.server.get(ROOT)
+    self.deck = await self.server.get(ROOT, kind=h.Deck)
 
 
 class ReadingTests(HandleTestCase):
@@ -69,8 +71,7 @@ class ReadingTests(HandleTestCase):
     self.assertEqual(await self.server.get("plate", root=ROOT), plate)
 
   async def test_items_are_known_without_asking(self):
-    plate = await self.server.get("plate", root=self.deck)
-    assert isinstance(plate, h.Plate)
+    plate = await self.server.get("plate", root=self.deck, kind=h.Plate)
     plr = self.plr.get_resource("plate")
     assert isinstance(plr, PLRPlate)
     self.assertEqual(plate.num_items, 96)
@@ -106,13 +107,11 @@ class ReadingTests(HandleTestCase):
     plate = await well.get_parent()
     self.assertIsInstance(plate, h.Plate)
     self.assertEqual(await well.get_root(), self.deck)
-    carrier = await self.deck.get_resource("plate_carrier")
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
     self.assertIsInstance(carrier, h.Carrier)
-    assert isinstance(carrier, h.Carrier)
     self.assertEqual(carrier.capacity, 5)
     site = carrier[0]
     self.assertIsInstance(site, h.PlateHolder)
-    assert isinstance(site, h.PlateHolder)
     self.assertEqual(await site.get_resource_held(), plate)
     self.assertIsNone(await carrier[4].get_resource_held())  # type: ignore
     self.assertIn(plate, await site.get_children())
@@ -123,8 +122,7 @@ class ReadingTests(HandleTestCase):
       await carrier.get_resource("tips")
 
   async def test_volumes_and_heights(self):
-    plate = await self.server.get("plate", root=self.deck)
-    assert isinstance(plate, h.Plate)
+    plate = await self.server.get("plate", root=self.deck, kind=h.Plate)
     await plate.set_well_volumes([10.0 * i for i in range(96)])
     well = plate.get_well("B1")
     self.assertEqual(await well.get_volume(), 10.0)
@@ -138,8 +136,7 @@ class ReadingTests(HandleTestCase):
     self.assertAlmostEqual(await well.compute_volume_from_height(height), 100, places=6)
 
   async def test_tips_are_there_until_emptied(self):
-    tips = await self.server.get("tips", root=self.deck)
-    assert isinstance(tips, h.TipRack)
+    tips = await self.server.get("tips", root=self.deck, kind=h.TipRack)
     spot = tips.get_tip_spot("A1")
     self.assertTrue(await spot.has_tip())
     tip = await spot.get_tip()
@@ -180,8 +177,7 @@ class EventTests(HandleTestCase):
 
     # A handle moves a resource in one assignment, and emits both events of the move.
     events = recorded(bus := EventBus())
-    carrier = await self.deck.get_resource("plate_carrier")
-    assert isinstance(carrier, h.Carrier)
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
     plate = await self.server.get("plate", root=self.deck)
     with use_event_bus(bus):
       await plate.unassign()
@@ -209,8 +205,7 @@ class EventTests(HandleTestCase):
     return [(event.name, event.data) for event in events]
 
   async def test_taking_and_making_tips_emits_what_plr_s_classes_do(self):
-    tips = await self.server.get("tips", root=self.deck)
-    assert isinstance(tips, h.TipRack)
+    tips = await self.server.get("tips", root=self.deck, kind=h.TipRack)
     spot = self.plr.get_resource("tips_tipspot_A1")
     assert isinstance(spot, TipSpot)
     ours = await self.events_of(lambda: tips.set_tip_state([i != 0 for i in range(tips.num_items)]))
@@ -223,8 +218,7 @@ class EventTests(HandleTestCase):
     self.assertEqual({name for name, _ in ours}, {"resource.unassigned"})
 
   async def test_creating_and_deleting_in_a_parent_emits_assignments(self):
-    carrier = await self.server.get("plate_carrier", root=self.deck)
-    assert isinstance(carrier, h.Carrier)
+    carrier = await self.server.get("plate_carrier", root=self.deck, kind=h.Carrier)
     events = await self.events_of(
       lambda: self.server.create("cor_96_wellplate_360uL_Fb", name="new_plate", parent=carrier[4])
     )
@@ -238,7 +232,6 @@ class EventTests(HandleTestCase):
 
 class DeckTests(HandleTestCase):
   async def test_tracks_are_plr_s(self):
-    assert isinstance(self.deck, h.Deck)
     plr = self.plr
     assert isinstance(plr, HamiltonDeck)
     for track in (1, 8, 30):
@@ -264,11 +257,9 @@ class ChangingTests(HandleTestCase):
 
     loose = cor_96_wellplate_360uL_Fb(name="new_plate")
     loose.get_well("A1").tracker.set_volume(50)
-    carrier = await self.deck.get_resource("plate_carrier")
-    assert isinstance(carrier, h.Carrier)
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
     plate = await carrier[3].assign_child_resource(loose)
 
-    assert isinstance(plate, h.Plate)
     self.assertEqual(plate.name, "new_plate")
     self.assertEqual(await plate.get_parent(), carrier[3])
     self.assertEqual(await self.server.get("new_plate", root=self.deck), plate)
@@ -285,23 +276,21 @@ class ChangingTests(HandleTestCase):
     self.assertIsNone(loose.parent)
 
   async def test_a_handle_assigned_comes_back(self):
-    carrier = await self.deck.get_resource("plate_carrier")
-    assert isinstance(carrier, h.Carrier)
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
     plate = await self.server.get("plate", root=self.deck)
     self.assertIs(await carrier[3].assign_child_resource(plate), plate)
 
   async def test_a_site_of_a_carrier_on_a_server_is_not_set_by_index(self):
-    carrier = await self.deck.get_resource("plate_carrier")
-    assert isinstance(carrier, h.Carrier)
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
     with self.assertRaisesRegex(TypeError, r"await carrier\[3\]\.assign_child_resource"):
       carrier[3] = cor_96_wellplate_360uL_Fb(name="new_plate")
 
   async def test_labware_is_made_from_plr_s_models(self):
-    carrier = await self.deck.get_resource("plate_carrier")
-    assert isinstance(carrier, h.Carrier)
-    plate = await self.server.create("cor_96_wellplate_360uL_Fb", name="fresh", parent=carrier[2])
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
+    plate = await self.server.create(
+      "cor_96_wellplate_360uL_Fb", name="fresh", parent=carrier[2], kind=h.Plate
+    )
     self.assertIsInstance(plate, h.Plate)
-    assert isinstance(plate, h.Plate)
     self.assertEqual(plate.get_well("H12").name, "fresh_well_H12")
     plr_carrier = self.plr.get_resource("plate_carrier")
     assert isinstance(plr_carrier, PlateCarrier)
@@ -313,8 +302,7 @@ class ChangingTests(HandleTestCase):
 
   async def test_a_plate_moves_by_hand(self):
     plate = await self.server.get("plate", root=self.deck)
-    carrier = await self.deck.get_resource("plate_carrier")
-    assert isinstance(carrier, h.Carrier)
+    carrier = await self.deck.get_resource("plate_carrier", kind=h.Carrier)
     await carrier[3].assign_child_resource(plate)
     self.assertEqual(await plate.get_parent(), carrier[3])
     await plate.unassign()
@@ -325,13 +313,12 @@ class ChangingTests(HandleTestCase):
     self.assertEqual(await plate.get_location(), Coordinate(600, 100, 0))
 
   async def test_a_root_with_no_location_still_has_a_size(self):
-    plate = await self.server.create("cor_96_wellplate_360uL_Fb", name="loose")
+    plate = await self.server.create("cor_96_wellplate_360uL_Fb", name="loose", kind=h.Plate)
     self.assertEqual(await plate.get_size(), Coordinate(127.76, 85.48, 14.2))
     self.assertEqual((await plate.get_absolute_rotation()).z, 0)
     with self.assertRaises(ServerError) as caught:
       await plate.get_absolute_location()
     self.assertEqual(caught.exception.problem, pb.PROBLEM_NO_LOCATION)
-    assert isinstance(plate, h.Plate)
     self.assertEqual(
       await plate.get_well("A1").get_location_wrt(plate), Coordinate(10.87, 70.77, 3.03)
     )
@@ -392,3 +379,57 @@ class ChangingTests(HandleTestCase):
 
 if __name__ == "__main__":
   unittest.main()
+
+
+class KindTests(HandleTestCase):
+  """What a handle is typed as is what it is: lookups take the kind expected, and check it."""
+
+  async def test_a_lookup_given_a_kind_gives_it_or_refuses(self):
+    plate = await self.server.get("plate", root=self.deck, kind=h.Plate)
+    self.assertIsInstance(plate, h.Plate)
+    self.assertEqual(await self.server.get_by_id(plate.id, h.Plate), plate)
+    with self.assertRaisesRegex(TypeError, "'plate' is a Plate, not a TipRack"):
+      await self.server.get("plate", root=self.deck, kind=h.TipRack)
+    with self.assertRaises(TypeError):
+      await self.deck.get_resource("plate", kind=h.Carrier)
+    holder = await plate.get_parent(h.PlateHolder)
+    self.assertIsInstance(holder, h.PlateHolder)
+    assert holder is not None
+    self.assertEqual(await holder.get_resource_held(h.Plate), plate)
+    self.assertEqual(await plate.get_root(h.Deck), self.deck)
+
+  async def test_a_list_given_a_kind_is_only_those(self):
+    carriers = await self.deck.get_children(h.Carrier)
+    self.assertEqual(
+      sorted(c.name for c in carriers), ["plate_carrier", "tip_carrier", "trough_carrier"]
+    )
+    plates = await self.deck.find_resources(kind=h.Plate)
+    self.assertEqual(sorted(p.name for p in plates), ["other_plate", "plate"])
+    containers = await self.server.find_resources(
+      spb.ResourceFilter(), scope=self.deck, kind=h.Container
+    )
+    self.assertTrue(containers)
+    self.assertTrue(all(isinstance(c, h.Container) for c in containers))
+    self.assertIn("trough", [c.name for c in containers])
+
+  async def test_a_plr_resource_comes_back_as_its_class(self):
+    carrier = await self.deck.assign_child_resource(
+      hamilton_plate_carrier_L5_ac(name="typed_carrier"), track=22
+    )
+    self.assertIsInstance(carrier, h.Carrier)
+    self.assertTrue(all(isinstance(site, h.PlateHolder) for site in carrier.sites))
+    plate = await carrier[0].assign_child_resource(cor_96_wellplate_360uL_Fb(name="typed"))
+    self.assertIsInstance(plate, h.Plate)
+    self.assertTrue(all(isinstance(well, h.Well) for well in plate.items))
+    self.assertEqual(
+      await self.deck.assign_child_resource(plate, location=Coordinate(0, 0, 0)), plate
+    )
+
+  def test_handles_nest_as_plr_s_classes_do(self):
+    self.assertTrue(issubclass(h.Tip, h.HeadTool))
+    self.assertTrue(issubclass(h.MechanicalGripper, h.LinkBody))
+    self.assertTrue(issubclass(h.EmbeddedTipRackHolder, h.ResourceHolder))
+    self.assertTrue(issubclass(h.TubeRack, h.ContainerRack))
+    self.assertTrue(issubclass(h.ContainerRack, h.ItemizedResource))
+    self.assertIn(pb.RESOURCE_KIND_TRASH, h.kinds_of(h.Container))
+    self.assertNotIn(pb.RESOURCE_KIND_PLATE, h.kinds_of(h.Container))

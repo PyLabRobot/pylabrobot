@@ -8,7 +8,7 @@ anywhere else. A store's refusal arrives as the `ServerError` it raised, with it
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any, Dict, List, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Type, TypeVar, Union, overload
 
 from connectrpc.errors import ConnectError
 from connectrpc.request import RequestContext
@@ -191,19 +191,56 @@ class ResourceServer:
     response = await self.commands.get_resources(spb.GetResourcesRequest(resources=[ref], depth=1))
     return (await self.make_handles(response.nodes[:1], response.nodes[1:]))[0]
 
+  @overload
   async def get(
     self, name: str, root: Union[str, handles.Resource, None] = None
+  ) -> handles.Resource: ...
+
+  @overload
+  async def get(
+    self, name: str, root: Union[str, handles.Resource, None] = None, *, kind: Type[handles.H]
+  ) -> handles.H: ...
+
+  async def get(
+    self,
+    name: str,
+    root: Union[str, handles.Resource, None] = None,
+    *,
+    kind: Optional[Type[handles.Resource]] = None,
   ) -> handles.Resource:
     """A resource by name: a root's, or one within `root`.
 
+    Args:
+      kind: What it must be, given back as that: `get("plate", kind=handles.Plate)`.
+
     Raises:
       ServerError: No resource has that name.
+      TypeError: It is not a `kind`.
     """
     root_name = root.name if isinstance(root, handles.Resource) else (root or "")
-    return await self._get(pb.ResourceRef(name=pb.NameRef(root=root_name, name=name)))
+    found = await self._get(pb.ResourceRef(name=pb.NameRef(root=root_name, name=name)))
+    return found if kind is None else handles.as_kind(found, kind)
 
-  async def get_by_id(self, resource_id: bytes) -> handles.Resource:
-    return await self._get(pb.ResourceRef(id=resource_id))
+  @overload
+  async def get_by_id(self, resource_id: bytes) -> handles.Resource: ...
+
+  @overload
+  async def get_by_id(self, resource_id: bytes, kind: Type[handles.H]) -> handles.H: ...
+
+  async def get_by_id(
+    self, resource_id: bytes, kind: Optional[Type[handles.Resource]] = None
+  ) -> handles.Resource:
+    """A resource by id.
+
+    Args:
+      kind: What it must be, given back as that.
+
+    Raises:
+      ServerError: No resource has that id.
+      TypeError: It is not a `kind`.
+    """
+    found = await self._get(pb.ResourceRef(id=resource_id))
+    return found if kind is None else handles.as_kind(found, kind)
 
   async def roots(self) -> List[handles.Resource]:
     """Every root in the store: decks, devices, and resources in nothing."""
@@ -216,13 +253,37 @@ class ResourceServer:
       if not token:
         return await self.make_handles(nodes)
 
+  @overload
   async def find_resources(
     self,
     filter: spb.ResourceFilter,
     scope: Optional[handles.Resource] = None,
-  ) -> List[handles.Resource]:
-    """Every resource that matches, within `scope` or the whole store, in pre-order."""
+  ) -> List[handles.Resource]: ...
+
+  @overload
+  async def find_resources(
+    self,
+    filter: spb.ResourceFilter,
+    scope: Optional[handles.Resource] = None,
+    *,
+    kind: Type[handles.H],
+  ) -> List[handles.H]: ...
+
+  async def find_resources(
+    self,
+    filter: spb.ResourceFilter,
+    scope: Optional[handles.Resource] = None,
+    *,
+    kind: Optional[Type[handles.H]] = None,
+  ) -> Union[List[handles.Resource], List[handles.H]]:
+    """Every resource that matches, within `scope` or the whole store, in pre-order.
+
+    Args:
+      kind: Only those that are one, as that; the store is asked only for their kinds.
+    """
     request = spb.FindResourcesRequest(filter=filter)
+    if kind is not None and not filter.kinds:
+      request.filter.kinds.extend(handles.kinds_of(kind))
     if scope is not None:
       request.scope.CopyFrom(scope.ref)
     nodes: List[pb.ResourceNode] = []
@@ -230,8 +291,33 @@ class ResourceServer:
       response = await self.commands.find_resources(request)
       nodes.extend(response.nodes)
       if not response.next_page_token:
-        return await self.make_handles(nodes)
+        found = await self.make_handles(nodes)
+        return found if kind is None else handles.of_kind(found, kind)
       request.page_token = response.next_page_token
+
+  @overload
+  async def create(
+    self,
+    source: Union[str, pb.ResourceDefinition],
+    name: str,
+    parent: Optional[handles.Resource] = None,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> handles.Resource: ...
+
+  @overload
+  async def create(
+    self,
+    source: Union[str, pb.ResourceDefinition],
+    name: str,
+    parent: Optional[handles.Resource] = None,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+    *,
+    kind: Type[handles.H],
+  ) -> handles.H: ...
 
   async def create(
     self,
@@ -241,6 +327,8 @@ class ResourceServer:
     location: Optional[Coordinate] = None,
     track: Optional[int] = None,
     index: Optional[int] = None,
+    *,
+    kind: Optional[Type[handles.Resource]] = None,
   ) -> handles.Resource:
     """Make a resource from a model or a definition, and put it in `parent` when given.
 
@@ -255,6 +343,10 @@ class ResourceServer:
       location: Where in `parent`; see `Resource.assign_child_resource`.
       track: A Hamilton deck's track, from 1.
       index: Its position among `parent`'s children; unset appends.
+      kind: What it must be made as, given back as that: `create(model, name, kind=handles.Plate)`.
+
+    Raises:
+      TypeError: It is not made as a `kind`; it is made all the same.
     """
     request = spb.CreateResource(name=name)
     if isinstance(source, pb.ResourceDefinition):
@@ -285,7 +377,8 @@ class ResourceServer:
       response = await self.commands.create_resources(create)
     if before is not None and parent is not None:
       handles.emit_assigned(before, response.nodes[0], parent.id)
-    return (await self.make_handles(response.nodes[:1], response.nodes[1:]))[0]
+    made = (await self.make_handles(response.nodes[:1], response.nodes[1:]))[0]
+    return made if kind is None else handles.as_kind(made, kind)
 
   async def _put_library_model(self, name: str) -> bool:
     """Put one of PLR's models in the store, under the name asked for, when the store has no model
@@ -303,6 +396,7 @@ class ResourceServer:
     await self.commands.put_model(spb.PutModelRequest(model=model))
     return True
 
+  @overload
   async def get_or_create(
     self,
     source: Union[str, pb.ResourceDefinition],
@@ -310,6 +404,29 @@ class ResourceServer:
     parent: Optional[handles.Resource] = None,
     location: Optional[Coordinate] = None,
     track: Optional[int] = None,
+  ) -> handles.Resource: ...
+
+  @overload
+  async def get_or_create(
+    self,
+    source: Union[str, pb.ResourceDefinition],
+    name: str,
+    parent: Optional[handles.Resource] = None,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    *,
+    kind: Type[handles.H],
+  ) -> handles.H: ...
+
+  async def get_or_create(
+    self,
+    source: Union[str, pb.ResourceDefinition],
+    name: str,
+    parent: Optional[handles.Resource] = None,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    *,
+    kind: Optional[Type[handles.Resource]] = None,
   ) -> handles.Resource:
     """The resource of this name where `create` would make it - a root, or a child of `parent` -
     or, when there is none, one made as `create` makes it.
@@ -320,14 +437,17 @@ class ResourceServer:
       parent: What it is in, or is put in; unset for a root.
       location: Where in `parent` it is put, when it is made.
       track: A Hamilton deck's track, from 1, when it is made.
+      kind: What it must be, given back as that.
 
     Raises:
       ServerError: A resource of this name is there, but is another kind or model
         (`PROBLEM_NAME_CONFLICT`).
+      TypeError: It is not a `kind`.
     """
     found = await self._find_named(name, parent)
     if found is None:
-      return await self.create(source, name, parent=parent, location=location, track=track)
+      made = await self.create(source, name, parent=parent, location=location, track=track)
+      return made if kind is None else handles.as_kind(made, kind)
     expected = await self._made_as(source)
     attributes = found.attributes
     if attributes.kind != expected.kind or attributes.model != expected.model:
@@ -337,7 +457,8 @@ class ResourceServer:
         f"'{attributes.model}', not a {pb.ResourceKind.Name(expected.kind)} of model "
         f"'{expected.model}'",
       )
-    return (await self.make_handles([found]))[0]
+    handle = (await self.make_handles([found]))[0]
+    return handle if kind is None else handles.as_kind(handle, kind)
 
   async def _made_as(self, source: Union[str, pb.ResourceDefinition]) -> pb.ResourceAttributes:
     """What a model or a definition makes its root as."""

@@ -32,8 +32,7 @@ class TrashTests(ServerTestCase):
   async def test_tip_spots_track_tips_by_default(self):
     spot = await self.node(item("tips", "A1"))
     self.assertTrue(spot.state.tip_tracking_enabled)
-    built = await self.server.create("hamilton_96_tiprack_300uL", "rack")
-    assert isinstance(built, handles.TipRack)
+    built = await self.server.create("hamilton_96_tiprack_300uL", "rack", kind=handles.TipRack)
     made = await built.get_tip_spot("A1").node()
     self.assertTrue(made.state.tip_tracking_enabled)
     picked = await self.pick_up(["A1"], [0])
@@ -57,8 +56,7 @@ class TrashTests(ServerTestCase):
     self.assertEqual(tip.attributes.location.z, 0)
 
     start = (await self.commands.get_server_info(spb.GetServerInfoRequest())).revision
-    held = await self.server.get("trash", root=ROOT)
-    assert isinstance(held, handles.Trash)
+    held = await self.server.get("trash", root=ROOT, kind=handles.Trash)
     await held.clear()
     self.assertEqual(list((await self.node(ref("trash"))).child_ids), [])
     for tip_id in tips:

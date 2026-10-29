@@ -11,6 +11,13 @@ A handle that moves a resource emits the events PLR's `Resource` emits for the s
 `resource.unassigned` and `resource.assigned`, while an event bus listens.
 
 Handles are made by a `ResourceServer` (`create`, `get`, `roots`), never directly.
+
+Each kind of resource has a handle class, as PLR has a class for each, and what a handle gives
+back is typed as precisely as can be known. A resource made from one of PLR's objects comes back
+as the handle for that object's class: a `Plate` as a `Plate`, a `PlateCarrier` as a
+`Carrier[PlateHolder]`. A plate's items are `Well`s, a tip rack's `TipSpot`s. Where a resource is
+found by name or by where it is, and could be any kind, a lookup takes the kind expected,
+`await server.get("plate", Plate)`, and raises `TypeError` when it is another.
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ from typing import (
   TYPE_CHECKING,
   Any,
   Dict,
+  Generic,
   Iterable,
   List,
   Mapping,
@@ -27,10 +35,13 @@ from typing import (
   Tuple,
   Type,
   Union,
+  cast,
+  overload,
 )
 
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
+from typing_extensions import TypeVar
 
 from pylabrobot.events import coordinate_reference, emit_event, is_event_bus_active
 from pylabrobot.resources.coordinate import Coordinate
@@ -44,10 +55,63 @@ from pylabrobot.resources.utils import row_index_to_label
 from pylabrobot.utils.positions import expand_string_range
 
 if TYPE_CHECKING:
+  from pylabrobot.resources.carrier import Carrier as PLRCarrier
+  from pylabrobot.resources.carrier import PlateCarrier as PLRPlateCarrier
+  from pylabrobot.resources.carrier import PlateHolder as PLRPlateHolder
+  from pylabrobot.resources.container import Container as PLRContainer
+  from pylabrobot.resources.container_rack import ContainerRack as PLRContainerRack
+  from pylabrobot.resources.deck import Deck as PLRDeck
+  from pylabrobot.resources.end_effector import MechanicalGripper as PLRMechanicalGripper
+  from pylabrobot.resources.head_tool import HeadTool as PLRHeadTool
+  from pylabrobot.resources.lid import Lid as PLRLid
+  from pylabrobot.resources.manipulator import LinkBody as PLRLinkBody
+  from pylabrobot.resources.n_channel_pipettes import NChannelPipette as PLRNChannelPipette
+  from pylabrobot.resources.n_channel_pipettes import TipMountingShaft as PLRTipMountingShaft
+  from pylabrobot.resources.petri_dish import PetriDish as PLRPetriDish
+  from pylabrobot.resources.petri_dish import PetriDishHolder as PLRPetriDishHolder
+  from pylabrobot.resources.plate import Plate as PLRPlate
+  from pylabrobot.resources.plate_adapter import PlateAdapter as PLRPlateAdapter
   from pylabrobot.resources.resource import Resource as PLRResource
+  from pylabrobot.resources.resource_holder import ResourceHolder as PLRResourceHolder
+  from pylabrobot.resources.resource_stack import ResourceStack as PLRResourceStack
   from pylabrobot.resources.server.client import ResourceServer
+  from pylabrobot.resources.tip import Tip as PLRTip
+  from pylabrobot.resources.tip_rack import TipRack as PLRTipRack
+  from pylabrobot.resources.tip_rack import TipSpot as PLRTipSpot
+  from pylabrobot.resources.tip_rack_holder import (
+    EmbeddedTipRackHolder as PLREmbeddedTipRackHolder,
+  )
+  from pylabrobot.resources.trash import Trash as PLRTrash
+  from pylabrobot.resources.trough import Trough as PLRTrough
+  from pylabrobot.resources.tube import Tube as PLRTube
+  from pylabrobot.resources.tube_rack import TubeRack as PLRTubeRack
+  from pylabrobot.resources.well import Well as PLRWell
 
 K = pb.ResourceKind
+
+# A handle of some kind: what a lookup gives when told the kind to expect.
+H = TypeVar("H", bound="Resource", default="Resource")
+# What a plate's, a tip rack's or a rack's items are.
+T = TypeVar("T", bound="Resource", default="Resource", covariant=True)
+# What a carrier's sites are.
+S = TypeVar("S", bound="ResourceHolder", default="ResourceHolder", covariant=True)
+
+
+def as_kind(handle: Resource, kind: Type[H]) -> H:
+  """A handle, as the kind it must be.
+
+  Raises:
+    TypeError: It is another kind.
+  """
+  if not isinstance(handle, kind):
+    raise TypeError(f"'{handle.name}' is a {type(handle).__name__}, not a {kind.__name__}")
+  return handle
+
+
+def of_kind(found: Sequence[Resource], kind: Type[H]) -> List[H]:
+  """Those of `found` that are a `kind`."""
+  return [handle for handle in found if isinstance(handle, kind)]
+
 
 _ANCHOR_X = {
   "l": pb.ANCHOR_X_LEFT,
@@ -221,34 +285,108 @@ class Resource:
     compact_grids(definition)
     return definition
 
-  async def get_parent(self) -> Optional[Resource]:
+  @overload
+  async def get_parent(self) -> Optional[Resource]: ...
+
+  @overload
+  async def get_parent(self, kind: Type[H]) -> Optional[H]: ...
+
+  async def get_parent(self, kind: Optional[Type[Resource]] = None) -> Optional[Resource]:
+    """What it is in; None for a root.
+
+    Args:
+      kind: What the parent must be, given back as that.
+
+    Raises:
+      TypeError: The parent is not a `kind`.
+    """
     node = await self.node()
     if not node.parent_id:
       return None
-    return await self.server.get_by_id(node.parent_id)
+    parent = await self.server.get_by_id(node.parent_id)
+    return parent if kind is None else as_kind(parent, kind)
 
-  async def get_root(self) -> Resource:
+  @overload
+  async def get_root(self) -> Resource: ...
+
+  @overload
+  async def get_root(self, kind: Type[H]) -> H: ...
+
+  async def get_root(self, kind: Optional[Type[Resource]] = None) -> Resource:
+    """The root of its tree: itself, for a root.
+
+    Args:
+      kind: What the root must be, given back as that.
+
+    Raises:
+      TypeError: The root is not a `kind`.
+    """
     node = await self.node()
-    return self if node.root_id == self.id else await self.server.get_by_id(node.root_id)
+    root = self if node.root_id == self.id else await self.server.get_by_id(node.root_id)
+    return root if kind is None else as_kind(root, kind)
 
-  async def get_children(self) -> List[Resource]:
+  @overload
+  async def get_children(self) -> List[Resource]: ...
+
+  @overload
+  async def get_children(self, kind: Type[H]) -> List[H]: ...
+
+  async def get_children(self, kind: Optional[Type[H]] = None) -> Union[List[Resource], List[H]]:
+    """What is in it, in order.
+
+    Args:
+      kind: Only the children that are one, as that.
+    """
     response = await self.server.commands.get_resources(
       spb.GetResourcesRequest(resources=[self.ref], depth=1)
     )
-    return await self.server.make_handles(
+    children = await self.server.make_handles(
       [node for node in response.nodes if node.parent_id == self.id], response.nodes
     )
+    return children if kind is None else of_kind(children, kind)
 
-  async def get_resource(self, name: str) -> Resource:
+  @overload
+  async def get_resource(self, name: str) -> Resource: ...
+
+  @overload
+  async def get_resource(self, name: str, kind: Type[H]) -> H: ...
+
+  async def get_resource(self, name: str, kind: Optional[Type[Resource]] = None) -> Resource:
     """A resource under it by name.
+
+    Args:
+      kind: What it must be, given back as that.
 
     Raises:
       ServerError: Nothing under it has that name.
+      TypeError: It is not a `kind`.
     """
     found = await self.find_resources(names=[name])
     if not found:
       raise ServerError(pb.PROBLEM_NOT_FOUND, f"'{self.name}' holds no '{name}'", name)
-    return found[0]
+    return found[0] if kind is None else as_kind(found[0], kind)
+
+  @overload
+  async def find_resources(
+    self,
+    kinds: Sequence[pb.ResourceKind] = (),
+    names: Sequence[str] = (),
+    models: Sequence[str] = (),
+    categories: Sequence[str] = (),
+    name_prefix: str = "",
+  ) -> List[Resource]: ...
+
+  @overload
+  async def find_resources(
+    self,
+    kinds: Sequence[pb.ResourceKind] = (),
+    names: Sequence[str] = (),
+    models: Sequence[str] = (),
+    categories: Sequence[str] = (),
+    name_prefix: str = "",
+    *,
+    kind: Type[H],
+  ) -> List[H]: ...
 
   async def find_resources(
     self,
@@ -257,20 +395,287 @@ class Resource:
     models: Sequence[str] = (),
     categories: Sequence[str] = (),
     name_prefix: str = "",
-  ) -> List[Resource]:
-    """It and everything under it that matches, in pre-order."""
-    return await self.server.find_resources(
-      scope=self,
-      filter=spb.ResourceFilter(
-        kinds=kinds, names=names, models=models, categories=categories, name_prefix=name_prefix
-      ),
+    *,
+    kind: Optional[Type[H]] = None,
+  ) -> Union[List[Resource], List[H]]:
+    """It and everything under it that matches, in pre-order.
+
+    Args:
+      kind: Only those that are one, as that.
+    """
+    filter = spb.ResourceFilter(
+      kinds=kinds, names=names, models=models, categories=categories, name_prefix=name_prefix
     )
+    if kind is None:
+      return await self.server.find_resources(scope=self, filter=filter)
+    return await self.server.find_resources(scope=self, filter=filter, kind=kind)
 
   async def is_in_subtree_of(self, other: Resource) -> bool:
     found = await other.find_resources(names=[self.name])
     return any(each.id == self.id for each in found)
 
   # -- changing ----------------------------------------------------------------------------------
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: H,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> H: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTipSpot,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> TipSpot: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTip,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Tip: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRHeadTool,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> HeadTool: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRLid,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Lid: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRPlateAdapter,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> PlateAdapter: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRResourceStack,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> ResourceStack: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRWell,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Well: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTrough,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Trough: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTube,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Tube: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRPetriDish,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> PetriDish: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTrash,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Trash: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRContainer,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Container: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRPetriDishHolder,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> PetriDishHolder: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRPlate,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Plate: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTipRack,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> TipRack: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTubeRack,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> TubeRack: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRContainerRack,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> ContainerRack: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLREmbeddedTipRackHolder,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> EmbeddedTipRackHolder: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRPlateHolder,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> PlateHolder: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRResourceHolder,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> ResourceHolder: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRPlateCarrier,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Carrier[PlateHolder]: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRCarrier,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Carrier[ResourceHolder]: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRDeck,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Deck: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRTipMountingShaft,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> TipMountingShaft: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRNChannelPipette,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> NChannelPipette: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRMechanicalGripper,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> MechanicalGripper: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRLinkBody,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> LinkBody: ...
+
+  @overload
+  async def assign_child_resource(
+    self,
+    child: PLRResource,
+    location: Optional[Coordinate] = None,
+    track: Optional[int] = None,
+    index: Optional[int] = None,
+  ) -> Resource: ...
 
   async def assign_child_resource(
     self,
@@ -283,7 +688,8 @@ class Resource:
 
     `child` may be one of PLR's `Resource` objects, a labware factory's say, that is on no server
     yet: it is made on this resource's server, with its children and their state, and put here.
-    The object itself is left as it was; use the handle returned.
+    The object itself is left as it was; use the handle returned, which is the handle for the
+    object's class: a `Plate` for a PLR `Plate`, a `Carrier[PlateHolder]` for a `PlateCarrier`.
 
     Args:
       child: What to put in it: a handle, which may be in another tree, or a PLR `Resource`.
@@ -535,13 +941,53 @@ class Trash(Container):
         emit_unassigned(before, child_id)
 
 
+# -- tips --------------------------------------------------------------------------------------
+
+
+class TipSpot(Resource):
+  async def get_tip(self) -> Optional[Tip]:
+    """The tip it holds; unset when it holds none."""
+    tips = await self.get_children(Tip)
+    return tips[0] if tips else None
+
+  async def has_tip(self) -> bool:
+    return await self.get_tip() is not None
+
+
+class HeadTool(Resource):
+  """A tool a channel or a head picks up: a tip is one."""
+
+
+class Tip(HeadTool):
+  async def get_volume(self, view: pb.View = pb.VIEW_PENDING) -> float:
+    state = await self.state(view)
+    return state.volume.pending_volume if view != pb.VIEW_COMMITTED else state.volume.volume
+
+  async def set_volume(
+    self,
+    volume: float,
+    on_tracking_problem: "pb.OnTrackingProblem" = pb.ON_TRACKING_PROBLEM_RECORD,
+  ) -> List[pb.Issue]:
+    """Say what it holds: 0 once it has been emptied somewhere the model does not hold.
+
+    Args:
+      volume: What it holds now.
+      on_tracking_problem: Whether more than it holds at most, or less than nothing, is set and
+        returned as an issue, or refused.
+
+    Raises:
+      ServerError: The volume is refused (`PROBLEM_TOO_LITTLE_VOLUME`, `PROBLEM_TOO_LITTLE_LIQUID`).
+    """
+    return await self._set_volume(volume, on_tracking_problem)
+
+
 # -- itemized resources --------------------------------------------------------------------------
 
 Identifiers = Union[str, int, slice, range, Sequence[Union[str, int]]]
 
 
-class ItemizedResource(Resource):
-  """Items laid out in a grid: a plate's wells, a tip rack's spots, a tube rack's tubes.
+class ItemizedResource(Resource, Generic[T]):
+  """Items laid out in a grid: a plate's wells, a tip rack's spots, a rack's holders.
 
   Attributes:
     num_items_x: Columns.
@@ -549,15 +995,26 @@ class ItemizedResource(Resource):
   """
 
   def __init__(
-    self, server: ResourceServer, node: pb.ResourceNode, children: Sequence[pb.ResourceNode]
+    self,
+    server: ResourceServer,
+    node: pb.ResourceNode,
+    children: Sequence[pb.ResourceNode],
+    item_type: Type[T],
   ):
+    """
+    Args:
+      item_type: What its items are.
+
+    Raises:
+      TypeError: An item is not an `item_type`.
+    """
     super().__init__(server, node, children)
     self.num_items_x = node.attributes.itemized.num_items_x
     self.num_items_y = node.attributes.itemized.num_items_y
     by_id = {child.id: child for child in children}
     items = [by_id[i] for i in node.child_ids if i in by_id and by_id[i].attributes.identifier]
-    self._items: List[Resource] = [server.handle_from_node(item, ()) for item in items]
-    self._by_identifier = {
+    self._items: List[T] = [as_kind(server.handle_from_node(item, ()), item_type) for item in items]
+    self._by_identifier: Dict[str, T] = {
       item.attributes.identifier: handle for item, handle in zip(items, self._items)
     }
 
@@ -566,7 +1023,7 @@ class ItemizedResource(Resource):
     return len(self._items)
 
   @property
-  def items(self) -> List[Resource]:
+  def items(self) -> List[T]:
     """Every item, column-major: A1, B1, ..., A2, ..."""
     return list(self._items)
 
@@ -575,7 +1032,7 @@ class ItemizedResource(Resource):
     """Every item's identifier, column-major."""
     return list(self._by_identifier)
 
-  def get_item(self, identifier: Union[str, int, Tuple[int, int]]) -> Resource:
+  def get_item(self, identifier: Union[str, int, Tuple[int, int]]) -> T:
     """An item by identifier ("A1"), index (column-major, from 0), or (row, column).
 
     Raises:
@@ -593,13 +1050,13 @@ class ItemizedResource(Resource):
       raise IndexError(f"'{self.name}' has no item {identifier}")
     return self._items[identifier]
 
-  def get_items(self, identifiers: Union[str, Sequence[Union[str, int]]]) -> List[Resource]:
+  def get_items(self, identifiers: Union[str, Sequence[Union[str, int]]]) -> List[T]:
     """Items by a range, "A1:H1", or by identifiers or indices."""
     if isinstance(identifiers, str):
       identifiers = expand_string_range(identifiers)
     return [self.get_item(identifier) for identifier in identifiers]
 
-  def __getitem__(self, identifier: Identifiers) -> List[Resource]:
+  def __getitem__(self, identifier: Identifiers) -> List[T]:
     """Items as `ItemizedResource.__getitem__` gives them: always a list.
 
     `plate["A1"]`, `plate["A1:H1"]`, `plate[0]`, `plate[0:8]`, `plate["A1":"A2"]`, `plate[[0, 1]]`.
@@ -622,21 +1079,23 @@ class ItemizedResource(Resource):
     return self.get_items(list(identifier))
 
 
-class Plate(ItemizedResource):
+class Plate(ItemizedResource[Well]):
+  """A plate: its items are wells."""
+
+  def __init__(
+    self, server: ResourceServer, node: pb.ResourceNode, children: Sequence[pb.ResourceNode]
+  ):
+    super().__init__(server, node, children, Well)
+
   def get_well(self, identifier: Union[str, int, Tuple[int, int]]) -> Well:
-    well = self.get_item(identifier)
-    if not isinstance(well, Well):
-      raise TypeError(f"'{well.name}' is not a well")
-    return well
+    return self.get_item(identifier)
 
   def get_wells(self, identifiers: Union[str, Sequence[Union[str, int]]]) -> List[Well]:
     return [self.get_well(identifier) for identifier in _expand(identifiers)]
 
   async def get_lid(self) -> Optional[Lid]:
-    for child in await self.get_children():
-      if isinstance(child, Lid):
-        return child
-    return None
+    lids = await self.get_children(Lid)
+    return lids[0] if lids else None
 
   async def has_lid(self) -> bool:
     return await self.get_lid() is not None
@@ -655,12 +1114,16 @@ class Plate(ItemizedResource):
     )
 
 
-class TipRack(ItemizedResource):
+class TipRack(ItemizedResource[TipSpot]):
+  """A tip rack: its items are tip spots."""
+
+  def __init__(
+    self, server: ResourceServer, node: pb.ResourceNode, children: Sequence[pb.ResourceNode]
+  ):
+    super().__init__(server, node, children, TipSpot)
+
   def get_tip_spot(self, identifier: Union[str, int, Tuple[int, int]]) -> TipSpot:
-    spot = self.get_item(identifier)
-    if not isinstance(spot, TipSpot):
-      raise TypeError(f"'{spot.name}' is not a tip spot")
-    return spot
+    return self.get_item(identifier)
 
   def get_tip_spots(self, identifiers: Union[str, Sequence[Union[str, int]]]) -> List[TipSpot]:
     return [self.get_tip_spot(identifier) for identifier in _expand(identifiers)]
@@ -706,45 +1169,6 @@ class TipRack(ItemizedResource):
     await self.set_tip_state(False)
 
 
-class TubeRack(ItemizedResource):
-  pass
-
-
-class TipSpot(Resource):
-  async def get_tip(self) -> Optional[Tip]:
-    """The tip it holds; unset when it holds none."""
-    for child in await self.get_children():
-      if isinstance(child, Tip):
-        return child
-    return None
-
-  async def has_tip(self) -> bool:
-    return await self.get_tip() is not None
-
-
-class Tip(Resource):
-  async def get_volume(self, view: pb.View = pb.VIEW_PENDING) -> float:
-    state = await self.state(view)
-    return state.volume.pending_volume if view != pb.VIEW_COMMITTED else state.volume.volume
-
-  async def set_volume(
-    self,
-    volume: float,
-    on_tracking_problem: "pb.OnTrackingProblem" = pb.ON_TRACKING_PROBLEM_RECORD,
-  ) -> List[pb.Issue]:
-    """Say what it holds: 0 once it has been emptied somewhere the model does not hold.
-
-    Args:
-      volume: What it holds now.
-      on_tracking_problem: Whether more than it holds at most, or less than nothing, is set and
-        returned as an issue, or refused.
-
-    Raises:
-      ServerError: The volume is refused (`PROBLEM_TOO_LITTLE_VOLUME`, `PROBLEM_TOO_LITTLE_LIQUID`).
-    """
-    return await self._set_volume(volume, on_tracking_problem)
-
-
 class Lid(Resource):
   pass
 
@@ -753,33 +1177,59 @@ class Lid(Resource):
 
 
 class ResourceHolder(Resource):
-  async def get_resource_held(self) -> Optional[Resource]:
-    """What it holds; unset when empty."""
+  @overload
+  async def get_resource_held(self) -> Optional[Resource]: ...
+
+  @overload
+  async def get_resource_held(self, kind: Type[H]) -> Optional[H]: ...
+
+  async def get_resource_held(self, kind: Optional[Type[Resource]] = None) -> Optional[Resource]:
+    """What it holds; unset when empty.
+
+    Args:
+      kind: What it must be, given back as that.
+
+    Raises:
+      TypeError: What it holds is not a `kind`.
+    """
     children = await self.get_children()
-    return children[0] if children else None
+    if not children:
+      return None
+    return children[0] if kind is None else as_kind(children[0], kind)
 
 
 class PlateHolder(ResourceHolder):
   pass
 
 
-class Carrier(Resource):
-  """A carrier: sites, fixed when it is made, that resources go in. `carrier[0]` is a site."""
+class Carrier(Resource, Generic[S]):
+  """A carrier: sites, fixed when it is made, that resources go in. `carrier[0]` is a site.
+
+  Its sites are holders: a `PlateCarrier`'s are `PlateHolder`s, as `Carrier[PlateHolder]` says.
+  """
 
   def __init__(
     self, server: ResourceServer, node: pb.ResourceNode, children: Sequence[pb.ResourceNode]
   ):
+    """
+    Raises:
+      TypeError: A site is not a holder.
+    """
     super().__init__(server, node, children)
     by_id = {child.id: child for child in children}
-    self.sites: List[Resource] = [
-      server.handle_from_node(by_id[i], ()) for i in node.child_ids if i in by_id
+    # Each site is checked to be a holder. Which holder `S` is, the class of the PLR carrier it
+    # was made from says (`assign_child_resource`); that is what this cast takes on.
+    self.sites: List[S] = [
+      cast(S, as_kind(server.handle_from_node(by_id[i], ()), ResourceHolder))
+      for i in node.child_ids
+      if i in by_id
     ]
 
   @property
   def capacity(self) -> int:
     return len(self.sites)
 
-  def __getitem__(self, index: int) -> Resource:
+  def __getitem__(self, index: int) -> S:
     return self.sites[index]
 
   def __setitem__(self, index: int, resource: Any) -> None:
@@ -829,29 +1279,49 @@ class PlateAdapter(Resource):
 
 
 class ResourceStack(Resource):
-  async def get_top_item(self) -> Optional[Resource]:
-    """The resource on top; unset when the stack is empty."""
+  @overload
+  async def get_top_item(self) -> Optional[Resource]: ...
+
+  @overload
+  async def get_top_item(self, kind: Type[H]) -> Optional[H]: ...
+
+  async def get_top_item(self, kind: Optional[Type[Resource]] = None) -> Optional[Resource]:
+    """The resource on top; unset when the stack is empty.
+
+    Args:
+      kind: What it must be, given back as that.
+
+    Raises:
+      TypeError: It is not a `kind`.
+    """
     children = await self.get_children()
-    return children[-1] if children else None
+    if not children:
+      return None
+    return children[-1] if kind is None else as_kind(children[-1], kind)
 
 
-class ContainerRack(Resource):
-  pass
+class ContainerRack(ItemizedResource[ResourceHolder]):
+  """A rack of holders, each holding a container."""
+
+  def __init__(
+    self, server: ResourceServer, node: pb.ResourceNode, children: Sequence[pb.ResourceNode]
+  ):
+    super().__init__(server, node, children, ResourceHolder)
+
+
+class TubeRack(ContainerRack):
+  """A rack of holders, each holding a tube."""
 
 
 class PetriDishHolder(Resource):
   pass
 
 
-class EmbeddedTipRackHolder(Resource):
+class EmbeddedTipRackHolder(ResourceHolder):
   pass
 
 
 # -- devices -------------------------------------------------------------------------------------
-
-
-class HeadTool(Resource):
-  pass
 
 
 class PipetteChannel(Resource):
@@ -859,12 +1329,10 @@ class PipetteChannel(Resource):
 
 
 class TipMountingShaft(Resource):
-  async def get_tool(self) -> Optional[Resource]:
+  async def get_tool(self) -> Optional[HeadTool]:
     """The tip or tool it carries; unset when bare."""
-    for child in await self.get_children():
-      if isinstance(child, (Tip, HeadTool)):
-        return child
-    return None
+    tools = await self.get_children(HeadTool)
+    return tools[0] if tools else None
 
 
 class NChannelPipette(Resource):
@@ -875,12 +1343,12 @@ class LinkBody(Resource):
   pass
 
 
-class MechanicalGripper(Resource):
+class MechanicalGripper(LinkBody):
   async def get_jaw_width(self) -> float:
     return (await self.state()).jaw_width
 
 
-HANDLE_TYPES: Dict[int, Type[Resource]] = {
+HANDLE_TYPES: Dict["pb.ResourceKind", Type[Resource]] = {
   K.RESOURCE_KIND_RESOURCE: Resource,
   K.RESOURCE_KIND_DECK: Deck,
   K.RESOURCE_KIND_CARRIER: Carrier,
@@ -910,6 +1378,12 @@ HANDLE_TYPES: Dict[int, Type[Resource]] = {
   K.RESOURCE_KIND_LINK_BODY: LinkBody,
   K.RESOURCE_KIND_MECHANICAL_GRIPPER: MechanicalGripper,
 }
+
+
+def kinds_of(kind: Type[Resource]) -> List[pb.ResourceKind]:
+  """The kinds whose handle is a `kind`: every kind, for `Resource`."""
+  return [k for k, handle_type in HANDLE_TYPES.items() if issubclass(handle_type, kind)]
+
 
 # Kinds whose handle knows its children, which are fixed when it is made.
 STRUCTURED_KINDS = frozenset(

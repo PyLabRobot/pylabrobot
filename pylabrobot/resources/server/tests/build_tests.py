@@ -222,8 +222,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         item_dy=9,
       ),
       name="plate",
+      kind=handles.Plate,
     )
-    assert isinstance(plate, handles.Plate)
     self.assertEqual(plate.num_items, 96)
     self.assertEqual(
       await plate.get_well("H12").get_location_wrt(plate), Coordinate(10.9 + 11 * 9, 7.96, 1.5)

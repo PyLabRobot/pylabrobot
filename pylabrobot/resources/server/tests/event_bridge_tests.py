@@ -30,8 +30,7 @@ async def _with_deck() -> Tuple[ResourceServer, h.Resource]:
 
 
 async def _moves(server: ResourceServer, deck: h.Resource) -> None:
-  carrier = await deck.get_resource("plate_carrier")
-  assert isinstance(carrier, h.Carrier)
+  carrier = await deck.get_resource("plate_carrier", kind=h.Carrier)
   plate = await server.get("plate", root=deck)
   await plate.unassign()
   await carrier[3].assign_child_resource(plate)
@@ -39,16 +38,14 @@ async def _moves(server: ResourceServer, deck: h.Resource) -> None:
 
 
 async def _tips(server: ResourceServer, deck: h.Resource) -> None:
-  tips = await server.get("tips", root=deck)
-  assert isinstance(tips, h.TipRack)
+  tips = await server.get("tips", root=deck, kind=h.TipRack)
   await tips.set_tip_state([i != 0 for i in range(tips.num_items)])
   await tips.fill()
   await tips.empty()
 
 
 async def _made_and_deleted(server: ResourceServer, deck: h.Resource) -> None:
-  carrier = await deck.get_resource("plate_carrier")
-  assert isinstance(carrier, h.Carrier)
+  carrier = await deck.get_resource("plate_carrier", kind=h.Carrier)
   plate = await server.create("cor_96_wellplate_360uL_Fb", name="new_plate", parent=carrier[4])
   await plate.delete()
 
@@ -143,8 +140,7 @@ class EventBridgeTests(unittest.IsolatedAsyncioTestCase):
     bus = EventBus()
     bus.subscribe(events.append)
     async with EventBridge(server, bus=bus, roots=[deck]) as bridge:
-      carrier = await deck.get_resource("plate_carrier")
-      assert isinstance(carrier, h.Carrier)
+      carrier = await deck.get_resource("plate_carrier", kind=h.Carrier)
       await carrier[3].assign_child_resource(loose)
       await other.delete()
       await bridge.caught_up()
