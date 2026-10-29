@@ -2223,15 +2223,41 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIs(tips[1].parent, spots[1])
 
   async def test_a_failed_pickup_lifts_the_channels_out_of_the_rack(self):
-    """Whatever state a failure leaves them in, the channels come up to the traverse height."""
+    """A channel a failure leaves below the traverse height comes up to it."""
     from unittest.mock import AsyncMock, patch
 
     pipettes, rack, _ = await channels_over_a_rack()
+    await pipettes.move_stop_disc_to_z_position(0, 250.0)
     with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
       with self.assertRaises(RuntimeError):
         await pipettes.pick_up_tips([rack.get_item("A1")])
     # The height the command would have travelled at: as high as a 300 uL tip goes.
     self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), 282.8, places=1)
+
+  async def test_a_failed_pickup_leaves_a_channel_above_the_traverse_height_where_it_is(self):
+    """The traverse height is a minimum: a channel already above it is not taken down to it."""
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    await pipettes.move_to_safe_z()
+    safe = await pipettes.request_stop_disc_z_position(0)
+    with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips([rack.get_item("A1")])
+    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
+
+  async def test_a_failed_drop_leaves_a_channel_above_the_traverse_height_where_it_is(self):
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    await pipettes.pick_up_tips([spot])
+    await pipettes.move_to_safe_z()
+    safe = await pipettes.request_stop_disc_z_position(0)
+    with patch.object(pipettes, "_unchecked_fw_drop_tips", AsyncMock(side_effect=RuntimeError)):
+      with self.assertRaises(RuntimeError):
+        await pipettes.drop_tips([spot])
+    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
 
   async def test_a_pickup_that_faults_on_one_channel_keeps_the_others_tips(self):
     """Not every pick-up uses every channel: the error names the ones that faulted, by channel.
