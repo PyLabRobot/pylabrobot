@@ -3746,21 +3746,49 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     self.wells[0].tracker.set_volume(120.0)  # The model is wrong; the search will say 150 is 120.
     await self.pipettes.aspirate(self.wells[:2], [50.0, 20.0], lld_mode=Pipettes.LLDMode.CAPACITIVE)
     self.assertEqual([c[:4] for c in sent], ["P1ZL", "P2ZL", "C0RL", "C0AS"])
-    # The command starts where the tips rest, the lower of the two surfaces, with the LLD off.
+    # The command starts where the tips rest, 2 mm under the lower surface, with the LLD off.
     lowest = min(
       self._surface_field(self.wells[0], 120.0), self._surface_field(self.wells[1], 100.0)
     )
-    self.assertIn(f"th{lowest}te2450", sent[-1])
+    self.assertIn(f"th{int(lowest) - 20:04}te2450", sent[-1])
     self.assertIn("lm0 0", sent[-1])
-    self.assertIn(
-      f"zl{self._surface_field(self.wells[0], 120.0)} {self._surface_field(self.wells[1], 100.0)}",
-      sent[-1],
-    )
+    # Each tip goes 2 mm under the surface it found, by the start height, with no immersion sent.
+    a1 = int(self._surface_field(self.wells[0], 120.0)) - 20
+    b1 = int(self._surface_field(self.wells[1], 100.0)) - 20
+    self.assertIn(f"zl{a1:04} {b1:04}", sent[-1])
+    self.assertIn("ip0000 0000", sent[-1])
     # The tips follow nothing unless told to, as legacy sends it.
     self.assertIn("fp0000 0000", sent[-1])
     # Measured volume less what was drawn, to the resolution of the well's height-volume model.
     self.assertAlmostEqual(self.wells[0].tracker.get_used_volume(), 70.0, delta=2.0)
     self.assertAlmostEqual(self.wells[1].tracker.get_used_volume(), 80.0, delta=2.0)
+
+  async def test_a_searched_tip_starts_its_immersion_under_the_surface_above_the_floor(self):
+    sent = self._record_aspirations("P1ZA", "P2ZA", "P3ZA", "P1AA", "P2AA", "P3AA")
+    modes = [Pipettes.LLDMode.CAPACITIVE, Pipettes.LLDMode.CAPACITIVE, Pipettes.LLDMode.OFF]
+    await self.pipettes.aspirate(
+      self.wells[:3], [10.0] * 3, lld_mode=modes, immersion_depths=[3.0, 50.0, 1.5]
+    )
+    # The firmware immerses only after a search of its own: a searched tip is sent its immersion
+    # in the start height, no lower than the floor, and 0 as ip; the OFF tip keeps its ip.
+    a1 = int(self._surface_field(self.wells[0], 150.0)) - 30
+    b1 = self._surface_field(self.wells[1], 0.0)
+    c1 = self._surface_field(self.wells[2], 0.0)
+    self.assertIn(f"zl{a1:04} {b1} {c1}", sent[-1])
+    self.assertIn("ip0000 0000 0015", sent[-1])
+    # After their approach moves, the two searched tips are taken there at the search's 10 mm/s;
+    # the OFF tip is not.
+    speed = self.pipettes.configuration.z_drive_mm_to_increments(10.0)
+    default = self.pipettes.configuration.z_drive_mm_to_increments(self.pipettes.default_z_speed)
+    self.assertEqual(
+      [c[:4] for c in sent],
+      ["P1ZA", "P2ZA", "P1AA", "P2AA", "P1ZA", "P2ZA", "P1AA", "P2AA", "C0AS"],
+    )
+    for command in sent[4:6]:
+      self.assertIn(f"zv{speed:05}", command)
+    # A `Px ZA` keeps its speed as the drive's, so the default goes back before the command.
+    for command in sent[6:8]:
+      self.assertIn(f"zv{default:05}", command)
 
   async def test_a_container_without_height_volume_functions_is_refused_before_any_batch(self):
     for row in "EFGH":
@@ -3827,7 +3855,8 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     # The touch, then the two searches, each its own way; then one command for all four, LLD off,
     # from the lowest height any tip rests at: 0.2 mm off the floor touched.
     self.assertEqual(
-      [c[:4] for c in sent], ["P4ZA", "P4ZH", "P2ZA", "P3ZA", "P2ZL", "P3ZE", "C0RL", "C0AS"]
+      [c[:4] for c in sent],
+      ["P4ZA", "P4ZH", "P2ZA", "P3ZA", "P2ZL", "P3ZE", "C0RL", "P2ZA", "P3ZA", "C0AS"],
     )
     self.assertIn("lm0 0 0 0", sent[-1])
     # The approach takes the two searching tips to the command's lp, 2 mm above the well, and the
@@ -3838,13 +3867,13 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     self.assertIn(f"zc{start:05}", sent[4])
     self.assertIn(f"lp{round((top + 2.0) * 10):04}", sent[-1])
     floor = f"{int(self._surface_field(self.wells[3], 0.0)) + 2:04}"
-    self.assertIn(f"th{floor}te2450", sent[-1])
-    # The OFF channel draws at the cavity bottom, the searched ones where they found the liquid.
-    self.assertIn(
-      f"zl{self._surface_field(self.wells[0], 0.0)} {self._surface_field(self.wells[1], 100.0)} "
-      f"{self._surface_field(self.wells[2], 50.0)} {floor}",
-      sent[-1],
-    )
+    # The lowest tip is C1's, immersed to its floor, under the one that touched.
+    self.assertIn(f"th{self._surface_field(self.wells[2], 0.0)}te2450", sent[-1])
+    # The OFF channel draws at the cavity bottom, the searched ones 2 mm under the liquid found,
+    # C1's 50 uL standing less than that, so at its floor.
+    bottom = self._surface_field(self.wells[0], 0.0)
+    b1 = int(self._surface_field(self.wells[1], 100.0)) - 20
+    self.assertIn(f"zl{bottom} {b1:04} {bottom} {floor}", sent[-1])
 
   async def test_a_z_touch_draws_just_off_the_floor(self):
     sent = self._record_aspirations("P1ZA", "P1ZH")
@@ -3970,8 +3999,8 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     # is sent, and with tracking off the tracker is left alone.
     await self.pipettes.aspirate(self.wells[:1], [10.0], lld_mode=Pipettes.LLDMode.CAPACITIVE)
     surface = self._surface_field(self.wells[0], 150.0)
-    self.assertIn(f"th{surface}te2450", sent[2])
-    self.assertIn(f"zl{surface}", sent[2])
+    self.assertIn(f"th{int(surface) - 20:04}te2450", sent[2])
+    self.assertIn(f"zl{int(surface) - 20:04}", sent[2])
     self.assertIn("lm0", sent[2])
     self.assertEqual(self.wells[0].tracker.get_used_volume(), 150.0)
 
@@ -4454,8 +4483,8 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     )
     self.assertEqual([c[:4] for c in sent], ["P1ZL", "C0RL", "C0DS"])
     surface = self._field(self.wells[1], self.wells[1].compute_height_from_volume(100.0))
-    self.assertIn(f"th{surface}te2450", sent[-1])
-    self.assertIn(f"zl{surface}", sent[-1])
+    self.assertIn(f"th{int(surface) - 20:04}te2450", sent[-1])
+    self.assertIn(f"zl{int(surface) - 20:04}", sent[-1])
     self.assertIn("lm0", sent[-1])
     # The tracker takes the measured volume, read in tenths of a millimetre, then the 10 given.
     self.assertAlmostEqual(self.wells[1].tracker.get_used_volume(), 110.0, delta=2.0)
