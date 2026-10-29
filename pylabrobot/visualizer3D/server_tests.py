@@ -264,6 +264,20 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     finally:
       await ws.close()
 
+  async def test_a_resource_moved_back_to_where_the_scene_placed_it_publishes_that(self):
+    """A return to the scene's place is news to a client that was told of the move away."""
+    ws, _, _ = await self.connect()
+    try:
+      kept = self.plate.location
+      self.plate.location = Coordinate(400, 300, 0)
+      self.assertEqual((await self.next_state(ws))["locations"]["plate"]["x"], 400)
+      self.plate.location = kept
+      update = await self.next_state(ws)
+      self.assertIsNotNone(update)
+      self.assertEqual(update["locations"]["plate"]["x"], kept.x)
+    finally:
+      await ws.close()
+
   async def test_a_resource_moved_under_another_parent_is_moved_not_rebuilt(self):
     """The same names are the same instances: a change of parent is a move, a parent index and six
     floats, applied to the scene the client has. Its new location travels in the move and in no
