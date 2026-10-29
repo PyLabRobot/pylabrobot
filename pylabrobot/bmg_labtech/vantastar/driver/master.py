@@ -360,6 +360,8 @@ class VANTAstarDriver:
   default_poll_interval: float = 0.25
   # Seconds between data block polls during a read (Voyager polls about every 0.17 s).
   measurement_poll_interval: float = 0.1
+  # Seconds an incubator command may take until the reader reports temperatures again.
+  incubator_settle_timeout: float = 5.0
   _USB_PACKET_TIMEOUT: int = 5
   _RETRY_SETTLE: float = 0.08
   # The communication protocol version requested in INIT.
@@ -1103,12 +1105,34 @@ class VANTAstarDriver:
     )
 
   async def set_temperature(self, temperature: float) -> None:
-    """Switch the incubator on, heating to ``temperature`` degrees C."""
+    """Switch the incubator on, heating to ``temperature`` degrees C; returns once the reader
+    reports its temperatures again.
+
+    Raises:
+      TimeoutError: if the reader reports no temperatures ``incubator_settle_timeout`` seconds
+        after the command.
+    """
     await self.send_command(CommandId.INCUBATOR, self.build_incubator(_INCUBATOR_ON, temperature))
+    await self._wait_for_temperatures()
 
   async def stop_temperature_control(self) -> None:
-    """Switch heating off, keeping the temperatures monitored (as Voyager does)."""
+    """Switch heating off, keeping the temperatures monitored (as Voyager does); returns once the
+    reader reports its temperatures again.
+
+    Raises:
+      TimeoutError: as for ``set_temperature``.
+    """
     await self.send_command(CommandId.INCUBATOR, self.build_incubator(_INCUBATOR_MONITOR, 0))
+    await self._wait_for_temperatures()
+
+  async def _wait_for_temperatures(self) -> None:
+    """Wait until the reader reports its incubator temperatures; it reports none (all zero) for up
+    to about a second after an IncubatorCommand."""
+    await self._wait_until_ready(
+      self.incubator_settle_timeout,
+      self.default_poll_interval,
+      until=lambda status: status.temperatures is not None,
+    )
 
   async def get_temperatures(self) -> Optional[Tuple[float, float, float]]:
     """The three incubator sensor readings in degrees C (the first is the one Voyager displays),

@@ -28,6 +28,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   ABSORBANCE_FIRST_PAGE,
   ABSORBANCE_LAST_PAGE,
   GAIN_DATA,
+  STATUS_AFTER_INCUBATOR_COMMAND,
   STATUS_HEATING,
   STATUS_INIT_RUNNING,
   STATUS_NOT_INITIALIZED,
@@ -310,6 +311,19 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     await driver.stop_temperature_control()
     sent = [c for c in commands(driver) if c[0] == 0x06]
     self.assertEqual(sent, [INCUBATOR_ON_30, INCUBATOR_OFF])
+
+  async def test_temperature_commands_return_once_temperatures_are_reported(self):
+    replies = deque([STATUS_IDLE] + [STATUS_AFTER_INCUBATOR_COMMAND] * 3)
+    driver = make_driver(lambda p: replies.popleft() if replies else STATUS_HEATING)
+    await driver.set_temperature(30)
+    self.assertEqual(len(replies), 0)
+    self.assertEqual(await driver.get_temperatures(), (30.1, 30.6, 30.5))
+
+  async def test_temperature_command_times_out_without_temperatures(self):
+    driver = make_driver(lambda p: STATUS_AFTER_INCUBATOR_COMMAND)
+    driver.incubator_settle_timeout = 0
+    with self.assertRaises(TimeoutError):
+      await driver.set_temperature(30)
 
   async def test_measurement(self):
     block_status = deque([MW_BLOCK_BUSY, MW_BLOCK_PAGE_READY, MW_BLOCK_LAST_PAGE])
