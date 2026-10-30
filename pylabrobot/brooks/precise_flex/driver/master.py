@@ -105,9 +105,8 @@ class PreciseFlexDriver:
         of range after that, ``OutOfRangeOfMotionError`` propagates (no loop). Set False to forbid
         this autonomous motion - an out-of-range axis then raises instead, carrying recovery
         instructions. Every recovery is logged.
-      closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
-        ``GripOpenPos``) at which the jaws are at the narrow end of
-        :attr:`PreciseFlexGripper.jaw_width_range`.
+      closed_gripper_position: the gripper axis's position, in the controller's units, at which
+        the jaws are at the narrow end of :attr:`PreciseFlexGripper.jaw_width_range`.
         Depends on the mounted gripper. The conversion mm → firmware units is
         linear with slope 1: ``units = closed_gripper_position + (width_mm -
         jaw_width_range[0])``.
@@ -1228,7 +1227,7 @@ class PreciseFlexDriver:
       kwargs["station_index"] = kwargs.pop("location_index")
     return await self.arm._unchecked_fw_set_station_to_current_cartesian_location(*args, **kwargs)
 
-  async def move_gripper(self, width: float, force_sensing: bool = False) -> Any:
+  async def move_gripper(self, width: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position``."""
     warnings.warn(
       "`move_gripper` is deprecated, use `gripper.move_to_jaw_position`.",
@@ -1237,7 +1236,7 @@ class PreciseFlexDriver:
     )
     return await self.gripper.move_to_jaw_position(width, force_sensing=force_sensing)
 
-  async def move_gripper_joint_position(self, position: float, force_sensing: bool = False) -> Any:
+  async def move_gripper_joint_position(self, position: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position_firmware_units``."""
     warnings.warn(
       "`move_gripper_joint_position` is deprecated, use "

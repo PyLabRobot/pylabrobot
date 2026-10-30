@@ -1,17 +1,18 @@
 """The PreciseFlex gripper: the end-effector at the arm's wrist, driven through the controller.
 
-Reached as `driver.gripper`. The jaws are the controller's gripper axis (`PreciseFlexAxis.GRIPPER`), commanded
-through their open and close positions; a force-controlled grasp for `pickplate` is set up here.
+Reached as `driver.gripper`. The jaws are the controller's gripper axis (`PreciseFlexAxis.GRIPPER`):
+a close limits its force (`GraspPlate`), an open lifts that limit (`ReleasePlate`), and a position
+move is asked for (`MoveOneAxis`). The grasp `pickplate` closes with is set up here too.
 """
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 from pylabrobot.events import evented_operation
 from pylabrobot.resources.end_effector import MechanicalGripper
 
-from ...kinematics import PreciseFlexAxis
+from ...kinematics import JointState, PreciseFlexAxis
 
 if TYPE_CHECKING:
   from ..master import PreciseFlexDriver
@@ -56,8 +57,8 @@ class PreciseFlexGripper:
     """
     Args:
       driver: the driver to send commands through.
-      closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
-        ``GripOpenPos``) at which the jaws are at the narrow end of :attr:`jaw_width_range`.
+      closed_gripper_position: the gripper axis's position, in the controller's units, at which
+        the jaws are at the narrow end of :attr:`jaw_width_range`.
       is_dual_gripper: whether two grippers are fitted. Discovery overrides it at setup.
     """
     self._driver = driver
@@ -92,7 +93,8 @@ class PreciseFlexGripper:
     This data remains in effect until the next GraspData command or the system is restarted.
 
     Args:
-      plate_width: The plate width in mm.
+      plate_width: The plate width in mm. It is sent as a position of the gripper axis, which is
+        what `pickplate` closes the jaws to.
       finger_speed_percent: The finger speed during grasp as a percentage (0-100). 100 = full speed.
       grasp_force: The gripper squeezing force, in Newtons.
       A positive value indicates the fingers must close to grasp.
@@ -105,7 +107,8 @@ class PreciseFlexGripper:
       raise ValueError(
         f"finger_speed_percent must be between 0 and 100, got {finger_speed_percent}"
       )
-    await self._driver.send_command(f"GraspData {plate_width} {finger_speed_percent} {grasp_force}")
+    units = self._mm_to_firmware_units(plate_width)
+    await self._driver.send_command(f"GraspData {units} {finger_speed_percent} {grasp_force}")
 
   # -- conversions: the wire counts in the axis's units, the driver speaks mm ----------------------
 
@@ -177,18 +180,19 @@ class PreciseFlexGripper:
 
   # -- jaw motion --------------------------------------------------------------------------------
 
-  async def _unchecked_fw_move_jaws(self, units: float, force_sensing: bool) -> None:
-    """Drive the jaws to ``units``, closing or opening. Nothing is guarded.
+  async def _unchecked_fw_grasp_plate(
+    self, units: float, speed_percent: float, force: float
+  ) -> bool:
+    """Close the jaws to a little narrower than ``units`` under a capped force (``GraspPlate``).
 
-    Sets the close position and closes (``gripper 2``), or sets the open position and opens
-    (``gripper 1``). Both are position moves.
+    Nothing is guarded. The jaws stop on what they meet and the cap stays until ``ReleasePlate``;
+    on nothing the controller lifts it. Returns whether something is held.
     """
-    if force_sensing:
-      await self._driver.send_command(f"GripClosePos {units}")
-      await self._driver.send_command("gripper 2")
-    else:
-      await self._driver.send_command(f"GripOpenPos {units}")
-      await self._driver.send_command("gripper 1")
+    return (await self._driver.send_command(f"GraspPlate {units} {speed_percent} {force}")) == "-1"
+
+  async def _unchecked_fw_release_plate(self, units: float, speed_percent: float) -> None:
+    """Move the jaws to ``units`` and lift the force cap (``ReleasePlate``). Nothing is guarded."""
+    await self._driver.send_command(f"ReleasePlate {units} {speed_percent}")
 
   async def _move_jaws(self, units: float, force_sensing: bool) -> None:
     """The one path that drives the jaws: to `units` on the gripper axis, once the arm has stopped,
@@ -196,24 +200,44 @@ class PreciseFlexGripper:
 
     Args:
       units: the gripper axis position, in the controller's units.
-      force_sensing: True closes (``gripper 2``), False opens (``gripper 1``).
+      force_sensing: True limits the force of a closing move (``GraspPlate``) and lifts it on an
+        opening one (``ReleasePlate``); False makes a position move (``MoveOneAxis``).
 
     Raises:
       ValueError: If opening the jaws would carry one into the column or the base plate, on a
         modelled arm.
     """
     units = self._hold_within_gripper_limits(units)
+    arm = self._driver.arm
+    closing = False
+
+    def build_targets(current: JointState) -> List[JointState]:
+      nonlocal closing
+      closing = units < current[PreciseFlexAxis.GRIPPER]
+      return [{**current, PreciseFlexAxis.GRIPPER: units}]
+
+    async def unchecked_fw_move(_targets: Sequence[JointState]) -> None:
+      speed_percent = self.default_finger_speed_percent
+      if not force_sensing:
+        await arm._unchecked_fw_move_one_axis(PreciseFlexAxis.GRIPPER, units)
+      elif not closing:
+        await self._unchecked_fw_release_plate(units, speed_percent)
+      elif not await self._unchecked_fw_grasp_plate(units, speed_percent, self.default_grasp_force):
+        logger.warning(
+          "[PreciseFlex %s] the jaws closed on nothing, so their force is no longer limited",
+          self._driver.io._host,
+        )
+        # On nothing the jaws run past `units` to the grasp's narrower set point: back to `units`.
+        await self._unchecked_fw_release_plate(units, speed_percent)
+
     # Held within the gripper's limits above; another axis out of range does not stop the jaws.
-    await self._driver.arm._guarded_move(
-      lambda current: [{**current, PreciseFlexAxis.GRIPPER: units}],
-      lambda _targets: self._unchecked_fw_move_jaws(units, force_sensing),
-      check_soft_limits=False,
-      retry_out_of_range=False,
+    await arm._guarded_move(
+      build_targets, unchecked_fw_move, check_soft_limits=False, retry_out_of_range=False
     )
 
   @evented_operation(
     "precise_flex.move_gripper",
-    lambda self, width, force_sensing=False: {
+    lambda self, width, force_sensing=True: {
       "device": self._driver._controller_reference(),
       "width": float(width),
       "force_sensing": force_sensing,
@@ -222,23 +246,25 @@ class PreciseFlexGripper:
   async def move_to_jaw_position(
     self,
     width: float,
-    force_sensing: bool = False,
+    force_sensing: bool = True,
   ):
     """Move the PreciseFlex gripper jaws.
 
-    ``force_sensing=False`` drives to the open position (``gripper 1``); ``force_sensing=True``
-    drives to the close position (``gripper 2``). Both are position moves: ``gripper 2`` limits the
-    force it applies getting there, but it does not stop the jaws where they meet something.
+    A move that closes them limits its force (``GraspPlate``, at ``default_grasp_force`` and
+    ``default_finger_speed_percent``): the jaws stop on what they meet, and with nothing between
+    them run past the width and are moved back to it. A move that opens them lifts that limit
+    (``ReleasePlate``). With ``force_sensing=False`` it is a position move (``MoveOneAxis``) either
+    way, with no limit on force: closed onto something rigid, the motor stalls (-3105).
 
     A target is held half a unit inside the axis: the jaws settle up to 0.2 units past a target,
     and a target past the axis's end left a bench arm in error -3104 until homed.
 
     Args:
       width: the jaw width to move to, in mm.
-      force_sensing: whether to close (True) or open (False) to the width.
+      force_sensing: False only to make a position move on purpose.
 
-    Not interruptible while a ``gripper`` command runs: it blocks the controller's command
-    interpreter until the jaws finish (hardware-verified, like ``waitForEom``).
+    Not interruptible while ``GraspPlate`` runs: it blocks the controller's command interpreter
+    until the jaws stop.
     """
     logger.info(
       "[PreciseFlex %s] move_to_jaw_position: width_mm=%s force_sensing=%s",
@@ -259,7 +285,7 @@ class PreciseFlexGripper:
 
   @evented_operation(
     "precise_flex.move_gripper_joint_position",
-    lambda self, position, force_sensing=False: {
+    lambda self, position, force_sensing=True: {
       "device": self._driver._controller_reference(),
       "gripper_joint_position": float(position),
       "force_sensing": force_sensing,
@@ -268,7 +294,7 @@ class PreciseFlexGripper:
   async def move_to_jaw_position_firmware_units(
     self,
     position: float,
-    force_sensing: bool = False,
+    force_sensing: bool = True,
   ) -> None:
     """Move the gripper to a controller-native joint position.
 
@@ -277,7 +303,7 @@ class PreciseFlexGripper:
 
     Args:
       position: the gripper axis position, in the controller's units.
-      force_sensing: whether to close (True) or open (False) to the position.
+      force_sensing: False only to make a position move on purpose.
     """
     await self._move_jaws(position, force_sensing)
 
