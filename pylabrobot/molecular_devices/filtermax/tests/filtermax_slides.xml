@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<DSFilterSlider xmlns="http://tempuri.org/DSFilterSlider.xsd">
+  <MeasFilterSlider><Index>0</Index><ID>1</ID><Name>Ex1</Name><Type>1</Type></MeasFilterSlider>
+  <MeasFilterSlider><Index>1</Index><ID>2</ID><Name>Ex2</Name><Type>1</Type></MeasFilterSlider>
+  <MeasFilterSlider><Index>2</Index><ID>1</ID><Name>Em1</Name><Type>0</Type></MeasFilterSlider>
+  <Filter><Position>1</Position><ApplyTo>2</ApplyTo><WL>535</WL><Name>535</Name><Bandwidth>25</Bandwidth><Index_Slider>0</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>2</Position><ApplyTo>2</ApplyTo><WL>485</WL><Name>485</Name><Bandwidth>20</Bandwidth><Index_Slider>0</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>3</Position><ApplyTo>4</ApplyTo><WL>485</WL><Name>485</Name><Bandwidth>20</Bandwidth><Index_Slider>0</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>5</Position><ApplyTo>8</ApplyTo><WL>370</WL><Name>370</Name><Bandwidth>80</Bandwidth><Index_Slider>0</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>1</Position><ApplyTo>1</ApplyTo><WL>260</WL><Name>260</Name><Bandwidth>12</Bandwidth><Index_Slider>1</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>2</Position><ApplyTo>1</ApplyTo><WL>340</WL><Name>340</Name><Bandwidth>10</Bandwidth><Index_Slider>1</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>3</Position><ApplyTo>1</ApplyTo><WL>405</WL><Name>405</Name><Bandwidth>10</Bandwidth><Index_Slider>1</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>4</Position><ApplyTo>1</ApplyTo><WL>450</WL><Name>450</Name><Bandwidth>8</Bandwidth><Index_Slider>1</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>5</Position><ApplyTo>1</ApplyTo><WL>595</WL><Name>595</Name><Bandwidth>8</Bandwidth><Index_Slider>1</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>6</Position><ApplyTo>1</ApplyTo><WL>620</WL><Name>620</Name><Bandwidth>8</Bandwidth><Index_Slider>1</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>1</Position><ApplyTo>2</ApplyTo><WL>595</WL><Name>595</Name><Bandwidth>35</Bandwidth><Index_Slider>2</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>2</Position><ApplyTo>2</ApplyTo><WL>535</WL><Name>535</Name><Bandwidth>25</Bandwidth><Index_Slider>2</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>3</Position><ApplyTo>4</ApplyTo><WL>535</WL><Name>535</Name><Bandwidth>25</Bandwidth><Index_Slider>2</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>4</Position><ApplyTo>4</ApplyTo><WL>535</WL><Name>535</Name><Bandwidth>25</Bandwidth><Index_Slider>2</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>5</Position><ApplyTo>10</ApplyTo><WL>625</WL><Name>625</Name><Bandwidth>35</Bandwidth><Index_Slider>2</Index_Slider><MDNumber /></Filter>
+  <Filter><Position>6</Position><ApplyTo>16</ApplyTo><WL>0</WL><Name>All</Name><Bandwidth>0</Bandwidth><Index_Slider>2</Index_Slider><MDNumber /></Filter>
+</DSFilterSlider>
