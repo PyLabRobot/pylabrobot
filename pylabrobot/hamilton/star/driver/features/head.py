@@ -22,9 +22,17 @@ import asyncio
 import datetime
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
+from pylabrobot.hamilton.star.driver.features.pipettes import PipetteCycleCounts
+from pylabrobot.hamilton.star.driver.firmware_update import (
+  FirmwareUpdateResult,
+  _firmware_reply_body,
+  _firmware_version_parts,
+  _FirmwareDownloader,
+)
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 
@@ -590,6 +598,82 @@ class Head:
     what an increment is worth and how wide a parameter is written.
     """
 
+  def _invalidate_firmware_version(self) -> None:
+    """Clear cached versions before the board leaves its application."""
+    self.configuration.firmware_version = None
+    self.configuration.firmware_date = None
+    key = "head96" if self.configuration.module == "H0" else "head384"
+    self._driver.firmware.pop(key, None)
+
+  async def _request_head_type_code(self) -> int:
+    """Read the numeric head variant reported by QG."""
+    reply = await self._driver.send_command(self.configuration.module, "QG", fmt="qg#")
+    return cast(int, reply["qg"])
+
+  async def _request_firmware_configuration(self) -> str:
+    """Read the complete head configuration array for update verification."""
+    module = self.configuration.module
+    reply = await self._driver.send_command(module, "QU")
+    return _firmware_reply_body(reply, module, "QU")
+
+  async def _request_firmware_state(self) -> Dict[str, str]:
+    """Capture head calibration and configuration, checking the controller/head pairing."""
+    module = self.configuration.module
+    state = await _FirmwareDownloader(self._driver, module)._request_stored_state()
+    state["configuration"] = await self._request_firmware_configuration()
+    version, _ = await self.request_firmware_version()
+    generation, _ = _firmware_version_parts(version)
+    head_type = await self._request_head_type_code()
+    allowed_types = (0, 1, 2) if module == "D0" else (2, 3) if generation == 5 else (0, 1)
+    if head_type not in allowed_types:
+      raise ValueError(f"Unsupported {module} head type {head_type} for {version}")
+    state["head_type"] = str(head_type)
+    return state
+
+  async def request_cycle_counts(self) -> PipetteCycleCounts:
+    """Read the head's lifetime tip pickup, discard, aspiration, and dispense counters."""
+    reply = await self._driver.send_command(
+      self.configuration.module, "RV", fmt="na##########nb##########nc##########nd##########"
+    )
+    return PipetteCycleCounts(reply["na"], reply["nb"], reply["nc"], reply["nd"])
+
+  async def update_firmware(
+    self,
+    firmware_file: Union[str, Path],
+    *,
+    expected_version: str,
+    allow_downgrade: bool = False,
+  ) -> FirmwareUpdateResult:
+    """Update the 96- or 384-channel head with a compatible manufacturer ACH image.
+
+    Validates the entire file, requires the same controller generation, and checks saved
+    calibration and identity after programming. An older build date requires allow_downgrade.
+    No movement or initialization is commanded. Power-cycle and initialize after success.
+    A failed transfer is not retried or restarted. Keep power and the connection stable.
+
+    Args:
+      firmware_file: path to the manufacturer's component-specific .ACH file.
+      expected_version: complete embedded version, including date and any hardware suffix.
+      allow_downgrade: explicitly allow an older build within the same controller generation.
+
+    Returns:
+      Verified version, image digest, record count, and before/after cycle counts.
+    """
+    result = await _FirmwareDownloader(self._driver, self.configuration.module).update_component(
+      firmware_file,
+      expected_version=expected_version,
+      allow_downgrade=allow_downgrade,
+      invalidate_version=self._invalidate_firmware_version,
+      read_state=self._request_firmware_state,
+      read_cycle_counts=self.request_cycle_counts,
+    )
+    self.configuration.firmware_version = result.version
+    _, self.configuration.firmware_date = _firmware_version_parts(result.version)
+    self._apply_firmware_generation()
+    key = "head96" if self.configuration.module == "H0" else "head384"
+    self._driver.firmware[key] = result.version
+    return result
+
   def _record_hardware(self, hardware: List[str]) -> None:
     """Record what this head's configuration bytes mean, past the clot-monitoring flag at index 0.
 
@@ -604,10 +688,7 @@ class Head:
     Returns:
       The head type, or "unknown" for a code this driver does not know.
     """
-    resp = await self._driver.send_command(
-      module=self.configuration.module, command="QG", fmt="qg#"
-    )
-    return self.configuration.head_types.get(cast(int, resp["qg"]), "unknown")
+    return self.configuration.head_types.get(await self._request_head_type_code(), "unknown")
 
   async def request_x_offset(self) -> float:
     """Request the X distance from the X-arm carriage center to head channel A1.

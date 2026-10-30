@@ -7,18 +7,103 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, ca
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
+from pylabrobot.hamilton.star.driver.configuration import DeviceConfiguration
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.pipettes import (
+  PipetteCycleCounts,
   Pipettes,
   PipettesConfiguration,
   TADMCurve,
   _get_channels_that_met_no_tip,
 )
+from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.io.io import IOBase
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import STARDeck
+
+
+class TestPipetteHardwareQueries(unittest.IsolatedAsyncioTestCase):
+  """Cross-check channel hardware and preserve channel order in aggregate reads."""
+
+  async def asyncSetUp(self) -> None:
+    """Answer read-only commands for two channels without opening a transport."""
+    self.driver = STARDriver(io=unittest.mock.Mock(spec=IOBase))
+    self.driver.configuration = DeviceConfiguration(pip_type_1000ul=True)
+    self.driver._num_channels = 2
+    self.pipettes = Pipettes(self.driver)
+    self.types = [1, 1]
+    self.version = "4.0S j 2022-03-16"
+    self.commands: List[Tuple[str, str]] = []
+    self.driver.send_command = unittest.mock.AsyncMock(side_effect=self.respond)  # type: ignore[method-assign]
+
+  async def respond(self, module: str, command: str, **kwargs: Any) -> Any:
+    """Provide independent channel replies, rejecting unexpected commands."""
+    self.commands.append((module, command))
+    channel = int(module[1:]) - 1
+    if command == "RF":
+      return f"{module}RFid0001rf{self.version}"
+    if command == "VW":
+      return f"{module}VWid0001vw0 0 0 0"
+    if command == "QG":
+      return {"qg": self.types[channel]}
+    if command == "VY":
+      return {"yc": [194, 194]}
+    if command == "RV":
+      await asyncio.sleep(0.01 if channel == 0 else 0)
+      return {"na": channel + 10, "nb": channel + 20, "nc": channel + 30, "nd": channel + 40}
+    raise AssertionError((module, command))
+
+  async def test_discovery_records_channel_type_once_for_each_generation(self) -> None:
+    """QG is available even when firmware is too old to support VW."""
+    for version in ("4.0S j 2022-03-16", "4.0S 2016-04-24"):
+      for pip_type in (0, 1):
+        with self.subTest(version=version, pip_type=pip_type):
+          self.version = version
+          self.types = [pip_type, pip_type]
+          self.driver.configuration = DeviceConfiguration(pip_type_1000ul=bool(pip_type))
+          self.commands.clear()
+          await self.pipettes.discover()
+          self.assertEqual(
+            [channel.pip_type_1000ul for channel in self.pipettes.configuration.channels],
+            [bool(pip_type), bool(pip_type)],
+          )
+          for module in ("P1", "P2"):
+            self.assertEqual(self.commands.count((module, "QG")), 1)
+            self.assertEqual(self.commands.count((module, "VW")), int("2022" in version))
+
+  async def test_discovery_refuses_disagreement_with_master(self) -> None:
+    """One incompatible channel must prevent successful discovery in either direction."""
+    for master_type in (False, True):
+      with self.subTest(master_type=master_type):
+        self.driver.configuration = DeviceConfiguration(pip_type_1000ul=master_type)
+        self.types = [int(master_type), int(not master_type)]
+        with self.assertRaisesRegex(ValueError, "P2.*master"):
+          await self.pipettes.discover()
+
+  async def test_unknown_channel_type_is_rejected(self) -> None:
+    """Do not interpret an unknown QG code as a 300 or 1000 uL channel."""
+    self.types = [2, 1]
+    with self.assertRaisesRegex(ValueError, "Unknown pipetting channel type"):
+      await self.pipettes.request_pipette_configuration(0)
+
+  async def test_all_cycle_counts_follow_channel_order(self) -> None:
+    """Replies arriving in reverse order still return results by channel index."""
+    self.assertEqual(
+      await self.pipettes.request_all_cycle_counts(),
+      [PipetteCycleCounts(10, 20, 30, 40), PipetteCycleCounts(11, 21, 31, 41)],
+    )
+    self.assertCountEqual(self.commands, [("P1", "RV"), ("P2", "RV")])
+
+  async def test_simulation_checks_explicit_channel_type_against_master(self) -> None:
+    """An explicit channel type must not be replaced with the master's default in simulation."""
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    assert driver.simulated_pipettes is not None
+    driver.simulated_pipettes.channels[0].pip_type_1000ul = False
+    with self.assertRaisesRegex(ValueError, "P1.*master"):
+      await driver.setup()
 
 
 async def channels(width: float, positions: List[float]) -> Tuple[Pipettes, List[str]]:
