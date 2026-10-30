@@ -10,8 +10,10 @@ from typing import (
   Any,
   ClassVar,
   Dict,
+  List,
   Literal,
   Optional,
+  Sequence,
   cast,
 )
 
@@ -103,9 +105,8 @@ class PreciseFlexDriver:
         of range after that, ``OutOfRangeOfMotionError`` propagates (no loop). Set False to forbid
         this autonomous motion - an out-of-range axis then raises instead, carrying recovery
         instructions. Every recovery is logged.
-      closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
-        ``GripOpenPos``) at which the jaws are at the narrow end of
-        :attr:`PreciseFlexGripper.jaw_width_range`.
+      closed_gripper_position: the gripper axis's position, in the controller's units, at which
+        the jaws are at the narrow end of :attr:`PreciseFlexGripper.jaw_width_range`.
         Depends on the mounted gripper. The conversion mm → firmware units is
         linear with slope 1: ``units = closed_gripper_position + (width_mm -
         jaw_width_range[0])``.
@@ -245,16 +246,17 @@ class PreciseFlexDriver:
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
     ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
-    modelled, and axes outside their limits are dealt with.
+    modelled, before homing so the jaws' opening is checked, and axes outside their limits are
+    dealt with.
 
     Args:
       skip_home: If True, skip the homing step during setup.
     """
     await self.connect()
     configuration = await self.initialize()
+    self._create_feature_resources(configuration)
     if not skip_home:
       await self.home()
-    self._create_feature_resources(configuration)
     await self.arm._handle_out_of_range_axes()
 
   async def connect(self) -> None:
@@ -528,12 +530,31 @@ class PreciseFlexDriver:
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
+    Only the jaws move: the other joints read their position. The jaws open to their stop and back
+    off, so on a modelled arm their opening to the hard limit is first checked against the column
+    and the base plate. Closing never carries a finger outward.
+
     Note:
       Requires power to be enabled.
       Requires robot to be attached.
       Waits until the homing is complete.
     """
-    await self.send_command("home")
+    gripper = self.gripper.configuration
+
+    def build_targets(current: JointState) -> List[JointState]:
+      if gripper is None:
+        return []
+      return [{**current, PreciseFlexAxis.GRIPPER: gripper.hard_limit_range[1]}]
+
+    async def unchecked_fw_move(_targets: Sequence[JointState]) -> None:
+      await self.send_command("home")
+
+    await self.arm._guarded_move(
+      build_targets,
+      unchecked_fw_move,
+      check_soft_limits=False,
+      retry_out_of_range=False,
+    )
 
   async def home_all(self) -> None:
     """Home all robots.
@@ -1206,7 +1227,7 @@ class PreciseFlexDriver:
       kwargs["station_index"] = kwargs.pop("location_index")
     return await self.arm._unchecked_fw_set_station_to_current_cartesian_location(*args, **kwargs)
 
-  async def move_gripper(self, width: float, force_sensing: bool = False) -> Any:
+  async def move_gripper(self, width: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position``."""
     warnings.warn(
       "`move_gripper` is deprecated, use `gripper.move_to_jaw_position`.",
@@ -1215,7 +1236,7 @@ class PreciseFlexDriver:
     )
     return await self.gripper.move_to_jaw_position(width, force_sensing=force_sensing)
 
-  async def move_gripper_joint_position(self, position: float, force_sensing: bool = False) -> Any:
+  async def move_gripper_joint_position(self, position: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position_firmware_units``."""
     warnings.warn(
       "`move_gripper_joint_position` is deprecated, use "

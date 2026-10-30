@@ -22,6 +22,25 @@ Z_COLUMN_SIZE_XY = (124.5, 181.5)
 Z_COLUMN_LOCATION = Coordinate(
   9.0, (BASE_PLATE_SIZE[1] - Z_COLUMN_SIZE_XY[1]) / 2, BASE_PLATE_SIZE[2]
 )
+# The column seen from above, in its own frame: rounded at both sides, not a box.
+Z_COLUMN_OUTLINE = (
+  (0.0, 18.3),
+  (36.1, 4.4),
+  (49.2, 1.4),
+  (68.9, 0.0),
+  (88.5, 2.6),
+  (98.1, 5.3),
+  (105.3, 8.2),
+  (123.3, 18.4),
+  (124.5, 90.7),
+  (123.1, 163.4),
+  (105.3, 173.3),
+  (85.9, 179.5),
+  (65.6, 181.6),
+  (45.3, 179.4),
+  (25.9, 173.3),
+  (0.0, 163.3),
+)
 # The datasheet's robot height, from the floor to the column's top, for each Z travel it is sold with.
 ROBOT_HEIGHTS = {400.0: 679.0, 750.0: 1029.0, 1160.0: 1439.0}
 

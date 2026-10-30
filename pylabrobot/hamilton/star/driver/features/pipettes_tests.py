@@ -382,12 +382,12 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
       speed=46.3, acceleration_level=1, channels=[7]
     ):
       self.assertEqual(self.sent, ["P8AAyv1000", "P8AAyr1"])
-    self.assertEqual(self.sent[2:], ["P8AAyv5399", "P8AAyr3"])
+    self.assertEqual(self.sent[2:], ["P8AAyv7559", "P8AAyr4"])
 
   async def test_profile_touches_only_the_named_channels(self):
     async with self.pipettes._temporary_y_drive_profile(acceleration_level=1, channels=[6, 7]):
       pass
-    self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr3", "P8AAyr3"])
+    self.assertEqual(self.sent, ["P7AAyr1", "P8AAyr1", "P7AAyr4", "P8AAyr4"])
 
 
 class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
@@ -396,8 +396,8 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
   async def test_every_channel_holds_the_defaults_after_setup(self):
     pipettes = await simulated_channels()
     for channel in range(pipettes.num_channels):
-      self.assertEqual(await pipettes.request_y_speed(channel), 249.98)
-      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 3)
+      self.assertEqual(await pipettes.request_y_speed(channel), 350.0)
+      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 4)
       self.assertEqual(await pipettes.request_z_speed(channel), 125.0)
       self.assertEqual(await pipettes.request_z_acceleration(channel), 804.6)
 
@@ -415,7 +415,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     await driver.setup()
     written = [command for command in sent if command[0] == "P"]
     self.assertEqual(len(written), 32)
-    self.assertEqual(written[:4], ["P1AAyv5399", "P1AAyr3", "P1AAzv11652", "P1AAzr075"])
+    self.assertEqual(written[:4], ["P1AAyv7559", "P1AAyr4", "P1AAzv11652", "P1AAzr075"])
 
   async def test_a_repeated_setup_puts_back_what_a_session_changed(self):
     pipettes = await simulated_channels()
@@ -423,7 +423,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     await pipettes._set_y_acceleration_level(2, 1)
     await pipettes._driver.setup()
     self.assertEqual(await pipettes.request_z_speed(2), 125.0)
-    self.assertEqual(await pipettes.request_y_acceleration_level(2), 3)
+    self.assertEqual(await pipettes.request_y_acceleration_level(2), 4)
 
   async def test_a_channel_move_writes_what_it_moved_with(self):
     pipettes = await simulated_channels()
@@ -1426,6 +1426,26 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.tool_bottoms.assert_not_awaited()
     self.assertEqual(self.safe_z.await_count, 2)
 
+  async def test_with_tracking_an_empty_well_is_touched_from_half_its_depth(self):
+    from pylabrobot.resources import set_volume_tracking
+
+    set_volume_tracking(True)
+    self.addCleanup(set_volume_tracking, False)
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    wells = self._wells("A1", "B1")
+    wells[1].tracker.set_volume(450.0)
+    await self.pipettes.probe_z_heights_using_ztouch(wells)
+
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    # The empty well from half its depth; the one holding liquid this plate cannot place, from
+    # the top.
+    half_way = round(bottom + 0.5 * (top - bottom), 2)
+    self.assertFalse(wells[1].supports_compute_height_volume_functions())
+    self.stop_discs.assert_awaited_once_with(
+      {0: round(half_way + 51.9, 2), 1: round(top + 51.9, 2)}, speed=125.0
+    )
+
   async def test_a_floor_search_ends_no_lower_than_the_drive_reaches(self):
     self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
     wells = self._wells("A1")
@@ -2223,15 +2243,41 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     self.assertIs(tips[1].parent, spots[1])
 
   async def test_a_failed_pickup_lifts_the_channels_out_of_the_rack(self):
-    """Whatever state a failure leaves them in, the channels come up to the traverse height."""
+    """A channel a failure leaves below the traverse height comes up to it."""
     from unittest.mock import AsyncMock, patch
 
     pipettes, rack, _ = await channels_over_a_rack()
+    await pipettes.move_stop_disc_to_z_position(0, 250.0)
     with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
       with self.assertRaises(RuntimeError):
         await pipettes.pick_up_tips([rack.get_item("A1")])
     # The height the command would have travelled at: as high as a 300 uL tip goes.
     self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), 282.8, places=1)
+
+  async def test_a_failed_pickup_leaves_a_channel_above_the_traverse_height_where_it_is(self):
+    """The traverse height is a minimum: a channel already above it is not taken down to it."""
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    await pipettes.move_to_safe_z()
+    safe = await pipettes.request_stop_disc_z_position(0)
+    with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
+      with self.assertRaises(RuntimeError):
+        await pipettes.pick_up_tips([rack.get_item("A1")])
+    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
+
+  async def test_a_failed_drop_leaves_a_channel_above_the_traverse_height_where_it_is(self):
+    from unittest.mock import AsyncMock, patch
+
+    pipettes, rack, _ = await channels_over_a_rack()
+    spot = rack.get_item("A1")
+    await pipettes.pick_up_tips([spot])
+    await pipettes.move_to_safe_z()
+    safe = await pipettes.request_stop_disc_z_position(0)
+    with patch.object(pipettes, "_unchecked_fw_drop_tips", AsyncMock(side_effect=RuntimeError)):
+      with self.assertRaises(RuntimeError):
+        await pipettes.drop_tips([spot])
+    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
 
   async def test_a_pickup_that_faults_on_one_channel_keeps_the_others_tips(self):
     """Not every pick-up uses every channel: the error names the ones that faulted, by channel.
@@ -3746,21 +3792,49 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     self.wells[0].tracker.set_volume(120.0)  # The model is wrong; the search will say 150 is 120.
     await self.pipettes.aspirate(self.wells[:2], [50.0, 20.0], lld_mode=Pipettes.LLDMode.CAPACITIVE)
     self.assertEqual([c[:4] for c in sent], ["P1ZL", "P2ZL", "C0RL", "C0AS"])
-    # The command starts where the tips rest, the lower of the two surfaces, with the LLD off.
+    # The command starts where the tips rest, 2 mm under the lower surface, with the LLD off.
     lowest = min(
       self._surface_field(self.wells[0], 120.0), self._surface_field(self.wells[1], 100.0)
     )
-    self.assertIn(f"th{lowest}te2450", sent[-1])
+    self.assertIn(f"th{int(lowest) - 20:04}te2450", sent[-1])
     self.assertIn("lm0 0", sent[-1])
-    self.assertIn(
-      f"zl{self._surface_field(self.wells[0], 120.0)} {self._surface_field(self.wells[1], 100.0)}",
-      sent[-1],
-    )
+    # Each tip goes 2 mm under the surface it found, by the start height, with no immersion sent.
+    a1 = int(self._surface_field(self.wells[0], 120.0)) - 20
+    b1 = int(self._surface_field(self.wells[1], 100.0)) - 20
+    self.assertIn(f"zl{a1:04} {b1:04}", sent[-1])
+    self.assertIn("ip0000 0000", sent[-1])
     # The tips follow nothing unless told to, as legacy sends it.
     self.assertIn("fp0000 0000", sent[-1])
     # Measured volume less what was drawn, to the resolution of the well's height-volume model.
     self.assertAlmostEqual(self.wells[0].tracker.get_used_volume(), 70.0, delta=2.0)
     self.assertAlmostEqual(self.wells[1].tracker.get_used_volume(), 80.0, delta=2.0)
+
+  async def test_a_searched_tip_starts_its_immersion_under_the_surface_above_the_floor(self):
+    sent = self._record_aspirations("P1ZA", "P2ZA", "P3ZA", "P1AA", "P2AA", "P3AA")
+    modes = [Pipettes.LLDMode.CAPACITIVE, Pipettes.LLDMode.CAPACITIVE, Pipettes.LLDMode.OFF]
+    await self.pipettes.aspirate(
+      self.wells[:3], [10.0] * 3, lld_mode=modes, immersion_depths=[3.0, 50.0, 1.5]
+    )
+    # The firmware immerses only after a search of its own: a searched tip is sent its immersion
+    # in the start height, no lower than the floor, and 0 as ip; the OFF tip keeps its ip.
+    a1 = int(self._surface_field(self.wells[0], 150.0)) - 30
+    b1 = self._surface_field(self.wells[1], 0.0)
+    c1 = self._surface_field(self.wells[2], 0.0)
+    self.assertIn(f"zl{a1:04} {b1} {c1}", sent[-1])
+    self.assertIn("ip0000 0000 0015", sent[-1])
+    # After their approach moves, the two searched tips are taken there at the search's 10 mm/s;
+    # the OFF tip is not.
+    speed = self.pipettes.configuration.z_drive_mm_to_increments(10.0)
+    default = self.pipettes.configuration.z_drive_mm_to_increments(self.pipettes.default_z_speed)
+    self.assertEqual(
+      [c[:4] for c in sent],
+      ["P1ZA", "P2ZA", "P1AA", "P2AA", "P1ZA", "P2ZA", "P1AA", "P2AA", "C0AS"],
+    )
+    for command in sent[4:6]:
+      self.assertIn(f"zv{speed:05}", command)
+    # A `Px ZA` keeps its speed as the drive's, so the default goes back before the command.
+    for command in sent[6:8]:
+      self.assertIn(f"zv{default:05}", command)
 
   async def test_a_container_without_height_volume_functions_is_refused_before_any_batch(self):
     for row in "EFGH":
@@ -3827,7 +3901,8 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     # The touch, then the two searches, each its own way; then one command for all four, LLD off,
     # from the lowest height any tip rests at: 0.2 mm off the floor touched.
     self.assertEqual(
-      [c[:4] for c in sent], ["P4ZA", "P4ZH", "P2ZA", "P3ZA", "P2ZL", "P3ZE", "C0RL", "C0AS"]
+      [c[:4] for c in sent],
+      ["P4ZA", "P4ZH", "P2ZA", "P3ZA", "P2ZL", "P3ZE", "C0RL", "P2ZA", "P3ZA", "C0AS"],
     )
     self.assertIn("lm0 0 0 0", sent[-1])
     # The approach takes the two searching tips to the command's lp, 2 mm above the well, and the
@@ -3838,13 +3913,26 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     self.assertIn(f"zc{start:05}", sent[4])
     self.assertIn(f"lp{round((top + 2.0) * 10):04}", sent[-1])
     floor = f"{int(self._surface_field(self.wells[3], 0.0)) + 2:04}"
-    self.assertIn(f"th{floor}te2450", sent[-1])
-    # The OFF channel draws at the cavity bottom, the searched ones where they found the liquid.
-    self.assertIn(
-      f"zl{self._surface_field(self.wells[0], 0.0)} {self._surface_field(self.wells[1], 100.0)} "
-      f"{self._surface_field(self.wells[2], 50.0)} {floor}",
-      sent[-1],
-    )
+    # The lowest tip is C1's, immersed to its floor, under the one that touched.
+    self.assertIn(f"th{self._surface_field(self.wells[2], 0.0)}te2450", sent[-1])
+    # The OFF channel draws at the cavity bottom, the searched ones 2 mm under the liquid found,
+    # C1's 50 uL standing less than that, so at its floor.
+    bottom = self._surface_field(self.wells[0], 0.0)
+    b1 = int(self._surface_field(self.wells[1], 100.0)) - 20
+    self.assertIn(f"zl{bottom} {b1:04} {bottom} {floor}", sent[-1])
+
+  async def test_a_z_touch_starts_above_the_liquid_a_well_holds(self):
+    sent = self._record_aspirations("P1ZH")
+    well = self.wells[0]
+    await self.pipettes.aspirate([well], [10.0], lld_mode=Pipettes.LLDMode.ZTOUCH)
+    bottom = well.get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    top = well.get_location_wrt(self.deck, "c", "c", "t").z
+    # Half its depth would be in A1's 150 uL: the touch starts 2 mm over the liquid instead.
+    above_liquid = round(bottom + well.compute_height_from_volume(150.0) + 2.0, 2)
+    self.assertGreater(above_liquid, bottom + 0.5 * (top - bottom))
+    overhang = await self.pipettes.request_tip_overhang(0)
+    start = self.pipettes.configuration.z_drive_mm_to_increments(round(above_liquid + overhang, 2))
+    self.assertIn(f"zb{start:05}", sent[0])
 
   async def test_a_z_touch_draws_just_off_the_floor(self):
     sent = self._record_aspirations("P1ZA", "P1ZH")
@@ -3970,8 +4058,8 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
     # is sent, and with tracking off the tracker is left alone.
     await self.pipettes.aspirate(self.wells[:1], [10.0], lld_mode=Pipettes.LLDMode.CAPACITIVE)
     surface = self._surface_field(self.wells[0], 150.0)
-    self.assertIn(f"th{surface}te2450", sent[2])
-    self.assertIn(f"zl{surface}", sent[2])
+    self.assertIn(f"th{int(surface) - 20:04}te2450", sent[2])
+    self.assertIn(f"zl{int(surface) - 20:04}", sent[2])
     self.assertIn("lm0", sent[2])
     self.assertEqual(self.wells[0].tracker.get_used_volume(), 150.0)
 
@@ -4454,8 +4542,8 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     )
     self.assertEqual([c[:4] for c in sent], ["P1ZL", "C0RL", "C0DS"])
     surface = self._field(self.wells[1], self.wells[1].compute_height_from_volume(100.0))
-    self.assertIn(f"th{surface}te2450", sent[-1])
-    self.assertIn(f"zl{surface}", sent[-1])
+    self.assertIn(f"th{int(surface) - 20:04}te2450", sent[-1])
+    self.assertIn(f"zl{int(surface) - 20:04}", sent[-1])
     self.assertIn("lm0", sent[-1])
     # The tracker takes the measured volume, read in tenths of a millimetre, then the 10 given.
     self.assertAlmostEqual(self.wells[1].tracker.get_used_volume(), 110.0, delta=2.0)
