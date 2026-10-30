@@ -9,3 +9,4 @@ pylabrobot.hamilton package
 
    prep
    transport.tcp
+   transport.text_tcp
