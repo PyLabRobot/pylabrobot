@@ -79,8 +79,7 @@ class USB(IOBase):
         any necessary configuration. If `None`, `dev.set_configuration()` is called.
       max_workers: The maximum number of worker threads for USB I/O operations.
       zero_length_packets: End a write whose length is a multiple of the write endpoint's packet
-        size with a zero-length packet. Some devices, such as BMG's VANTAstar, reject the extra
-        packet.
+        size with a zero-length packet. Some devices reject the extra packet.
     """
 
     super().__init__()
