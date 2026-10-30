@@ -147,6 +147,13 @@ do. A tip command travels as high as the mounted tip allows, its stop disc an ov
 and never below the 245.0 mm safety height. `pick_up_tips` and `drop_tips` follow this, and so do
 the Prep's.
 
+**P21. The master manages every session to the device.** Every connection a device is reached
+through - a second session to the same device, or a second server behind it - is held by the
+master: all open in `setup` and close in `stop`, and a feature sends on one only through a master
+method, never on a link of its own. The STAR has one link. The Prep opens two sessions, so each
+channel node can be sent a command beside the other's, and its channels reach the second through
+`send_command_on_second_session`.
+
 ## Where this is not consistent yet
 
 1. **`.configuration` has two owners.** Most features own theirs

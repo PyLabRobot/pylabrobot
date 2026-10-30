@@ -1,5 +1,5 @@
-"""PreciseFlex driver: the controller link, its lifecycle, the configuration, and the resource model
-it builds from one."""
+"""PreciseFlex driver: the controller link and lifecycle, the vision server's links, the
+configuration, and the resource model it builds from one."""
 
 import asyncio
 import dataclasses
@@ -14,6 +14,7 @@ from typing import (
   Literal,
   Optional,
   Sequence,
+  Tuple,
   cast,
 )
 
@@ -55,8 +56,66 @@ from .errors import PreciseFlexError
 from .features.arm import PreciseFlexArm, PreciseFlexArmConfiguration
 from .features.gripper import PreciseFlexGripper, PreciseFlexGripperConfiguration
 from .features.rail import PreciseFlexRail, PreciseFlexRailConfiguration
+from .features.vision import PreciseFlexVision
 
 logger = logging.getLogger(__name__)
+
+# Brooks' PreciseVision server behind a camera-gripper arm: a text property
+# protocol on one port, and the JPEG results it pushes on another.
+VISION_SERVER_PROPERTY_PORT = 1450  # text command/query protocol
+# The binary stream carrying the pushed "Primary Image [n]" JPEG results.
+VISION_SERVER_IMAGE_PORT = 1500
+_NO_VISION_SERVER = "no vision server configured - pass vision_host at setup to use this method"
+
+_RESULT_HEADER_LENGTH = 16
+# A sanity cap: a result this large signals a desync, not a real frame.
+_MAX_IMAGE_BYTES = 16 * 1024 * 1024
+
+
+def _drain_named_result(buf: bytearray) -> Optional[Tuple[str, bytes]]:
+  """Pop the next complete ``(name, data)`` result from the front of ``buf``, consuming it.
+
+  The vision server pushes length-prefixed results on its image port, each a fixed 16-byte header,
+  then the result name, then the data::
+
+    01 | name_len (u8) | 00 00 00 | data_len (u32 LE) | 00 00 00 00 00 00 00 | <name> | <data>
+
+  For a "Primary Image [n]" result the data is the JPEG and ``data_len`` its exact byte count.
+  Non-image results, such as a tool's results, are interleaved and framed the same way. Parsing by
+  the announced length never inspects the payload, so a JPEG's internal markers cannot mis-frame
+  it. Assumes ``buf`` begins on a result boundary, which a freshly held stream does.
+
+  Args:
+    buf: the held read buffer; a complete result is removed from its front in place.
+
+  Returns:
+    The next ``(name, data)`` result, or ``None`` while the full result has not arrived yet.
+
+  Raises:
+    ValueError: if the header is not a result start (``buf[0] != 0x01``) or declares an implausibly
+      large ``data_len`` - both signal a desynchronised stream, which has no safe silent recovery.
+  """
+  if len(buf) < _RESULT_HEADER_LENGTH:
+    return None
+  if buf[0] != 0x01:
+    raise ValueError(
+      f"PreciseVision image stream desync: result starts with {buf[0]:#04x}, not 0x01"
+    )
+  name_len = buf[1]
+  data_len = int.from_bytes(buf[5:9], "little")
+  if data_len > _MAX_IMAGE_BYTES:
+    raise ValueError(
+      f"PreciseVision result declares an implausible data length of {data_len} bytes"
+    )
+  end = _RESULT_HEADER_LENGTH + name_len + data_len
+  if len(buf) < end:
+    return None
+  name = bytes(buf[_RESULT_HEADER_LENGTH : _RESULT_HEADER_LENGTH + name_len]).decode(
+    "ascii", "replace"
+  )
+  data = bytes(buf[_RESULT_HEADER_LENGTH + name_len : end])
+  del buf[:end]
+  return name, data
 
 
 class PreciseFlexDriver:
@@ -82,6 +141,7 @@ class PreciseFlexDriver:
     read_kinematics_from_device: bool = True,
     recover_out_of_range: bool = True,
     parking_position: Optional[JointState] = None,
+    vision_host: Optional[str] = None,
     base_plate: Optional[Resource] = None,
     declared_configuration_json: Optional[str] = None,
   ) -> None:
@@ -114,6 +174,12 @@ class PreciseFlexDriver:
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
         elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
+      vision_host: address of the vision server, a separate computer from the controller (its
+        own box with its own IP). Set it to connect to the vision server, which powers both image
+        fetch and discovery on the vision server (what tool types, tools, processes, and projects
+        exist). None leaves the vision server unconnected, disabling those; the controller-side
+        execution path (running processes/tools, setting properties, lighting, barcodes, stereo
+        locate) is unaffected. Only consulted when setup discovers an IntelliGuide vision module.
       base_plate: the base plate to build the arm on. Optional: without one the driver still
         drives the arm, and models nothing.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
@@ -133,6 +199,20 @@ class PreciseFlexDriver:
     # Serializes each request->reply exchange over the single shared controller socket; the
     # rationale (and why it is kept though uncontended today) is in _locked_exchange.
     self._io_lock = asyncio.Lock()
+    self._vision_host = vision_host
+    # The vision server's two connections, held here beside the controller's; None until
+    # setup opens them, which it does only for a reachable `vision_host`.
+    self._vision_server_io: Optional[Socket] = None
+    self._vision_image_io: Optional[Socket] = None
+    # The held image stream is read in chunks and a result can span reads, so a read that times out
+    # mid-result leaves a partial result here, keeping the next read frame-aligned.
+    self._vision_image_buf = bytearray()
+    self.vision_server_timeout = 5.0
+    # One exchange at a time on each vision server connection, as `_io_lock` on the controller's.
+    self._vision_server_lock = asyncio.Lock()
+    self._vision_image_lock = asyncio.Lock()
+    # The vision feature, built at setup when the controller's vision module is loaded.
+    self.vision: Optional[PreciseFlexVision] = None
     # Built only on an arm that has a rail; discovery decides at setup.
     self.rail: Optional[PreciseFlexRail] = PreciseFlexRail(self) if has_rail else None
     self.arm = PreciseFlexArm(self)
@@ -178,6 +258,18 @@ class PreciseFlexDriver:
       await self.io.write(command.encode("utf-8") + b"\n")
       return (await self.io.readline()).decode("utf-8").strip()
 
+  async def _locked_vision_server_exchange(self, command: str) -> str:
+    """As `_locked_exchange`, on the vision server's property connection. Its lines end CRLF.
+
+    Raises:
+      RuntimeError: If the vision server is not connected.
+    """
+    if self._vision_server_io is None:
+      raise RuntimeError(_NO_VISION_SERVER)
+    async with self._vision_server_lock:
+      await self._vision_server_io.write(command.encode("utf-8") + b"\r\n")
+      return (await self._vision_server_io.readline()).decode("utf-8", "replace").strip()
+
   def _ensure_successful(self, reply: str) -> str:
     """Return the data of a ``<code> <data>`` reply, raising unless the code is 0.
 
@@ -198,30 +290,43 @@ class PreciseFlexDriver:
       raise PreciseFlexError(replycode, data)
     return data
 
-  async def send_command(self, command: str) -> str:
+  async def send_command(
+    self, command: str, *, use_server: Literal["controller", "vision"] = "controller"
+  ) -> str:
     """Send a command and return the accepted ``<code> <data>`` payload.
 
     Writes the command and reads one reply line (as one locked exchange), then applies the standard
     acceptance gate (``_ensure_successful``): a non-zero reply code raises, otherwise the data
-    payload is returned. A reply in a different grammar goes through the same ``_locked_exchange``
-    and is parsed by the caller instead.
+    payload is returned. A reply in a different grammar (e.g. PreciseVision's bare ``VToolProperty``
+    value) goes through the same ``_locked_exchange`` and is parsed by the caller instead.
 
     The exchange is wrapped in the firmware-command events so a command keeps its enclosing
     operation context.
 
     Args:
       command: the command line, without its line ending.
+      use_server: ``"controller"`` (the default), or ``"vision"`` for the vision server's property
+        connection, which answers in the same grammar.
 
     Raises:
+      RuntimeError: If ``use_server`` is ``"vision"`` and the vision server is not connected.
       PreciseFlexError: on an empty reply or a non-zero reply code.
     """
+    device = self._controller_reference()
+    if use_server == "controller":
+      exchange = self._locked_exchange
+    elif use_server == "vision":
+      exchange = self._locked_vision_server_exchange
+      device = {**device, "host": self._vision_host, "port": VISION_SERVER_PROPERTY_PORT}
+    else:
+      raise ValueError(f"use_server has to be either `controller` or `vision`, is {use_server}")
     event_data = {
-      "device": self._controller_reference(),
+      "device": device,
       "command": command,
     }
     emit_event("precise_flex.firmware_command.started", **event_data)
     try:
-      result = self._ensure_successful(await self._locked_exchange(command))
+      result = self._ensure_successful(await exchange(command))
     except BaseException as error:
       emit_event(
         "precise_flex.firmware_command.failed",
@@ -233,24 +338,128 @@ class PreciseFlexDriver:
     emit_event("precise_flex.firmware_command.completed", **event_data, response=result)
     return result
 
+  # -- vision server: the second server's two connections, held here ------------------------------
+
+  @property
+  def vision_server_connected(self) -> bool:
+    """Whether setup opened the vision server's connections."""
+    return self._vision_server_io is not None
+
+  async def _open_vision_server(self, host: str) -> None:
+    """Open and hold both vision server connections (property + image stream)."""
+    server_io = Socket(
+      human_readable_device_name="vision server (property)",
+      host=host,
+      port=VISION_SERVER_PROPERTY_PORT,
+    )
+    image_io = Socket(
+      human_readable_device_name="vision server (image)",
+      host=host,
+      port=VISION_SERVER_IMAGE_PORT,
+    )
+    await server_io.setup()
+    await image_io.setup()
+    self._vision_server_io, self._vision_image_io = server_io, image_io
+    self._vision_image_buf.clear()  # a fresh stream; drop anything buffered from a previous session
+    logger.info(
+      "[PreciseVision %s] connected: property=%s image=%s",
+      host,
+      VISION_SERVER_PROPERTY_PORT,
+      VISION_SERVER_IMAGE_PORT,
+    )
+
+  async def _close_vision_server(self) -> None:
+    """Close both vision server connections, if they are open."""
+    if self._vision_image_io is not None:
+      await self._vision_image_io.stop()
+    if self._vision_server_io is not None:
+      await self._vision_server_io.stop()
+    self._vision_server_io = self._vision_image_io = None
+
+  async def request_vision_server_property(self, name: str) -> str:
+    """Read a named vision server parameter (``property get <name>``); raises on an error reply.
+
+    Args:
+      name: the vision server parameter name (e.g. ``system.engineversion``, ``acq1.exposure``).
+        May carry trailing positional args (e.g. ``system.cameraname 1``).
+
+    Returns:
+      The parameter value (possibly empty).
+    """
+    return await self.send_command(f"property get {name}", use_server="vision")
+
+  async def _set_vision_server_property(self, name: str, value: object) -> str:
+    """Write a named vision server parameter (``property set <name> <value>``).
+
+    Private: a write changes device state. The same namespace carries action triggers
+    (``system.runtool``, ``system.cameraacquire``).
+
+    Args:
+      name: the vision server parameter name (e.g. ``acq1.exposure``, ``system.runtool``).
+      value: the value to write; stringified onto the command line.
+
+    Returns:
+      The reply value (possibly empty).
+    """
+    return await self.send_command(f"property set {name} {value}", use_server="vision")
+
+  async def read_next_vision_server_result(
+    self, timeout: Optional[float] = None
+  ) -> Optional[Tuple[str, bytes]]:
+    """Read the next complete ``(name, data)`` result off the held image stream, or None at its end.
+
+    Returns a result already buffered if there is one, otherwise reads until a whole result has
+    arrived. Partial bytes from a timed-out read stay buffered, so the next call resumes
+    frame-aligned. One reader at a time, so concurrent callers take whole results in call order.
+
+    Args:
+      timeout: per-read timeout in seconds; ``vision_server_timeout`` when None.
+
+    Returns:
+      The next ``(name, data)`` result, or None if the stream closed before a full result.
+
+    Raises:
+      RuntimeError: If the vision server is not connected.
+      TimeoutError: if no bytes arrive within ``timeout``.
+      ValueError: if the stream has desynchronised (see ``_drain_named_result``).
+    """
+    if self._vision_image_io is None:
+      raise RuntimeError(_NO_VISION_SERVER)
+    buf = self._vision_image_buf
+    async with self._vision_image_lock:
+      while True:
+        result = _drain_named_result(buf)
+        if result is not None:
+          return result
+        chunk = await self._vision_image_io.read(
+          65_536, timeout=self.vision_server_timeout if timeout is None else timeout
+        )
+        if not chunk:
+          return None
+        buf += chunk
+
   # -- lifecycle -------------------------------------------------------------
 
   @evented_operation(
     "precise_flex.setup",
-    lambda self, skip_home=False: {
+    lambda self, skip_home=False, skip_vision_setup=False: {
       "device": self._controller_reference(),
       "skip_home": skip_home,
+      "skip_vision_setup": skip_vision_setup,
     },
   )
-  async def setup(self, skip_home: bool = False):
+  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
     ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
-    modelled, before homing so the jaws' opening is checked, and axes outside their limits are
-    dealt with.
+    modelled, before homing so the jaws' opening is checked, axes outside their limits are dealt
+    with, and, when the controller has an IntelliGuide vision module, the vision feature is built
+    as ``self.vision``.
 
     Args:
       skip_home: If True, skip the homing step during setup.
+      skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
+        Mirrors STAR's ``skip_*`` setup flags.
     """
     await self.connect()
     configuration = await self.initialize()
@@ -258,6 +467,8 @@ class PreciseFlexDriver:
     if not skip_home:
       await self.home()
     await self.arm._handle_out_of_range_axes()
+    if not skip_vision_setup and configuration.has_vision_server:
+      await self._setup_vision(self._vision_host)
 
   async def connect(self) -> None:
     """Open the link and agree the response protocol. Powers nothing, moves nothing."""
@@ -390,18 +601,44 @@ class PreciseFlexDriver:
     hand = gripper(
       name=f"{device.name}_gripper",
       tool_length=c.kinematics.gripper_length,
+      intelliguide="v23" if configuration.has_vision_gripper else "s23",
       # The axis's soft limits, in mm, as the gripper takes them when it adopts a configuration.
       jaw_range=(
         self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[0]),
         self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[1]),
       ),
-      intelliguide="v23" if configuration.has_vision_gripper else "s23",
     )
     second.assign_child_resource(
       hand, location=cast(Coordinate, second.distal_joint) - hand.proximal_joint
     )
     self.arm.resource, self.arm.link_1, self.arm.link_2 = carriage, first, second
     self.gripper.resource = hand
+
+  async def _setup_vision(self, vision_host: Optional[str]) -> None:
+    """Build the vision capability and connect its vision server; best-effort, never raises.
+
+    Called by ``setup`` when the controller is set up for a vision server (``has_vision_server``),
+    whatever gripper is fitted; this class owns the connection, as ``stop`` closes it. The
+    controller side of vision always works; a set, reachable ``vision_host`` additionally opens the
+    vision server for image fetch and discovery. A missing or unreachable host leaves
+    ``self.vision`` built with no vision server.
+
+    Args:
+      vision_host: address of the vision server, or ``None`` for controller-only vision.
+    """
+    if vision_host:
+      try:
+        await self._open_vision_server(vision_host)
+      # A missing or unreachable vision server just disables image fetch.
+      except Exception as exc:  # noqa: BLE001
+        logger.warning(
+          "[PreciseFlex %s] vision server at %s unreachable; direct image acquisition disabled: %s",
+          self.io._host,
+          vision_host,
+          exc,
+        )
+    self.vision = PreciseFlexVision(self)
+    await self.vision.setup()  # discovers, caches, and logs the capability summary (best-effort)
 
   async def disconnect(self) -> None:
     """Hand the arm back and close the links. Moves nothing.
@@ -411,6 +648,7 @@ class PreciseFlexDriver:
     await self.detach()
     await self.power_off_robot()
     await self._exit()
+    await self._close_vision_server()
     await self.io.stop()
     logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
@@ -419,7 +657,7 @@ class PreciseFlexDriver:
     lambda self: {"device": self._controller_reference()},
   )
   async def stop(self):
-    """Hand the arm back and close the link (``disconnect``)."""
+    """Hand the arm back and close every connection (``disconnect``)."""
     await self.disconnect()
 
   # -- device-level commands -------------------------------------------------
@@ -1086,15 +1324,11 @@ class PreciseFlexDriver:
     lambda self: {"device": self._controller_reference()},
   )
   async def recover_from_fault(self) -> None:
-    """Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.
+    """Re-enable power and re-attach after a fault that dropped power; home only if not homed.
 
-    A collision trips an envelope error (``-3100`` hard / ``-3122`` soft, see
-    :func:`~pylabrobot.brooks.precise_flex.driver.errors.is_collision`); the servo stops the arm
-    itself and high power drops. This re-enables power, re-attaches, and re-homes. It does **not**
-    drive the arm to any pose; confirm the obstacle is removed before calling.
-
-    The envelope error auto-clears, so no explicit clear is needed; a latched fatal that blocks
-    power-on is surfaced by ``power_on_robot`` for the operator to reset (DataID 247) or reboot.
+    A soft envelope error (``-3122``) leaves the arm homed, so no homing runs; homing sweeps the
+    arm. Does not drive the arm to any pose. Confirm the obstacle is removed first. The envelope
+    error clears itself; a latched fatal that blocks power-on needs a reset (DataID 247) or reboot.
 
     Raises:
       PreciseFlexError: if a hard E-stop is engaged (release the button first) or power cannot be
@@ -1106,7 +1340,8 @@ class PreciseFlexDriver:
       )
     await self.power_on_robot()
     await self.attach(1)
-    await self.home()
+    if not await self._is_robot_homed():
+      await self.home()
 
   # -- deprecated: moved to the arm, gripper and rail ---------------------------------------------
 
