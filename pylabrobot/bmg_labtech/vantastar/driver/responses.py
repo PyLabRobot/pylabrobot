@@ -16,6 +16,7 @@ from typing import List, Optional, Sequence, Tuple
 
 CONFIRMATION_ID = 0x01
 MEASUREMENT_DATA_ID = 0x02
+TIME_DATA_ID = 0x03
 GAIN_DATA_ID = 0x05
 WELL_LIST_ID = 0x1D
 MW_BLOCK_DATA_ID = 0x2A
@@ -224,6 +225,25 @@ def parse_measurement_data(reply: bytes) -> MeasurementData:
     cycle=int.from_bytes(p[wells_offset + _MD_CYCLE : wells_offset + _MD_CYCLE + 2], "big"),
     start_time=u32(wells_offset + _MD_START_TIME) / 10,
   )
+
+
+# TimeDataResponse payload (the reply to RUN): TestRunTime, the run time the reader expects in s.
+_TD_RUN_TIME = 12  # u32
+
+
+def parse_run_time(reply: bytes) -> int:
+  """The run time in s the reader expects for a read, from the TimeDataResponse it answers a RUN
+  with (TestRunTime).
+
+  Raises:
+    ValueError: if ``reply`` is not a TimeDataResponse or is truncated.
+  """
+  if not reply or reply[0] != TIME_DATA_ID:
+    raise ValueError(f"not a TimeDataResponse: {reply[:16].hex()}")
+  _, _, p = split_reply(reply)
+  if len(p) < _TD_RUN_TIME + 4:
+    raise ValueError(f"TimeDataResponse too short: {reply.hex()}")
+  return int.from_bytes(p[_TD_RUN_TIME : _TD_RUN_TIME + 4], "big")
 
 
 def parse_well_list(reply: bytes) -> List[Tuple[int, int]]:

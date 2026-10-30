@@ -15,6 +15,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses import (
   parse_gain_data,
   parse_measurement_data,
   parse_mw_block_data,
+  parse_run_time,
   parse_well_list,
   split_reply,
 )
@@ -384,6 +385,32 @@ class GainDataTests(unittest.TestCase):
     result = parse_gain_data(GAIN_DATA_GAIN)
     self.assertEqual(result.gain, 719)
     self.assertIsNone(result.focal_height)
+
+
+# The reader's replies to time estimates (RUN with CalcTimeOnly) for a 96-well read at 450 nm, and for
+# the same read as 2 cycles 200 s apart; the reads took 91 s and are estimated at 95 s and 295 s.
+TIME_DATA_96_WELLS = bytes.fromhex(
+  "03050426000001000011c10000018c0111300000005f0001010000000000000003000000580001000000030000000041"
+)
+TIME_DATA_KINETIC = bytes.fromhex(
+  "03050426000001000011c10000018c011130000001270001010000000000000003000000580002000000030000000041"
+)
+
+
+class TimeDataTests(unittest.TestCase):
+  """Parsing the run time the reader expects from its reply to a RUN."""
+
+  def test_run_time(self):
+    """The replies give 95 s for the 96-well read and 295 s for its two cycles 200 s apart."""
+    self.assertEqual(parse_run_time(TIME_DATA_96_WELLS), 95)
+    self.assertEqual(parse_run_time(TIME_DATA_KINETIC), 295)
+
+  def test_other_replies_are_refused(self):
+    """A reply that is not a TimeDataResponse, or is truncated, raises ValueError."""
+    with self.assertRaises(ValueError):
+      parse_run_time(GAIN_DATA)
+    with self.assertRaises(ValueError):
+      parse_run_time(TIME_DATA_96_WELLS[:20])
 
 
 class WellListTests(unittest.TestCase):

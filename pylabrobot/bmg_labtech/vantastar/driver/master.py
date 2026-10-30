@@ -42,6 +42,7 @@ from .framing import (
 )
 from .responses import (
   CONFIRMATION_ID,
+  TIME_DATA_ID,
   GainFocus,
   MeasurementData,
   MwBlockStatus,
@@ -49,6 +50,7 @@ from .responses import (
   parse_gain_data,
   parse_measurement_data,
   parse_mw_block_data,
+  parse_run_time,
   parse_well_list,
   split_reply,
 )
@@ -168,6 +170,9 @@ _NEXT_NEW_DATA_BLOCK = bytes([ValuesType.MEASUREMENT_DATA]) + bytes(6)
 # A ValuesCommand for one well's part of a block (MeasurementDataSpecificDataBlock) sets this bit
 # of its sub-block number to leave out the 0%/100% calibration values.
 _WITHOUT_CALIBRATION = 0x8000
+# RUN fields: the reading-mode byte and its CalcTimeOnly bit, set for a time estimate without a read.
+_READING_MODE = 66
+_CALC_TIME_ONLY = 0x01
 # MwBlockCommand GetStatusOfMeasDataBlock with a send block size of 65535.
 _MW_BLOCK_STATUS = bytes([CommandId.MW_BLOCK, 0x00, 0x00, 0x00, 0xFF, 0xFF])
 # MwBlockCommand ReleaseMeasDataBlock, of kinetic cycle 1, as Voyager sends it after the last well of
@@ -1195,6 +1200,20 @@ class VANTAstarDriver:
       return 0
     return max(0, (progress.saved - progress.calibration_values) // per_well)
 
+  async def estimate_run_time(self, parameters: bytes) -> int:
+    """The run time in s the reader expects for a read of the RUN fields ``parameters``, without
+    reading: the RUN is sent with CalcTimeOnly set, as Voyager sends it while a method is edited.
+
+    On the tested reader every read finished 3-7 s before its estimate (a read sent with the drawer
+    out took longer: the reader first moves the plate in).  Each read logs its estimate at INFO.
+
+    Raises:
+      CommandRefusedError: if the reader refuses the fields, as it refuses them for a read.
+    """
+    fields = bytearray(parameters)
+    fields[_READING_MODE] |= _CALC_TIME_ONLY
+    return parse_run_time(await self.send_command(CommandId.RUN, bytes(fields)))
+
   async def _run(
     self, parameters: bytes, *, timeout: float, by_well: bool
   ) -> List[MeasurementData]:
@@ -1208,7 +1227,9 @@ class VANTAstarDriver:
     try:
       # Sent once: the reader acts on the RUN and on each data request it answers, so sending one
       # again after a lost reply would start a second read or skip a block.
-      await self.send_command(CommandId.RUN, parameters, retries=1)
+      reply = await self.send_command(CommandId.RUN, parameters, retries=1)
+      if reply[:1] == bytes([TIME_DATA_ID]):
+        logger.info("the reader expects the read to take %d s", parse_run_time(reply))
       wells = parse_well_list(
         await self.send_command(
           CommandId.VALUES, bytes([ValuesType.LAYOUT_WELL_LIST]) + bytes(6), when_idle=False

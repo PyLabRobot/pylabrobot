@@ -19,6 +19,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.framing import (
 from pylabrobot.bmg_labtech.vantastar.driver.master import (
   LUMINESCENCE_NO_FILTER,
   STANDARD_96,
+  CommandId,
   MonochromatorSettings,
   VANTAstarDriver,
   WellScan,
@@ -872,6 +873,17 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(respond)
     result = await driver.adjust_gain_and_focus(GAIN_PLATE[1:])
     self.assertEqual((result.gain, result.focal_height), (2904, 3.0))
+
+  async def test_estimate_run_time(self):
+    """A time estimate sends the RUN with CalcTimeOnly set, its other fields unchanged, and returns
+    the run time the reader expects; nothing else is sent after it."""
+    driver = make_driver(lambda p: RUN_REPLY if p[0] == CommandId.RUN else STATUS_IDLE)
+    fields = driver.build_absorbance_run([450], flashes=22, settling_time=0.5)
+    self.assertEqual(await driver.estimate_run_time(fields), 95)
+    run = commands(driver)[-1]
+    self.assertEqual(run[0], CommandId.RUN)
+    self.assertEqual(run[67], 0x03)  # WellPlateModeKinetic and CalcTimeOnly
+    self.assertEqual(run[1:67] + run[68:], fields[:66] + fields[67:])
 
 
 if __name__ == "__main__":
