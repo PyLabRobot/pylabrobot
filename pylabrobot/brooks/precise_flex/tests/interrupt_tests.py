@@ -36,76 +36,55 @@ def _make_arm() -> PreciseFlexDriver:
 
 
 class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
-  """The non-blocking motion-wait: polls wherej and returns once the arm stops moving."""
+  """The non-blocking motion-wait: polls state and returns once the arm stops moving."""
 
-  async def test_returns_when_motion_stops(self):
-    """Returns once three samples in a row agree."""
-    wherej = iter(["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9"] + ["10 10 10 10 10"] * 3)
+  async def _wait_through(self, states: list) -> AsyncMock:
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=lambda cmd: next(wherej))  # type: ignore[method-assign]
-    await d.arm._wait_for_eom(poll_interval=0)  # no error == returned at the settled sample
-
-  async def test_a_move_creeping_off_does_not_count_as_stopped(self):
-    """Right after moveJ the arm creeps under the settle threshold (as logged), then moves."""
-    # The arm's first four reads after a logged moveJ, then the three it settled on.
-    replies = [
-      "301.022 33.703 242.82 141.894 74.8",
-      "301.022 33.694 242.807 141.909 74.8",
-      "301.022 33.667 242.74 141.942 74.8",
-      "301.038 33.586 242.595 142.024 74.8",
-      "301.123 0.002 179.998 179.996 74.777",
-      "301.124 0.002 179.999 180 74.777",
-      "301.125 0.001 179.999 180.002 74.777",
-    ]
-    d = _make_arm()
-    d.send_command = AsyncMock(side_effect=replies)  # type: ignore[method-assign]
+    d.send_command = AsyncMock(side_effect=states)  # type: ignore[method-assign]
     await d.arm._wait_for_eom(poll_interval=0)
-    self.assertEqual(mocked(d.send_command).await_count, len(replies))
+    return mocked(d.send_command)
 
-  async def test_returns_immediately_when_already_stationary(self):
+  async def test_waits_through_a_move_at_every_phase(self):
+    """The phases a move read on the arm: accelerating, constant, decelerating, nulling, idle."""
+    send = await self._wait_through(["2", "3", "5", "15", "1", "1"])
+    self.assertEqual(send.await_count, 6)
+    send.assert_awaited_with("state")
+
+  async def test_returns_at_once_when_already_stopped(self):
     """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
-    d = _make_arm()
-    idle = "269.908 81.507 218.952 113.977 70.685"  # as the arm answered, poll after poll
-    d.send_command = AsyncMock(return_value=idle)  # type: ignore[method-assign]
-    await d.arm._wait_for_eom(poll_interval=0)
+    send = await self._wait_through(["1", "1"])
+    self.assertEqual(send.await_count, 2)
+
+  async def test_freedrive_counts_as_stopped(self):
+    """Freedrive read 10 on the arm: a read during it must not wait for the hand to let go."""
+    send = await self._wait_through(["10", "10"])
+    self.assertEqual(send.await_count, 2)
+
+  async def test_a_stale_reply_does_not_end_the_wait(self):
+    """After an interrupted `moveJ`, its late empty reply answers `state`: the arm is still moving."""
+    send = await self._wait_through(["", "3", "5", "15", "1", "1"])
+    self.assertEqual(send.await_count, 6)
 
   async def test_keyboard_interrupt_halts_and_raises_operation_interrupted(self):
     """A user interrupt mid-wait sends halt on the connection and surfaces OperationInterrupted."""
-    seq = iter(["0 0 0 0 0"])
-
-    def fake(cmd: str) -> str:
-      try:
-        return next(seq)
-      except StopIteration:
-        raise KeyboardInterrupt()
-
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=fake)  # type: ignore[method-assign]
+    d.send_command = AsyncMock(side_effect=["2", KeyboardInterrupt()])  # type: ignore[method-assign]
     with self.assertRaises(OperationInterrupted):
       await d.arm._wait_for_eom(poll_interval=0)
     self.assertTrue(any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list))
 
   async def test_cancelled_error_halts_and_reraises(self):
     """Cancellation is re-raised (not converted) but still sends halt first."""
-    seq = iter(["0 0 0 0 0"])
-
-    def fake(cmd: str) -> str:
-      try:
-        return next(seq)
-      except StopIteration:
-        raise asyncio.CancelledError()
-
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=fake)  # type: ignore[method-assign]
+    d.send_command = AsyncMock(side_effect=["2", asyncio.CancelledError()])  # type: ignore[method-assign]
     with self.assertRaises(asyncio.CancelledError):
       await d.arm._wait_for_eom(poll_interval=0)
     self.assertTrue(any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list))
 
-  async def test_timeout_when_never_settles(self):
+  async def test_timeout_when_never_stops(self):
     """An arm that never stops moving raises TimeoutError rather than spinning forever."""
-    n = iter(range(1000))
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=lambda cmd: f"{next(n)} 0 0 0 0")  # type: ignore[method-assign]  # always changing
+    d.send_command = AsyncMock(return_value="3")  # type: ignore[method-assign]
     with self.assertRaises(TimeoutError):
       await d.arm._wait_for_eom(poll_interval=0, timeout=0)
 

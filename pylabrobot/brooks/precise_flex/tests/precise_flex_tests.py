@@ -81,6 +81,7 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
   async def test_closed_gripper_position_shifts_units(self):
     # Different anchor ⇒ same width yields a different firmware-unit target.
     arm = _make_arm(closed_gripper_position=1000.0)
+    arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
     await arm.gripper.move_to_jaw_position(width=80.0, force_sensing=False)
     commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm ⇒ 1000 + (80 - 60) = 1020 units.
