@@ -446,6 +446,8 @@ class TestAMoveKeepsTheModelInStep(unittest.IsolatedAsyncioTestCase):
     moved: List[str] = []
 
     async def respond(command: str) -> str:
+      if command == "state":
+        return "1"
       if command == "wherej":
         if not moved:
           return self.STOOD

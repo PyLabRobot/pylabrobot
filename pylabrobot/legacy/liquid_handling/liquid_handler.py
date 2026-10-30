@@ -752,14 +752,6 @@ class LiquidHandler(Resource, Machine):
       for tip_spot, offset, tip in zip(tip_spots, offsets, tips)
     ]
 
-    # queue operations on the trackers
-    for channel, op in zip(use_channels, pickups):
-      if self.head[channel].has_tip:
-        raise HasTipError("Channel has tip")
-      if does_tip_tracking() and not op.resource.tracker.is_disabled:
-        op.resource.tracker.remove_tip()
-      self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.pick_up_tips,
@@ -769,6 +761,22 @@ class LiquidHandler(Resource, Machine):
     )
     for extra in extras:
       del backend_kwargs[extra]
+
+    # Queue operations on the trackers transactionally. A later occupied channel must roll back
+    # changes already queued for earlier channels before the backend is called.
+    try:
+      for channel, op in zip(use_channels, pickups):
+        if self.head[channel].has_tip:
+          raise HasTipError("Channel has tip")
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.remove_tip()
+        self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
+    except Exception:
+      for channel, op in zip(use_channels, pickups):
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.rollback()
+        self.head[channel].rollback()
+      raise
 
     # actually pick up the tips
     error: Optional[BaseException] = None
@@ -898,16 +906,6 @@ class LiquidHandler(Resource, Machine):
       for tip_spot, tip, offset in zip(tip_spots, tips, offsets)
     ]
 
-    # queue operations on the trackers
-    for channel, op in zip(use_channels, drops):
-      if (
-        does_tip_tracking()
-        and isinstance(op.resource, TipSpot)
-        and not op.resource.tracker.is_disabled
-      ):
-        op.resource.tracker.add_tip(op.tip, commit=False)
-      self.head[channel].remove_tip()
-
     # fix the backend kwargs
     extras = self._check_args(
       self.backend.drop_tips,
@@ -917,6 +915,28 @@ class LiquidHandler(Resource, Machine):
     )
     for extra in extras:
       del backend_kwargs[extra]
+
+    # Queue operations on the trackers transactionally. A later occupied destination must roll
+    # back changes already queued for earlier channels before the backend is called.
+    try:
+      for channel, op in zip(use_channels, drops):
+        if (
+          does_tip_tracking()
+          and isinstance(op.resource, TipSpot)
+          and not op.resource.tracker.is_disabled
+        ):
+          op.resource.tracker.add_tip(op.tip, commit=False)
+        self.head[channel].remove_tip()
+    except Exception:
+      for channel, op in zip(use_channels, drops):
+        if (
+          does_tip_tracking()
+          and isinstance(op.resource, TipSpot)
+          and not op.resource.tracker.is_disabled
+        ):
+          op.resource.tracker.rollback()
+        self.head[channel].rollback()
+      raise
 
     # actually drop the tips
     error: Optional[BaseException] = None
@@ -1711,30 +1731,31 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # queue operation on all tip trackers
-    tips: List[Optional[Tip]] = []
-    for i, tip_spot in enumerate(tip_rack.get_all_items()):
-      if not does_tip_tracking() and self.head96[i].has_tip:
-        self.head96[i].remove_tip()
-      # only add tips where there is one present.
-      # it's possible only some tips are present in the tip rack.
-      if tip_spot.has_tip():
-        self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
-        tips.append(tip_spot.get_tip())
-      else:
-        tips.append(None)
-      if does_tip_tracking() and not tip_spot.tracker.is_disabled and tip_spot.has_tip():
-        tip_spot.tracker.remove_tip()
-
-    pickup_operation = PickupTipRack(resource=tip_rack, offset=offset, tips=tips)
     try:
+      # Queue tracker changes inside the rollback block so a rejected channel rolls back earlier
+      # channels before any backend command is sent.
+      tips: List[Optional[Tip]] = []
+      for i, tip_spot in enumerate(tip_rack.get_all_items()):
+        if not does_tip_tracking() and self.head96[i].has_tip:
+          self.head96[i].remove_tip()
+        # only add tips where there is one present.
+        # it's possible only some tips are present in the tip rack.
+        if tip_spot.has_tip():
+          self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
+          tips.append(tip_spot.get_tip())
+        else:
+          tips.append(None)
+        if does_tip_tracking() and not tip_spot.tracker.is_disabled and tip_spot.has_tip():
+          tip_spot.tracker.remove_tip()
+
+      pickup_operation = PickupTipRack(resource=tip_rack, offset=offset, tips=tips)
       await self.backend.pick_up_tips96(pickup=pickup_operation, **backend_kwargs)
-    except Exception as error:
+    except Exception:
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
         if does_tip_tracking() and not tip_spot.tracker.is_disabled:
           tip_spot.tracker.rollback()
         self.head96[i].rollback()
-      raise error
+      raise
     else:
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
         if does_tip_tracking() and not tip_spot.tracker.is_disabled:
@@ -1792,32 +1813,35 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # queue operation on all tip trackers
-    for i in range(96):
-      # it's possible not every channel on this head has a tip.
-      if not self.head96[i].has_tip:
-        continue
-      tip = self.head96[i].get_tip()
-      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume and does_volume_tracking():
-        error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
-        raise RuntimeError(error)
-      if isinstance(resource, TipRack):
-        tip_spot = resource.get_item(i)
-        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
-          tip_spot.tracker.add_tip(tip, commit=False)
-      self.head96[i].remove_tip()
-
-    drop_operation = DropTipRack(resource=resource, offset=offset)
     try:
+      # Queue tracker changes inside the rollback block so a rejected channel rolls back earlier
+      # channels before any backend command is sent.
+      for i in range(96):
+        # it's possible not every channel on this head has a tip.
+        if not self.head96[i].has_tip:
+          continue
+        tip = self.head96[i].get_tip()
+        if (
+          tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume and does_volume_tracking()
+        ):
+          error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
+          raise RuntimeError(error)
+        if isinstance(resource, TipRack):
+          tip_spot = resource.get_item(i)
+          if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+            tip_spot.tracker.add_tip(tip, commit=False)
+        self.head96[i].remove_tip()
+
+      drop_operation = DropTipRack(resource=resource, offset=offset)
       await self.backend.drop_tips96(drop=drop_operation, **backend_kwargs)
-    except Exception as e:
+    except Exception:
       for i in range(96):
         if isinstance(resource, TipRack):
           tip_spot = resource.get_item(i)
           if does_tip_tracking() and not tip_spot.tracker.is_disabled:
             tip_spot.tracker.rollback()
         self.head96[i].rollback()
-      raise e
+      raise
     else:
       for i in range(96):
         if isinstance(resource, TipRack):
@@ -2007,15 +2031,6 @@ class LiquidHandler(Resource, Machine):
       if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
 
-      for tip in tips:
-        if tip is None:
-          continue
-
-        if does_volume_tracking():
-          if not container.tracker.is_disabled:
-            container.tracker.remove_liquid(volume=volume)
-          tip.tracker.add_liquid(volume=volume)
-
       aspiration = MultiHeadAspirationContainer(
         container=container,
         volume=volume,
@@ -2036,15 +2051,6 @@ class LiquidHandler(Resource, Machine):
       if not len(containers) == 96:
         raise ValueError(f"aspirate96 expects 96 containers when a list, got {len(containers)}")
 
-      for well, tip in zip(containers, tips):
-        if tip is None:
-          continue
-
-        if does_volume_tracking():
-          if not well.tracker.is_disabled:
-            well.tracker.remove_liquid(volume=volume)
-          tip.tracker.add_liquid(volume=volume)
-
       aspiration = MultiHeadAspirationPlate(
         wells=cast(List[Well], containers),
         volume=volume,
@@ -2057,6 +2063,28 @@ class LiquidHandler(Resource, Machine):
       )
 
     try:
+      # Queue tracker changes inside the rollback block so an invalid later channel rolls back
+      # earlier channels before any backend command is sent.
+      if len(containers) == 1:
+        container = containers[0]
+        for tip in tips:
+          if tip is None:
+            continue
+
+          if does_volume_tracking():
+            if not container.tracker.is_disabled:
+              container.tracker.remove_liquid(volume=volume)
+            tip.tracker.add_liquid(volume=volume)
+      else:
+        for well, tip in zip(containers, tips):
+          if tip is None:
+            continue
+
+          if does_volume_tracking():
+            if not well.tracker.is_disabled:
+              well.tracker.remove_liquid(volume=volume)
+            tip.tracker.add_liquid(volume=volume)
+
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
     except Exception:
       for tip in tips:
@@ -2155,22 +2183,10 @@ class LiquidHandler(Resource, Machine):
     # if we have enough liquid in the tip, remove it from the tip tracker for accounting.
     # if we do not (for example because the plunger was up on tip pickup), and we
     # do not have volume tracking enabled, we just ignore it.
-    for tip in tips:
-      if tip is None:
-        continue
-
-      if does_volume_tracking():
-        tip.tracker.remove_liquid(volume=volume)
-      elif tip.tracker.get_used_volume() <= volume:
-        tip.tracker.remove_liquid(volume=min(tip.tracker.get_used_volume(), volume))
-
     if len(containers) == 1:  # single container
       container = containers[0]
       if not self._check_96_head_fits_in_container(container):
         raise ValueError("Container too small to accommodate 96 head")
-
-      if not container.tracker.is_disabled and does_volume_tracking():
-        container.tracker.add_liquid(volume=len([t for t in tips if t is not None]) * volume)
 
       dispense = MultiHeadDispenseContainer(
         container=container,
@@ -2192,13 +2208,6 @@ class LiquidHandler(Resource, Machine):
       if not len(containers) == 96:
         raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
 
-      for well, tip in zip(containers, tips):
-        if tip is None:
-          continue
-
-        if not well.tracker.is_disabled and does_volume_tracking():
-          well.tracker.add_liquid(volume=volume)
-
       dispense = MultiHeadDispensePlate(
         wells=cast(List[Well], containers),
         volume=volume,
@@ -2211,6 +2220,29 @@ class LiquidHandler(Resource, Machine):
       )
 
     try:
+      # Queue tracker changes inside the rollback block so an invalid later channel rolls back
+      # earlier channels before any backend command is sent.
+      for tip in tips:
+        if tip is None:
+          continue
+
+        if does_volume_tracking():
+          tip.tracker.remove_liquid(volume=volume)
+        elif tip.tracker.get_used_volume() <= volume:
+          tip.tracker.remove_liquid(volume=min(tip.tracker.get_used_volume(), volume))
+
+      if len(containers) == 1:
+        container = containers[0]
+        if not container.tracker.is_disabled and does_volume_tracking():
+          container.tracker.add_liquid(volume=len([t for t in tips if t is not None]) * volume)
+      else:
+        for well, tip in zip(containers, tips):
+          if tip is None:
+            continue
+
+          if not well.tracker.is_disabled and does_volume_tracking():
+            well.tracker.add_liquid(volume=volume)
+
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception:
       for tip in tips:
