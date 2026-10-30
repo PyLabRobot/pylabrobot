@@ -5,6 +5,7 @@ from pylabrobot.lib.pick_and_place.locations import (
   get_grip_location,
   get_pick_location,
   get_place_location,
+  get_rotation_wrt,
   get_rotation_wrt_destination,
 )
 from pylabrobot.resources.alpaqua.magnetic_racks import alpaqua_96_plateadapter_magnum_flx
@@ -17,6 +18,7 @@ from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
+from pylabrobot.utils.linalg import matrix_multiply_3x3
 
 
 def assert_coordinates_equal(test: unittest.TestCase, got: Coordinate, expected: Coordinate):
@@ -116,6 +118,80 @@ class GetPlaceLocationTests(unittest.TestCase):
     box = Resource("box", size_x=200, size_y=200, size_z=10)
     self.deck.assign_child_resource(box, location=Coordinate(600, 600, 0))
     self.assertEqual(get_place_location(self.plate, box, self.deck), Coordinate(600, 600, 0))
+
+
+class GetRotationWrtTests(unittest.TestCase):
+  """Its rotation is the one that, after the frame's, gives its absolute rotation."""
+
+  ANGLES = (-450, -270, -90, -37.5, 0, 12.3, 90, 180, 270, 359.9, 450)
+
+  def assert_matrices_equal(self, got: Rotation, expected: Rotation):
+    for got_row, expected_row in zip(got.get_rotation_matrix(), expected.get_rotation_matrix()):
+      for a, b in zip(got_row, expected_row):
+        self.assertAlmostEqual(a, b, delta=1e-9)
+
+  def test_about_z_only_it_is_the_difference_of_the_angles(self):
+    deck = Resource("deck", size_x=1000, size_y=1000, size_z=10)
+    for frame_z in self.ANGLES:
+      for own_z in self.ANGLES:
+        with self.subTest(frame_z=frame_z, own_z=own_z):
+          deck.rotation = Rotation(z=frame_z)
+          carrier = Resource("carrier", size_x=100, size_y=100, size_z=10)
+          deck.assign_child_resource(carrier, location=Coordinate(10, 20, 0))
+          carrier.rotation = Rotation(z=own_z)
+          turned, frame = carrier.get_absolute_rotation(), deck.get_absolute_rotation()
+          rotation = get_rotation_wrt(carrier, deck)
+          self.assertEqual(
+            (rotation.x, rotation.y, rotation.z),
+            (turned.x - frame.x, turned.y - frame.y, turned.z - frame.z),
+          )
+          deck.unassign_child_resource(carrier)
+
+  def test_a_child_of_a_frame_turned_about_other_axes(self):
+    for frame_rotation, own in (
+      (Rotation(x=90), Rotation(z=90)),
+      (Rotation(y=90), Rotation(z=90)),
+      (Rotation(x=45, y=30), Rotation(z=-60)),
+      (Rotation(x=30, y=-20, z=110), Rotation(x=-15, y=70, z=200)),
+    ):
+      with self.subTest(frame=frame_rotation, own=own):
+        frame = Resource("frame", size_x=100, size_y=100, size_z=10, rotation=frame_rotation)
+        child = Resource("child", size_x=10, size_y=10, size_z=10, rotation=own)
+        frame.assign_child_resource(child, location=Coordinate.zero())
+        rotation = get_rotation_wrt(child, frame)
+        self.assert_matrices_equal(
+          frame.get_absolute_rotation() + rotation, child.get_absolute_rotation()
+        )
+        assert_coordinates_equal(
+          self, Coordinate(10, 20, 30).rotated(rotation), Coordinate(10, 20, 30).rotated(own)
+        )
+
+  def test_a_point_along_the_child_lies_along_the_frame_where_it_truly_is(self):
+    # A frame turned about x holds a child turned about z: the child's x axis is the frame's y.
+    frame = Resource("frame", size_x=100, size_y=100, size_z=10, rotation=Rotation(x=90))
+    child = Resource("child", size_x=10, size_y=10, size_z=10, rotation=Rotation(z=90))
+    frame.assign_child_resource(child, location=Coordinate.zero())
+    assert_coordinates_equal(
+      self, Coordinate(10, 0, 0).rotated(get_rotation_wrt(child, frame)), Coordinate(0, 10, 0)
+    )
+
+  def test_a_plate_on_a_carrier_turned_about_x_on_a_deck(self):
+    # The deck sits tilted on the device carrying it, so its own axes are turned about y too.
+    deck = Deck(size_x=1000, size_y=1000, size_z=10)
+    deck.rotation = Rotation(y=20, z=90)
+    carrier = Resource("carrier", size_x=200, size_y=100, size_z=10, rotation=Rotation(x=30))
+    deck.assign_child_resource(carrier, location=Coordinate(100, 200, 0))
+    plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    plate.rotation = Rotation(z=90)
+    carrier.assign_child_resource(plate, location=Coordinate(5, 5, 10))
+    expected = matrix_multiply_3x3(
+      Rotation(x=30).get_rotation_matrix(), Rotation(z=90).get_rotation_matrix()
+    )
+    got = get_rotation_wrt(plate, deck).get_rotation_matrix()
+    for got_row, expected_row in zip(got, expected):
+      for a, b in zip(got_row, expected_row):
+        self.assertAlmostEqual(a, b, delta=1e-9)
+    self.assert_matrices_equal(get_rotation_wrt(plate, carrier), Rotation(z=90))
 
 
 class GetRotationWrtDestinationTests(unittest.TestCase):
