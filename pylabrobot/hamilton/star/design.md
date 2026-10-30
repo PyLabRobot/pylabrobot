@@ -76,25 +76,9 @@ on the way out.
 one `try`/`finally` and one model update. Anything more convenient is a helper on top of that
 method, never a second path to the same drive.
 
-**P10. Names say what kind of thing they are.** The prefixes follow the PLR command prefix
-proposal, which splits them by what is on the other end:
-
-| what it touches | prefix | here |
-|---|---|---|
-| the machine, doing work | `move_`, `aspirate_`, `dispense_`, `pickup_`, `shake_` | `move_to_y_position`, `move_to_safe_z` |
-| the machine, a process started and left running | `start_`, `stop_` | `start_tadm_monitoring`, `stop_tadm_monitoring` |
-| the machine's sensors | `read_`, `capture_`, `measure_`, `sense_` | `sense_tip_presence`, `sense_carrier_presence_on_deck` |
-| the machine's memory, reading | `request_` | `request_y_positions`, `gripper_request_width` |
-| the machine's memory, writing | `set_` | `set_drive_parameter`, `set_loading_indicators` |
-| the resource model, reading | `get_` | `elbow_drive_get_angle`, `wrist_drive_get_angle` |
-| the resource model, writing | `update_`, `assign_`, `unassign_` | `elbow_drive_update_angle`, `update_location_by_reference_point` |
-
-`get_` and `request_` are not the same question: `get_` asks this driver's model, `request_` asks
-the device. `set_` only writes device memory: a process started and left running is a `start_` /
-`stop_` pair, as in `start_temperature_control` / `stop_temperature_control` and `start_shaking` /
-`stop_shaking`. On a feature with several drives the drive's name comes first: `wheel_*`,
-`scanner_*`, `gripper_*`, `elbow_*`, `wrist_*`. Arguments are ordered as the execution uses them,
-not by type. `discover` / `initialize` / `park` are the lifecycle and take no prefix.
+**P10. Names say what kind of thing they are.** Method names follow
+[Name methods by prefix](../../../docs/contributor_guide/device-driver-guide.md#name-methods-by-prefix).
+Arguments are ordered as the execution uses them, not by type.
 
 **P11. Locking is by subsystem, not by module.** The master routes: `C0 DI` drives the channels and
 `C0 II` the autoload, and the device runs those together. So a command names the subsystem it
@@ -169,17 +153,12 @@ the Prep's.
    `star/__init__.py` exports the device, the driver and the simulator. Any of these is defensible;
    the four together are not a convention.
 
-5. **One prefix is used that P10's table does not name.** `probe_*` (`probe_z_max`,
-   `gripper_probe_for_object`) is a measurement taken by moving, which the proposal has no prefix
-   for - it is neither a plain `move_` nor a `sense_` that leaves the device where it stands. The
-   simulator's `_modelled_y`, `_modelled_z` and `_modelled_track` are the same question for a
-   private helper, where the table does not reach.
+5. **The prefix table does not reach private helpers.** The simulator's `_modelled_y`,
+   `_modelled_z` and `_modelled_track` have no prefix.
 
-6. **One reading is filed as memory rather than measurement.**
-   `gripper_request_latest_force_applied` reads the force sensor, which P10's table puts under
-   `measure_`; legacy called it `measure_iswap_gripper_force`. It is `request_` here because the arm
-   answers it out of the registers it recorded the last movement in, not from the sensor at the
-   moment of asking.
+6. **One sensor reading is filed as memory.** `gripper_request_latest_force_applied` reads the
+   force sensor, but it is `request_` because the arm answers it out of the registers it kept from
+   the last movement, not from the sensor at the moment of asking.
 
 7. **`DeviceConfiguration` documents its fields by wire parameter and bit number**
    (`"Bit 1: ISWAP. False = none, True = installed."`), which no feature configuration does. It is
