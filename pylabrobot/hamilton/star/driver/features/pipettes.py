@@ -2179,6 +2179,10 @@ class Pipettes:
     spacing = round((back - front) * 10) // (self.num_channels - 1)
     return [(round(back * 10) - channel * spacing) / 10 for channel in range(self.num_channels)]
 
+  def _extended(self, **parameters: Any) -> Dict[str, Any]:
+    device = self._driver.configuration
+    return parameters if device is None or device.takes_extended_pip_parameters else {}
+
   async def initialize(
     self,
     x_position: Optional[float] = None,
@@ -2248,7 +2252,7 @@ class Pipettes:
       te=f"{round(minimum_traverse_height_end * 10):04}",
       tm=[f"{tm:01}" for tm in tip_pattern],
       tt=f"{tip_type:02}",
-      ti=discarding_method,
+      **self._extended(ti=discarding_method),
     )
     # Everything the channels carried is in the waste now, and belongs nowhere.
     for channel, involved in enumerate(tip_pattern):
@@ -4095,7 +4099,7 @@ class Pipettes:
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
       th=f"{minimum_traverse_height_start:04}",
-      td=pickup_method.value,
+      **self._extended(td=pickup_method.value),
     )
 
   def _tip_traverse_height(
@@ -4391,7 +4395,7 @@ class Pipettes:
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_start,
       te=minimum_traverse_height_end,
-      ti=discarding_method.value,
+      **self._extended(ti=discarding_method.value),
     )
 
   async def _drop_tips_in_one_move(
@@ -5597,7 +5601,7 @@ class Pipettes:
       lp=[f"{lp:04}" for lp in lld_search_height],
       ch=[f"{ch:03}" for ch in clot_detection_height],
       zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
-      po=[f"{po:04}" for po in pull_out_distance_transport_air],
+      **self._extended(po=[f"{po:04}" for po in pull_out_distance_transport_air]),
       zu=[f"{zu:04}" for zu in second_section_height],
       zr=[f"{zr:05}" for zr in second_section_ratio],
       zx=[f"{zx:04}" for zx in minimum_height],
@@ -5621,15 +5625,17 @@ class Pipettes:
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
-      gi=[f"{gi:03}" for gi in limit_curve_index],
-      gj=tadm_algorithm,
-      gk=recording_mode,
-      lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
-      ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
-      sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
-      se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
-      sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
-      io=[f"{io:04}" for io in cup_upper_edge],
+      **self._extended(
+        gi=[f"{gi:03}" for gi in limit_curve_index],
+        gj=tadm_algorithm,
+        gk=recording_mode,
+        lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
+        ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
+        sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
+        se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
+        sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
+        io=[f"{io:04}" for io in cup_upper_edge],
+      ),
     )
 
   async def _aspirate_in_one_move(
@@ -6581,7 +6587,7 @@ class Pipettes:
       zx=[f"{zx:04}" for zx in minimum_height],
       lp=[f"{lp:04}" for lp in lld_search_height],
       zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
-      po=[f"{po:04}" for po in pull_out_distance_transport_air],
+      **self._extended(po=[f"{po:04}" for po in pull_out_distance_transport_air]),
       ip=[f"{ip:04}" for ip in immersion_depth],
       it=[f"{it}" for it in immersion_depth_direction],
       fp=[f"{fp:04}" for fp in surface_following_distance],
@@ -6607,9 +6613,11 @@ class Pipettes:
       mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
       ms=[f"{ms:04}" for ms in mix_speed],
       mh=[f"{mh:04}" for mh in mix_surface_following_distance],
-      gi=[f"{gi:03}" for gi in limit_curve_index],
-      gj=tadm_algorithm,
-      gk=recording_mode,
+      **self._extended(
+        gi=[f"{gi:03}" for gi in limit_curve_index],
+        gj=tadm_algorithm,
+        gk=recording_mode,
+      ),
     )
 
   async def _dispense_in_one_move(
