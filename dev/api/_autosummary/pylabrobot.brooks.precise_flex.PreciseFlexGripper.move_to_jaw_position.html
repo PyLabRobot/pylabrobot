@@ -589,23 +589,25 @@
 <h1>pylabrobot.brooks.precise_flex.PreciseFlexGripper.move_to_jaw_position<a class="headerlink" href="#pylabrobot-brooks-precise-flex-preciseflexgripper-move-to-jaw-position" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexGripper.move_to_jaw_position">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexGripper.</span></span><span class="sig-name descname"><span class="pre">move_to_jaw_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_sensing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexGripper.move_to_jaw_position" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexGripper.</span></span><span class="sig-name descname"><span class="pre">move_to_jaw_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_sensing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexGripper.move_to_jaw_position" title="Link to this definition">#</a></dt>
 <dd><p>Move the PreciseFlex gripper jaws.</p>
-<p><code class="docutils literal notranslate"><span class="pre">force_sensing=False</span></code> drives to the open position (<code class="docutils literal notranslate"><span class="pre">gripper</span> <span class="pre">1</span></code>); <code class="docutils literal notranslate"><span class="pre">force_sensing=True</span></code>
-drives to the close position (<code class="docutils literal notranslate"><span class="pre">gripper</span> <span class="pre">2</span></code>). Both are position moves: <code class="docutils literal notranslate"><span class="pre">gripper</span> <span class="pre">2</span></code> limits the
-force it applies getting there, but it does not stop the jaws where they meet something.</p>
+<p>A move that closes them limits its force (<code class="docutils literal notranslate"><span class="pre">GraspPlate</span></code>, at <code class="docutils literal notranslate"><span class="pre">default_grasp_force</span></code> and
+<code class="docutils literal notranslate"><span class="pre">default_finger_speed_percent</span></code>): the jaws stop on what they meet, and with nothing between
+them run past the width and are moved back to it. A move that opens them lifts that limit
+(<code class="docutils literal notranslate"><span class="pre">ReleasePlate</span></code>). With <code class="docutils literal notranslate"><span class="pre">force_sensing=False</span></code> it is a position move (<code class="docutils literal notranslate"><span class="pre">MoveOneAxis</span></code>) either
+way, with no limit on force: closed onto something rigid, the motor stalls (-3105).</p>
 <p>A target is held half a unit inside the axis: the jaws settle up to 0.2 units past a target,
 and a target past the axis’s end left a bench arm in error -3104 until homed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>width</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – the jaw width to move to, in mm.</p></li>
-<li><p><strong>force_sensing</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – whether to close (True) or open (False) to the width.</p></li>
+<li><p><strong>force_sensing</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – False only to make a position move on purpose.</p></li>
 </ul>
 </dd>
 </dl>
-<p>Not interruptible while a <code class="docutils literal notranslate"><span class="pre">gripper</span></code> command runs: it blocks the controller’s command
-interpreter until the jaws finish (hardware-verified, like <code class="docutils literal notranslate"><span class="pre">waitForEom</span></code>).</p>
+<p>Not interruptible while <code class="docutils literal notranslate"><span class="pre">GraspPlate</span></code> runs: it blocks the controller’s command interpreter
+until the jaws stop.</p>
 </dd></dl>
 
 </section>

@@ -589,7 +589,7 @@
 <h1>pylabrobot.brooks.precise_flex.PreciseFlexArm.change_elbow_orientation<a class="headerlink" href="#pylabrobot-brooks-precise-flex-preciseflexarm-change-elbow-orientation" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexArm.change_elbow_orientation">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexArm.</span></span><span class="sig-name descname"><span class="pre">change_elbow_orientation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grip_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexArm.change_elbow_orientation" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexArm.</span></span><span class="sig-name descname"><span class="pre">change_elbow_orientation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grip_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_gripper_without_force_sensing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexArm.change_elbow_orientation" title="Link to this definition">#</a></dt>
 <dd><p>Change Robot configuration from Righty to Lefty or vice versa using customizable locations.</p>
 <p>Uses customizable locations to avoid hitting robot during change.
 Does not include checks for collision inside work volume of the robot.
@@ -600,11 +600,16 @@ Can be customized by user for their work cell configuration.</p>
 <li><p><strong>grip_mode</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Gripper control mode.</p></li>
 <li><p><strong>gripper</strong> (<em>2 = close</em>)</p></li>
 <li><p><strong>gripper</strong></p></li>
-<li><p><strong>gripper</strong></p></li>
+<li><p><strong>gripper</strong> – refused unless asked</p></li>
+<li><p><strong>position</strong> (<em>by</em>) – refused unless asked</p></li>
+<li><p><strong>close_gripper_without_force_sensing</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – allow <code class="docutils literal notranslate"><span class="pre">grip_mode=2</span></code>.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>None</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">grip_mode</span></code> is 2, unless asked.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
 </dd>
 </dl>
 </dd></dl>

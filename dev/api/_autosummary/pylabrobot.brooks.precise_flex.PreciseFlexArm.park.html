@@ -589,7 +589,7 @@
 <h1>pylabrobot.brooks.precise_flex.PreciseFlexArm.park<a class="headerlink" href="#pylabrobot-brooks-precise-flex-preciseflexarm-park" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexArm.park">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexArm.</span></span><span class="sig-name descname"><span class="pre">park</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexArm.park" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexArm.</span></span><span class="sig-name descname"><span class="pre">park</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">close_gripper_without_force_sensing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexArm.park" title="Link to this definition">#</a></dt>
 <dd><p>Move to <code class="docutils literal notranslate"><span class="pre">self.parking_position</span></code>; defaults at setup, reassignable at runtime.</p>
 <p><code class="docutils literal notranslate"><span class="pre">parking_position</span></code> is filled at setup with <code class="docutils literal notranslate"><span class="pre">PARKING_POSITION_RIGHT</span></code> (a planar fold facing
 right, Z column at 3/4 of its discovered travel); assign one of the <code class="docutils literal notranslate"><span class="pre">PARKING_POSITION_*</span></code> class
@@ -600,6 +600,13 @@ an arm that is modelled, a pose whose way there is refused is tried a full turn 
 the shorter turn first; the pose as written is taken whenever its way is clear. The arm is read
 for that, and again by the move.</p>
 <dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>close_gripper_without_force_sensing</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – allow a parking pose whose gripper axis is below the live
+one, and the <code class="docutils literal notranslate"><span class="pre">movetosafe</span></code> fallback, which closes the jaws by position first.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If parking would close the jaws, unless asked.</p>
+</dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>None</p>
 </dd>
