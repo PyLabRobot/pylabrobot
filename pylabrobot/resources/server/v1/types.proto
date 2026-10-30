@@ -1,0 +1,628 @@
+syntax = "proto3";
+
+// What the resource server's services share: how a resource is named, what it is, what state it is
+// in, and the changes made to it. Units are PLR's defaults: mm, degrees, uL. Angles are Euler
+// degrees, as `Rotation.serialize` gives them; composing them is the server's business.
+package pylabrobot.resources.server.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================================
+// Identity
+// ============================================================================================
+
+// A resource, named one of three ways. The server resolves every ref in a request before acting,
+// and answers with ids.
+message ResourceRef {
+  oneof ref {
+    // Opaque, chosen by the server: PLR's own servers use a 16-byte UUID. Never parsed by a client.
+    bytes id = 1;
+    // By name. Root names are unique in the server; every other name is unique within its root.
+    NameRef name = 2;
+    // An item of an itemized resource by identifier, "A1" of a plate.
+    ItemRef item = 3;
+  }
+}
+
+message NameRef {
+  // The root's name. Empty when `name` is itself a root's.
+  string root = 1;
+  string name = 2;
+}
+
+message ItemRef {
+  ResourceRef parent = 1;
+  string identifier = 2;
+}
+
+// ============================================================================================
+// Values
+// ============================================================================================
+
+message Vec3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+// Some axes of a Vec3; an unset axis is left as it is.
+message PartialVec3 {
+  optional double x = 1;
+  optional double y = 2;
+  optional double z = 3;
+}
+
+message Rotation {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+// Some axes of a Rotation; an unset axis is left as it is.
+message PartialRotation {
+  optional double x = 1;
+  optional double y = 2;
+  optional double z = 3;
+}
+
+// An axis-aligned box in a resource's own frame, from its left front bottom corner.
+message Box {
+  Vec3 min = 1;
+  Vec3 max = 2;
+}
+
+enum AnchorX {
+  ANCHOR_X_UNSPECIFIED = 0; // left
+  ANCHOR_X_LEFT = 1;
+  ANCHOR_X_CENTER = 2;
+  ANCHOR_X_RIGHT = 3;
+}
+
+enum AnchorY {
+  ANCHOR_Y_UNSPECIFIED = 0; // front
+  ANCHOR_Y_FRONT = 1;
+  ANCHOR_Y_CENTER = 2;
+  ANCHOR_Y_BACK = 3;
+}
+
+enum AnchorZ {
+  ANCHOR_Z_UNSPECIFIED = 0; // bottom
+  ANCHOR_Z_BOTTOM = 1;
+  ANCHOR_Z_CENTER = 2;
+  ANCHOR_Z_TOP = 3;
+  // A container's inside floor: its bottom plus `material_z_thickness`.
+  ANCHOR_Z_CAVITY_BOTTOM = 4;
+}
+
+message Anchor {
+  AnchorX x = 1;
+  AnchorY y = 2;
+  AnchorZ z = 3;
+}
+
+message Barcode {
+  string data = 1;
+  string symbology = 2;
+  string position_on_resource = 3;
+}
+
+// ============================================================================================
+// Kinds: what the server computes for a resource is decided by its kind, and only by its kind.
+// ============================================================================================
+
+enum ResourceKind {
+  RESOURCE_KIND_UNSPECIFIED = 0;
+  // A box with no behaviour of its own; also every device body.
+  RESOURCE_KIND_RESOURCE = 1;
+  RESOURCE_KIND_DECK = 2;
+  RESOURCE_KIND_CARRIER = 3;
+  RESOURCE_KIND_RESOURCE_HOLDER = 4;
+  RESOURCE_KIND_PLATE_HOLDER = 5;
+  RESOURCE_KIND_CONTAINER = 6;
+  RESOURCE_KIND_WELL = 7;
+  RESOURCE_KIND_TROUGH = 8;
+  RESOURCE_KIND_TUBE = 9;
+  RESOURCE_KIND_PETRI_DISH = 10;
+  RESOURCE_KIND_TRASH = 11;
+  RESOURCE_KIND_PLATE = 12;
+  RESOURCE_KIND_TIP_RACK = 13;
+  RESOURCE_KIND_TIP_SPOT = 14;
+  RESOURCE_KIND_TIP = 15;
+  RESOURCE_KIND_LID = 16;
+  RESOURCE_KIND_PLATE_ADAPTER = 17;
+  RESOURCE_KIND_RESOURCE_STACK = 18;
+  RESOURCE_KIND_CONTAINER_RACK = 19;
+  RESOURCE_KIND_TUBE_RACK = 20;
+  RESOURCE_KIND_PETRI_DISH_HOLDER = 21;
+  RESOURCE_KIND_EMBEDDED_TIP_RACK_HOLDER = 22;
+  // A tool a head mounts that is not a tip, a CoRe gripper paddle say.
+  RESOURCE_KIND_HEAD_TOOL = 23;
+  RESOURCE_KIND_PIPETTE_CHANNEL = 24;
+  RESOURCE_KIND_TIP_MOUNTING_SHAFT = 25;
+  RESOURCE_KIND_N_CHANNEL_PIPETTE = 26;
+  RESOURCE_KIND_LINK_BODY = 27;
+  RESOURCE_KIND_MECHANICAL_GRIPPER = 28;
+}
+
+// The bottom of a well, tube or trough.
+enum WellBottomType {
+  WELL_BOTTOM_TYPE_UNSPECIFIED = 0; // unknown
+  WELL_BOTTOM_TYPE_FLAT = 1;
+  WELL_BOTTOM_TYPE_U = 2;
+  WELL_BOTTOM_TYPE_V = 3;
+}
+
+enum CrossSectionType {
+  CROSS_SECTION_TYPE_UNSPECIFIED = 0;
+  CROSS_SECTION_TYPE_CIRCLE = 1;
+  CROSS_SECTION_TYPE_RECTANGLE = 2;
+}
+
+enum TipPickupMethod {
+  TIP_PICKUP_METHOD_UNSPECIFIED = 0;
+  TIP_PICKUP_METHOD_OUT_OF_RACK = 1;
+  TIP_PICKUP_METHOD_OUT_OF_WASH_LIQUID = 2;
+}
+
+enum TipRackStyle {
+  TIP_RACK_STYLE_UNSPECIFIED = 0; // plain TipRack
+  TIP_RACK_STYLE_EMBEDDED = 1;
+  TIP_RACK_STYLE_STANDING = 2;
+  TIP_RACK_STYLE_NESTED = 3;
+}
+
+enum StackDirection {
+  STACK_DIRECTION_UNSPECIFIED = 0;
+  STACK_DIRECTION_X = 1;
+  STACK_DIRECTION_Y = 2;
+  STACK_DIRECTION_Z = 3;
+}
+
+message HeightVolumePoint {
+  double height = 1;
+  double volume = 2;
+}
+
+// Containers: wells, troughs, tubes, petri dishes, trash. Volume and height convert only through
+// `height_volume_data`, piecewise linear; a container without it cannot convert.
+message ContainerSpec {
+  optional double max_volume = 1;
+  // From the outer bottom to the cavity bottom. Unset: the cavity bottom is unknown.
+  optional double material_z_thickness = 2;
+  repeated HeightVolumePoint height_volume_data = 3;
+  // Where a tip must not go, in the container's own frame.
+  repeated Box no_go_zones = 4;
+  WellBottomType bottom_type = 5;
+  CrossSectionType cross_section_type = 6;
+  // Trough only.
+  optional double through_base_to_container_base = 7;
+}
+
+// Plates, tip racks, tube racks: items laid out in a grid, ordered column-major. Each child
+// carries its identifier in `ResourceAttributes.identifier`.
+message ItemizedSpec {
+  int32 num_items_x = 1;
+  int32 num_items_y = 2;
+  // A uniform grid, given once: a definition with it lists only the children that are not items,
+  // a lid say, and the server makes the items, ahead of those, when the resource is created. A
+  // resource read from the server never has it: its items are its children.
+  optional ItemGrid grid = 3;
+}
+
+// Items alike but for where they are: the item in column `i` and row `j` (row 0 is "A", at the
+// back) is at `offset + (i * item_dx, (num_items_y - 1 - j) * item_dy, 0)`, as
+// `create_ordered_items_2d` lays them out. Its identifier is the row's letters and the column's
+// number, "A1", and `{identifier}` in any name in the item becomes it.
+message ItemGrid {
+  // Without a location or an identifier.
+  ResourceDefinition item = 1;
+  // Where the item in the left column and front row is.
+  Vec3 offset = 2;
+  double item_dx = 3;
+  double item_dy = 4;
+}
+
+message PlateSpec {
+  string plate_type = 1; // "skirted", "semi-skirted", "non-skirted"
+  optional double stacking_z_height = 2;
+}
+
+message TipRackSpec {
+  TipRackStyle style = 1;
+  optional double frame_height = 2;
+  optional double sinking_depth = 3;
+  optional double stacking_z_height = 4;
+}
+
+message HamiltonTipSpec {
+  string tip_size = 1; // TipSize enum name
+  TipPickupMethod pickup_method = 2;
+}
+
+// Any tool a head mounts: tips, CoRe gripper paddles.
+message HeadToolSpec {
+  double fitting_depth = 1;
+  optional bool is_conductive = 2;
+  optional Vec3 pick_up_location = 3;
+  // A gripper tool's: how far the line it grips along - the axis through its pins - stands above
+  // its bottom. Unset on a tool that does not grip.
+  optional double grip_line_height = 4;
+}
+
+message TipSpec {
+  double diameter = 1;
+  bool has_filter = 2;
+  double maximal_volume = 3;
+  double nominal_volume = 4;
+  // Unset when the tip states none; it then rests on its spot's surface.
+  optional double collar_height = 5;
+  optional HamiltonTipSpec hamilton = 6;
+}
+
+// What a spot makes when a tip is needed and it is not tracking: a tip of this definition.
+message TipSpotSpec {
+  ResourceAttributes prototype_tip = 1;
+}
+
+message LidSpec {
+  double nesting_z_height = 1;
+}
+
+// Holders, plate holders, embedded tip rack holders, and the holders devices are built from.
+message HolderSpec {
+  Vec3 child_location = 1;
+  // Plate holder only.
+  optional double pedestal_size_z = 2;
+  // Kinds this holder takes; empty takes any. Replaces per-device `check_can_drop_resource_here`.
+  repeated ResourceKind accepts = 3;
+  // How many children it takes at once; 0 is no limit.
+  int32 capacity = 4;
+  // A holder tools are parked in, a CoRe gripper holder: where along its y, from its front edge,
+  // each channel stands to take its tool, back first.
+  repeated double channel_y_centers = 5;
+}
+
+message ResourceStackSpec {
+  StackDirection direction = 1;
+}
+
+message PlateAdapterSpec {
+  double dx = 1;
+  double dy = 2;
+  double dz = 3;
+  double adapter_hole_size_x = 4;
+  double adapter_hole_size_y = 5;
+  double adapter_hole_size_z = 6;
+  double adapter_hole_dx = 7;
+  double adapter_hole_dy = 8;
+  double plate_z_offset = 9;
+}
+
+// A channel's own body, which a shaft hangs from. `reference_point` is where the drives report,
+// from the channel's left front bottom corner.
+message PipetteChannelSpec {
+  Vec3 reference_point = 1;
+}
+
+message TipMountingShaftSpec {
+  string tip_pickup_mode = 1;
+  CrossSectionType cross_section_type = 2;
+}
+
+message NChannelPipetteSpec {
+  Vec3 reference_point = 1;
+  bool independent_channel_actuation = 2;
+}
+
+message LinkBodySpec {
+  Vec3 proximal_joint = 1;
+  optional Vec3 distal_joint = 2;
+}
+
+// A gripper's own parts are children named here; anything else under it is something it holds.
+// Setting its jaw width stands the fingers (or the jaws carrying them) either side of the tool
+// centre point.
+message MechanicalGripperSpec {
+  Vec3 proximal_joint = 1;
+  Vec3 tool_center_point = 2;
+  double jaw_width_min = 3;
+  double jaw_width_max = 4;
+  string body = 5;
+  repeated string fingers = 6;
+  repeated string pads = 7;
+  repeated string jaws = 8;
+}
+
+// Hamilton decks: a track's location is `track_origin` moved `(track - 1) * track_pitch` in x.
+message HamiltonDeckSpec {
+  int32 num_tracks = 1;
+  Vec3 track_origin = 2;
+  double track_pitch = 3;
+}
+
+message DeckSpec {
+  optional HamiltonDeckSpec hamilton = 1;
+}
+
+// What a resource is, without where it is in a tree or what state it is in. The same message
+// describes a resource of a model, of an inline definition, and of the server as it is read.
+//
+// A resource on the server refers to the model, or the inline definition, it was made from: what
+// it is (its kind, model, category, size and spec) is the model's, held once for every resource
+// made from it, and changes when the model is put again. Its name, location, rotation, identifier,
+// preferred pickup location, barcode, metadata and display model are its own. A read answers both
+// together.
+message ResourceAttributes {
+  reserved 3;
+  reserved "type_name";
+
+  string name = 1;
+  // What it is: the one type a resource has. A client builds its handle by it; `model` and
+  // `category` name it more finely.
+  ResourceKind kind = 2;
+  string model = 4;
+  string category = 5;
+  Vec3 size = 6;
+  // Relative to the parent's left front bottom corner, along the parent's axes. Unset on a root:
+  // where it is, is unknown.
+  optional Vec3 location = 7;
+  Rotation rotation = 8;
+  // Its identifier within an itemized parent, "A1"; empty otherwise.
+  string identifier = 9;
+  optional Vec3 preferred_pickup_location = 10;
+  optional Barcode barcode = 11;
+  google.protobuf.Struct metadata = 12;
+  // The model name it is drawn as, when that is not `model`: a Hamilton deck with an autoload
+  // fitted is drawn with the autoload's belt frame where its front panel was. What it is made
+  // from, and `model`, are unchanged. Empty: drawn as `model`.
+  string display_model = 13;
+
+  // Only the ones its kind takes; the server refuses any other.
+  optional ContainerSpec container = 20;
+  optional ItemizedSpec itemized = 21;
+  optional PlateSpec plate = 22;
+  optional TipRackSpec tip_rack = 23;
+  optional HeadToolSpec head_tool = 24;
+  optional TipSpec tip = 25;
+  optional TipSpotSpec tip_spot = 26;
+  optional LidSpec lid = 27;
+  optional HolderSpec holder = 28;
+  optional ResourceStackSpec stack = 29;
+  optional PlateAdapterSpec plate_adapter = 30;
+  optional PipetteChannelSpec pipette_channel = 31;
+  optional TipMountingShaftSpec tip_mounting_shaft = 32;
+  optional NChannelPipetteSpec n_channel_pipette = 33;
+  optional LinkBodySpec link_body = 34;
+  optional MechanicalGripperSpec mechanical_gripper = 35;
+  optional DeckSpec deck = 36;
+}
+
+// A tree to create: a model the server keeps, or one a factory built. Children are kept in the
+// order given; an itemized resource's children are its items in column-major order.
+message ResourceDefinition {
+  ResourceAttributes attributes = 1;
+  repeated ResourceDefinition children = 2;
+  optional ResourceState initial_state = 3;
+}
+
+// A named definition the server keeps. In a model, `{name}` in a child's name becomes the name the
+// instance is created with. Every resource made from a model refers to it; putting the model again
+// changes what each of them is.
+message ResourceModel {
+  string name = 1;
+  ResourceDefinition definition = 2;
+  string description = 3;
+}
+
+// ============================================================================================
+// State
+// ============================================================================================
+
+message VolumeState {
+  // What the last committed change left.
+  double volume = 1;
+  // Counting the changes not yet resolved; PLR's `get_used_volume`.
+  double pending_volume = 2;
+  bool tracking_enabled = 3;
+}
+
+message ResourceState {
+  // Containers and tips.
+  optional VolumeState volume = 1;
+  // Tip spots: whether this spot gives up and takes back tips.
+  optional bool tip_tracking_enabled = 2;
+  // Mechanical grippers.
+  optional double jaw_width = 3;
+  // Tip spots: how many tips it has made, which names the next one "<spot>#<tips_made>".
+  optional uint32 tips_made = 4;
+  // Device parts with rotation drives: each drive's angle, by the drive's name, in degrees, as the
+  // drive last reported it. Kept in the drive's own terms; the parts it turns carry the same fact
+  // as their rotations, rendered for the deck.
+  map<string, double> drive_angles = 5;
+}
+
+// One resource as it is now. A spot's tip, a holder's resource, a plate's lid and a shaft's tool
+// are its children, as in the PLR tree.
+message ResourceNode {
+  bytes id = 1;
+  bytes parent_id = 2;
+  bytes root_id = 3;
+  // Its position among its parent's children.
+  int32 index = 4;
+  ResourceAttributes attributes = 5;
+  ResourceState state = 6;
+  repeated bytes child_ids = 7;
+  // Operations with an unresolved item that changes it.
+  repeated bytes pending_operation_ids = 8;
+  // The server revision of its last change.
+  uint64 revision = 9;
+}
+
+// Which state a read sees.
+enum View {
+  // Unresolved staged changes included, as PLR reads its trackers today.
+  VIEW_UNSPECIFIED = 0;
+  VIEW_PENDING = 1;
+  // Only resolved changes.
+  VIEW_COMMITTED = 2;
+}
+
+// ============================================================================================
+// Problems
+// ============================================================================================
+
+enum Problem {
+  PROBLEM_UNSPECIFIED = 0;
+  PROBLEM_NOT_FOUND = 1;
+  PROBLEM_NAME_CONFLICT = 2;
+  PROBLEM_NO_LOCATION = 3;
+  PROBLEM_NOT_IN_FRAME = 4;
+  PROBLEM_WRONG_KIND = 5;
+  PROBLEM_CANNOT_DROP_HERE = 6;
+  PROBLEM_NO_HEIGHT_VOLUME_DATA = 7;
+  PROBLEM_OUTSIDE_HEIGHT_VOLUME_DATA = 8;
+  PROBLEM_OUT_OF_RANGE = 9;
+  // Tracking: the model disagrees with what is asked or what was sensed.
+  PROBLEM_NO_TIP = 20;
+  PROBLEM_HAS_TIP = 21;
+  PROBLEM_TOO_LITTLE_LIQUID = 22;
+  PROBLEM_TOO_LITTLE_VOLUME = 23;
+  PROBLEM_TIP_NOT_EMPTY = 24;
+  PROBLEM_LID_ON = 25;
+}
+
+message Issue {
+  Problem problem = 1;
+  string message = 2;
+  bytes resource_id = 3;
+  // The request item it is about; -1 for the request as a whole.
+  int32 item = 4;
+}
+
+// What a request does when the model disagrees with it.
+enum OnTrackingProblem {
+  // Go ahead: the model follows what the device does, and the issue is returned.
+  ON_TRACKING_PROBLEM_UNSPECIFIED = 0;
+  ON_TRACKING_PROBLEM_RECORD = 1;
+  // Refuse the whole request and change nothing.
+  ON_TRACKING_PROBLEM_REJECT = 2;
+}
+
+// ============================================================================================
+// Operations: changes staged before the device acts, resolved per item once it has. The server
+// never resolves one itself: an unresolved operation waits for a client or a person.
+// ============================================================================================
+
+enum ItemState {
+  ITEM_STATE_UNSPECIFIED = 0;
+  ITEM_STATE_PENDING = 1;
+  ITEM_STATE_COMMITTED = 2;
+  ITEM_STATE_ROLLED_BACK = 3;
+}
+
+message OperationItem {
+  int32 item = 1;
+  ItemState state = 2;
+  google.protobuf.Timestamp resolved_at = 3;
+}
+
+message Operation {
+  bytes id = 1;
+  bytes root_id = 2;
+  // The request that staged it, "BeginToolPickup", for people reading it.
+  string kind = 3;
+  repeated OperationItem items = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// ============================================================================================
+// Changes the command API and the primitives both make.
+// ============================================================================================
+
+// Put `child` into `parent`, out of wherever it was; the two may be in different roots.
+message AssignChild {
+  ResourceRef child = 1;
+  ResourceRef parent = 2;
+  // Neither set: where the parent seats a child of this kind - a holder's child location, the
+  // top of a stack, a plate adapter's plate location, a lid's nesting, a tip resting by its
+  // collar.
+  oneof where {
+    // Relative to the parent, along its axes.
+    Vec3 location = 3;
+    // A Hamilton deck's track, from 1.
+    int32 track = 4;
+    // In the parent with no location: where it is there is unknown, as PLR's
+    // `assign_child_resource(child, location=None)` leaves a child of a parent that seats none.
+    bool no_location = 6;
+  }
+  // Position among the parent's children; unset appends.
+  optional int32 index = 5;
+}
+
+// Take `resource` out of its parent; it becomes a root with no location.
+message UnassignChild {
+  ResourceRef resource = 1;
+}
+
+// Turn a resource about its parent's axes.
+message RotationChange {
+  ResourceRef resource = 1;
+  oneof rotation {
+    // On top of what it has: `rotate`.
+    Rotation by = 2;
+    // To these angles: `rotate_to`.
+    PartialRotation to = 3;
+  }
+  // What to turn about, in the resource's own frame; its location moves so this point stays
+  // put. Unset turns about its origin.
+  optional Vec3 pivot = 4;
+}
+
+message SetMetadata {
+  ResourceRef resource = 1;
+  google.protobuf.Struct metadata = 2;
+  // Replace all of it, or merge these keys in.
+  bool replace = 3;
+}
+
+message SetBarcode {
+  ResourceRef resource = 1;
+  optional Barcode barcode = 2;
+}
+
+// Where a gripper should take hold of a resource, in its own frame; unset clears it.
+message SetPreferredPickupLocation {
+  ResourceRef resource = 1;
+  optional Vec3 location = 2;
+}
+
+message SetTracking {
+  // This and every container or spot under it.
+  ResourceRef scope = 1;
+  optional bool volume_tracking = 2;
+  optional bool tip_tracking = 3;
+}
+
+message SetVolume {
+  // A container or a tip.
+  ResourceRef resource = 1;
+  double volume = 2;
+}
+
+// Fill spots with fresh tips, or empty them: `fill()`, `empty()`, `set_tip_state`.
+message SetTipPresence {
+  repeated ResourceRef spots = 1;
+  bool present = 2;
+}
+
+// Draw a resource as another model, or, empty, as its own `model`: `display_model`.
+message SetDisplayModel {
+  ResourceRef resource = 1;
+  string display_model = 2;
+}
+
+// Delete everything a trash holds: the tips and resources dropped into it.
+message ClearTrash {
+  ResourceRef trash = 1;
+}

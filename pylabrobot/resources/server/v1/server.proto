@@ -1,0 +1,665 @@
+syntax = "proto3";
+
+// The resource server: the one place PLR keeps the resource tree, its geometry and its state.
+//
+// Every server - in-memory, SQLAlchemy, or another - serves `ResourceService`, and PLR talks
+// to all of them through one client. This is the command API: every call names something PLR does,
+// and it is the whole of what PLR uses. The low-level changes in `primitives.proto` are for
+// building new uses of resources, not for PLR.
+//
+// Division of labour: the server answers everything about the resource model - where a thing is
+// along whose axes, how big it is once turned, what a height holds, where a child seats - and
+// keeps its state. A driver plans motion (batches, channel spacing, traverse heights) from what
+// the server answers, and tells the server what the device did.
+//
+// Access is the backend's: a client gives its credentials when it connects, in its requests'
+// headers, and the API says nothing of them. A backend may limit what a connection sees or
+// changes - one machine's driver to that machine, say. What it hides is NOT_FOUND, and a change it
+// refuses is PERMISSION_DENIED.
+package pylabrobot.resources.server.v1;
+
+import "google/protobuf/timestamp.proto";
+import "pylabrobot/resources/server/v1/types.proto";
+
+// ============================================================================================
+// The server itself
+// ============================================================================================
+
+message GetServerInfoRequest {}
+
+message ServerInfo {
+  string api_version = 1;
+  string implementation = 2;
+  string implementation_version = 3;
+  // Changes on restart; revisions are ordered only within one instance.
+  string instance_id = 4;
+  uint64 revision = 5;
+}
+
+// ============================================================================================
+// Models
+// ============================================================================================
+
+// Keep a model, or change one. A changed model's resources follow it: each resource made from a
+// part of the old model, matched by where the part is in it, is what the new part says, and one
+// still standing where the old part put it in its parent moves to where the new part puts it. A
+// resource is not added or taken away by a change, and a change that would turn a resource into
+// another kind is refused. Each resource changed is reported to `Watch` as updated.
+message PutModelRequest {
+  ResourceModel model = 1;
+}
+
+message GetModelRequest {
+  // A model's name; PLR's servers also know the names of PLR's deprecated labware factories.
+  string name = 1;
+}
+
+// The models put in the server, by name. PLR's own servers start with PLR's labware put in.
+message ListModelsRequest {
+  ResourceKind kind = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListModelsResponse {
+  repeated ResourceModel models = 1;
+  string next_page_token = 2;
+}
+
+// ============================================================================================
+// Building the tree
+// ============================================================================================
+
+message CreateResource {
+  oneof source {
+    // A model the server keeps, by name: the resource refers to it, and follows it when it changes.
+    string model = 1;
+    // A definition of its own, kept for it alone and not listed as a model.
+    ResourceDefinition definition = 2;
+  }
+  // The new root's name; replaces the model's or definition's.
+  string name = 3;
+  // Where to put it, as `AssignResources` would; unset leaves it a root with no location.
+  optional AssignChild assign = 4;
+}
+
+message CreateResourcesRequest {
+  repeated CreateResource resources = 1;
+}
+
+message CreateResourcesResponse {
+  // Every node created, each subtree in pre-order, in the order asked.
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+}
+
+message DeleteResourcesRequest {
+  // Each with everything under it. Its history is kept.
+  repeated ResourceRef resources = 1;
+}
+
+message DeleteResourcesResponse {
+  uint64 revision = 1;
+}
+
+message AssignResourcesRequest {
+  // In order, all or none: setting up a deck, or a person moving a plate by hand.
+  repeated AssignChild assignments = 1;
+}
+
+message AssignResourcesResponse {
+  // Each resource assigned, as it is now.
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+}
+
+message UnassignResourcesRequest {
+  repeated ResourceRef resources = 1;
+}
+
+message UnassignResourcesResponse {
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+}
+
+// A change a person makes to the model, rather than one a device reports.
+message ResourceUpdate {
+  oneof update {
+    RotationChange rotation = 1;
+    SetMetadata metadata = 2;
+    SetBarcode barcode = 3;
+    SetTracking tracking = 4;
+    // `set_volume`, `set_well_volumes`: what a person says is there.
+    SetVolume volume = 5;
+    SetTipPresence tip_presence = 6;
+    SetPreferredPickupLocation preferred_pickup_location = 7;
+    SetDisplayModel display_model = 8;
+    ClearTrash clear_trash = 9;
+  }
+}
+
+message UpdateResourcesRequest {
+  // In order, all or none.
+  repeated ResourceUpdate updates = 1;
+  // A volume set above what a container or tip holds at most, or below nothing.
+  OnTrackingProblem on_tracking_problem = 2;
+}
+
+message UpdateResourcesResponse {
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+  repeated Issue issues = 3;
+}
+
+// ============================================================================================
+// Reading
+// ============================================================================================
+
+message GetResourcesRequest {
+  repeated ResourceRef resources = 1;
+  // How far below each to include: 0 the resource alone, -1 everything.
+  int32 depth = 2;
+  View view = 3;
+  // Also each resource's ancestors, its parent up to its root, after all of the above.
+  bool ancestors = 4;
+}
+
+message GetResourcesResponse {
+  // Pre-order per requested resource, then the ancestors asked for; a node reached twice appears
+  // once.
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+}
+
+message ResourceFilter {
+  reserved 2;
+  reserved "type_names";
+
+  repeated ResourceKind kinds = 1;
+  repeated string models = 3;
+  repeated string categories = 4;
+  string name_prefix = 5;
+  // Exactly these names.
+  repeated string names = 6;
+}
+
+message FindResourcesRequest {
+  // Searched with its subtree. Unset searches every root.
+  optional ResourceRef scope = 1;
+  ResourceFilter filter = 2;
+  View view = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message FindResourcesResponse {
+  repeated ResourceNode nodes = 1;
+  string next_page_token = 2;
+  uint64 revision = 3;
+}
+
+message ListRootsRequest {
+  ResourceFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListRootsResponse {
+  repeated ResourceNode roots = 1;
+  string next_page_token = 2;
+  uint64 revision = 3;
+}
+
+message GeometryQuery {
+  ResourceRef resource = 1;
+  // Locations and rotations are along this resource's axes, from its left front bottom corner.
+  // Unset: absolute, as `get_absolute_location` has them - along the axes a root is turned in.
+  optional ResourceRef frame = 2;
+  // Each anchor is answered as one location; none answers the left front bottom corner.
+  repeated Anchor anchors = 3;
+}
+
+message Geometry {
+  bytes resource_id = 1;
+  // One per anchor asked, in order.
+  repeated Vec3 locations = 2;
+  // Its rotation along the frame's axes.
+  Rotation rotation_in_frame = 3;
+  Rotation absolute_rotation = 4;
+  // Its bounding box once turned, along the root's axes: `get_absolute_size_*`.
+  Vec3 absolute_size = 5;
+  // Its size as its kind computes it: a stack's from what it holds.
+  Vec3 size = 6;
+  // The highest point of it and everything under it, along the root's axes; a deck's own top
+  // does not count.
+  double highest_point = 7;
+  // Set when a location asked for could not be answered, a resource with no location say; its
+  // size and rotations are answered all the same.
+  optional Issue issue = 8;
+}
+
+message ResolveGeometryRequest {
+  repeated GeometryQuery queries = 1;
+  View view = 2;
+}
+
+message ResolveGeometryResponse {
+  // One per query, in order.
+  repeated Geometry results = 1;
+  uint64 revision = 2;
+}
+
+message HeightVolumeQuery {
+  ResourceRef container = 1;
+  oneof given {
+    // Above the cavity bottom.
+    double height = 2;
+    double volume = 3;
+  }
+}
+
+message HeightVolumeResult {
+  double height = 1;
+  double volume = 2;
+  optional Issue issue = 3;
+}
+
+message ConvertHeightVolumeRequest {
+  repeated HeightVolumeQuery queries = 1;
+}
+
+message ConvertHeightVolumeResponse {
+  repeated HeightVolumeResult results = 1;
+}
+
+message FindResourcesAtRequest {
+  ResourceRef frame = 1;
+  // In the frame, along its axes.
+  Vec3 location = 2;
+  repeated ResourceRef exclude = 3;
+  View view = 4;
+}
+
+message FindResourcesAtResponse {
+  // The deepest resource whose box holds the location, then its ancestors up to the frame. Empty
+  // when nothing does.
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+}
+
+// ============================================================================================
+// What a device reports
+// ============================================================================================
+
+// Where a part of a device is now, as its drives report it.
+message DevicePosition {
+  ResourceRef resource = 1;
+  // Unset: `location` is relative to the parent, along its axes. Set: `location` is where
+  // `reference_point` is, in this frame along its axes, and the server converts.
+  optional ResourceRef frame = 2;
+  PartialVec3 location = 3;
+  // From the resource's left front bottom corner; unset is that corner. A pipette channel's
+  // reference point is its spec's when unset.
+  optional Vec3 reference_point = 4;
+  // A joint's angle, about the resource's pivot.
+  optional RotationChange rotation = 5;
+  // A gripper's jaws.
+  optional double jaw_width = 6;
+  // Rotation drives the part carries, by name: each one's angle as it reports it, in degrees,
+  // merged into its `drive_angles`.
+  map<string, double> drive_angles = 7;
+}
+
+message RecordDevicePositionsRequest {
+  // All of them at once: what one move left the device as.
+  repeated DevicePosition positions = 1;
+}
+
+message RecordDevicePositionsResponse {
+  repeated ResourceNode nodes = 1;
+  uint64 revision = 2;
+}
+
+message Measurement {
+  oneof measurement {
+    // A volume measured in a container or a tip.
+    double volume = 1;
+    // A liquid surface found, above the cavity bottom; the server converts it to a volume.
+    double liquid_height = 2;
+    // Whether a shaft or spot was sensed holding a tool. Recorded, and an issue when the model
+    // disagrees; the tree is not changed.
+    bool tool_present = 3;
+    Barcode barcode = 4;
+  }
+  ResourceRef resource = 5;
+}
+
+message MeasurementResult {
+  // For volumes and heights: what the model held before, and holds now.
+  optional double previous_volume = 1;
+  optional double volume = 2;
+  // A volume measured above what the resource holds at most is recorded, with an issue.
+  optional Issue issue = 3;
+}
+
+// A measurement is of what is there now: before any unresolved item that moves liquid in or out
+// of it has moved it.
+message RecordMeasurementsRequest {
+  repeated Measurement measurements = 1;
+}
+
+message RecordMeasurementsResponse {
+  // One per measurement, in order.
+  repeated MeasurementResult results = 1;
+  uint64 revision = 2;
+}
+
+// ============================================================================================
+// Commands: one call per device command. Each answers what the driver needs to plan the command,
+// and stages what the device will do; `ResolveOperation` commits it, per item, once it has.
+// ============================================================================================
+
+// A container, spot or trash as a command reads it, in the request's frame.
+message Placement {
+  bytes resource_id = 1;
+  ResourceKind kind = 2;
+  // Its centre centre bottom, centre centre cavity bottom, and centre centre top.
+  Vec3 bottom = 3;
+  Vec3 cavity_bottom = 4;
+  Vec3 top = 5;
+  Vec3 absolute_size = 6;
+  Rotation rotation_in_frame = 7;
+  // Containers: no-go zones, height-volume data, material thickness.
+  optional ContainerSpec container = 8;
+  // What it holds as it stood before this request's own changes.
+  optional VolumeState volume = 9;
+}
+
+message ToolPickupItem {
+  // A tip spot, a holder a tool is parked in, or a tool itself where it is parked: dropped back
+  // to its origin, it goes back where it stood.
+  ResourceRef source = 1;
+  ResourceRef shaft = 2;
+}
+
+message BeginToolPickupRequest {
+  // Where locations are answered: the deck.
+  ResourceRef frame = 1;
+  repeated ToolPickupItem items = 2;
+  // Also answer what these shafts carry: every shaft whose tool decides how high the head
+  // travels.
+  repeated ResourceRef context_shafts = 3;
+  OnTrackingProblem on_tracking_problem = 4;
+}
+
+message ToolPickupPlan {
+  int32 item = 1;
+  // The tool it collects: the spot's tip, a fresh one from an untracked spot, or a parked tool.
+  ResourceNode tool = 2;
+  Placement source = 3;
+}
+
+message ShaftContext {
+  bytes shaft_id = 1;
+  // What it carries; unset when bare.
+  optional ResourceNode tool = 2;
+}
+
+// Staged per item: the tool leaves its source (a spot only when tracked) and mounts on the shaft.
+message BeginToolPickupResponse {
+  Operation operation = 1;
+  repeated ToolPickupPlan items = 2;
+  repeated ShaftContext context_shafts = 3;
+  repeated Issue issues = 4;
+  uint64 revision = 5;
+}
+
+message ToolDropItem {
+  ResourceRef shaft = 1;
+  oneof destination {
+    // A tip spot, a tool holder, or a trash.
+    ResourceRef target = 2;
+    // Where the tool came from: `return_tips`, parking a tool.
+    bool origin = 3;
+  }
+}
+
+message BeginToolDropRequest {
+  ResourceRef frame = 1;
+  repeated ToolDropItem items = 2;
+  repeated ResourceRef context_shafts = 3;
+  OnTrackingProblem on_tracking_problem = 4;
+}
+
+message ToolDropPlan {
+  int32 item = 1;
+  ResourceNode tool = 2;
+  Placement destination = 3;
+}
+
+// Staged per item: the tool leaves the shaft and rests in its destination, or leaves the tree for
+// a trash.
+message BeginToolDropResponse {
+  Operation operation = 1;
+  repeated ToolDropPlan items = 2;
+  repeated ShaftContext context_shafts = 3;
+  repeated Issue issues = 4;
+  uint64 revision = 5;
+}
+
+enum TransferDirection {
+  TRANSFER_DIRECTION_UNSPECIFIED = 0;
+  // Container to tip.
+  TRANSFER_DIRECTION_ASPIRATE = 1;
+  // Tip to container.
+  TRANSFER_DIRECTION_DISPENSE = 2;
+}
+
+message TransferItem {
+  ResourceRef container = 1;
+  // The shaft whose mounted tip the liquid goes into or comes out of.
+  ResourceRef shaft = 2;
+  double volume = 3;
+}
+
+message BeginLiquidTransferRequest {
+  ResourceRef frame = 1;
+  TransferDirection direction = 2;
+  repeated TransferItem items = 3;
+  OnTrackingProblem on_tracking_problem = 4;
+}
+
+message TransferPlan {
+  int32 item = 1;
+  Placement container = 2;
+  ResourceNode tip = 3;
+}
+
+// Staged per item: the volume leaves the giver and enters the taker.
+message BeginLiquidTransferResponse {
+  Operation operation = 1;
+  repeated TransferPlan items = 2;
+  repeated Issue issues = 3;
+  uint64 revision = 4;
+}
+
+message Grip {
+  oneof height {
+    double distance_from_top = 1;
+    double distance_from_bottom = 2;
+  }
+}
+
+message BeginResourcePickupRequest {
+  ResourceRef frame = 1;
+  ResourceRef resource = 2;
+  // What carries it once picked up, a gripper tool; it is assigned there where it is held.
+  ResourceRef carrier = 3;
+  Grip grip = 4;
+}
+
+// Staged as one item: the resource moves to its carrier.
+message BeginResourcePickupResponse {
+  Operation operation = 1;
+  ResourceNode resource = 2;
+  // Its origin, in the frame.
+  Vec3 pick_location = 3;
+  // Its centre at the grip height, in the frame.
+  Vec3 grip_location = 4;
+  double grip_height = 5;
+  Vec3 absolute_size = 6;
+  Rotation rotation_in_frame = 7;
+  repeated Issue issues = 8;
+  uint64 revision = 9;
+}
+
+message BeginResourcePlaceRequest {
+  ResourceRef frame = 1;
+  ResourceRef resource = 2;
+  oneof destination {
+    ResourceRef destination_resource = 3;
+    // Its origin's location in the frame. The server finds what is there; an empty place puts it
+    // on the frame itself.
+    Vec3 destination_location = 4;
+  }
+  // How far the move turns it about z, in degrees.
+  double rotation_applied_by_move = 5;
+  Grip grip = 6;
+}
+
+// Staged as one item: the resource turns and moves into its destination.
+message BeginResourcePlaceResponse {
+  Operation operation = 1;
+  // What it goes into, when found from a location.
+  optional ResourceNode destination = 2;
+  // Its origin once placed, in the frame.
+  Vec3 place_location = 3;
+  Vec3 grip_location = 4;
+  double grip_height = 5;
+  // Its rotation along the destination's axes once placed.
+  Rotation rotation_in_destination = 6;
+  repeated Issue issues = 7;
+  uint64 revision = 8;
+}
+
+// ============================================================================================
+// Operations
+// ============================================================================================
+
+message ItemOutcome {
+  int32 item = 1;
+  bool succeeded = 2;
+  // Liquid transfers: what moved, when not what was asked - a channel that failed part way, read
+  // off its piston. Booked and committed even when `succeeded` is false.
+  optional double volume = 3;
+}
+
+message ResolveOperationRequest {
+  bytes operation_id = 1;
+  // Any of the unresolved items; the rest stay pending.
+  repeated ItemOutcome outcomes = 2;
+}
+
+message ResolveOperationResponse {
+  Operation operation = 1;
+  repeated ResourceNode nodes = 2;
+  uint64 revision = 3;
+}
+
+message GetOperationRequest {
+  bytes operation_id = 1;
+}
+
+message ListOperationsRequest {
+  ResourceRef root = 1;
+  bool unresolved_only = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListOperationsResponse {
+  repeated Operation operations = 1;
+  string next_page_token = 2;
+}
+
+// ============================================================================================
+// Watching
+// ============================================================================================
+
+message WatchRequest {
+  repeated ResourceRef roots = 1;
+  // Events after this revision: read a tree, then watch from its revision.
+  uint64 after_revision = 2;
+}
+
+// What about a resource an update changed.
+enum ChangeAspect {
+  CHANGE_ASPECT_UNSPECIFIED = 0;
+  // Its parent, its position among the parent's children, its location or its rotation.
+  CHANGE_ASPECT_PLACEMENT = 1;
+  // Its volume, tracking, jaw width or tips made.
+  CHANGE_ASPECT_STATE = 2;
+  // Anything else about what it is: metadata, barcode, spec, or its model changing.
+  CHANGE_ASPECT_ATTRIBUTES = 3;
+  // Which resources hang from it, or their order.
+  CHANGE_ASPECT_CHILDREN = 4;
+}
+
+// Every event of one request has the same revision, so a watcher can apply them together.
+message ResourceEvent {
+  uint64 revision = 1;
+  google.protobuf.Timestamp at = 2;
+  oneof event {
+    ResourceNode created = 3;
+    bytes deleted = 4;
+    // As it is after an assign, unassign, move, turn, or change of state.
+    ResourceNode updated = 5;
+    Operation operation = 6;
+  }
+  // For `updated`: what changed since its last event.
+  repeated ChangeAspect changed = 7;
+}
+
+service ResourceService {
+  rpc GetServerInfo(GetServerInfoRequest) returns (ServerInfo);
+
+
+  // Models.
+  rpc PutModel(PutModelRequest) returns (ResourceModel);
+  rpc GetModel(GetModelRequest) returns (ResourceModel);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+
+  // Building the tree.
+  rpc CreateResources(CreateResourcesRequest) returns (CreateResourcesResponse);
+  rpc DeleteResources(DeleteResourcesRequest) returns (DeleteResourcesResponse);
+  rpc AssignResources(AssignResourcesRequest) returns (AssignResourcesResponse);
+  rpc UnassignResources(UnassignResourcesRequest) returns (UnassignResourcesResponse);
+  rpc UpdateResources(UpdateResourcesRequest) returns (UpdateResourcesResponse);
+
+  // Reading.
+  rpc GetResources(GetResourcesRequest) returns (GetResourcesResponse);
+  rpc FindResources(FindResourcesRequest) returns (FindResourcesResponse);
+  rpc ListRoots(ListRootsRequest) returns (ListRootsResponse);
+  rpc ResolveGeometry(ResolveGeometryRequest) returns (ResolveGeometryResponse);
+  rpc ConvertHeightVolume(ConvertHeightVolumeRequest) returns (ConvertHeightVolumeResponse);
+  rpc FindResourcesAt(FindResourcesAtRequest) returns (FindResourcesAtResponse);
+
+  // What a device reports.
+  rpc RecordDevicePositions(RecordDevicePositionsRequest) returns (RecordDevicePositionsResponse);
+  rpc RecordMeasurements(RecordMeasurementsRequest) returns (RecordMeasurementsResponse);
+
+  // Commands.
+  rpc BeginToolPickup(BeginToolPickupRequest) returns (BeginToolPickupResponse);
+  rpc BeginToolDrop(BeginToolDropRequest) returns (BeginToolDropResponse);
+  rpc BeginLiquidTransfer(BeginLiquidTransferRequest) returns (BeginLiquidTransferResponse);
+  rpc BeginResourcePickup(BeginResourcePickupRequest) returns (BeginResourcePickupResponse);
+  rpc BeginResourcePlace(BeginResourcePlaceRequest) returns (BeginResourcePlaceResponse);
+
+  // Operations.
+  rpc ResolveOperation(ResolveOperationRequest) returns (ResolveOperationResponse);
+  rpc GetOperation(GetOperationRequest) returns (Operation);
+  rpc ListOperations(ListOperationsRequest) returns (ListOperationsResponse);
+
+  // Watching: the events after `after_revision`, then each as it happens.
+  rpc Watch(WatchRequest) returns (stream ResourceEvent);
+}

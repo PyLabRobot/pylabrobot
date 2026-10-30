@@ -9,7 +9,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets>=14"]
+dependencies = [
+  "typing_extensions",
+  "websockets>=14",
+  "protobuf==7.36.2",
+  "connectrpc==0.12.1",
+  # connectrpc requires these unbounded; 0.7 of protobuf-py removed what connectrpc 0.12 imports.
+  "protobuf-py==0.6.0",
+  "pyqwest==0.11.0",
+]
 
 [project.scripts]
 plr = "pylabrobot.cli:main"
@@ -28,6 +36,7 @@ rpc = ["grpcio==1.84.0", "protobuf==7.36.2"]
 rpc-dev = [
   "PyLabRobot[rpc,test]",
   "grpcio-tools==1.84.0",
+  "protoc-gen-connectrpc==0.12.1",
   "mypy-protobuf==5.1.0",
   "types-grpcio",
   "types-protobuf",
@@ -36,7 +45,9 @@ cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
+# Serving a resource server over the network: `uvicorn` runs `asgi_app(store)`.
+resource-server = ["uvicorn>=0.30"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey,resource-server]"]
 test = [
   "pytest>=9.1",
   "pytest-xdist",
@@ -71,6 +82,7 @@ exclude = ["*.__pycache__"]
 [tool.setuptools.package-data]
 "pylabrobot.revvity.celigo.grpc.v1" = ["*.proto", "*.pyi"]
 "pylabrobot.rpc.v1" = ["*.proto", "*.pyi"]
+"pylabrobot.resources.server.v1" = ["*.proto", "*.pyi"]
 "*" = [
   "*.css",
   "*.csv",
@@ -102,6 +114,9 @@ extend-exclude = [
   "pylabrobot/revvity/celigo/grpc/v1/*_pb2.pyi",
   "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.py",
   "pylabrobot/revvity/celigo/grpc/v1/*_pb2_grpc.pyi",
+  "pylabrobot/resources/server/v1/*_pb2.py",
+  "pylabrobot/resources/server/v1/*_pb2.pyi",
+  "pylabrobot/resources/server/v1/*_connect.py",
 ]
 
 [tool.ruff.lint.per-file-ignores]
