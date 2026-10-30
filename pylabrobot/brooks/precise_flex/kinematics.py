@@ -19,7 +19,7 @@ import warnings
 from dataclasses import dataclass
 from enum import IntEnum
 from math import atan2, cos, degrees, hypot, pi, radians, sin
-from typing import Dict, Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -194,6 +194,29 @@ def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
     wrist=wrist,
     rail_position=rail_position,
   )
+
+
+def compute_outline_clearance(
+  outline: Sequence[Tuple[float, float]], other: Sequence[Tuple[float, float]]
+) -> float:
+  """How far apart two convex outlines stand, in mm. Negative when they overlap, by how deep.
+
+  The widest gap any edge of either leaves to the other. Never more than the true distance.
+
+  Args:
+    outline: the points (x, y) round one part, counter-clockwise.
+    other: the points round the other, in the same frame and the same sense.
+  """
+  clearance = float("-inf")
+  for edges, points in ((outline, other), (other, outline)):
+    for (x_1, y_1), (x_2, y_2) in zip(edges, list(edges[1:]) + list(edges[:1])):
+      length = hypot(x_2 - x_1, y_2 - y_1)
+      if length == 0.0:
+        continue
+      # Outwards from this edge: how far the nearest point of the other part stands off it.
+      out_x, out_y = (y_2 - y_1) / length, (x_1 - x_2) / length
+      clearance = max(clearance, min((x - x_1) * out_x + (y - y_1) * out_y for x, y in points))
+  return clearance
 
 
 # -- inverse kinematics ----------------------------------------------------

@@ -18,6 +18,34 @@ GRIPPER_BODY_SIZE = {"s23": (115.5, 134.0, 36.5), "v23": (127.0, 134.0, 55.4)}
 # The wrist joint within the gripper: centred across it, in the flange plane just above its body.
 GRIPPER_JOINT = {"s23": Coordinate(35.0, 67.0, 37.5), "v23": Coordinate(35.0, 67.0, 56.4)}
 
+# The body seen from above, in its own frame: it narrows towards the wrist joint.
+GRIPPER_BODY_OUTLINE = {
+  "s23": (
+    (2.0, 48.1),
+    (65.0, 0.3),
+    (67.0, 0.0),
+    (115.5, 0.0),
+    (115.5, 132.6),
+    (114.5, 134.0),
+    (65.4, 134.0),
+    (2.5, 86.3),
+    (0.9, 75.8),
+    (-0.3, 67.5),
+  ),
+  "v23": (
+    (1.3, 57.2),
+    (3.3, 51.8),
+    (8.5, 43.2),
+    (65.4, 0.0),
+    (127.0, 0.0),
+    (127.0, 134.0),
+    (65.4, 134.0),
+    (6.7, 89.5),
+    (0.3, 75.1),
+    (-0.2, 63.9),
+  ),
+}
+
 GRIPPER_JAW_SIZE = (22.0, 43.2, 37.2)
 # Where a jaw starts along the gripper and above its underside. Across it is wherever the drive is.
 # Its box is the thicker jaw's; the thinner one ends at the same front and bottom.

@@ -197,6 +197,10 @@ class PreciseFlexGripper:
     Args:
       units: the gripper axis position, in the controller's units.
       force_sensing: True closes (``gripper 2``), False opens (``gripper 1``).
+
+    Raises:
+      ValueError: If opening the jaws would carry one into the column or the base plate, on a
+        modelled arm.
     """
     units = self._hold_within_gripper_limits(units)
     # Held within the gripper's limits above; another axis out of range does not stop the jaws.
