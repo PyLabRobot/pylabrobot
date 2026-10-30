@@ -69,6 +69,7 @@ include = ["pylabrobot", "pylabrobot.*"]
 exclude = ["*.__pycache__"]
 
 [tool.setuptools.package-data]
+"pylabrobot.agilent.vspin.grpc.v1" = ["*.proto", "*.pyi"]
 "pylabrobot.revvity.celigo.grpc.v1" = ["*.proto", "*.pyi"]
 "pylabrobot.rpc.v1" = ["*.proto", "*.pyi"]
 "*" = [
@@ -94,6 +95,10 @@ line-length = 100
 indent-width = 2
 force-exclude = true
 extend-exclude = [
+  "pylabrobot/agilent/vspin/grpc/v1/*_pb2.py",
+  "pylabrobot/agilent/vspin/grpc/v1/*_pb2.pyi",
+  "pylabrobot/agilent/vspin/grpc/v1/*_pb2_grpc.py",
+  "pylabrobot/agilent/vspin/grpc/v1/*_pb2_grpc.pyi",
   "pylabrobot/rpc/v1/*_pb2.py",
   "pylabrobot/rpc/v1/*_pb2.pyi",
   "pylabrobot/rpc/v1/*_pb2_grpc.py",
