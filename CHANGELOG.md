@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Resource.rotate`, `rotate_to` and `rotated` take an optional `pivot_coordinate`: a point in the resource's own frame that stays where it is, so a resource can turn about its centre, an edge, or any other point rather than only about its origin. `location` carries by however far the turn moved that point. Raises `NoLocationError` when the resource has no location, since there is nothing to carry. (#1249)
 - `LinkBody` (`pylabrobot.resources.LinkBody`): one rigid member of a manipulator, an ordinary resource whose origin is a corner and which carries its `proximal_joint` and `distal_joint` as coordinates within it. The link is the line between the two joints and `length` is the distance, `None` on a member that ends the chain. A member turns about its proximal joint rather than its origin. (#1249)
 - `MechanicalGripper` (`pylabrobot.resources.MechanicalGripper`): a `LinkBody` that ends the chain, holding what it takes between two fingers. Its far end is a `tool_center_point` rather than a joint, it is sized to its body because `jaw_width` moves the fingers, and the jaws straddle the grip centre. (#1249)
+- `pylabrobot.io.USB(zero_length_packets=False)` sends a write whose length is a multiple of the endpoint's packet size without the zero-length packet after it, for devices that do not take one, such as BMG Labtech's VANTAstar. The default is unchanged.
 
 ### Changed
 
@@ -37,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `pylabrobot.io.USB.ctrl_transfer` writes data in host-to-device control transfers (`data_or_wLength` takes the bytes); recording such a transfer raised `TypeError: 'int' object is not iterable`.
 - Azenta XPeel (`pylabrobot.azenta.XPeel` and the legacy `XPeelBackend`): `request_status()` / `get_status()` read the three error codes from a ready line that carries its error description (`*ready:00,00,00 [No error]`), and `peel()` sends `adhere_time` as the peeler's code 1-4 (`*xpeel:41` for 2.5 s), which it accepts.
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
 - `HamiltonTCPClient` no longer retransmits a command after a failed read. A read timeout on a slow motion command previously re-sent it, which could execute the motion twice (#1195).
