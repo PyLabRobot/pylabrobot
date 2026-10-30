@@ -404,17 +404,27 @@ class PreciseFlexArm:
     """
     await self._driver.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
 
-  async def _unchecked_fw_set_joint_angles(
-    self,
-    station_index: int,
-    joint_position: JointState,
+  async def _unchecked_fw_set_station_cartesian(
+    self, station_index: int, joint_position: JointState
   ) -> None:
-    """Set joint angles for a station, handling rail configuration."""
-    angles_str = " ".join(str(joint_position[axis]) for axis in self._WIRE_ORDER)
+    """Write a station as the controller's Cartesian location, from the joint state to stand at.
+
+    ``pickplate`` and ``placeplate`` take a Cartesian station, and ``StationType`` empties one set
+    by ``locAngles``. The controller's z is the Z joint.
+
+    Raises:
+      NotImplementedError: On an arm with a rail, whose station has not been run on an arm.
+    """
     if self._driver._has_rail:
-      # Here the rail's value goes first.
-      angles_str = f"{joint_position[PreciseFlexAxis.RAIL]} {angles_str}"
-    await self._driver.send_command(f"locAngles {station_index} {angles_str}")
+      raise NotImplementedError("a pick or a place is not supported on a rail-equipped arm yet")
+    pose = kinematics.fk(joint_position, self._driver._kinematics_params)
+    heading = (pose.rotation.z + 180) % 360 - 180
+    await self._driver.send_command(
+      f"locXyz {station_index} {round(pose.location.x, 3)} {round(pose.location.y, 3)} "
+      f"{round(joint_position[PreciseFlexAxis.BASE], 3)} {round(heading, 3)} 90 180"
+    )
+    config = 1 if pose.orientation == "right" else 2
+    await self._driver.send_command(f"locConfig {station_index} {config}")
 
   def _plan_cartesian_pose(
     self,
@@ -2040,7 +2050,7 @@ class PreciseFlexArm:
     """
 
     async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
-      await self._unchecked_fw_set_joint_angles(self.station_index, targets[0])
+      await self._unchecked_fw_set_station_cartesian(self.station_index, targets[0])
       await self._unchecked_fw_set_grip_detail()
       await unchecked_fw_plate()
 
