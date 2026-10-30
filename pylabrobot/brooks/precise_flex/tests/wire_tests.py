@@ -1161,7 +1161,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 200.0 10.0 170.0 20.0 100.0",
+      "locXyz 1 -143.818 -2.966 200.0 -160.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "pickplate 1 0 0",
       "state",
@@ -1177,7 +1178,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 200.0 10.0 170.0 20.0 100.0",
+      "locXyz 1 -143.818 -2.966 200.0 -160.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "placeplate 1 0 0",
       "state",
@@ -1194,7 +1196,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 201.25 -38.74046014630248 128.25603427878514 -89.51557413248264 70.685",
+      "locXyz 1 400.0 100.0 201.25 0.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "pickplate 1 0 0",
       "state",
@@ -1210,7 +1213,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 201.25 -38.74046014630248 128.25603427878514 -89.51557413248264 70.685",
+      "locXyz 1 400.0 100.0 201.25 0.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "placeplate 1 0 0",
       "state",
@@ -1715,6 +1719,40 @@ class TestGripperTargetsStayInsideTheirLimits(unittest.IsolatedAsyncioTestCase):
     await arm.gripper.move_to_jaw_position(114.0, force_sensing=False)  # the advertised maximum
     moves = [c for c in fake.sent if c.startswith("MoveOneAxis 5")]
     self.assertEqual(moves, ["MoveOneAxis 5 133.5 1"] * 2)
+
+
+class TestPickAndPlaceStation(unittest.IsolatedAsyncioTestCase):
+  """`StationType` empties a station set by `locAngles`, so it is written as a Cartesian one."""
+
+  async def test_the_station_is_where_the_controller_says_those_joints_are(self):
+    # Joints as `wherej` read them, with `wherec`'s x, y, z, heading and configuration there.
+    for joints, station, config in (
+      ((16.484, -31.943, 134.929, -105.062), "353.222 115.96 16.484 -2.076", 1),
+      ((10.192, 69.106, 198.097, -267.011), "255.596 -5.976 10.192 0.19", 2),
+    ):
+      with self.subTest(config=config):
+        fake = _FakeController()
+        arm = _make_arm(fake)
+        axes = (
+          PreciseFlexAxis.BASE,
+          PreciseFlexAxis.SHOULDER,
+          PreciseFlexAxis.ELBOW,
+          PreciseFlexAxis.WRIST,
+        )
+        await arm.arm._unchecked_fw_set_station_cartesian(1, dict(zip(axes, joints)))
+        sent_x, sent_y, sent_z, sent_heading = map(float, fake.sent[0].split()[2:6])
+        for sent, recorded in zip(
+          (sent_x, sent_y, sent_z, sent_heading), map(float, station.split())
+        ):
+          self.assertAlmostEqual(sent, recorded, delta=0.02)
+        self.assertEqual(fake.sent[1], f"locConfig 1 {config}")
+
+  async def test_a_rail_arm_is_refused_before_the_station_is_written(self):
+    fake = _FakeController()
+    arm = _make_arm(fake, has_rail=True)
+    with self.assertRaises(NotImplementedError):
+      await arm.arm._unchecked_fw_set_station_cartesian(1, dict(_J))
+    self.assertEqual(fake.sent, [])
 
 
 class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
