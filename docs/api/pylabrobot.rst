@@ -34,6 +34,7 @@ Manufacturers
     pylabrobot.kbioscience
     pylabrobot.kbiosystems
     pylabrobot.li_cor
+    pylabrobot.liconic
     pylabrobot.mettler_toledo
     pylabrobot.micronic
     pylabrobot.molecular_devices

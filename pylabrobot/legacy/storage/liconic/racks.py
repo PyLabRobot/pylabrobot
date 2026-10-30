@@ -1,5 +1,7 @@
-from pylabrobot.resources import Coordinate
-from pylabrobot.resources.carrier import PlateCarrier, PlateHolder
+from pylabrobot.liconic.racks import _create_legacy_rack
+from pylabrobot.resources import Coordinate as Coordinate
+from pylabrobot.resources.carrier import PlateCarrier as PlateCarrier
+from pylabrobot.resources.carrier import PlateHolder as PlateHolder
 
 
 def _liconic_rack(
@@ -9,31 +11,7 @@ def _liconic_rack(
   model: str,
   total_height: int = 505,
 ):
-  start = 17.2  # rough height of first plate position
-  return PlateCarrier(
-    name=name,
-    size_x=109,  # based off cytomat rack dimensions roughly the same
-    size_y=142,
-    size_z=total_height,
-    sites={
-      i: PlateHolder(
-        size_x=85.48,
-        size_y=127.27,
-        # estimates
-        size_z=max(site_height, total_height - site_height) if i == num_sites - 1 else site_height,
-        name=f"{name}-{i}",
-        pedestal_size_z=0,
-      ).at(
-        Coordinate(
-          x=11.76,  # estimate
-          y=0,
-          z=start + site_height * i,
-        )
-      )
-      for i in range(num_sites)
-    },
-    model=model,
-  )
+  return _create_legacy_rack(name, site_height, num_sites, model, total_height)
 
 
 def liconic_rack_5mm_42(name: str):
