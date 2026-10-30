@@ -13,7 +13,10 @@ PreciseFlex
   :nosignatures:
   :recursive:
 
+    PreciseFlexDevice
+    PreciseFlex400
     PreciseFlexDriver
+    PreciseFlexSimulationDriver
     PreciseFlexArm
     PreciseFlexGripper
     PreciseFlexRail
@@ -21,7 +24,7 @@ PreciseFlex
     PreciseFlexCartesianPose
     WorkEnvelope
     MotionProfile
-    Axis
+    PreciseFlexAxis
     Wrist
     ElbowOrientation
     PreciseFlexError

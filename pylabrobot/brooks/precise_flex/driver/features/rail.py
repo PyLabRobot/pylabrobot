@@ -24,7 +24,7 @@ class PreciseFlexRailConfiguration:
 
 
 class PreciseFlexRail:
-  """The linear rail a PreciseFlex arm rides on (`Axis.RAIL`).
+  """The linear rail a PreciseFlex arm rides on (`PreciseFlexAxis.RAIL`).
 
   Reached as `driver.rail`. Sends through the driver's `send_command`. A rail move goes through a
   stored station: its rail position is set, then the rail moves to it.

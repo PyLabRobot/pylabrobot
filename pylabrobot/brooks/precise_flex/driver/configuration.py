@@ -12,7 +12,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union
 
-from pylabrobot.brooks.precise_flex.kinematics import Axis
+from pylabrobot.brooks.precise_flex.kinematics import PreciseFlexAxis
 
 from .. import kinematics
 from ..kinematics import WorkEnvelope
@@ -73,7 +73,7 @@ class PreciseFlexConfiguration:
   # -- deprecated: moved to the arm, gripper and rail configurations --
 
   @property
-  def soft_limits(self) -> Dict[Axis, tuple]:
+  def soft_limits(self) -> Dict[PreciseFlexAxis, tuple]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
     warnings.warn(
       "`soft_limits` is deprecated, use `arm.soft_limits`, and `soft_limit_range` on "
@@ -81,13 +81,13 @@ class PreciseFlexConfiguration:
       DeprecationWarning,
       stacklevel=2,
     )
-    merged = {**self.arm.soft_limits, Axis.GRIPPER: self.gripper.soft_limit_range}
+    merged = {**self.arm.soft_limits, PreciseFlexAxis.GRIPPER: self.gripper.soft_limit_range}
     if self.rail is not None:
-      merged[Axis.RAIL] = self.rail.soft_limit_range
+      merged[PreciseFlexAxis.RAIL] = self.rail.soft_limit_range
     return merged
 
   @property
-  def hard_limits(self) -> Dict[Axis, tuple]:
+  def hard_limits(self) -> Dict[PreciseFlexAxis, tuple]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
     warnings.warn(
       "`hard_limits` is deprecated, use `arm.hard_limits`, and `hard_limit_range` on "
@@ -95,13 +95,13 @@ class PreciseFlexConfiguration:
       DeprecationWarning,
       stacklevel=2,
     )
-    merged = {**self.arm.hard_limits, Axis.GRIPPER: self.gripper.hard_limit_range}
+    merged = {**self.arm.hard_limits, PreciseFlexAxis.GRIPPER: self.gripper.hard_limit_range}
     if self.rail is not None and self.rail.hard_limit_range is not None:
-      merged[Axis.RAIL] = self.rail.hard_limit_range
+      merged[PreciseFlexAxis.RAIL] = self.rail.hard_limit_range
     return merged
 
   @property
-  def max_joint_speed(self) -> Dict[Axis, float]:
+  def max_joint_speed(self) -> Dict[PreciseFlexAxis, float]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
     warnings.warn(
       "`max_joint_speed` is deprecated, use `arm.max_joint_speed`, and `max_speed` on "
@@ -109,13 +109,13 @@ class PreciseFlexConfiguration:
       DeprecationWarning,
       stacklevel=2,
     )
-    merged = {**self.arm.max_joint_speed, Axis.GRIPPER: self.gripper.max_speed}
+    merged = {**self.arm.max_joint_speed, PreciseFlexAxis.GRIPPER: self.gripper.max_speed}
     if self.rail is not None and self.rail.max_speed is not None:
-      merged[Axis.RAIL] = self.rail.max_speed
+      merged[PreciseFlexAxis.RAIL] = self.rail.max_speed
     return merged
 
   @property
-  def max_joint_acceleration(self) -> Dict[Axis, float]:
+  def max_joint_acceleration(self) -> Dict[PreciseFlexAxis, float]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
     warnings.warn(
       "`max_joint_acceleration` is deprecated, use `arm.max_joint_acceleration`, "
@@ -123,13 +123,16 @@ class PreciseFlexConfiguration:
       DeprecationWarning,
       stacklevel=2,
     )
-    merged = {**self.arm.max_joint_acceleration, Axis.GRIPPER: self.gripper.max_acceleration}
+    merged = {
+      **self.arm.max_joint_acceleration,
+      PreciseFlexAxis.GRIPPER: self.gripper.max_acceleration,
+    }
     if self.rail is not None and self.rail.max_acceleration is not None:
-      merged[Axis.RAIL] = self.rail.max_acceleration
+      merged[PreciseFlexAxis.RAIL] = self.rail.max_acceleration
     return merged
 
   @property
-  def max_joint_deceleration(self) -> Dict[Axis, float]:
+  def max_joint_deceleration(self) -> Dict[PreciseFlexAxis, float]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
     warnings.warn(
       "`max_joint_deceleration` is deprecated, use `arm.max_joint_deceleration`, "
@@ -137,9 +140,12 @@ class PreciseFlexConfiguration:
       DeprecationWarning,
       stacklevel=2,
     )
-    merged = {**self.arm.max_joint_deceleration, Axis.GRIPPER: self.gripper.max_deceleration}
+    merged = {
+      **self.arm.max_joint_deceleration,
+      PreciseFlexAxis.GRIPPER: self.gripper.max_deceleration,
+    }
     if self.rail is not None and self.rail.max_deceleration is not None:
-      merged[Axis.RAIL] = self.rail.max_deceleration
+      merged[PreciseFlexAxis.RAIL] = self.rail.max_deceleration
     return merged
 
   @property
