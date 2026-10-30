@@ -225,7 +225,8 @@ _WELL_SCAN_MODES = {"orbital": 3, "spiral": 4}
 @dataclass(frozen=True)
 class WellScan:
   """Averaging over an area of each well instead of reading its centre: the reader reads along an
-  orbit, or a spiral, of ``diameter`` mm around the centre."""
+  orbit, or a spiral, of ``diameter`` mm around the centre.  The reader refuses a diameter wider
+  than the well (quit code 65; 7 mm on a 96-well plate with 6.96 mm wells)."""
 
   mode: WellScanMode
   diameter: int
@@ -1345,7 +1346,8 @@ class VANTAstarDriver:
 
     Args:
       mode: "orbital", "double_orbital" or "linear".
-      speed: rpm, a multiple of 100; the reader refuses speeds above its maximum for the mode.
+      speed: rpm, a multiple of 100; the tested reader reports 700 rpm as its maximum for every
+        mode (not tested above).
       duration: seconds.
 
     Raises:
@@ -1486,7 +1488,7 @@ class VANTAstarDriver:
     """Connect, initialize the reader (about 10 s), and read its configuration."""
     logger.warning(
       "the VANTAstar driver has been tested on one reader (firmware 1.12) only; its luminescence "
-      "read, spectra, kinetic reads and well scanning not yet. If you verify them on your reader, "
+      "read not yet (that reader has no luminescence module). If you verify it on your reader, "
       "please report the result or open a pull request to update this warning."
     )
     await self._usb_setup()

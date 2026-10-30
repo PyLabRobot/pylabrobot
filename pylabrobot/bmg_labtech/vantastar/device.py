@@ -252,9 +252,10 @@ class VANTAstarDevice(Resource):
 
   @staticmethod
   def _check_settling_time(settling_time: float) -> None:
-    """Raise unless the settling time fits the reader's byte of 20 ms steps."""
-    if not 0 <= settling_time <= 5.1:
-      raise ValueError(f"settling_time must be 0-5.1 s, got {settling_time}")
+    """Raise unless the settling time is one the reader takes: 0.02-1.0 s (it refuses 0 and longer
+    times, quit code 43)."""
+    if not 0.02 <= settling_time <= 1.0:
+      raise ValueError(f"settling_time must be 0.02-1.0 s, got {settling_time}")
 
   @staticmethod
   def _check_optics(
@@ -300,9 +301,9 @@ class VANTAstarDevice(Resource):
 
   @staticmethod
   def _check_flashes(flashes: int) -> None:
-    """Raise unless ``flashes`` is 1-200."""
-    if not 1 <= flashes <= 200:
-      raise ValueError(f"flashes must be 1-200, got {flashes}")
+    """Raise unless ``flashes`` is 1-500, the reader's maximum (it refuses more, quit code 60)."""
+    if not 1 <= flashes <= 500:
+      raise ValueError(f"flashes must be 1-500, got {flashes}")
 
   @staticmethod
   def _check_absorbance_wavelengths(wavelengths: Sequence[int]) -> None:
@@ -318,9 +319,10 @@ class VANTAstarDevice(Resource):
 
   @staticmethod
   def _check_cycles(cycles: int, cycle_time: int) -> None:
-    """Raise unless a kinetic read has 2-65535 cycles and a cycle time of 1-65535 whole s."""
-    if not 2 <= cycles <= 0xFFFF:
-      raise ValueError(f"cycles must be 2-65535, got {cycles}")
+    """Raise unless a kinetic read has 2-1000 cycles (the reader refuses more, quit code 60) and a
+    cycle time of 1-65535 whole s."""
+    if not 2 <= cycles <= 1000:
+      raise ValueError(f"cycles must be 2-1000, got {cycles}")
     if not 1 <= cycle_time <= 0xFFFF:
       raise ValueError(f"cycle_time must be 1-65535 s, got {cycle_time}")
 
@@ -377,14 +379,16 @@ class VANTAstarDevice(Resource):
 
     The defaults are Voyager's "precise" preset.  The optical density is computed as Voyager
     computes it, against the reader's 100% and reference values; it is not pathlength-corrected.
-    Voyager reports optical densities above 3.5 as 3.5; these are the computed values.
+    Voyager reports optical densities above 3.5 as 3.5; these are the computed values, ``inf`` for a
+    well that lets no measurable light through.  Averaging over an orbit or spiral reads higher
+    optical densities than the centre, near the well's edge (Voyager's too).
 
     Args:
       wavelengths: 1 to 8 wavelengths in nm (220-1000).
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-200).
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      flashes: flashes per well (1-500).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take.
 
@@ -431,13 +435,13 @@ class VANTAstarDevice(Resource):
 
     Args:
       wavelengths: 1 to 8 wavelengths in nm (220-1000).
-      cycles: reads of the plate (2-65535).
-      cycle_time: whole seconds from one cycle's start to the next (1-65535); a cycle that takes
-        longer delays the next.
+      cycles: reads of the plate (2-1000).
+      cycle_time: whole seconds from one cycle's start to the next (1-65535); the reader refuses a
+        cycle time shorter than one cycle takes (``CommandRefusedError``, quit code 60).
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-200).
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      flashes: flashes per well (1-500).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take; None allows the cycles plus 300 s.
 
@@ -500,8 +504,8 @@ class VANTAstarDevice(Resource):
       step_size: nm between wavelengths, a whole nm dividing the range.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-200).
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      flashes: flashes per well (1-500).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take.
 
@@ -671,13 +675,14 @@ class VANTAstarDevice(Resource):
       focal_height: mm, in 0.1 mm steps (``adjust_gain_and_focus`` finds one).
       gain: the detector gain; required unless ``enhanced_dynamic_range``.
       dichroic_split_wavelength: nm; None sets it as Voyager does automatically, midway between the
-        excitation's upper and the emission's lower edge.
+        excitation's upper and the emission's lower edge.  The tested reader refuses a dichroic
+        above 760 nm (``CommandRefusedError``, quit code 67).
       monochromator: band edges, dichroic and slits to read with instead of the computed ones.
       enhanced_dynamic_range: read with enhanced dynamic range; no gain is sent.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-200).
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      flashes: flashes per well (1-500).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take.
 
@@ -744,9 +749,9 @@ class VANTAstarDevice(Resource):
     Args:
       excitation_wavelength: nm.
       emission_wavelength: nm.
-      cycles: reads of the plate (2-65535).
-      cycle_time: whole seconds from one cycle's start to the next (1-65535); a cycle that takes
-        longer delays the next.
+      cycles: reads of the plate (2-1000).
+      cycle_time: whole seconds from one cycle's start to the next (1-65535); the reader refuses a
+        cycle time shorter than one cycle takes (``CommandRefusedError``, quit code 60).
       excitation_bandwidth: nm, 8-100.
       emission_bandwidth: nm, 8-100.
       focal_height: mm, in 0.1 mm steps.
@@ -756,8 +761,8 @@ class VANTAstarDevice(Resource):
       enhanced_dynamic_range: read with enhanced dynamic range; no gain is sent.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-200).
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      flashes: flashes per well (1-500).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take; None allows the cycles plus 300 s.
 
@@ -849,8 +854,8 @@ class VANTAstarDevice(Resource):
       dichroic_split_wavelength: nm for every point; None to set it per point.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well and wavelength (1-200).
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      flashes: flashes per well and wavelength (1-500).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       well_scan: average over an orbit or spiral in each well; None reads the centre.
       timeout: seconds the run may take.
 
@@ -930,7 +935,9 @@ class VANTAstarDevice(Resource):
     settling_time: float = 0.02,
     timeout: float = 600.0,
   ) -> LuminescenceResult:
-    """Measure the luminescence of the plate from the top (endpoint).  NOT TESTED on a reader.
+    """Measure the luminescence of the plate from the top (endpoint).  NOT TESTED on a reader with
+    luminescence; a reader without the luminescence module refuses it (``CommandRefusedError``, quit
+    code 205).
 
     The defaults are those of Voyager's luminescence protocol: all the emitted light, automatic
     gain, 0.8 s per well, 0.5 mm aperture distance, 20 ms settling.  Neither the command nor the
@@ -944,7 +951,7 @@ class VANTAstarDevice(Resource):
         Voyager's luminescence protocol does.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      settling_time: seconds to settle before reading each well (0-5.1, 20 ms steps).
+      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
       timeout: seconds the run may take.
 
     Returns:
@@ -1023,7 +1030,7 @@ class VANTAstarDevice(Resource):
       monochromator: band edges, dichroic and slits instead of the computed ones.
       plate: the plate; None uses the plate on the plate holder.
       well_scan: adjust over the orbit or spiral a well-scanning read uses; None at the centre.
-      flashes: flashes per well, sent with ``well_scan`` (1-200).
+      flashes: flashes per well, sent with ``well_scan`` (1-500).
       timeout: seconds the adjustment may take.
 
     Returns:
@@ -1068,14 +1075,19 @@ class VANTAstarDevice(Resource):
 
     Args:
       mode: "orbital", "double_orbital" or "linear".
-      speed: rpm, a multiple of 100.
-      duration: seconds.
+      speed: rpm, a multiple of 100; the tested reader reports 700 rpm as its maximum for every
+        mode.
+      duration: seconds; the tested reader reports 1-3600 s as its range.
     """
     await self.driver.shake(mode, speed, duration)
     self.plate_holder._drawer_open = False
 
   async def set_temperature(self, temperature: float) -> None:
-    """Heat the incubator to ``temperature`` degrees C."""
+    """Heat the incubator to ``temperature`` degrees C.
+
+    The reader refuses a temperature outside its range (``CommandRefusedError``, quit code 110); the
+    tested reader's range is 25-45 C.
+    """
     await self.driver.set_temperature(temperature)
 
   async def stop_temperature_control(self) -> None:

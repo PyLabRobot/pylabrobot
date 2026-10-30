@@ -294,6 +294,19 @@ class ArgumentTests(unittest.IsolatedAsyncioTestCase):
       await device.measure_absorbance_kinetic([450], cycles=1, cycle_time=10)
     self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
+  async def test_limits_the_reader_refuses(self):
+    """Settling times outside 0.02-1.0 s, more than 500 flashes and more than 1000 kinetic cycles,
+    which the reader refuses (quit codes 43 and 60), are refused before anything is sent."""
+    device = make_device([])
+    for settling_time in (0, 1.04):
+      with self.assertRaises(ValueError):
+        await device.measure_absorbance([450], settling_time=settling_time)
+    with self.assertRaises(ValueError):
+      await device.measure_absorbance([450], flashes=501)
+    with self.assertRaises(ValueError):
+      await device.measure_absorbance_kinetic([450], cycles=1001, cycle_time=10)
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
+
   async def test_adjust_something(self):
     """A gain and focus adjustment that adjusts neither is refused before anything is sent."""
     device = make_device([])
