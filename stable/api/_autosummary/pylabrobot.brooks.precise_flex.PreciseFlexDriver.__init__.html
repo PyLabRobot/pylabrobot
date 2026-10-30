@@ -611,9 +611,8 @@ it matters: at setup, and before a commanded move (which then retries). If it is
 of range after that, <code class="docutils literal notranslate"><span class="pre">OutOfRangeOfMotionError</span></code> propagates (no loop). Set False to forbid
 this autonomous motion - an out-of-range axis then raises instead, carrying recovery
 instructions. Every recovery is logged.</p></li>
-<li><p><strong>closed_gripper_position</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – firmware-unit value (passed to <code class="docutils literal notranslate"><span class="pre">GripClosePos</span></code> /
-<code class="docutils literal notranslate"><span class="pre">GripOpenPos</span></code>) at which the jaws are at the narrow end of
-<a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlexGripper.jaw_width_range.html#pylabrobot.brooks.precise_flex.PreciseFlexGripper.jaw_width_range" title="pylabrobot.brooks.precise_flex.PreciseFlexGripper.jaw_width_range"><code class="xref py py-attr docutils literal notranslate"><span class="pre">PreciseFlexGripper.jaw_width_range</span></code></a>.
+<li><p><strong>closed_gripper_position</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – the gripper axis’s position, in the controller’s units, at which
+the jaws are at the narrow end of <a class="reference internal" href="pylabrobot.brooks.precise_flex.PreciseFlexGripper.jaw_width_range.html#pylabrobot.brooks.precise_flex.PreciseFlexGripper.jaw_width_range" title="pylabrobot.brooks.precise_flex.PreciseFlexGripper.jaw_width_range"><code class="xref py py-attr docutils literal notranslate"><span class="pre">PreciseFlexGripper.jaw_width_range</span></code></a>.
 Depends on the mounted gripper. The conversion mm → firmware units is
 linear with slope 1: <code class="docutils literal notranslate"><span class="pre">units</span> <span class="pre">=</span> <span class="pre">closed_gripper_position</span> <span class="pre">+</span> <span class="pre">(width_mm</span> <span class="pre">-</span>
 <span class="pre">jaw_width_range[0])</span></code>.</p></li>
