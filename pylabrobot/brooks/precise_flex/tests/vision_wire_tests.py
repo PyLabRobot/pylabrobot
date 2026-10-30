@@ -580,7 +580,7 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
   async def test_setup_without_the_vision_server(self):
     without_module = _REPLIES["version"].split(", IntelliGuide")[0]
     for name, kwargs, vision_built in (
-      ("skip_vision", {"skip_vision": True}, False),
+      ("skip_vision_setup", {"skip_vision_setup": True}, False),
       ("no IntelliGuide module", {}, False),
       ("vision server unreachable", {}, True),
       ("no vision_host", {"vision_host": None}, True),

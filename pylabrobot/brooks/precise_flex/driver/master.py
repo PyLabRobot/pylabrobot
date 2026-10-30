@@ -442,13 +442,13 @@ class PreciseFlexDriver:
 
   @evented_operation(
     "precise_flex.setup",
-    lambda self, skip_home=False, skip_vision=False: {
+    lambda self, skip_home=False, skip_vision_setup=False: {
       "device": self._controller_reference(),
       "skip_home": skip_home,
-      "skip_vision": skip_vision,
+      "skip_vision_setup": skip_vision_setup,
     },
   )
-  async def setup(self, skip_home: bool = False, skip_vision: bool = False):
+  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
     ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
@@ -458,7 +458,7 @@ class PreciseFlexDriver:
 
     Args:
       skip_home: If True, skip the homing step during setup.
-      skip_vision: If True, leave ``self.vision`` unset even when a vision module is detected.
+      skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
         Mirrors STAR's ``skip_*`` setup flags.
     """
     await self.connect()
@@ -467,7 +467,7 @@ class PreciseFlexDriver:
     if not skip_home:
       await self.home()
     await self.arm._handle_out_of_range_axes()
-    if not skip_vision and configuration.has_vision_server:
+    if not skip_vision_setup and configuration.has_vision_server:
       await self._setup_vision(self._vision_host)
 
   async def connect(self) -> None:

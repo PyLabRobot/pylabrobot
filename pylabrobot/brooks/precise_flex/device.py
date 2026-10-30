@@ -91,14 +91,14 @@ class PreciseFlexDevice(Resource):
     """The vision feature, if setup found one."""
     return self.driver.vision
 
-  async def setup(self, skip_home: bool = False, skip_vision: bool = False):
+  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
     """Bring the device up.
 
     Args:
       skip_home: as `PreciseFlexDriver.setup` takes it.
-      skip_vision: as `PreciseFlexDriver.setup` takes it.
+      skip_vision_setup: as `PreciseFlexDriver.setup` takes it.
     """
-    await self.driver.setup(skip_home=skip_home, skip_vision=skip_vision)
+    await self.driver.setup(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
 
   async def stop(self):
     """Put the device down."""
