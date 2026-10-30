@@ -8,6 +8,7 @@ from pylabrobot.opentrons import Flex, OpentronsAPI
 from pylabrobot.opentrons.flex.flex_wire import OFFLINE_API_VERSION
 from pylabrobot.opentrons.types import (
   CommandInfo,
+  DeckFixture,
   InstrumentInfo,
   LabwareIdentity,
   RobotInfo,
@@ -38,6 +39,7 @@ def make_api(
   """Supply fixed API replies; individual tests set their own failures and readings."""
   api = AsyncMock(spec=OpentronsAPI)
   api.get_health.return_value = RobotInfo("test-flex", "OT-3 Standard", api_version)
+  api.get_deck_configuration.return_value = (DeckFixture("cutoutA3", "trashBinAdapter"),)
   api.create_run.return_value = RunInfo("run")
   api.get_run.return_value = RunInfo("run", "stopped")
   instruments = [

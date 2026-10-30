@@ -329,9 +329,9 @@ class Pico(HasLifespan):
       raise RuntimeError("Backend not set up. Call setup() first.")
     return self._channel
 
-  def _lock_metadata(self) -> List[Tuple[str, bytes]]:
+  def _lock_metadata(self) -> Tuple[Tuple[str, bytes], ...]:
     assert self._lock_id is not None
-    return [(_LOCK_META_KEY, metadata_lock_identifier(self._lock_id))]
+    return ((_LOCK_META_KEY, metadata_lock_identifier(self._lock_id)),)
 
   async def _relock(self) -> None:
     try:
@@ -422,6 +422,9 @@ class Pico(HasLifespan):
   def _close_channel(self) -> None:
     channel = self._channel
     self._channel = None
+    self._locked = False
+    self._lock_id = None
+    self._door_open = False
     if channel is not None:
       try:
         channel.close()
@@ -447,9 +450,12 @@ class Pico(HasLifespan):
     except (grpc.RpcError, RuntimeError):
       pass
 
-    await self._lock()
-    stack.push_shielded_async_callback(self._unlock)
-    stack.push_shielded_async_callback(self._force_exit_objective_maintenance)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self._lock()
+      stack.push_shielded_async_callback(self._unlock)
+      stack.push_shielded_async_callback(self._force_exit_objective_maintenance)
+    await anyio.lowlevel.checkpoint()
     logger.info("PicoDriver: connected to %s:%d", self._host, self._port)
 
     installed_obj = await self._request_installed_objectives()

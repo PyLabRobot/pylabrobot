@@ -25,6 +25,40 @@ are immutable values; planning uses configuration and coordinate math without co
 to the instrument. Execution passes the compiled stage, galvo, channel, camera, and
 focus operations back through the owning `Celigo`.
 
+## Scan execution and custom acquisition
+
+Use `await celigo.execute(plan)` to run a complete plan. An optional async `on_frame`
+callback receives each `FrameResult` after capture and illumination cleanup, before
+execution continues. This supports saving images and reporting progress during a scan:
+
+```python
+import logging
+
+from pylabrobot.revvity.celigo import FrameResult
+
+logger = logging.getLogger(__name__)
+
+
+async def report_frame(result: FrameResult) -> None:
+  logger.info("Completed frame %s of %s", result.planned.index + 1, plan.frame_count)
+
+
+result = await celigo.execute(plan, on_frame=report_frame, initial_brightfield_z_mm=2.5)
+```
+
+`initial_brightfield_z_mm` seeds each block's focus with channel offsets applied;
+autofocus, when requested by the plan, updates focus within that block. Callback
+exceptions or cancellation stop the remaining plan and propagate to the caller.
+`execute` still retains every frame in its returned `ScanResult`, including when
+a callback is supplied.
+
+For custom acquisition loops and previews, use `move_to_scan_block(block)` followed
+by `acquire_scan_position(...)`. Pass the returned settled XY position to
+`settled_stage_position_mm`. The caller owns block/frame sequencing and must use a
+plan matching the current configuration. `acquire_scan_position` does not move or
+verify XY; it handles focus, channel selection, galvos, optional auto-exposure,
+capture, and illumination cleanup. Serialize operations on an instrument.
+
 ## Package
 
 | Module | Responsibility |
@@ -38,6 +72,7 @@ focus operations back through the owning `Celigo`.
 | `coordinates.py` | Pixel, sample-mm, and stage-mm coordinate frames |
 | `navigation.py` | Plate/well navigation and galvo FOV planning |
 | `scan.py` | Scan specifications, physical planning, execution results, and offline estimates |
+| [`grpc/`](grpc/README.md) | Optional device service, versioned protobuf contract, Python client, simulator, and durable jobs/images |
 
 Tutorials, safety guidance, and hardware workflows live in the
 [Celigo user guide](../../../docs/user_guide/revvity/celigo/index.md).

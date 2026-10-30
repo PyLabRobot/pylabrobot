@@ -6,12 +6,14 @@ from typing import Any, Optional
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
+from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
 from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.features.x_arm import XArm
+from pylabrobot.hamilton.star.driver.lld_mode import LLDMode
 from pylabrobot.hamilton.star.driver.master import STARDriver
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
@@ -73,8 +75,6 @@ SIDE_PANEL_ORIGIN_YZ = (52.8, 180.5)
 # file was drawn rather than how the devices differ. This is the median, and the STARlet's, which
 # is the frame the rest of this is measured against.
 SIDE_PANEL_X = 5.0
-# What it used to be, before there was a part to measure: an unsourced 245.0 that only widened the
-# device. Kept as a name because the tests measure the housing against it.
 EXTENSION_HOUSING_SIZE_X = EXTENSION_HOUSING_SIZE[0]
 MANUAL_SIZE_Y = 785.8
 SIZE_Z = 903.0
@@ -102,11 +102,7 @@ AUTOLOAD_TRAY_PROUD_Y = 221.2
 #
 # The duct and the deck's own front edge, 181.3 mm behind the front face, read the same in the CAD
 # master and in the manufacturer's chassis models, and the same on all three frames - so STAR and
-# STARlet share this figure rather than differing as they used to.
-#
-# What this replaces: 116.0 on a STAR and 106.0 on a STARlet, derived as `795 - 119 - 560` and
-# `790 - 124 - 560` from depths that have since been measured. Those drove every carrier 21.2 mm
-# and 11.2 mm respectively into the duct.
+# STARlet share this figure.
 DECK_ORIGIN_Y = 97.8
 
 # How far right the deck sits from where a 2021 STAR was measured. Two parts the manufacturer draws
@@ -125,8 +121,7 @@ DECK_ORIGIN_X_CORRECTION = 6.215
 #      origin is 100 mm below the surface. The surface itself is measured on the manufacturer's
 #      models: the deck plate is 2.5 mm thick, its underside on the platform's top plate, and its
 #      TOP - which is what a carrier rests on - is 180.5 mm above the device's base. The same
-#      on all three frames. What this replaces is an unsourced 78.5, which put the work surface at
-#      178.5 and so seated every carrier 2.0 mm inside the plate it stands on.
+#      on all three frames.
 STAR_DECK_LOCATION = Coordinate(110.0 + DECK_ORIGIN_X_CORRECTION, DECK_ORIGIN_Y, 80.5)
 # The STARlet's x is not measured: its chassis leaves the same 119 mm beyond its deck as the STAR's
 # does, so it takes the same value until someone measures one.
@@ -143,6 +138,9 @@ class STARDevice(Resource, HasLifespan):
   positions, millimetres - and stays reachable whatever is built on top of it. The device adds
   what the driver cannot know: where things are, and so which of them a command is about.
   """
+
+  # How a channel or a head senses the liquid: `star.LLDMode.CAPACITIVE`.
+  LLDMode = LLDMode
 
   def __init__(
     self,
@@ -174,10 +172,10 @@ class STARDevice(Resource, HasLifespan):
       size_y: how deep it is, in mm. Defaults to the deck's own depth.
       size_z: how tall it is, in mm. Defaults to the deck's own height.
       extension_housing: whether the left extension housing is fitted. It becomes a resource of its
-        own, `left_extension_housing`, standing to the LEFT of the chassis at a negative x. It does
-        NOT change the device's size: see `EXTENSION_HOUSING_SIZE`.
+        own, `<name>_left_extension_housing`, standing to the LEFT of the chassis at a negative
+        x. It does NOT change the device's size: see `EXTENSION_HOUSING_SIZE`.
       left_side_panel_installed: whether the chassis's left side panel is on. It becomes a
-        resource of its own, `left_side_panel`, at `SIDE_PANEL_X`. Declared rather than
+        resource of its own, `<name>_left_side_panel`, at `SIDE_PANEL_X`. Declared rather than
         discovered: the panel bolts off in seconds and the device does not report it. Passed on
         to the driver, which stops an arm short of a fitted one.
       deck_location: where the deck sits inside it, BEFORE any extension housing. Defaults to the
@@ -269,6 +267,16 @@ class STARDevice(Resource, HasLifespan):
   # Read through: the optional ones do not exist until discovery says what is fitted.
 
   @property
+  def left_side_panel(self) -> Optional[Resource]:
+    """The chassis's left side panel, on a device it is declared installed on."""
+    return next((c for c in self.children if c.category == "left_side_panel"), None)
+
+  @property
+  def left_extension_housing(self) -> Optional[Resource]:
+    """The left extension housing, on a device it is fitted to."""
+    return next((c for c in self.children if c.category == "left_extension_housing"), None)
+
+  @property
   def left_x_arm(self) -> Optional[XArm]:
     """The left X-arm, on a device that has one."""
     return self.driver.left_x_arm
@@ -315,6 +323,11 @@ class STARDevice(Resource, HasLifespan):
   def iswap(self) -> Optional[iSWAP]:
     """The iSWAP, on a device that has one."""
     return self.driver.iswap
+
+  @property
+  def core_grippers(self) -> Optional[CoreGrippers]:
+    """The CoRe grippers, on a device whose channels can carry them."""
+    return self.driver.core_grippers
 
   @property
   def autoload(self) -> Optional[Autoload]:
@@ -370,7 +383,7 @@ def STAR(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STAR",
+  name: str = "STAR",
   size_x: float = STAR_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -406,12 +419,12 @@ def STAR(
   )
 
 
-def STARLet(
+def STARlet(
   deck: Optional[HamiltonSTARDeck] = None,
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STARlet",
+  name: str = "STARlet",
   size_x: float = STARLET_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,
@@ -443,7 +456,7 @@ def STARLet(
     extension_housing=extension_housing,
     left_side_panel_installed=left_side_panel_installed,
     deck_location=STARLET_DECK_LOCATION,
-    model=STARLet.__name__,
+    model=STARlet.__name__,
   )
 
 
@@ -452,7 +465,7 @@ def STARPlus(
   simulation: bool = False,
   declared_configuration_json: Optional[str] = None,
   driver: Optional[STARDriver] = None,
-  name: str = "Hamilton STARplus",
+  name: str = "STARplus",
   size_x: float = STARPLUS_SIZE_X,
   size_y: float = MANUAL_SIZE_Y,
   size_z: float = SIZE_Z,

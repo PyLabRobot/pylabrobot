@@ -7,6 +7,32 @@ from typing import Iterator, Optional, Sequence
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
 
 
+def validate_liquid_transfer(
+  sources: Sequence[Optional[VolumeTracker]],
+  destinations: Sequence[Optional[VolumeTracker]],
+  volume: float,
+) -> None:
+  """Check available liquid and capacity without changing any tracker."""
+  if len(sources) != len(destinations):
+    raise ValueError("Each source must have a corresponding destination")
+  if not math.isfinite(volume) or volume < 0:
+    raise ValueError("volume must be finite and non-negative")
+  if not does_volume_tracking():
+    return
+  changes = {
+    tracker: 0.0
+    for tracker in (*sources, *destinations)
+    if tracker is not None and not tracker.is_disabled
+  }
+  for source, destination in zip(sources, destinations):
+    if source is not None and source in changes:
+      changes[source] -= volume
+      source.validate_remove_liquid(-changes[source])
+    if destination is not None and destination in changes:
+      changes[destination] += volume
+      destination.validate_add_liquid(changes[destination])
+
+
 @contextmanager
 def track_liquid_transfer(
   sources: Sequence[Optional[VolumeTracker]],
@@ -20,10 +46,7 @@ def track_liquid_transfer(
   Rollback restores bookkeeping, not physical state: a timed-out or cancelled
   hardware command can still require operator reconciliation.
   """
-  if len(sources) != len(destinations):
-    raise ValueError("Each source must have a corresponding destination")
-  if not math.isfinite(volume) or volume < 0:
-    raise ValueError("volume must be finite and non-negative")
+  validate_liquid_transfer(sources, destinations, volume)
   trackers = list(
     dict.fromkeys(
       tracker

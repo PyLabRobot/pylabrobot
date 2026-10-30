@@ -1,0 +1,86 @@
+{
+  "device": {
+    "model": "CLARIOstarPlus",
+    "serial_number": "000-0000",
+    "mainboard_revision": 2,
+    "firmware_version": "1.35",
+    "firmware_build": 1,
+    "firmware_build_date": null,
+    "extended_red_photomultiplier_tube": true,
+    "dual_photomultiplier_tubes": true,
+    "photomultiplier_tube_crossover": false,
+    "excitation_slide_positions": 4,
+    "spectrometer": true,
+    "monochromator_slides": {
+      "EX_SP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "EX_LP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "BSP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2",
+        "4": "Filter 3"
+      },
+      "EM_SP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "EM_LP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "EM_SLIT": {
+        "1": "open",
+        "2": "Slit 0.8",
+        "3": "Slit 1.2",
+        "4": "Slit 2.0",
+        "5": "Slit 3.0",
+        "7": "FP par",
+        "8": "FP per",
+        "6": "LUM lense"
+      },
+      "EX_SLIT": {
+        "1": "open",
+        "2": "Slit 0.6",
+        "3": "Slit 1.0",
+        "4": "Slit 1.6",
+        "5": "Slit 2.3",
+        "8": "FP Stdrd",
+        "7": "FP UV",
+        "9": "ABS",
+        "6": "F-Check"
+      }
+    },
+    "linear_variable_filters": true,
+    "temperature_controller": true,
+    "temperature_controller_channels": 2,
+    "pumps": [
+      null,
+      null,
+      null
+    ],
+    "stacker_connected": false,
+    "barcode_readers": {},
+    "atmospheric_control_unit_connected": false,
+    "fluorescence_channels": 1,
+    "luminescence_channels": 1,
+    "time_resolved_fluorescence_channels": 1,
+    "absorbance_available": true,
+    "alpha_screen_available": false,
+    "fluorescence_polarization_available": false,
+    "fluorescence_polarization_ultraviolet_available": false,
+    "bottom_measurement_available": true,
+    "extended_temperature_range": false,
+    "high_speed_shaking_allowed": false,
+    "well_1536_plates_supported": false
+  }
+}

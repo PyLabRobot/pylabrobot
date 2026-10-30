@@ -284,8 +284,12 @@ class Shaker(ResourceHolder, Machine):
     finally:
       self._shaking_transition_lock.release()
 
-  async def _pre_backend_stop(self, *, force_stop: bool = False) -> None:
-    """Fulfill tracked shaking and plate unlock before closing the backend."""
+  async def _cleanup_shaking_before_backend_stop(self, *, force_stop: bool) -> None:
+    """Fulfill tracked shaking and plate unlock before closing the backend.
+
+    Args:
+      force_stop: Whether to stop shaking even when no tracked shaking requires it.
+    """
     try:
       with anyio.fail_after(_SHAKER_CLEANUP_TIMEOUT):
         await self._shaking_transition_lock.acquire()
@@ -295,6 +299,10 @@ class Shaker(ResourceHolder, Machine):
         self._shaking_transition_lock.release()
     finally:
       self._shaking_scope_token = None
+
+  async def _pre_backend_stop(self) -> None:
+    """Fulfill tracked shaking and plate unlock before closing the backend."""
+    await self._cleanup_shaking_before_backend_stop(force_stop=False)
 
   def serialize(self) -> dict:
     return {

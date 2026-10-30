@@ -15,6 +15,7 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     Container
     Coordinate
     Deck
+    tip_rack.EmbeddedTipRack
     head_tool.HeadTool
     ItemizedResource
     utils.create_equally_spaced_2d
@@ -30,6 +31,7 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     ResourceHolder
     ResourceStack
     Rotation
+    tip_rack.StandingTipRack
     tip.Tip
     TipCarrier
     TipRack

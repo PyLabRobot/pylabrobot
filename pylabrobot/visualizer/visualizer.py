@@ -31,6 +31,7 @@ except ImportError as e:
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources import Resource
+from pylabrobot.resources.head_tool import HeadTool
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,12 @@ def _get_public_methods(cls: type) -> list:
   return sorted(methods)
 
 
+def _drawn_children(resource: Resource) -> List[Resource]:
+  """The children the visualizer draws: all but a held tool, such as the tip in a tip spot, which
+  it shows as its holder's state."""
+  return [child for child in resource.children if not isinstance(child, HeadTool)]
+
+
 def _serialize_resource_tree(resource: Resource) -> dict:
   """Serialize a resource and its children for the visualizer.
 
@@ -102,8 +109,16 @@ def _serialize_resource_tree(resource: Resource) -> dict:
   the browser. On a full deck this avoids repeating the same signature list on every well.
   """
   data = resource.serialize()
-  data["children"] = [_serialize_resource_tree(child) for child in resource.children]
+  data["children"] = [_serialize_resource_tree(child) for child in _drawn_children(resource)]
   return data
+
+
+def _state_of(resource: Resource) -> Dict[str, Any]:
+  """The state of a resource and every child the visualizer draws, by name."""
+  state = {resource.name: resource.serialize_state()}
+  for child in _drawn_children(resource):
+    state.update(_state_of(child))
+  return state
 
 
 def _build_method_registry(resource: Resource, registry: Optional[dict] = None) -> dict:
@@ -117,7 +132,7 @@ def _build_method_registry(resource: Resource, registry: Optional[dict] = None) 
   type_name = type(resource).__name__
   if type_name not in registry:
     registry[type_name] = _get_public_methods(type(resource))  # type: ignore[arg-type]
-  for child in resource.children:
+  for child in _drawn_children(resource):
     _build_method_registry(child, registry)
   return registry
 
@@ -488,7 +503,7 @@ class Visualizer(HasLifespan):
               message = self.received.pop()
               if "id" in message and message["id"] == id_:
                 break
-            await asyncio.sleep(0.1)
+            await anyio.sleep(0.1)
         finally:
           self._pending_response_ids.discard(id_)
 
@@ -831,7 +846,7 @@ class Visualizer(HasLifespan):
       resource_state = resource.serialize_state()
       if resource_state is not None:
         state[resource.name] = resource_state
-      for child in resource.children:
+      for child in _drawn_children(resource):
         save_resource_state(child)
 
     save_resource_state(self._root_resource)
@@ -894,6 +909,8 @@ class Visualizer(HasLifespan):
 
   def _register_state_update_callbacks(self, resource: Resource, generation: int) -> None:
     """Install and record state callbacks for one tree while the callback lock is held."""
+    if isinstance(resource, HeadTool):
+      return
     if id(resource) not in self._state_update_callbacks:
       observed_resource = resource
 
@@ -903,7 +920,7 @@ class Visualizer(HasLifespan):
       resource.register_state_update_callback(state_updated)
       self._state_update_callbacks[id(resource)] = (resource, state_updated)
 
-    for child in resource.children:
+    for child in _drawn_children(resource):
       self._register_state_update_callbacks(child, generation)
 
   def _deregister_resource_callbacks(self) -> None:
@@ -930,6 +947,8 @@ class Visualizer(HasLifespan):
   def _handle_resource_assigned_callback(self, resource: Resource, generation: int) -> None:
     """Called when a resource is assigned to a resource already in the tree starting from the
     root resource. This method will send an event about the new resource"""
+    if isinstance(resource, HeadTool):
+      return
     with self._callback_lock:
       if not self._callbacks_active or generation != self._callback_generation:
         return
@@ -939,7 +958,7 @@ class Visualizer(HasLifespan):
       data = {
         "resource": _serialize_resource_tree(resource),
         "method_registry": _build_method_registry(resource),
-        "state": resource.serialize_all_state(),
+        "state": _state_of(resource),
         "parent_name": (resource.parent.name if resource.parent else None),
       }
       self._emit("resource_assigned", data)
@@ -956,6 +975,8 @@ class Visualizer(HasLifespan):
   def _handle_resource_unassigned_callback(self, resource: Resource, generation: int) -> None:
     """Called when a resource is unassigned from a resource already in the tree starting from the
     root resource. This method will send an event about the removed resource"""
+    if isinstance(resource, HeadTool):
+      return
     with self._callback_lock:
       if not self._callbacks_active or generation != self._callback_generation:
         return

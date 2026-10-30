@@ -569,6 +569,17 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(await celigo.dichroic_filter.move_to_ticks(100), 100)
     self.assertEqual(wait_count, 2)
 
+  async def test_normal_filter_move_rejects_inexact_position(self):
+    celigo = make_celigo(hardware=CeligoHardwareConfig(dichroic_filter_wheel=_filter_config()))
+    wait = AsyncMock(return_value=18)
+    with (
+      patch.object(celigo.motor_controller, "send_command", AsyncMock(return_value="/0`")),
+      patch.object(celigo.dichroic_filter.motor, "wait_until_ready", wait),
+      self.assertRaisesRegex(CeligoError, "stopped at 18, target 20, tolerance 1"),
+    ):
+      await celigo.dichroic_filter.move_to_ticks(20)
+    self.assertEqual(wait.await_count, 3)
+
   async def test_normal_accurate_home_checks_limit_indexes_and_moves_to_minimum(self):
     axis = make_linear_axis_config(
       motion_name="X Axis",
@@ -772,6 +783,35 @@ class TestMotorStartup(unittest.IsolatedAsyncioTestCase):
 
 
 class TestAccurateFilterHome(unittest.IsolatedAsyncioTestCase):
+  async def test_homing_uses_opto_reference_with_inexact_offset_moves(self):
+    celigo = make_celigo(hardware=CeligoHardwareConfig(dichroic_filter_wheel=_filter_config()))
+    wheel = celigo.dichroic_filter
+    wheel._initialized = True
+    positions = iter((24, 2016, 4016))
+    flags = iter((15, 15, 11))
+    commands = []
+
+    async def send(command):
+      commands.append(command)
+      data = ""
+      if command == "/4?8\r":
+        data = str(next(positions))
+      elif command == "/4?4\r":
+        data = str(next(flags))
+      return f"/0`{data}"
+
+    with (
+      patch.object(wheel, "_home_to_encoder_index", AsyncMock(return_value=0)),
+      patch.object(wheel, "_initialize", AsyncMock()),
+      patch.object(celigo.motor_controller, "send_command", send),
+    ):
+      self.assertEqual(await wheel.home(), 4020)
+    self.assertTrue(wheel.has_position_reference)
+    self.assertEqual(
+      [command for command in commands if "A" in command],
+      [f"/4h50L5000V5000A{target}R\r" for target in (20, 2020, 4020)],
+    )
+
   async def test_index_timeout_terminates_and_restores_configured_mode(self):
     celigo = make_celigo(hardware=CeligoHardwareConfig(dichroic_filter_wheel=_filter_config()))
     commands = []
@@ -826,11 +866,37 @@ class TestAccurateFilterHome(unittest.IsolatedAsyncioTestCase):
         request_limit_flags=get_flags,
       ),
       patch.object(celigo.dichroic_filter.motor, "_set_mode", set_mode),
-      patch.object(Axis, "move_to_ticks", new=move_axis),
+      patch.object(Axis, "_move_to_ticks", new=move_axis),
     ):
       self.assertEqual(await celigo.dichroic_filter.home(), 4020)
     self.assertEqual(moves, [20, 2020, 4020])
     self.assertTrue(celigo.dichroic_filter.has_position_reference)
+
+  async def test_homing_requires_opto_even_if_encoder_reaches_target(self):
+    celigo = make_celigo(hardware=CeligoHardwareConfig(dichroic_filter_wheel=_filter_config()))
+    wheel = celigo.dichroic_filter
+    wheel._initialized = True
+    positions = iter((20, 2020, 4020, 6020))
+    commands = []
+
+    async def send(command):
+      commands.append(command)
+      data = ""
+      if command == "/4?8\r":
+        data = str(next(positions))
+      elif command == "/4?4\r":
+        data = "15"
+      return f"/0`{data}"
+
+    with (
+      patch.object(wheel, "_home_to_encoder_index", AsyncMock(return_value=0)),
+      patch.object(wheel, "_initialize", AsyncMock()),
+      patch.object(celigo.motor_controller, "send_command", send),
+      self.assertRaisesRegex(CeligoError, "Opto1 sensor was not active"),
+    ):
+      await wheel.home()
+    self.assertFalse(wheel.has_position_reference)
+    self.assertEqual(commands.count("/4h30R\r"), 4)
 
 
 class TestCameraFrame(unittest.TestCase):

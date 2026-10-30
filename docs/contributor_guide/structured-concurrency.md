@@ -326,13 +326,21 @@ emergency stops also remain their existing non-scope operations.
 
 ## Use asyncio-only services
 
-Two service integrations are explicit asyncio-only dependency boundaries:
+These service integrations are explicit asyncio-only dependency boundaries:
 
 - `Visualizer` uses the asyncio implementation of `websockets` and owns its websocket server,
   static-file listener and handlers, resource callbacks, bounded outbox, and outbox worker inside
   one lifespan.
+- `Viewer3D` uses the same `websockets` implementation and owns its websocket server, static-file
+  listener and its accepted connections' workers, resource callbacks, and scene flushes inside one
+  lifespan.
 - `MicroSpinMockServer` uses asyncio streams and owns its listener, accepted clients, handlers, and
   simulated motions inside its lifespan.
+- The RPC `DeviceServer` and `DeviceClient` use `grpc.aio`. The server's lifespan accepts RPCs and
+  the client's holds one channel. `CeligoSession` owns the Celigo service's hardware lock, job
+  store, accepted commands, job executions, and the driver's lifespan in one task group, so a
+  command or job outlives the RPC that accepted it but not the session. `CeligoServer` enters the
+  session before it accepts RPCs.
 
 Each boundary must reject non-asyncio backends before acquisition, and its tests must be explicitly
 limited to asyncio except for a test that verifies the rejection. Direct asyncio primitives inside

@@ -37,6 +37,12 @@ class RobotHTTP(HTTP):
       return {"name": "offline", "robot_model": "OT-3 Standard", "api_version": "9.1.2"}
     if path == "/pipettes":
       return {"left": {"name": None}, "right": {"name": None}}
+    if path == "/deck_configuration":
+      return {
+        "data": {
+          "cutoutFixtures": [{"cutoutId": "cutoutA3", "cutoutFixtureId": "trashBinAdapter"}]
+        }
+      }
     if path == "/instruments":
       return {
         "data": [

@@ -1,14 +1,13 @@
 """Software-only lifecycle and timing tests for the Inheco ODTC backend."""
 
 import xml.etree.ElementTree as ET
-from typing import Any, Optional
+from typing import Optional
 
 import anyio
 import pytest
 from trio.testing import MockClock
 
 from pylabrobot.concurrency import HasLifespan
-from pylabrobot.inheco.transport import sila as sila_transport
 from pylabrobot.inheco.transport.sila import InhecoSiLAInterface, SiLAError
 from pylabrobot.legacy.storage.inheco.scila.scila_backend_tests import RecordingSiLATransport
 from pylabrobot.legacy.thermocycling.inheco import odtc_backend as odtc_module
@@ -33,9 +32,7 @@ def make_odtc_backend(
 
 
 class TestODTCBackend(AnyioTestBase):
-  """Exercise lifecycle and command behavior on the supported asyncio backend."""
-
-  _anyio_backends = ["asyncio"]
+  """Exercise lifecycle and command behavior on both AnyIO backends."""
 
   async def test_managed_methods_are_inherited(self) -> None:
     """Kills retaining ODTC custom setup or stop beside native ownership."""
@@ -223,23 +220,3 @@ class TestODTCTiming(AnyioTestBase):
       "ReadActualTemperature",
       "ReadActualTemperature",
     ]
-
-
-class TestODTCTrioGuard(AnyioTestBase):
-  """Exercise the real Wave 8 backend guard without opening a socket."""
-
-  _anyio_backends = ["trio"]
-
-  async def test_trio_rejects_before_network_bind(self, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Kills moving Wave 8's asyncio guard after callback-server construction."""
-    monkeypatch.setattr(odtc_module, "InhecoSiLAInterface", InhecoSiLAInterface)
-
-    def unexpected_bind(*args: Any, **kwargs: Any) -> None:
-      raise AssertionError("callback server bind attempted")
-
-    monkeypatch.setattr(sila_transport, "_CallbackHTTPServer", unexpected_bind)
-    backend = ExperimentalODTCBackend(ip="192.0.2.45", client_ip="127.0.0.1")
-
-    with pytest.raises(RuntimeError, match="requires the asyncio backend"):
-      async with backend:
-        pytest.fail("unsupported backend reached the body")

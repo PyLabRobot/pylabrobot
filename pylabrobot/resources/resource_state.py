@@ -8,13 +8,10 @@ LiquidHandler to share.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Collection, Literal, Mapping, Optional, Sequence, Union
+from typing import Collection, Literal, Mapping, Sequence, Union
 
 from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.tip_tracking import does_tip_tracking
@@ -132,20 +129,3 @@ def finalize_volume_ops(
       (intent.container.tracker.commit if ok else intent.container.tracker.rollback)()
     if not intent.tip.tracker.is_disabled:
       (intent.tip.tracker.commit if ok else intent.tip.tracker.rollback)()
-
-
-def place_resource(
-  resource: Resource,
-  destination: Resource,
-  *,
-  location: Optional[Coordinate] = None,
-) -> None:
-  """Reassign ``resource`` under ``destination`` after a successful place."""
-  destination.check_can_drop_resource_here(resource)
-  resource.unassign()
-  if isinstance(destination, ResourceHolder):
-    destination.assign_child_resource(resource, location=location)
-  else:
-    destination.assign_child_resource(
-      resource, location=location if location is not None else Coordinate.zero()
-    )

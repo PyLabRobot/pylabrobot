@@ -1,33 +1,13 @@
 """Serialize complete robot operations, including nested calls from one task."""
 
-import asyncio
 from functools import wraps
-from typing import Any, Callable, Coroutine, Optional, Protocol, TypeVar, cast
+from typing import Any, Callable, Coroutine, Protocol, TypeVar, cast
+
+from pylabrobot.opentrons.run import RobotOperationLock
 
 F = TypeVar("F", bound=Callable[..., Coroutine[Any, Any, Any]])
 
-
-class OperationLock:
-  """A task-owned reentrant lock for multi-command robot operations."""
-
-  def __init__(self) -> None:
-    self._lock = asyncio.Lock()
-    self._owner: Optional[asyncio.Task] = None
-    self._depth = 0
-
-  async def __aenter__(self) -> "OperationLock":
-    task = asyncio.current_task()
-    if task is not self._owner:
-      await self._lock.acquire()
-      self._owner = task
-    self._depth += 1
-    return self
-
-  async def __aexit__(self, exc_type, exc, traceback) -> None:
-    self._depth -= 1
-    if self._depth == 0:
-      self._owner = None
-      self._lock.release()
+OperationLock = RobotOperationLock
 
 
 class OperationOwner(Protocol):

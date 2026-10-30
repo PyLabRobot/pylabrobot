@@ -45,6 +45,7 @@ class FakeSerialIO(HasLifespan):
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
     if kwargs:
       raise TypeError("FakeSerialIO does not accept lifespan options")
+    await super()._enter_lifespan(stack)
     self.events.append("serial.enter")
     stack.push_shielded_async_callback(self._close)
     if self.block_entry is not None:
@@ -108,6 +109,11 @@ def delayed_line(
     return line
 
   return read_delayed_line
+
+
+async def _enter_and_wait(backend: XPeelBackend) -> None:
+  async with backend:
+    pytest.fail("cancelled entry reached the body")
 
 
 class TestLegacyXPeelProtocol(AnyioTestBase):
@@ -183,7 +189,7 @@ class TestLegacyXPeelProtocol(AnyioTestBase):
     assert fake_io.writes == [
       b"*reset\r\n",
       b"*restart\r\n",
-      b"*xpeel:42.5\r\n",
+      b"*xpeel:41\r\n",
       b"*sealcheck\r\n",
       b"*platecheck:y\r\n",
       b"*platecheck:n\r\n",
@@ -355,6 +361,18 @@ class TestLegacyXPeelTransactions(AnyioTestBase):
     assert fake_io.writes == [b"*moveout\r\n"]
 
 
-async def _enter_and_wait(backend: XPeelBackend) -> None:
-  async with backend:
-    pytest.fail("cancelled entry reached the body")
+class TestXPeelBackendGetStatus(AnyioTestBase):
+  async def test_returns_the_three_error_codes(self) -> None:
+    backend, _, _ = make_backend([b"*ready:07,20,00\r\n"])
+
+    assert await backend.get_status() == (7, 20, 0)
+
+
+class TestXPeelBackendPeel(AnyioTestBase):
+  async def test_sends_the_adhere_time_as_a_code(self) -> None:
+    for adhere_time, code in ((2.5, 1), (5.0, 2), (7.5, 3), (10.0, 4)):
+      backend, io, _ = make_backend([b"*ack\r\n", b"*ready:00,00,00\r\n"])
+
+      await backend.peel(begin_location=0, fast=False, adhere_time=adhere_time)
+
+      assert io.writes == [f"*xpeel:4{code}\r\n".encode("ascii")]

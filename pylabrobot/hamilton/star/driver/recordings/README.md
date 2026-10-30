@@ -32,7 +32,7 @@ itself, and the declaration is cross-checked against it: setup refuses if the tw
 features are fitted, how many channels, or what each arm carries. Identity and geometry are not
 compared, so a declaration taken off one device still describes another of the same build.
 
-Five recordings ship with this package. `STAR`, `STARLet` and `STARPlus` hand the 96-head one for
+Five recordings ship with this package. `STAR`, `STARlet` and `STARPlus` hand the 96-head one for
 their frame to a **simulated** device when nothing else is declared; the two 384-head ones are
 declared by name. A physical device is never given any of them:
 

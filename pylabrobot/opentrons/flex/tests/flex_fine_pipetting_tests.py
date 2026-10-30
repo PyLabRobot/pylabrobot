@@ -297,7 +297,7 @@ class TestTouchTipHead96(unittest.IsolatedAsyncioTestCase):
 class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
   """FlexHead1 liquid probing: the found liquid z rides the command result's
   ``z_position`` key, which the robot-server OMITS entirely (not null) when
-  no liquid is found -- liquid_probe raises on absence, try_liquid_probe
+  no liquid is found -- probe_liquid_heights raises on absence, try_probe_liquid_heights
   returns None."""
 
   def setUp(self):
@@ -319,7 +319,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
   async def test_liquid_probe_returns_configured_z_and_sends_probe_command(self):
     flex, api, head, rack, plate = await self._bench(liquid_probe_z=12.5)
     await head.pick_up_tips(rack.get_item("A1"))
-    z = await head.liquid_probe(plate.get_item("B3"))
+    z = await head.probe_liquid_heights(plate.get_item("B3"))
 
     self.assertEqual(z, 12.5)
     probe_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "liquidProbe"]
@@ -337,7 +337,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
     flex, api, head, rack, plate = await self._bench()
     await head.pick_up_tips(rack.get_item("A1"))
     with self.assertRaises(OpentronsError):
-      await head.liquid_probe(plate.get_item("B3"))
+      await head.probe_liquid_heights(plate.get_item("B3"))
 
     # The probe command WAS sent -- absence of z_position in its result is
     # what raised, not a pre-wire guard.
@@ -347,7 +347,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
   async def test_try_liquid_probe_returns_none_when_no_liquid_found(self):
     flex, api, head, rack, plate = await self._bench()
     await head.pick_up_tips(rack.get_item("A1"))
-    z = await head.try_liquid_probe(plate.get_item("B3"))
+    z = await head.try_probe_liquid_heights(plate.get_item("B3"))
 
     self.assertIsNone(z)
     probe_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "tryLiquidProbe"]
@@ -356,7 +356,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
   async def test_try_liquid_probe_returns_configured_z(self):
     flex, api, head, rack, plate = await self._bench(liquid_probe_z=4.75)
     await head.pick_up_tips(rack.get_item("A1"))
-    z = await head.try_liquid_probe(plate.get_item("B3"))
+    z = await head.try_probe_liquid_heights(plate.get_item("B3"))
     self.assertEqual(z, 4.75)
     probe_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "tryLiquidProbe"]
     self.assertEqual(
@@ -368,7 +368,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
     flex, api, head, _rack, plate = await self._bench(liquid_probe_z=12.5)
     n_before = api.submit_command.await_count
     with self.assertRaises(OpentronsError):
-      await head.liquid_probe(plate.get_item("B3"))
+      await head.probe_liquid_heights(plate.get_item("B3"))
 
     self.assertEqual(api.submit_command.await_count, n_before, "rejection must not reach the wire")
 
@@ -392,7 +392,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
       ),
       self.assertRaises(OpentronsError) as ctx,
     ):
-      await head.liquid_probe(plate.get_item("B3"))
+      await head.probe_liquid_heights(plate.get_item("B3"))
 
     self.assertEqual(ctx.exception.title, "LiquidNotFoundError")
     probe_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "liquidProbe"]
@@ -402,7 +402,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
     # tryLiquidProbe genuinely succeeds with the z_position key absent.
     flex, api, head, rack, plate = await self._bench()
     await head.pick_up_tips(rack.get_item("A1"))
-    self.assertIsNone(await head.try_liquid_probe(plate.get_item("B3")))
+    self.assertIsNone(await head.try_probe_liquid_heights(plate.get_item("B3")))
     self.assertEqual(api.submit_command.await_args.args[1], "tryLiquidProbe")
 
   async def test_liquid_probe_other_wire_failure_reraises_untranslated(self):
@@ -432,7 +432,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
       ),
       self.assertRaises(OpentronsCommandError) as ctx,
     ):
-      await head.liquid_probe(plate.get_item("B3"))
+      await head.probe_liquid_heights(plate.get_item("B3"))
     self.assertEqual(ctx.exception.error_type, "overpressure")
 
   async def test_a_probe_refused_for_an_unprimed_plunger_carries_the_priming_remedy(self):
@@ -470,7 +470,7 @@ class TestLiquidProbeHead1(unittest.IsolatedAsyncioTestCase):
       ),
       self.assertRaises(OpentronsError) as caught,
     ):
-      await head.liquid_probe(plate.get_item("B3"))
+      await head.probe_liquid_heights(plate.get_item("B3"))
     self.assertEqual(caught.exception.title, "NotReadyToAspirateError")
     self.assertIn("prepare_to_aspirate()", str(caught.exception))
 
@@ -498,7 +498,7 @@ class TestLiquidProbeHead8(unittest.IsolatedAsyncioTestCase):
   async def test_liquid_probe_anchors_at_column_a_row_well_and_returns_z(self):
     flex, api, head, rack, plate = await self._bench(liquid_probe_z=7.25)
     await head.pick_up_tips(rack, column=0)
-    z = await head.liquid_probe(plate, column=3)
+    z = await head.probe_liquid_heights(plate, column=3)
 
     self.assertEqual(z, 7.25)
     probe_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "liquidProbe"]
@@ -508,7 +508,7 @@ class TestLiquidProbeHead8(unittest.IsolatedAsyncioTestCase):
   async def test_try_liquid_probe_returns_none_when_no_liquid_found(self):
     flex, api, head, rack, plate = await self._bench()
     await head.pick_up_tips(rack, column=0)
-    z = await head.try_liquid_probe(plate, column=3)
+    z = await head.try_probe_liquid_heights(plate, column=3)
 
     self.assertIsNone(z)
     probe_cmds = [c for c in api.submit_command.await_args_list if c.args[1] == "tryLiquidProbe"]
@@ -519,7 +519,7 @@ class TestLiquidProbeHead8(unittest.IsolatedAsyncioTestCase):
     flex, api, head, _rack, plate = await self._bench(liquid_probe_z=7.25)
     n_before = api.submit_command.await_count
     with self.assertRaises(OpentronsError):
-      await head.liquid_probe(plate, column=3)
+      await head.probe_liquid_heights(plate, column=3)
 
     self.assertEqual(api.submit_command.await_count, n_before, "rejection must not reach the wire")
 
@@ -554,8 +554,8 @@ class TestHead8ColumnValidation(unittest.IsolatedAsyncioTestCase):
         lambda c=column: self.head.aspirate(self.plate, column=c, volume=10),
         lambda c=column: self.head.dispense(self.plate, column=c, volume=10),
         lambda c=column: self.head.touch_tip(self.plate, column=c),
-        lambda c=column: self.head.liquid_probe(self.plate, column=c),
-        lambda c=column: self.head.try_liquid_probe(self.plate, column=c),
+        lambda c=column: self.head.probe_liquid_heights(self.plate, column=c),
+        lambda c=column: self.head.try_probe_liquid_heights(self.plate, column=c),
       ]
       for op in ops:
         n_before = self.api.submit_command.await_count
@@ -629,7 +629,7 @@ class TestHead8ColumnValidation(unittest.IsolatedAsyncioTestCase):
     n_before = self.api.submit_command.await_count
     for op in (
       lambda: self.head.aspirate(plate_384, column=48, volume=10),
-      lambda: self.head.liquid_probe(plate_384, column=100),
+      lambda: self.head.probe_liquid_heights(plate_384, column=100),
       lambda: self.head.touch_tip(plate_384, column=-1),
     ):
       with self.assertRaises(ValueError):
@@ -1291,13 +1291,13 @@ class TestTipPresenceCommands(unittest.IsolatedAsyncioTestCase):
     self.flex._run = OpentronsRun(self.flex._api, "run", "9.1.2", command_poll_interval=0)
     self.head = FlexHead8(self.flex, "left", "pipette", 8, "p1000_multi_v3.5", 1000)
 
-  async def test_get_tip_presence_returns_the_reported_status(self):
+  async def test_request_tip_presence_returns_the_reported_status(self):
     self.io.request.side_effect = [
       {"data": {"id": "command"}},
       {"data": {"status": "succeeded", "result": {"status": "present"}}},
     ]
 
-    self.assertEqual(await self.head.get_tip_presence(), "present")
+    self.assertEqual(await self.head.request_tip_presence(), "present")
 
     self.io.request.assert_has_awaits(
       [
@@ -1317,13 +1317,13 @@ class TestTipPresenceCommands(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(self.io.request.await_count, 2)
 
-  async def test_get_tip_presence_reports_absent_without_raising(self):
+  async def test_request_tip_presence_reports_absent_without_raising(self):
     self.io.request.side_effect = [
       {"data": {"id": "command"}},
       {"data": {"status": "succeeded", "result": {"status": "absent"}}},
     ]
 
-    self.assertEqual(await self.head.get_tip_presence(), "absent")
+    self.assertEqual(await self.head.request_tip_presence(), "absent")
     self.io.request.assert_awaited_with("GET", "/runs/run/commands/command")
     self.assertEqual(self.io.request.await_count, 2)
 

@@ -1,12 +1,20 @@
+import json
 import unittest
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, call
 
 from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.api import OpentronsAPI
 from pylabrobot.opentrons.errors import OpentronsError, OpentronsProtocolError
-from pylabrobot.opentrons.types import LabwareIdentity, ModuleInfo, MountedPipette, RunInfo
+from pylabrobot.opentrons.types import (
+  DeckFixture,
+  LabwareIdentity,
+  ModuleInfo,
+  MountedPipette,
+  RunInfo,
+)
 
 
 class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
@@ -34,6 +42,56 @@ class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(FrozenInstanceError):
       setattr(first, "name", "replacement")
     self.io.setup.assert_not_called()
+
+  async def test_deck_configuration_parses_cutout_fixtures(self) -> None:
+    """Read the robot's configured fixtures, including unassigned cutouts."""
+    self.io.request.return_value = {
+      "data": {
+        "cutoutFixtures": [
+          {"cutoutId": "cutoutB3", "cutoutFixtureId": "trashBinAdapter"},
+          {"cutoutId": "cutoutA1", "cutoutFixtureId": None},
+        ]
+      }
+    }
+    self.assertEqual(
+      await self.api.get_deck_configuration(),
+      (
+        DeckFixture("cutoutB3", "trashBinAdapter"),
+        DeckFixture("cutoutA1", None),
+      ),
+    )
+    self.io.request.assert_awaited_once_with("GET", "/deck_configuration")
+
+  async def test_deck_configuration_from_robot(self) -> None:
+    """Parse the complete Flex configuration, including its D3 trash bin."""
+    fixture = Path(__file__).parents[1] / "testing/test_data/opentrons_flex_deck_configuration.json"
+    self.io.request.return_value = json.loads(fixture.read_text(encoding="utf-8"))
+    self.assertEqual(
+      await self.api.get_deck_configuration(),
+      (
+        DeckFixture("cutoutA1", "singleLeftSlot"),
+        DeckFixture("cutoutB1", "singleLeftSlot"),
+        DeckFixture("cutoutC1", "singleLeftSlot"),
+        DeckFixture("cutoutD1", "singleLeftSlot"),
+        DeckFixture("cutoutA2", "singleCenterSlot"),
+        DeckFixture("cutoutB2", "singleCenterSlot"),
+        DeckFixture("cutoutC2", "singleCenterSlot"),
+        DeckFixture("cutoutD2", "singleCenterSlot"),
+        DeckFixture("cutoutA3", "singleRightSlot"),
+        DeckFixture("cutoutB3", "singleRightSlot"),
+        DeckFixture("cutoutC3", "singleRightSlot"),
+        DeckFixture("cutoutD3", "trashBinAdapter"),
+      ),
+    )
+    self.io.request.assert_awaited_once_with("GET", "/deck_configuration")
+
+  async def test_invalid_deck_configuration_is_rejected(self) -> None:
+    """Malformed configuration must not be interpreted as a missing trash bin."""
+    responses: List[Dict[str, Any]] = [{}, {"data": {}}, {"data": {"cutoutFixtures": [{}]}}]
+    for response in responses:
+      with self.subTest(response=response), self.assertRaises(OpentronsProtocolError):
+        self.io.request.return_value = response
+        await self.api.get_deck_configuration()
 
   async def test_mount_discovery_handles_an_empty_mount_without_a_name_key(self) -> None:
     self.io.request.return_value = {

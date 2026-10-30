@@ -86,6 +86,34 @@ BioTek Synergy H1
     SynergyH1
 
 
+BioTek Synergy HT
+------------------
+
+.. currentmodule:: pylabrobot.agilent.biotek.synergy_ht
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    SynergyHT
+
+
+BioTek measurement results
+--------------------------
+
+.. currentmodule:: pylabrobot.agilent.biotek.results
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    AbsorbanceResult
+    FluorescenceResult
+    LuminescenceResult
+
+
 .. _vspin-api:
 
 VSpin

@@ -663,6 +663,27 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.setup()
     self.addAsyncCleanup(self.lh.stop)
 
+  async def test_probe_tip_presence_via_pickup(self):
+    """Probed through the library's runner: a channel the ChannelizedError names found no tip."""
+    self.backend.request_tip_presence.side_effect = NotImplementedError()
+    # Unspecced, so they take the STAR's heights the probe passes, as the STAR backend does.
+    self.backend.pick_up_tips = unittest.mock.AsyncMock(
+      side_effect=[ChannelizedError(errors={1: RuntimeError("no tip")}), None]
+    )
+    self.backend.drop_tips = unittest.mock.AsyncMock()
+    spots = [self.tip_rack.get_item(well) for well in ("A1", "B1", "A2")]
+    found = await self.lh.probe_tip_presence_via_pickup(spots, use_channels=[0, 1, 2])
+    self.assertEqual(found, {spots[0].name: True, spots[1].name: False, spots[2].name: True})
+    self.assertEqual(
+      [call.kwargs["use_channels"] for call in self.backend.pick_up_tips.call_args_list],
+      [[0, 1], [2]],
+    )
+    self.assertEqual(
+      [call.kwargs["use_channels"] for call in self.backend.drop_tips.call_args_list],
+      [[0], [2]],
+    )
+    self.assertFalse(any(tracker.has_tip for tracker in self.lh.head.values()))
+
   async def test_consolidate_tip_inventory(self):
     """Execute library-planned transfers through the normal tracked tip operations."""
     self.tip_rack.set_tip_state([index >= 86 for index in range(96)])
@@ -1526,22 +1547,22 @@ class TestCoveredTipRacks(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(self.lh.stop)
 
   async def test_only_the_top_rack_of_a_stack_can_be_picked_up_from(self):
-    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'bottom': it is not available for tip handling"):
       await self.lh.pick_up_tips([self.bottom.get_item("A1")])
     self.backend.pick_up_tips.assert_not_called()
     await self.lh.pick_up_tips([self.top.get_item("A1")])
     self.backend.pick_up_tips.assert_called_once()
 
   async def test_tips_are_not_dropped_into_a_covered_rack(self):
-    with self.assertRaisesRegex(ValueError, "'bottom': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'bottom': it is not available for tip handling"):
       await self.lh.drop_tips([self.bottom.get_item("A1")])
     self.backend.drop_tips.assert_not_called()
 
   async def test_a_lid_covers_a_rack_for_the_96_head(self):
     self.top.lid = Lid("lid", size_x=127.76, size_y=85.48, size_z=10.0, nesting_z_height=2.0)
-    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'top': it is not available for tip handling"):
       await self.lh.pick_up_tips96(self.top)
-    with self.assertRaisesRegex(ValueError, "'top': something is stacked on top of it"):
+    with self.assertRaisesRegex(ValueError, "'top': it is not available for tip handling"):
       await self.lh.drop_tips96(self.top)
     self.backend.pick_up_tips96.assert_not_called()
     self.backend.drop_tips96.assert_not_called()
@@ -1942,10 +1963,11 @@ class TestLiquidHandlerSerializeState(AnyioTestBase):
     assert len(updates) == 1
 
 
-class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
+class TestNoGoZoneIntegration(AnyioTestBase):
   """Integration tests for no-go zone channel distribution through LiquidHandler."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     self.backend = _create_mock_backend(num_channels=8)
     self.backend.get_channel_spacings.side_effect = lambda channels: [9.0] * len(channels)
     self.deck = STARLetDeck()
@@ -1966,9 +1988,7 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
 
     self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
-    with self.assertWarns(DeprecationWarning):
-      await self.lh.setup()
-    self.addAsyncCleanup(self.lh.stop)
+    await stack.enter_async_context(self.lh.lifespan())
 
   async def test_aspirate_2_channels_avoids_no_go_zone(self):
     """2 channels on a trough with a center divider should be placed in separate compartments."""
@@ -1982,12 +2002,12 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     ops = self.backend.aspirate.call_args.kwargs["ops"]
     y_offsets = [op.offset.y for op in ops]
     # Both offsets should be non-zero (not centered) and in opposite compartments
-    self.assertEqual(len(y_offsets), 2)
+    assert len(y_offsets) == 2
     # One positive (back compartment), one negative (front compartment)
-    self.assertTrue(y_offsets[0] > 0 and y_offsets[1] < 0, f"offsets: {y_offsets}")
+    assert y_offsets[0] > 0 and y_offsets[1] < 0, f"offsets: {y_offsets}"
     # Neither should be near the divider (Y=44-46, container center=45, so offset ~0 is bad)
     for y in y_offsets:
-      self.assertGreater(abs(y), 5, f"offset {y} too close to divider")
+      assert abs(y) > 5, f"offset {y} too close to divider"
 
   async def test_single_channel_respects_no_go_zone(self):
     """Single channel on a container with no-go zones should be placed in a safe compartment."""
@@ -2000,9 +2020,9 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     ops = self.backend.aspirate.call_args.kwargs["ops"]
     # Single channel should be placed in a compartment, not at container center
     # (container center Y=45 is inside the no-go zone at Y=44-46)
-    self.assertNotAlmostEqual(ops[0].offset.y, 0.0)
+    assert ops[0].offset.y != pytest.approx(0.0)
     # Should be in the back compartment center: (48+88)/2 = 68, offset = 68-45 = 23
-    self.assertAlmostEqual(ops[0].offset.y, 23.0)
+    assert ops[0].offset.y == pytest.approx(23.0)
 
   async def test_dispense_uses_no_go_zones(self):
     """Dispense should also use no-go zone logic."""
@@ -2016,7 +2036,7 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
 
     ops = self.backend.dispense.call_args.kwargs["ops"]
     y_offsets = [op.offset.y for op in ops]
-    self.assertTrue(y_offsets[0] > 0 and y_offsets[1] < 0, f"offsets: {y_offsets}")
+    assert y_offsets[0] > 0 and y_offsets[1] < 0, f"offsets: {y_offsets}"
 
   async def test_no_go_zones_skipped_for_custom_spread(self):
     """spread='custom' should bypass no-go zone logic."""
@@ -2030,7 +2050,7 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     ops = self.backend.aspirate.call_args.kwargs["ops"]
     # Custom spread: offsets should be zero (user controls positioning)
     for op in ops:
-      self.assertAlmostEqual(op.offset.y, 0.0)
+      assert op.offset.y == pytest.approx(0.0)
 
   async def test_no_go_zones_tight_vs_wide(self):
     """spread='tight' should pack channels closer than spread='wide' within compartments."""
@@ -2059,4 +2079,4 @@ class TestNoGoZoneIntegration(unittest.IsolatedAsyncioTestCase):
     # within each compartment, wide channels should be further apart than tight
     wide_gap_lower = abs(wide_offsets[1] - wide_offsets[0])
     tight_gap_lower = abs(tight_offsets[1] - tight_offsets[0])
-    self.assertGreater(wide_gap_lower, tight_gap_lower)
+    assert wide_gap_lower > tight_gap_lower

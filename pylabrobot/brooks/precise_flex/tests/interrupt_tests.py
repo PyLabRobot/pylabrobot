@@ -4,15 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, call
 import anyio
 import pytest
 
-from pylabrobot.brooks.precise_flex.config import Axis
 from pylabrobot.brooks.precise_flex.data_ids import PowerState
-from pylabrobot.brooks.precise_flex.errors import (
+from pylabrobot.brooks.precise_flex.driver.configuration import PreciseFlexAxis
+from pylabrobot.brooks.precise_flex.driver.errors import (
   OperationInterrupted,
   PreciseFlexError,
   is_collision,
 )
+from pylabrobot.brooks.precise_flex.driver.master import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.interrupt import halt_and_resync, halt_on_interrupt
-from pylabrobot.brooks.precise_flex.precise_flex import PreciseFlex
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.testing.concurrency import AnyioTestBase
 
@@ -22,9 +22,9 @@ def mocked(method: object) -> AsyncMock:
   return cast(AsyncMock, method)
 
 
-def _make_arm() -> PreciseFlex:
+def _make_arm() -> PreciseFlexDriver:
   """Return an arm whose socket records writes and drains immediately."""
-  arm = PreciseFlex(
+  arm = PreciseFlexDriver(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
@@ -39,34 +39,44 @@ def _make_arm() -> PreciseFlex:
 class _CancellingIO:
   """Software transport that requests cancellation after a selected reply is consumed."""
 
-  def __init__(self, cancel_command: str) -> None:
+  def __init__(self, cancel_command: str, *, has_rail: bool = False) -> None:
     self.cancel_command = cancel_command
     self.commands: list[str] = []
+    self.raw_writes: list[bytes] = []
     self.consumed: list[str] = []
     self.scope: anyio.CancelScope | None = None
     self._current_command = ""
     self._cancelled = False
+    self._has_rail = has_rail
     self._host = "localhost"
     self._port = 10100
 
-  async def write(self, data: bytes) -> None:
+  async def write(self, data: bytes, timeout: float | None = None) -> None:
+    del timeout
+    self.raw_writes.append(data)
     self._current_command = data.decode("ascii").strip()
     self.commands.append(self._current_command)
 
-  async def readline(self) -> bytes:
+  async def readline(self, timeout: float | None = None) -> bytes:
+    if timeout is not None:
+      raise TimeoutError()
     self.consumed.append(self._current_command)
     if self._current_command == self.cancel_command and not self._cancelled:
       self._cancelled = True
       assert self.scope is not None
       self.scope.cancel()
+    if self._current_command == "wherej":
+      if self._has_rail:
+        return b"0 100.0 0.0 180.0 180.0 70.0 0.0\n"
+      return b"0 100.0 0.0 180.0 180.0 70.0\n"
     return b"0 1\n"
 
 
 def _make_cancelling_arm(
-  cancel_command: str, *, has_rail: bool = False
-) -> tuple[PreciseFlex, _CancellingIO]:
-  io = _CancellingIO(cancel_command)
-  arm = PreciseFlex(
+  cancel_command: str, *, has_rail: bool = False, stub_eom: bool = True
+) -> tuple[PreciseFlexDriver, _CancellingIO]:
+  io = _CancellingIO(cancel_command, has_rail=has_rail)
+  arm = PreciseFlexDriver(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
@@ -74,6 +84,9 @@ def _make_cancelling_arm(
     has_rail=has_rail,
   )
   arm.io = cast(Any, io)
+  arm.gripper.configuration = MagicMock(soft_limit_range=(0.0, 10_000.0))
+  if stub_eom:
+    arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
   return arm, io
 
 
@@ -95,27 +108,42 @@ class TestWaitForEom(AnyioTestBase):
   """The non-blocking motion wait polls until the arm stops moving."""
 
   async def test_returns_when_motion_stops(self) -> None:
-    wherej = iter(
-      [
-        "0 0 0 0 0",
-        "5 5 5 5 5",
-        "9.9 9.9 9.9 9.9 9.9",
-        "10 10 10 10 10",
-        "10 10 10 10 10",
-      ]
-    )
+    """Returns once three samples in a row agree."""
+    wherej = iter(["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9"] + ["10 10 10 10 10"] * 3)
     arm = _make_arm()
     arm.send_command = AsyncMock(  # type: ignore[method-assign]
       side_effect=lambda command, **kwargs: next(wherej)
     )
 
-    await arm._wait_for_eom(poll_interval=0)
+    await arm.arm._wait_for_eom(poll_interval=0)
+
+  async def test_a_move_creeping_off_does_not_count_as_stopped(self) -> None:
+    """Right after moveJ the arm creeps under the settle threshold (as logged), then moves."""
+    # The arm's first four reads after a logged moveJ, then the three it settled on.
+    replies = [
+      "301.022 33.703 242.82 141.894 74.8",
+      "301.022 33.694 242.807 141.909 74.8",
+      "301.022 33.667 242.74 141.942 74.8",
+      "301.038 33.586 242.595 142.024 74.8",
+      "301.123 0.002 179.998 179.996 74.777",
+      "301.124 0.002 179.999 180 74.777",
+      "301.125 0.001 179.999 180.002 74.777",
+    ]
+    replies_iter = iter(replies)
+    arm = _make_arm()
+    arm.send_command = AsyncMock(  # type: ignore[method-assign]
+      side_effect=lambda command, **kwargs: next(replies_iter)
+    )
+    await arm.arm._wait_for_eom(poll_interval=0)
+    assert mocked(arm.send_command).await_count == len(replies)
 
   async def test_returns_immediately_when_already_stationary(self) -> None:
+    """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
     arm = _make_arm()
-    arm.send_command = AsyncMock(return_value="113 81 218 64 70")  # type: ignore[method-assign]
+    idle = "269.908 81.507 218.952 113.977 70.685"  # as the arm answered, poll after poll
+    arm.send_command = AsyncMock(return_value=idle)  # type: ignore[method-assign]
 
-    await arm._wait_for_eom(poll_interval=0)
+    await arm.arm._wait_for_eom(poll_interval=0)
 
   async def test_cancelled_wait_halts_resyncs_and_reraises(self) -> None:
     arm = _make_arm()
@@ -137,7 +165,7 @@ class TestWaitForEom(AnyioTestBase):
       with anyio.CancelScope() as scope:
         scopes.append(scope)
         try:
-          await arm._wait_for_eom(poll_interval=0)
+          await arm.arm._wait_for_eom(poll_interval=0)
         except anyio.get_cancelled_exc_class():
           cancelled.append(True)
           raise
@@ -160,7 +188,7 @@ class TestWaitForEom(AnyioTestBase):
     )
 
     with pytest.raises(TimeoutError):
-      await arm._wait_for_eom(poll_interval=0, timeout=0)
+      await arm.arm._wait_for_eom(poll_interval=0, timeout=0)
 
   @pytest.mark.parametrize("stalled_sample", [1, 2])
   async def test_zero_timeout_bounds_stalled_sample(self, stalled_sample: int) -> None:
@@ -182,13 +210,13 @@ class TestWaitForEom(AnyioTestBase):
       with pytest.raises(
         TimeoutError, match=r"motion did not settle within 0s \(current="
       ) as error:
-        await arm._wait_for_eom(poll_interval=0, timeout=0)
+        await arm.arm._wait_for_eom(poll_interval=0, timeout=0)
 
     assert samples == stalled_sample
     expected_current = "[]" if stalled_sample == 1 else "[7.0, 0.0, 0.0, 0.0, 0.0]"
     assert str(error.value) == f"motion did not settle within 0s (current={expected_current})"
 
-  async def test_zero_timeout_returns_after_two_stationary_samples(self) -> None:
+  async def test_zero_timeout_returns_after_stationary_samples(self) -> None:
     arm = _make_arm()
     samples = 0
 
@@ -200,8 +228,8 @@ class TestWaitForEom(AnyioTestBase):
       return "7 0 0 0 0"
 
     arm.send_command = sample  # type: ignore[method-assign]
-    await arm._wait_for_eom(poll_interval=0.01, timeout=0)
-    assert samples == 2
+    await arm.arm._wait_for_eom(poll_interval=0.01, timeout=0)
+    assert samples == 3
 
   @pytest.mark.parametrize("stalled_sample", [1, 2])
   async def test_zero_timeout_shielded_reply_cannot_contaminate_next_command(
@@ -239,7 +267,7 @@ class TestWaitForEom(AnyioTestBase):
 
     with anyio.fail_after(2):
       with pytest.raises(TimeoutError, match="motion did not settle within 0s") as error:
-        await arm._wait_for_eom(poll_interval=0, timeout=0)
+        await arm.arm._wait_for_eom(poll_interval=0, timeout=0)
 
     expected_current = "[]" if stalled_sample == 1 else "[7.0, 0.0, 0.0, 0.0, 0.0]"
     assert f"current={expected_current}" in str(error.value)
@@ -285,7 +313,7 @@ class TestWaitForEom(AnyioTestBase):
     arm.io = cast(Any, io)
     with anyio.fail_after(2):
       with pytest.raises(TimeoutError, match="motion did not settle within") as error:
-        await arm._wait_for_eom(poll_interval=0, timeout=timeout)
+        await arm.arm._wait_for_eom(poll_interval=0, timeout=timeout)
 
     expected_current = "[]" if stalled_sample == 1 else "[7.0, 0.0, 0.0, 0.0, 0.0]"
     assert f"current={expected_current}" in str(error.value)
@@ -321,7 +349,7 @@ class TestWaitForEom(AnyioTestBase):
     arm.io = cast(Any, io)
     with anyio.fail_after(1):
       with pytest.raises(TimeoutError, match="motion did not settle within 0s"):
-        await arm._wait_for_eom(poll_interval=0, timeout=0.2)
+        await arm.arm._wait_for_eom(poll_interval=0, timeout=0.2)
 
     assert io.lost
     assert io.writes == [b"wherej\n"]
@@ -353,7 +381,7 @@ class TestWaitForEom(AnyioTestBase):
 
     async def poll() -> None:
       with pytest.raises(TimeoutError, match="motion did not settle within"):
-        await arm._wait_for_eom(poll_interval=0, timeout=0.2)
+        await arm.arm._wait_for_eom(poll_interval=0, timeout=0.2)
 
     with anyio.fail_after(1):
       async with anyio.create_task_group() as group:
@@ -365,7 +393,7 @@ class TestWaitForEom(AnyioTestBase):
     assert io.lost  # The committed read timed out against the original polling deadline.
 
   async def test_write_lock_timeout_before_dispatch_keeps_socket_usable(self) -> None:
-    arm = PreciseFlex(
+    arm = PreciseFlexDriver(
       host="localhost",
       gripper_length=162.0,
       gripper_z_offset=0.0,
@@ -391,7 +419,7 @@ class TestWaitForEom(AnyioTestBase):
     async def poll() -> None:
       try:
         with pytest.raises(TimeoutError, match="motion did not settle within"):
-          await arm._wait_for_eom(poll_interval=0, timeout=0.05)
+          await arm.arm._wait_for_eom(poll_interval=0, timeout=0.05)
       finally:
         finished.set()
 
@@ -430,7 +458,7 @@ class TestWaitForEom(AnyioTestBase):
     arm.io = cast(Any, io)
     with anyio.fail_after(1):
       with pytest.raises(TimeoutError) as error:
-        await arm._wait_for_eom(timeout=0.2)
+        await arm.arm._wait_for_eom(timeout=0.2)
 
     assert error.value is transport_error
     assert io.lost
@@ -446,7 +474,7 @@ class TestWaitForEom(AnyioTestBase):
     arm.send_command = stalled_sample  # type: ignore[method-assign]
     with anyio.fail_after(1):
       with pytest.raises(TimeoutError, match="motion did not settle within 0s"):
-        await arm._wait_for_eom(timeout=0.01)
+        await arm.arm._wait_for_eom(timeout=0.01)
 
 
 class TestInterruptHelpers(AnyioTestBase):
@@ -554,7 +582,7 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
     event_bus.subscribe(events.append)
 
     with use_event_bus(event_bus):
-      await _run_until_confirmed_cancellation(io, lambda: arm.start_freedrive_mode([1, 2]))
+      await _run_until_confirmed_cancellation(io, lambda: arm.arm.start_freedrive_mode([1, 2]))
 
     assert io.commands == ["freemode 1", "freemode -1"]
     assert io.consumed == ["freemode 1", "freemode -1"]
@@ -573,17 +601,17 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
   ) -> None:
     arm, io = _make_cancelling_arm(cancel_command)
 
-    await _run_until_confirmed_cancellation(io, lambda: arm.start_freedrive_mode([1, 2, 3]))
+    await _run_until_confirmed_cancellation(io, lambda: arm.arm.start_freedrive_mode([1, 2, 3]))
 
     assert io.commands == expected_commands
     assert io.consumed == expected_commands
 
   async def test_cancelled_stop_reconciles_exit_before_propagating(self) -> None:
     arm, io = _make_cancelling_arm("freemode -1")
-    await arm.start_freedrive_mode([1])
+    await arm.arm.start_freedrive_mode([1])
 
-    await _run_until_confirmed_cancellation(io, arm.stop_freedrive_mode)
-    await arm.start_freedrive_mode([2])
+    await _run_until_confirmed_cancellation(io, arm.arm.stop_freedrive_mode)
+    await arm.arm.start_freedrive_mode([2])
 
     assert io.commands == ["freemode 1", "freemode -1", "freemode 2"]
     assert io.consumed == io.commands
@@ -595,7 +623,8 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
     scope_ready = anyio.Event()
     scopes: list[anyio.CancelScope] = []
 
-    async def readline() -> bytes:
+    async def readline(timeout: float | None = None) -> bytes:
+      del timeout
       if io._current_command == "active":
         active_read_started.set()
         await release_active_reply.wait()
@@ -608,7 +637,7 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
       with anyio.CancelScope() as scope:
         scopes.append(scope)
         scope_ready.set()
-        await arm.start_freedrive_mode([1])
+        await arm.arm.start_freedrive_mode([1])
 
     async with anyio.create_task_group() as task_group:
       task_group.start_soon(arm.send_command, "active")
@@ -624,17 +653,87 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
     assert io.commands == ["active"]
 
   async def test_cancelled_gripper_command_consumes_terminal_reply(self) -> None:
-    arm, io = _make_cancelling_arm("gripper 1")
+    arm, io = _make_cancelling_arm("ReleasePlate 520.0 50.0")
 
-    await _run_until_confirmed_cancellation(io, lambda: arm.move_gripper(80.0))
+    await _run_until_confirmed_cancellation(io, lambda: arm.gripper.move_to_jaw_position(80.0))
 
-    assert io.commands == ["GripOpenPos 520.0", "gripper 1"]
+    assert io.commands == ["wherej", "ReleasePlate 520.0 50.0"]
     assert io.consumed == io.commands
+
+  async def test_cancelled_gripper_grasp_consumes_terminal_reply_without_release(self) -> None:
+    arm, io = _make_cancelling_arm("GraspPlate 60.0 50.0 10.0")
+
+    await _run_until_confirmed_cancellation(
+      io, lambda: arm.gripper.move_to_jaw_position_firmware_units(60.0)
+    )
+
+    assert io.commands == ["wherej", "GraspPlate 60.0 50.0 10.0"]
+    assert io.consumed == io.commands
+
+  async def test_cancelled_gripper_position_move_after_commit_halts(self) -> None:
+    move_command = "MoveOneAxis 5 520.0 1"
+    arm, io = _make_cancelling_arm(move_command)
+
+    await _run_until_confirmed_cancellation(
+      io, lambda: arm.gripper.move_to_jaw_position(80.0, force_sensing=False)
+    )
+
+    assert io.commands == ["wherej", move_command, "halt"]
+    assert io.consumed == ["wherej", move_command]
+    assert io.raw_writes[-1] == b"\nhalt\n"
+
+  async def test_cancelled_move_j_after_commit_halts_without_post_cancel_wherej(self) -> None:
+    move_command = "moveJ 1 100.0 10.0 180.0 180.0 70.0"
+    arm, io = _make_cancelling_arm(move_command)
+
+    await _run_until_confirmed_cancellation(
+      io, lambda: arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 10.0})
+    )
+
+    assert io.commands == ["wherej", move_command, "halt"]
+    assert io.consumed == ["wherej", move_command]
+    assert io.raw_writes[-1] == b"\nhalt\n"
+
+  async def test_cancelled_move_j_during_eom_wait_halts_once(self) -> None:
+    arm, io = _make_cancelling_arm("never", stub_eom=False)
+    post_move_reads = 0
+    polling_started = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def readline(timeout: float | None = None) -> bytes:
+      nonlocal post_move_reads
+      if timeout is not None:
+        raise TimeoutError()
+      io.consumed.append(io._current_command)
+      if io._current_command == "wherej":
+        if any(cmd.startswith("moveJ") for cmd in io.commands):
+          post_move_reads += 1
+          polling_started.set()
+          return f"0 100.0 {float(post_move_reads)} 180.0 180.0 70.0\n".encode("ascii")
+        return b"0 100.0 0.0 180.0 180.0 70.0\n"
+      return b"0 1\n"
+
+    io.readline = readline  # type: ignore[method-assign]
+
+    async def move() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        await arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 10.0})
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(move)
+      await polling_started.wait()
+      scopes[0].cancel()
+
+    assert io.raw_writes.count(b"\nhalt\n") == 1
+    assert io.commands[-1] == "halt"
 
   async def test_cancelled_rail_command_consumes_terminal_reply(self) -> None:
     arm, io = _make_cancelling_arm("MoveRail 1 1", has_rail=True)
+    rail = arm.rail
+    assert rail is not None
 
-    await _run_until_confirmed_cancellation(io, lambda: arm.move_rail(123.0))
+    await _run_until_confirmed_cancellation(io, lambda: rail.move_rail(123.0))
 
     assert io.commands == ["Rail 1 123.0", "MoveRail 1 1"]
     assert io.consumed == io.commands
@@ -642,15 +741,15 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
   async def test_cancelled_pick_consumes_terminal_reply_without_release(self) -> None:
     arm, io = _make_cancelling_arm("pickplate 1 0 0")
     position = {
-      Axis.BASE: 100.0,
-      Axis.SHOULDER: 0.0,
-      Axis.ELBOW: 180.0,
-      Axis.WRIST: 180.0,
-      Axis.GRIPPER: 70.0,
+      PreciseFlexAxis.BASE: 100.0,
+      PreciseFlexAxis.SHOULDER: 0.0,
+      PreciseFlexAxis.ELBOW: 180.0,
+      PreciseFlexAxis.WRIST: 180.0,
+      PreciseFlexAxis.GRIPPER: 70.0,
     }
 
     await _run_until_confirmed_cancellation(
-      io, lambda: arm.pick_up_at_joint_position(position, resource_width=80.0)
+      io, lambda: arm.arm.pick_up_at_joint_state(position, resource_width=80.0)
     )
 
     assert io.consumed[-1] == "pickplate 1 0 0"
@@ -659,15 +758,15 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
   async def test_cancelled_place_consumes_terminal_reply_without_release(self) -> None:
     arm, io = _make_cancelling_arm("placeplate 1 0 0")
     position = {
-      Axis.BASE: 100.0,
-      Axis.SHOULDER: 0.0,
-      Axis.ELBOW: 180.0,
-      Axis.WRIST: 180.0,
-      Axis.GRIPPER: 70.0,
+      PreciseFlexAxis.BASE: 100.0,
+      PreciseFlexAxis.SHOULDER: 0.0,
+      PreciseFlexAxis.ELBOW: 180.0,
+      PreciseFlexAxis.WRIST: 180.0,
+      PreciseFlexAxis.GRIPPER: 70.0,
     }
 
     await _run_until_confirmed_cancellation(
-      io, lambda: arm.drop_at_joint_position(position, resource_width=80.0)
+      io, lambda: arm.arm.drop_at_joint_state(position, resource_width=80.0)
     )
 
     assert io.consumed[-1] == "placeplate 1 0 0"

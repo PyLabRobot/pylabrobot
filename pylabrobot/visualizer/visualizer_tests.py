@@ -1,6 +1,7 @@
 import asyncio
 import errno
 import json
+import logging
 import socket
 import threading
 import time
@@ -16,18 +17,20 @@ import websockets
 
 import pylabrobot.visualizer.visualizer as visualizer_module
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
-from pylabrobot.concurrency import HasLifespan
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources import (
   Coordinate,
   Resource,
   cor_96_wellplate_360uL_Fb,
 )
+from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL
 from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.visualizer import Visualizer
 from pylabrobot.visualizer.visualizer import (
   _build_method_registry,
   _sanitize_floats,
   _serialize_resource_tree,
+  _state_of,
   _VisualizerHTTPRequestHandler,
 )
 
@@ -529,16 +532,27 @@ class TestVisualizerServerStartupFailure(AnyioTestBase):
   async def test_file_server_startup_permission_error_rolls_back_websocket(self) -> None:
     vis = self._make_visualizer()
     error = PermissionError(errno.EACCES, "permission denied")
-    with unittest.mock.patch(
-      "http.server.HTTPServer.server_bind",
-      side_effect=error,
+    ws_servers: list[Any] = []
+    orig_start_ws = vis._start_ws_server
+
+    async def capture_ws(stack: AsyncExitStackWithShielding) -> None:
+      await orig_start_ws(stack)
+      ws_servers.append(vis._ws_server)
+
+    with (
+      unittest.mock.patch.object(vis, "_start_ws_server", side_effect=capture_ws),
+      unittest.mock.patch(
+        "http.server.HTTPServer.server_bind",
+        side_effect=error,
+      ),
     ):
       with pytest.raises(PermissionError):
         async with vis:
           pass
 
-    with socket.socket() as probe:
-      probe.bind((vis.host, vis.ws_port))
+    assert len(ws_servers) == 1
+    assert not ws_servers[0].is_serving()
+    assert vis._ws_server is None
     assert vis._loop is None
     assert vis._task_group is None
 
@@ -783,12 +797,15 @@ class TestVisualizerConnectionShutdown(AnyioTestBase):
     vis = Visualizer(resource, ws_port=0, fs_port=0, open_browser=False)
 
     async with vis:
-      ws_port = vis.ws_port
-      fs_port = vis.fs_port
+      ws_server = vis._ws_server
+      httpd = vis._httpd
+      assert ws_server is not None and ws_server.is_serving()
+      assert httpd is not None and httpd.socket.fileno() != -1
 
-    for port in (ws_port, fs_port):
-      with socket.socket() as probe:
-        probe.bind((vis.host, port))
+    assert not ws_server.is_serving()
+    assert httpd.socket.fileno() == -1
+    assert vis._ws_server is None
+    assert vis._httpd is None
 
   async def test_connection_shutdown_waits_for_bounded_partial_request(self) -> None:
     """A partial request worker finishes before listener shutdown."""
@@ -911,8 +928,8 @@ class TestVisualizerCommand(AnyioTestBase):
 
   _anyio_backends = ["asyncio"]
 
-  @asynccontextmanager
-  async def lifespan(self, **kwargs):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     self.maxDiff = None
     self.r = Resource(size_x=100, size_y=100, size_z=100, name="root")
     self.vis = Visualizer(self.r, ws_port=0, fs_port=0, open_browser=False)
@@ -921,8 +938,7 @@ class TestVisualizerCommand(AnyioTestBase):
     self.send_command_mock = unittest.mock.AsyncMock()
     self.vis.send_command = self.send_command_mock  # type: ignore[method-assign]
 
-    async with self.vis:
-      yield
+    await stack.enter_async_context(self.vis)
 
   async def _wait_for_event(self, event: str, data_key: Optional[str] = None, timeout: float = 5.0):
     """Wait until the most recent send_command call is ``event`` (optionally carrying
@@ -939,7 +955,7 @@ class TestVisualizerCommand(AnyioTestBase):
       if last is not None and last.kwargs.get("event") == event:
         if data_key is None or data_key in last.kwargs.get("data", {}):
           return
-      await asyncio.sleep(0.01)
+      await anyio.sleep(0.01)
 
   async def test_assign_child_resource(self):
     """Test that the assign_child_resource method sends the correct event."""
@@ -1042,8 +1058,9 @@ class TestVisualizerOutbox(AnyioTestBase):
 
   _anyio_backends = ["asyncio"]
 
-  def test_size_one_outbox_drops_newest_event_with_one_warning(self, caplog) -> None:
+  def test_size_one_outbox_drops_newest_event_with_one_warning(self, caplog, monkeypatch) -> None:
     """A full outbox retains its old event and warns once for the dropped new event."""
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     resource = Resource(size_x=100, size_y=100, size_z=100, name="root")
     vis = Visualizer(resource, open_browser=False)
     send_stream, receive_stream = anyio.create_memory_object_stream[tuple[str, dict]](1)
@@ -1058,8 +1075,9 @@ class TestVisualizerOutbox(AnyioTestBase):
       "visualizer: dropping 'second' event (outbox closed or full)"
     ]
 
-  async def test_worker_logs_failed_send_and_continues(self, caplog) -> None:
+  async def test_worker_logs_failed_send_and_continues(self, caplog, monkeypatch) -> None:
     """One browser-send failure does not prevent a later outbox event from sending."""
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     resource = Resource(size_x=100, size_y=100, size_z=100, name="root")
     vis = Visualizer(resource, open_browser=False)
     sent: list[str] = []
@@ -1087,6 +1105,20 @@ class TestVisualizerOutbox(AnyioTestBase):
     assert [record.getMessage() for record in caplog.records] == [
       "visualizer: failed to send 'first' event to browser"
     ]
+
+
+class VisualizerHeldToolTests(unittest.TestCase):
+  def test_a_racked_tip_is_its_spots_state_not_a_resource_in_the_tree(self):
+    """A tip serializes without a location, which the page cannot draw; its spot shows it."""
+    rack = hamilton_96_tiprack_300uL(name="rack", with_tips=True)
+    spot = rack.get_item("A1")
+    self.assertTrue(spot.children)
+
+    tree = _serialize_resource_tree(rack)
+    spot_data = next(child for child in tree["children"] if child["name"] == spot.name)
+    self.assertEqual(spot_data["children"], [])
+    self.assertNotIn(spot.get_tip().name, _state_of(rack))
+    self.assertIn(spot.name, _state_of(rack))
 
 
 class TestVisualizerMetadataHandling(unittest.TestCase):

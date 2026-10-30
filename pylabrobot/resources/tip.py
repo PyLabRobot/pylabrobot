@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.head_tool import HeadTool
@@ -33,6 +33,7 @@ class Tip(HeadTool):
     category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    is_conductive: Optional[bool] = None,
   ):
     """Initialize a tip with its resource dimensions and liquid handling properties."""
     super().__init__(
@@ -44,12 +45,15 @@ class Tip(HeadTool):
       category=category,
       model=model,
       pick_up_location=pick_up_location,
+      is_conductive=is_conductive,
     )
     self.has_filter = has_filter
     self.maximal_volume = maximal_volume
     self._collar_height = collar_height
     self.nominal_volume = nominal_volume if nominal_volume is not None else maximal_volume
     self.tracker = VolumeTracker(thing=name, max_volume=maximal_volume)
+    # What the tip holds is state a viewer shows, so a change in the tracker is a state update.
+    self.tracker.register_callback(self._state_updated)
 
   def __eq__(self, other: object) -> bool:
     """Compare tool fields and the tip's liquid handling properties."""
@@ -61,6 +65,13 @@ class Tip(HeadTool):
       and self.maximal_volume == other.maximal_volume
       and self._collar_height == other._collar_height
     )
+
+  def serialize_state(self) -> Dict[str, Any]:
+    return {**super().serialize_state(), **self.tracker.serialize()}
+
+  def load_state(self, state: Dict[str, Any]) -> None:
+    super().load_state(state)
+    self.tracker.load_state({k: v for k, v in state.items() if k != "rotation"})
 
   def serialize(self) -> dict:
     """Serialize the tip's resource fields and liquid handling properties."""

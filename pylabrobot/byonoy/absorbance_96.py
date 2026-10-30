@@ -150,25 +150,128 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   """
 
   _ERROR_NAMES = ABS96_ERROR_NAMES
+  _DD_IGNORE_ERRORS_IN_CALIBRATION = 0x800E
 
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name)
+    # Drawn with the parking unit's housing, which is the same part, until the detection unit is
+    # modelled on its own.
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name, model="byonoy_a96a_parking_unit")
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
     self.available_wavelengths: List[float] = []
 
-  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
-    """Enter HID ownership, initialize measurements, and discover wavelengths."""
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    ignore_errors_in_calibration: bool = False,
+    **kwargs: Any,
+  ) -> None:
+    """Enter HID ownership, initialize measurements, and discover wavelengths.
+
+    Args:
+      ignore_errors_in_calibration: Temporarily enable the experimental firmware
+        override during calibration. The previous setting is restored even if
+        calibration fails. Defaults to False, which leaves the setting unchanged.
+        This diagnostic option does not establish measurement accuracy and relies
+        on an internal field identified on A96A firmware 2024-10-23.
+    """
+    if not isinstance(ignore_errors_in_calibration, bool):
+      raise TypeError("ignore_errors_in_calibration must be a bool.")
     await super()._enter_lifespan(stack, **kwargs)
     stack.callback(self._clear_available_wavelengths)
-    await self.initialize_measurements()
+    original_override: Optional[bool] = None
+    if ignore_errors_in_calibration:
+      original_override = await self.request_ignore_errors_in_calibration()
+    try:
+      if ignore_errors_in_calibration:
+        await self.set_ignore_errors_in_calibration(True)
+      await self.initialize_measurements()
+    finally:
+      if original_override is not None and self._reply_synchronized:
+        with anyio.CancelScope(shield=True):
+          await self.set_ignore_errors_in_calibration(original_override)
     self.available_wavelengths = await self.request_available_absorbance_wavelengths()
     logger.info(
       "[%s] ready, available wavelengths: %s nm",
       self.name,
       self.available_wavelengths,
     )
+
+  async def request_ignore_errors_in_calibration(self) -> bool:
+    """Read the firmware's experimental calibration-error override.
+
+    Field 0x800E is ``state.ignore_errors_in_calibration`` on A96A firmware
+    2024-10-23. This internal field is not a stable vendor API.
+    """
+    payload = Writer().u16(self._DD_IGNORE_ERRORS_IN_CALIBRATION).u8(0).finish()
+    response = await self.send_command(report_id=0x0200, payload=payload, routing_info=b"\x80\x40")
+    assert response is not None
+    r = Reader(response[2:])
+    field_index, flags = r.u16(), r.u8()
+    if field_index != self._DD_IGNORE_ERRORS_IN_CALIBRATION or flags & 0x0F != 0x01:
+      raise RuntimeError("Unexpected field or type for ignore_errors_in_calibration.")
+    value = r.u32()
+    if value not in (0, 1):
+      raise RuntimeError(f"Unexpected ignore_errors_in_calibration value: {value}.")
+    return bool(value)
+
+  async def set_ignore_errors_in_calibration(self, enabled: bool) -> None:
+    """Set and verify the firmware's experimental calibration-error override.
+
+    Diagnostic use only: suppressing an error does not establish a valid calibration.
+    The field address is specific to A96A firmware 2024-10-23. Save the original
+    value with :meth:`request_ignore_errors_in_calibration` and restore it in a
+    ``finally`` block. Setup only enables this override when explicitly requested.
+    """
+    if not isinstance(enabled, bool):
+      raise TypeError("enabled must be a bool.")
+    if self._in_flight_trigger is not None:
+      raise RuntimeError("Cannot change calibration-error override during a measurement.")
+    payload = Writer().u16(self._DD_IGNORE_ERRORS_IN_CALIBRATION).u8(0).u32(int(enabled)).finish()
+    command = self._assemble_command(0x0210, payload, routing_info=b"\x00\x40")
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    async with self._transaction_lock:
+      if self._in_flight_trigger is not None:
+        raise RuntimeError("Cannot change calibration-error override during a measurement.")
+      if not self._reply_synchronized:
+        raise RuntimeError("Byonoy reply boundary unknown; enter a new lifespan before sending")
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        try:
+          await self.io.write(command)
+        except BaseException:
+          self._reply_synchronized = False
+          raise
+        try:
+          with anyio.fail_after(10):
+            while True:
+              response = await self._read_report()
+              if len(response) < 6:
+                continue
+              r = Reader(response)
+              if r.u16() != 0x0020 or r.u16() != 0x0210:
+                continue
+              code = r.u16()
+              break
+        except TimeoutError:
+          self._reply_synchronized = False
+          raise TimeoutError(
+            "Timed out waiting for calibration-error override acknowledgement."
+          ) from None
+        except BaseException:
+          self._reply_synchronized = False
+          raise
+        if code != 0:
+          raise RuntimeError(f"Firmware rejected calibration-error override: 0x{code:04x}.")
+      await anyio.lowlevel.checkpoint()
+    if await self.request_ignore_errors_in_calibration() != enabled:
+      raise RuntimeError("Calibration-error override readback does not match requested value.")
+    if enabled:
+      logger.warning(
+        "[%s] calibration-error override enabled; calibration may be invalid", self.name
+      )
 
   def _clear_available_wavelengths(self) -> None:
     """Clear setup-derived wavelength state when the reader leaves its lifespan."""
@@ -341,6 +444,7 @@ def byonoy_sbs_adapter(name: str) -> ResourceHolder:
       y=-(95.48 - 85.48) / 2,
       z=17.0,
     ),
+    model="byonoy_a96a_sbs_adapter",
   )
 
 
@@ -352,7 +456,7 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
     size_x=size_x,
     size_y=size_y,
     size_z=42.898,
-    model="Byonoy A96A Illumination Unit",
+    model="byonoy_a96a_illumination_unit",
     preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
   )
 
@@ -364,7 +468,7 @@ def byonoy_a96a_detection_unit(name: str) -> ByonoyAbsorbance96:
 
 def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
   """Create a Byonoy A96A detection unit holder (base only, no backend)."""
-  return ByonoyAbsorbanceBaseUnit(name=name)
+  return ByonoyAbsorbanceBaseUnit(name=name, model="byonoy_a96a_parking_unit")
 
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:

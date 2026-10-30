@@ -3,7 +3,7 @@
 Owns MLPrep method commands (``PrepMethodBegin`` / ``PrepMethodEnd`` / ``PrepMethodAbort``)
 through the driver, and exposes an async context manager
 (:meth:`MethodLifecycle.run`) that calls ``abort`` on exception and ``end`` on
-clean exit — mirrors the ``PrepDriver.mounted_core_grippers()`` pattern in ``prep.py``.
+clean exit — mirrors the ``CoreGrippers.mounted()`` pattern.
 """
 
 from __future__ import annotations

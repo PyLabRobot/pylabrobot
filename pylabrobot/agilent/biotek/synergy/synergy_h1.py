@@ -50,47 +50,15 @@ class SynergyH1(BioTekPlateReaderDriver):
   def focal_height_range(self):
     return (4.5, 10.68)
 
-  async def _read_until(
-    self, terminator: bytes, timeout: Optional[float] = None, chunk_size: int = 512
-  ) -> bytes:
-    if timeout is None:
-      timeout = self.timeout
-
-    buf = bytearray()
-
+  async def _read_chunk(self, length: int) -> bytes:
+    """Retry transient FTDI read errors without consuming bytes from the next reply."""
     retries = 0
-    max_retries = 3
-
-    try:
-      with anyio.fail_after(timeout):
-        while True:
-          try:
-            buf.extend(await self.io.read(chunk_size))
-            if terminator in buf:
-              idx = buf.index(terminator) + len(terminator)
-              full = bytes(buf[:idx])
-              logger.debug(
-                f"{self.__class__.__name__} _read_until received %d bytes (hex prefix): %s",
-                len(full),
-                full[:200].hex(),
-              )
-              return full
-          except FtdiError as e:
-            retries += 1
-            logger.warning(
-              f"{self.__class__.__name__} transient FtdiError while reading: %s — retrying", e
-            )
-            if retries >= max_retries:
-              logger.warning(
-                f"{self.__class__.__name__} too many FtdiError retries ({max_retries}) — stopping",
-                e,
-              )
-              raise
-            await anyio.sleep(0.05)
-    except TimeoutError:
-      logger.debug(
-        f"{self.__class__.__name__} _read_until timed out; partial buffer (hex): %s", buf.hex()
-      )
-      raise TimeoutError(
-        f"{self.__class__.__name__} _read_until timed out waiting for {terminator!r}; partial={buf.hex()}"
-      ) from None
+    while True:
+      try:
+        return await super()._read_chunk(length)
+      except FtdiError:
+        retries += 1
+        if retries == 3:
+          raise
+        logger.warning("Synergy H1 FTDI read failed; retrying", exc_info=True)
+        await anyio.sleep(0.05)

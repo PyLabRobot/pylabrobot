@@ -138,11 +138,12 @@ class ScanEstimateModel:
 
 @dataclass(frozen=True)
 class Capture:
-  """One channel and its camera settings."""
+  """One channel and its camera settings, optionally selecting exposure for each frame."""
 
   channel: str
   exposure_ms: Optional[float] = None
   gain: Optional[float] = None
+  machine_auto_exposure: bool = False
 
   def __post_init__(self) -> None:
     if not isinstance(self.channel, str) or not self.channel.strip():
@@ -159,14 +160,18 @@ class Capture:
 
 
 @dataclass(frozen=True)
-class _PointGeometry:
+class PointGeometry:
+  """Labeled sample centers and the frame grid acquired around each center."""
+
   centers_mm: Tuple[CoordinateMM, ...]
   labels: Tuple[Optional[str], ...]
   block_shape: BlockShape
 
 
 @dataclass(frozen=True)
-class _RandomGeometry:
+class RandomGeometry:
+  """Seeded block sampling within physical bounds."""
+
   bounds: ScanRegion
   count: int
   block_shape: BlockShape
@@ -175,30 +180,101 @@ class _RandomGeometry:
 
 
 @dataclass(frozen=True)
-class _FullCoverageGeometry:
+class FullCoverageGeometry:
+  """Physical bounds to cover with calibrated frame grids."""
+
   bounds: ScanRegion
 
 
-_SpecGeometry = Union[_PointGeometry, _RandomGeometry, _FullCoverageGeometry]
+ScanGeometry = Union[PointGeometry, RandomGeometry, FullCoverageGeometry]
+
+
+def _normalize_captures(
+  channel: Optional[str],
+  exposure_ms: Optional[float],
+  gain: Optional[float],
+  captures: Optional[Sequence[Capture]],
+  machine_auto_exposure: bool = False,
+) -> Tuple[Capture, ...]:
+  if captures is not None:
+    if channel is not None or exposure_ms is not None or gain is not None or machine_auto_exposure:
+      raise ValueError(
+        "captures cannot be combined with channel, exposure_ms, gain, or machine_auto_exposure"
+      )
+    normalized = tuple(captures)
+    if not normalized or any(not isinstance(capture, Capture) for capture in normalized):
+      raise ValueError("captures must contain at least one Capture")
+    return normalized
+  if channel is None:
+    raise ValueError("provide channel or captures")
+  return (
+    Capture(
+      channel=channel,
+      exposure_ms=exposure_ms,
+      gain=gain,
+      machine_auto_exposure=machine_auto_exposure,
+    ),
+  )
+
+
+def _normalize_centers(centers_mm: Sequence[CoordinateMM]) -> Tuple[CoordinateMM, ...]:
+  if isinstance(centers_mm, (str, bytes)):
+    raise ValueError("centers_mm must be a sequence of (x, y) coordinates")
+  try:
+    centers = tuple((float(x), float(y)) for x, y in centers_mm)
+  except (TypeError, ValueError) as exc:
+    raise ValueError("centers_mm must contain (x, y) coordinates") from exc
+  if not centers:
+    raise ValueError("centers_mm must contain at least one coordinate")
+  for index, (x_mm, y_mm) in enumerate(centers):
+    _validate_finite(x_mm, f"centers_mm[{index}].x")
+    _validate_finite(y_mm, f"centers_mm[{index}].y")
+  return centers
+
+
+def _point_geometry(
+  centers_mm: Sequence[CoordinateMM],
+  block_shape: BlockShape,
+  labels: Optional[Sequence[str]] = None,
+) -> PointGeometry:
+  centers = _normalize_centers(centers_mm)
+  shape = _validate_block_shape(block_shape)
+  if labels is None:
+    normalized_labels: Tuple[Optional[str], ...] = (None,) * len(centers)
+  else:
+    values = tuple(labels)
+    if len(values) != len(centers):
+      raise ValueError("labels must have the same length as centers_mm")
+    if any(not isinstance(label, str) or not label for label in values):
+      raise ValueError("labels must contain non-empty strings")
+    normalized_labels = tuple(values)
+  return PointGeometry(
+    centers_mm=centers,
+    labels=normalized_labels,
+    block_shape=shape,
+  )
 
 
 @dataclass(frozen=True)
 class ScanSpec:
   """A complete, reusable description of scan geometry and acquisition settings."""
 
-  geometry: _SpecGeometry
+  geometry: ScanGeometry
   captures: Tuple[Capture, ...]
   autofocus: Optional[AutofocusMethod]
+  initial_brightfield_z_mm: Optional[float] = None
 
   def __post_init__(self) -> None:
     if not isinstance(
       self.geometry,
-      (_PointGeometry, _RandomGeometry, _FullCoverageGeometry),
+      (PointGeometry, RandomGeometry, FullCoverageGeometry),
     ):
       raise TypeError("geometry must be created by a ScanSpec constructor")
     if not self.captures or any(not isinstance(capture, Capture) for capture in self.captures):
       raise ValueError("captures must contain at least one Capture")
     _validate_autofocus(self.autofocus)
+    if self.initial_brightfield_z_mm is not None:
+      _validate_finite(self.initial_brightfield_z_mm, "initial_brightfield_z_mm")
 
   @classmethod
   def wells(
@@ -210,8 +286,10 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a scan at named well centers without retaining the plate."""
     if not isinstance(plate, Plate):
@@ -226,8 +304,9 @@ class ScanSpec:
     centers = tuple(well_to_sample_mm(plate, well) for well in normalized_wells)
     return cls(
       geometry=_point_geometry(centers, block_shape, normalized_wells),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -239,15 +318,18 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create an anonymous scan centered at explicit sample-relative points."""
     normalized_centers = _normalize_centers(centers_mm)
     return cls(
       geometry=_point_geometry(normalized_centers, block_shape),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -262,8 +344,10 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a reproducible random sample of blocks within physical bounds."""
     _validate_scan_region(bounds)
@@ -274,15 +358,16 @@ class ScanSpec:
     if not isinstance(non_overlapping, bool):
       raise ValueError("non_overlapping must be a boolean")
     return cls(
-      geometry=_RandomGeometry(
+      geometry=RandomGeometry(
         bounds=bounds,
         count=count,
         block_shape=validated_shape,
         seed=seed,
         non_overlapping=non_overlapping,
       ),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -293,15 +378,18 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a scan that covers all physical bounds."""
     _validate_scan_region(bounds)
     return cls(
-      geometry=_FullCoverageGeometry(bounds=bounds),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      geometry=FullCoverageGeometry(bounds=bounds),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
 
@@ -351,6 +439,47 @@ class PlannedFrame:
   capture: Capture
 
 
+def _describe_geometry(geometry: ScanGeometry) -> str:
+  if isinstance(geometry, PointGeometry):
+    columns, rows = geometry.block_shape
+    kind = "wells" if any(label is not None for label in geometry.labels) else "points"
+    return f"{kind}(count={len(geometry.centers_mm)}, block_shape={columns}x{rows})"
+  if isinstance(geometry, RandomGeometry):
+    columns, rows = geometry.block_shape
+    return (
+      f"random(count={geometry.count}, block_shape={columns}x{rows}, "
+      f"seed={geometry.seed}, non_overlapping={geometry.non_overlapping})"
+    )
+  return (
+    f"full_coverage(X={geometry.bounds.left:g}..{geometry.bounds.right:g} mm, "
+    f"Y={geometry.bounds.top:g}..{geometry.bounds.bottom:g} mm)"
+  )
+
+
+def _format_duration(duration: timedelta) -> str:
+  seconds = max(0, round(duration.total_seconds()))
+  hours, remainder = divmod(seconds, 3600)
+  minutes, seconds = divmod(remainder, 60)
+  parts = []
+  if hours:
+    parts.append(f"{hours}h")
+  if minutes or hours:
+    parts.append(f"{minutes}m")
+  parts.append(f"{seconds}s")
+  return " ".join(parts)
+
+
+def _format_bytes(byte_count: int) -> str:
+  units = ("B", "kB", "MB", "GB", "TB")
+  value = float(byte_count)
+  unit = units[0]
+  for unit in units:
+    if value < 1000.0 or unit == units[-1]:
+      break
+    value /= 1000.0
+  return f"{value:.3g} {unit}"
+
+
 @dataclass(frozen=True)
 class ScanPlan:
   """An inspectable, hardware-free sequence of validated frame operations."""
@@ -396,6 +525,20 @@ class ScanPlan:
 
 
 @dataclass(frozen=True)
+class AcquisitionTiming:
+  """Host Unix timestamps and monotonic durations, excluding image persistence.
+
+  elapsed includes acquisition and illumination cleanup. stage_move_elapsed is
+  present only on the first image after a coarse-stage move and is separate from elapsed.
+  """
+
+  started_at: float
+  finished_at: float
+  elapsed: timedelta
+  stage_move_elapsed: Optional[timedelta] = None
+
+
+@dataclass(frozen=True)
 class FrameResult:
   """A captured frame linked to the exact operation that produced it."""
 
@@ -405,6 +548,7 @@ class FrameResult:
   actual_z_mm: float
   galvo_hardware_voltages: Tuple[float, float]
   focus: Optional["FocusResult"]
+  timing: Optional[AcquisitionTiming] = None
 
 
 @dataclass(frozen=True)
@@ -444,145 +588,6 @@ class _BlockLayout:
   selections: Tuple[_BlockSelection, ...]
   label: Optional[str]
   bounds: Optional[ScanRegion]
-
-
-def build_scan_plan(
-  config: CeligoConfig,
-  spec: ScanSpec,
-  *,
-  estimate_model: Optional[ScanEstimateModel] = None,
-) -> ScanPlan:
-  """Compile a complete scan specification without communicating with hardware."""
-  if not isinstance(config, CeligoConfig):
-    raise TypeError("config must be a CeligoConfig")
-  if not isinstance(spec, ScanSpec):
-    raise TypeError("spec must be a ScanSpec")
-  estimates = ScanEstimateModel() if estimate_model is None else estimate_model
-  if not isinstance(estimates, ScanEstimateModel):
-    raise TypeError("estimate_model must be a ScanEstimateModel")
-
-  capture_geometries = tuple(_capture_geometry(config, capture) for capture in spec.captures)
-  layouts = _build_layouts(spec.geometry, capture_geometries)
-  coordinate_systems = CoordinateSystems.from_config(
-    config.calibration,
-    config.hardware_defaults,
-  )
-
-  blocks: List[ScanBlock] = []
-  frames: List[PlannedFrame] = []
-  footprints: List[ScanRegion] = []
-  next_position_index = 0
-  for block_index, layout in enumerate(layouts):
-    block, positions, block_footprints, next_position_index = _compile_block(
-      config=config,
-      coordinate_systems=coordinate_systems,
-      captures=spec.captures,
-      capture_geometries=capture_geometries,
-      block_index=block_index,
-      first_position_index=next_position_index,
-      layout=layout,
-    )
-    blocks.append(block)
-    footprints.extend(block_footprints)
-    for position, capture in positions:
-      frames.append(
-        PlannedFrame(
-          index=len(frames),
-          block=block,
-          position=position,
-          capture=capture,
-        )
-      )
-
-  frame_count = len(frames)
-  stage_position_count = len(blocks)
-  autofocus_count = stage_position_count if spec.autofocus is not None else 0
-  exposure_seconds = sum(
-    0.0 if frame.capture.exposure_ms is None else frame.capture.exposure_ms / 1000.0
-    for frame in frames
-  )
-  duration_seconds = (
-    frame_count * estimates.seconds_per_frame
-    + exposure_seconds
-    + stage_position_count * estimates.seconds_per_stage_position
-    + autofocus_count * estimates.seconds_per_autofocus
-  )
-  calibration = config.calibration
-  storage_bytes = (
-    frame_count
-    * calibration.image_width_pixels
-    * calibration.image_height_pixels
-    * estimates.bytes_per_pixel
-  )
-  return ScanPlan(
-    spec=spec,
-    configuration_fingerprint=_configuration_fingerprint(config),
-    blocks=tuple(blocks),
-    frames=tuple(frames),
-    estimate_model=estimates,
-    frame_count=frame_count,
-    stage_position_count=stage_position_count,
-    autofocus_count=autofocus_count,
-    sampled_area_mm2=_union_area(footprints),
-    estimated_duration=timedelta(seconds=duration_seconds),
-    estimated_storage_bytes=storage_bytes,
-  )
-
-
-def _normalize_captures(
-  channel: Optional[str],
-  exposure_ms: Optional[float],
-  gain: Optional[float],
-  captures: Optional[Sequence[Capture]],
-) -> Tuple[Capture, ...]:
-  if captures is not None:
-    if channel is not None or exposure_ms is not None or gain is not None:
-      raise ValueError("captures cannot be combined with channel, exposure_ms, or gain")
-    normalized = tuple(captures)
-    if not normalized or any(not isinstance(capture, Capture) for capture in normalized):
-      raise ValueError("captures must contain at least one Capture")
-    return normalized
-  if channel is None:
-    raise ValueError("provide channel or captures")
-  return (Capture(channel=channel, exposure_ms=exposure_ms, gain=gain),)
-
-
-def _normalize_centers(centers_mm: Sequence[CoordinateMM]) -> Tuple[CoordinateMM, ...]:
-  if isinstance(centers_mm, (str, bytes)):
-    raise ValueError("centers_mm must be a sequence of (x, y) coordinates")
-  try:
-    centers = tuple((float(x), float(y)) for x, y in centers_mm)
-  except (TypeError, ValueError) as exc:
-    raise ValueError("centers_mm must contain (x, y) coordinates") from exc
-  if not centers:
-    raise ValueError("centers_mm must contain at least one coordinate")
-  for index, (x_mm, y_mm) in enumerate(centers):
-    _validate_finite(x_mm, f"centers_mm[{index}].x")
-    _validate_finite(y_mm, f"centers_mm[{index}].y")
-  return centers
-
-
-def _point_geometry(
-  centers_mm: Sequence[CoordinateMM],
-  block_shape: BlockShape,
-  labels: Optional[Sequence[str]] = None,
-) -> _PointGeometry:
-  centers = _normalize_centers(centers_mm)
-  shape = _validate_block_shape(block_shape)
-  if labels is None:
-    normalized_labels: Tuple[Optional[str], ...] = (None,) * len(centers)
-  else:
-    values = tuple(labels)
-    if len(values) != len(centers):
-      raise ValueError("labels must have the same length as centers_mm")
-    if any(not isinstance(label, str) or not label for label in values):
-      raise ValueError("labels must contain non-empty strings")
-    normalized_labels = tuple(values)
-  return _PointGeometry(
-    centers_mm=centers,
-    labels=normalized_labels,
-    block_shape=shape,
-  )
 
 
 def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometry:
@@ -646,19 +651,36 @@ def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometr
   return geometry
 
 
-def _build_layouts(
-  spec_geometry: _SpecGeometry,
-  capture_geometries: Tuple[_CaptureGeometry, ...],
-) -> List[_BlockLayout]:
-  if isinstance(spec_geometry, _PointGeometry):
-    return _point_layouts(spec_geometry, capture_geometries)
-  if isinstance(spec_geometry, _RandomGeometry):
-    return _random_layouts(spec_geometry, capture_geometries)
-  return _full_coverage_layouts(spec_geometry, capture_geometries)
+def _validate_shape_for_captures(
+  block_shape: BlockShape,
+  capture_geometries: Sequence[_CaptureGeometry],
+) -> None:
+  columns, rows = _validate_block_shape(block_shape)
+  for geometry in capture_geometries:
+    if columns > geometry.max_block_columns or rows > geometry.max_block_rows:
+      raise ValueError(
+        f"Requested {columns}x{rows} block_shape, but the calibrated galvo limit is "
+        f"{geometry.max_block_columns}x{geometry.max_block_rows}"
+      )
+
+
+def _selection_from_center(
+  center_x_mm: float,
+  center_y_mm: float,
+  block_shape: BlockShape,
+  geometry: _CaptureGeometry,
+) -> _BlockSelection:
+  columns, rows = block_shape
+  first_x_mm = center_x_mm - (columns - 1) * geometry.step_x_mm / 2.0
+  first_y_mm = center_y_mm - (rows - 1) * geometry.step_y_mm / 2.0
+  return _BlockSelection(
+    x_centers_mm=tuple(first_x_mm + index * geometry.step_x_mm for index in range(columns)),
+    y_centers_mm=tuple(first_y_mm + index * geometry.step_y_mm for index in range(rows)),
+  )
 
 
 def _point_layouts(
-  geometry: _PointGeometry,
+  geometry: PointGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
@@ -675,8 +697,160 @@ def _point_layouts(
   ]
 
 
+def _non_overlapping_block_centers(
+  start_mm: float,
+  end_mm: float,
+  block_mm: float,
+) -> Tuple[float, ...]:
+  available_mm = end_mm - start_mm
+  if block_mm > available_mm + 1e-9:
+    raise ValueError(
+      f"Imaging block length {block_mm:g} mm does not fit within scan bound "
+      f"length {available_mm:g} mm"
+    )
+  count = max(1, math.floor(available_mm / block_mm + 1e-12))
+  occupied_mm = count * block_mm
+  first_center_mm = start_mm + (available_mm - occupied_mm) / 2.0 + block_mm / 2.0
+  return tuple(first_center_mm + index * block_mm for index in range(count))
+
+
+def _candidate_block_centers(
+  start_mm: float,
+  end_mm: float,
+  block_mm: float,
+  step_mm: float,
+) -> Tuple[float, ...]:
+  minimum_center = start_mm + block_mm / 2.0
+  maximum_center = end_mm - block_mm / 2.0
+  if maximum_center < minimum_center - 1e-9:
+    raise ValueError(
+      f"Imaging block length {block_mm:g} mm does not fit within scan bound "
+      f"length {end_mm - start_mm:g} mm"
+    )
+  if maximum_center <= minimum_center + 1e-9:
+    return ((start_mm + end_mm) / 2.0,)
+  count = math.floor((maximum_center - minimum_center) / step_mm + 1e-12) + 1
+  candidates = [minimum_center + index * step_mm for index in range(count)]
+  if maximum_center - candidates[-1] > 1e-9:
+    candidates.append(maximum_center)
+  return tuple(candidates)
+
+
+def _exact_open_path(distances: Sequence[Sequence[float]]) -> List[int]:
+  point_count = len(distances)
+  state_count = 1 << point_count
+  costs = [[math.inf] * point_count for _ in range(state_count)]
+  parents = [[-1] * point_count for _ in range(state_count)]
+  for index in range(point_count):
+    costs[1 << index][index] = 0.0
+
+  for mask in range(1, state_count):
+    for end in range(point_count):
+      end_bit = 1 << end
+      if mask & end_bit == 0:
+        continue
+      previous_mask = mask ^ end_bit
+      if previous_mask == 0:
+        continue
+      best_cost = math.inf
+      best_previous = -1
+      for previous in range(point_count):
+        if previous_mask & (1 << previous) == 0:
+          continue
+        cost = costs[previous_mask][previous] + distances[previous][end]
+        if cost < best_cost:
+          best_cost = cost
+          best_previous = previous
+      costs[mask][end] = best_cost
+      parents[mask][end] = best_previous
+
+  mask = state_count - 1
+  end = min(range(point_count), key=lambda index: (costs[mask][index], index))
+  reversed_order = []
+  while end >= 0:
+    reversed_order.append(end)
+    previous = parents[mask][end]
+    mask ^= 1 << end
+    end = previous
+  return list(reversed(reversed_order))
+
+
+def _nearest_neighbor_path(
+  start: int,
+  distances: Sequence[Sequence[float]],
+) -> List[int]:
+  unvisited = set(range(len(distances)))
+  unvisited.remove(start)
+  order = [start]
+  while unvisited:
+    current = order[-1]
+    next_index = min(unvisited, key=lambda index: (distances[current][index], index))
+    order.append(next_index)
+    unvisited.remove(next_index)
+  return order
+
+
+def _path_length(
+  order: Sequence[int],
+  distances: Sequence[Sequence[float]],
+) -> float:
+  return sum(distances[start][end] for start, end in zip(order, order[1:]))
+
+
+def _improve_open_path(
+  order: List[int],
+  distances: Sequence[Sequence[float]],
+) -> List[int]:
+  improved = True
+  while improved:
+    improved = False
+    for start in range(len(order) - 1):
+      for end in range(start + 1, len(order)):
+        current = 0.0
+        replacement = 0.0
+        if start > 0:
+          current += distances[order[start - 1]][order[start]]
+          replacement += distances[order[start - 1]][order[end]]
+        if end + 1 < len(order):
+          current += distances[order[end]][order[end + 1]]
+          replacement += distances[order[start]][order[end + 1]]
+        if replacement + 1e-12 < current:
+          order[start : end + 1] = reversed(order[start : end + 1])
+          improved = True
+  return order
+
+
+def _heuristic_open_path(
+  points: Sequence[CoordinateMM],
+  distances: Sequence[Sequence[float]],
+) -> List[int]:
+  point_count = len(points)
+  starts = {
+    0,
+    min(range(point_count), key=lambda index: points[index][0]),
+    max(range(point_count), key=lambda index: points[index][0]),
+    min(range(point_count), key=lambda index: points[index][1]),
+    max(range(point_count), key=lambda index: points[index][1]),
+  }
+  routes = [_nearest_neighbor_path(start, distances) for start in starts]
+  order = min(routes, key=lambda route: _path_length(route, distances))
+  return _improve_open_path(order, distances)
+
+
+def _shortest_travel_order(points: Sequence[CoordinateMM]) -> List[CoordinateMM]:
+  """Order selected points along a short open path without changing the selection."""
+  if len(points) <= 1:
+    return list(points)
+  distances = [[math.dist(start, end) for end in points] for start in points]
+  if len(points) <= _EXACT_ROUTE_LIMIT:
+    order = _exact_open_path(distances)
+  else:
+    order = _heuristic_open_path(points, distances)
+  return [points[index] for index in order]
+
+
 def _random_layouts(
-  geometry: _RandomGeometry,
+  geometry: RandomGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
@@ -728,121 +902,56 @@ def _random_layouts(
   ]
 
 
-def _shortest_travel_order(points: Sequence[CoordinateMM]) -> List[CoordinateMM]:
-  """Order selected points along a short open path without changing the selection."""
-  if len(points) <= 1:
-    return list(points)
-  distances = [[math.dist(start, end) for end in points] for start in points]
-  if len(points) <= _EXACT_ROUTE_LIMIT:
-    order = _exact_open_path(distances)
-  else:
-    order = _heuristic_open_path(points, distances)
-  return [points[index] for index in order]
+def _coverage_axis_centers_with_count(
+  start_mm: float,
+  end_mm: float,
+  frame_mm: float,
+  count: int,
+) -> Tuple[float, ...]:
+  minimum_center = start_mm + frame_mm / 2.0
+  maximum_center = end_mm - frame_mm / 2.0
+  if maximum_center < minimum_center - 1e-9:
+    raise ValueError(
+      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the {frame_mm:g} mm camera frame"
+    )
+  if count == 1:
+    return ((start_mm + end_mm) / 2.0,)
+  step_mm = (maximum_center - minimum_center) / (count - 1)
+  centers = [minimum_center + index * step_mm for index in range(count)]
+  centers[-1] = maximum_center
+  return tuple(centers)
 
 
-def _exact_open_path(distances: Sequence[Sequence[float]]) -> List[int]:
-  point_count = len(distances)
-  state_count = 1 << point_count
-  costs = [[math.inf] * point_count for _ in range(state_count)]
-  parents = [[-1] * point_count for _ in range(state_count)]
-  for index in range(point_count):
-    costs[1 << index][index] = 0.0
-
-  for mask in range(1, state_count):
-    for end in range(point_count):
-      end_bit = 1 << end
-      if mask & end_bit == 0:
-        continue
-      previous_mask = mask ^ end_bit
-      if previous_mask == 0:
-        continue
-      best_cost = math.inf
-      best_previous = -1
-      for previous in range(point_count):
-        if previous_mask & (1 << previous) == 0:
-          continue
-        cost = costs[previous_mask][previous] + distances[previous][end]
-        if cost < best_cost:
-          best_cost = cost
-          best_previous = previous
-      costs[mask][end] = best_cost
-      parents[mask][end] = best_previous
-
-  mask = state_count - 1
-  end = min(range(point_count), key=lambda index: (costs[mask][index], index))
-  reversed_order = []
-  while end >= 0:
-    reversed_order.append(end)
-    previous = parents[mask][end]
-    mask ^= 1 << end
-    end = previous
-  return list(reversed(reversed_order))
+def _coverage_axis_centers(
+  start_mm: float,
+  end_mm: float,
+  frame_mm: float,
+  maximum_step_mm: float,
+) -> Tuple[float, ...]:
+  minimum_center = start_mm + frame_mm / 2.0
+  maximum_center = end_mm - frame_mm / 2.0
+  center_span = maximum_center - minimum_center
+  if center_span < -1e-9:
+    raise ValueError(
+      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the {frame_mm:g} mm camera frame"
+    )
+  if center_span <= 1e-9:
+    return ((start_mm + end_mm) / 2.0,)
+  interval_count = max(1, math.ceil(center_span / maximum_step_mm - 1e-12))
+  return _coverage_axis_centers_with_count(
+    start_mm,
+    end_mm,
+    frame_mm,
+    interval_count + 1,
+  )
 
 
-def _heuristic_open_path(
-  points: Sequence[CoordinateMM],
-  distances: Sequence[Sequence[float]],
-) -> List[int]:
-  point_count = len(points)
-  starts = {
-    0,
-    min(range(point_count), key=lambda index: points[index][0]),
-    max(range(point_count), key=lambda index: points[index][0]),
-    min(range(point_count), key=lambda index: points[index][1]),
-    max(range(point_count), key=lambda index: points[index][1]),
-  }
-  routes = [_nearest_neighbor_path(start, distances) for start in starts]
-  order = min(routes, key=lambda route: _path_length(route, distances))
-  return _improve_open_path(order, distances)
-
-
-def _nearest_neighbor_path(
-  start: int,
-  distances: Sequence[Sequence[float]],
-) -> List[int]:
-  unvisited = set(range(len(distances)))
-  unvisited.remove(start)
-  order = [start]
-  while unvisited:
-    current = order[-1]
-    next_index = min(unvisited, key=lambda index: (distances[current][index], index))
-    order.append(next_index)
-    unvisited.remove(next_index)
-  return order
-
-
-def _improve_open_path(
-  order: List[int],
-  distances: Sequence[Sequence[float]],
-) -> List[int]:
-  improved = True
-  while improved:
-    improved = False
-    for start in range(len(order) - 1):
-      for end in range(start + 1, len(order)):
-        current = 0.0
-        replacement = 0.0
-        if start > 0:
-          current += distances[order[start - 1]][order[start]]
-          replacement += distances[order[start - 1]][order[end]]
-        if end + 1 < len(order):
-          current += distances[order[end]][order[end + 1]]
-          replacement += distances[order[start]][order[end + 1]]
-        if replacement + 1e-12 < current:
-          order[start : end + 1] = reversed(order[start : end + 1])
-          improved = True
-  return order
-
-
-def _path_length(
-  order: Sequence[int],
-  distances: Sequence[Sequence[float]],
-) -> float:
-  return sum(distances[start][end] for start, end in zip(order, order[1:]))
+def _chunks(values: Tuple[int, ...], size: int) -> List[Tuple[int, ...]]:
+  return [values[start : start + size] for start in range(0, len(values), size)]
 
 
 def _full_coverage_layouts(
-  geometry: _FullCoverageGeometry,
+  geometry: FullCoverageGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   x_counts = [
@@ -917,17 +1026,57 @@ def _full_coverage_layouts(
   return layouts
 
 
-def _validate_shape_for_captures(
-  block_shape: BlockShape,
-  capture_geometries: Sequence[_CaptureGeometry],
+def _build_layouts(
+  spec_geometry: ScanGeometry,
+  capture_geometries: Tuple[_CaptureGeometry, ...],
+) -> List[_BlockLayout]:
+  if isinstance(spec_geometry, PointGeometry):
+    return _point_layouts(spec_geometry, capture_geometries)
+  if isinstance(spec_geometry, RandomGeometry):
+    return _random_layouts(spec_geometry, capture_geometries)
+  return _full_coverage_layouts(spec_geometry, capture_geometries)
+
+
+def _selection_bounds(
+  selection: _BlockSelection,
+  geometry: _CaptureGeometry,
+) -> ScanRegion:
+  return ScanRegion(
+    left=selection.x_centers_mm[0] - geometry.frame_x_mm / 2.0,
+    top=selection.y_centers_mm[0] - geometry.frame_y_mm / 2.0,
+    right=selection.x_centers_mm[-1] + geometry.frame_x_mm / 2.0,
+    bottom=selection.y_centers_mm[-1] + geometry.frame_y_mm / 2.0,
+  )
+
+
+def _contains(outer: ScanRegion, inner: ScanRegion) -> bool:
+  tolerance = 1e-9
+  return (
+    inner.left >= outer.left - tolerance
+    and inner.top >= outer.top - tolerance
+    and inner.right <= outer.right + tolerance
+    and inner.bottom <= outer.bottom + tolerance
+  )
+
+
+def _validate_stage_target(
+  config: CeligoConfig,
+  block_index: int,
+  stage_x_mm: float,
+  stage_y_mm: float,
 ) -> None:
-  columns, rows = _validate_block_shape(block_shape)
-  for geometry in capture_geometries:
-    if columns > geometry.max_block_columns or rows > geometry.max_block_rows:
-      raise ValueError(
-        f"Requested {columns}x{rows} block_shape, but the calibrated galvo limit is "
-        f"{geometry.max_block_columns}x{geometry.max_block_rows}"
-      )
+  x_axis = config.hardware.x_axis
+  y_axis = config.hardware.y_axis
+  if x_axis is not None and not x_axis.min_position <= stage_x_mm <= x_axis.max_position:
+    raise ValueError(
+      f"Block {block_index} X stage target {stage_x_mm:g} mm is outside "
+      f"{x_axis.min_position:g}..{x_axis.max_position:g} mm"
+    )
+  if y_axis is not None and not y_axis.min_position <= stage_y_mm <= y_axis.max_position:
+    raise ValueError(
+      f"Block {block_index} Y stage target {stage_y_mm:g} mm is outside "
+      f"{y_axis.min_position:g}..{y_axis.max_position:g} mm"
+    )
 
 
 def _compile_block(
@@ -1030,150 +1179,6 @@ def _compile_block(
   return block, positions, footprints, position_index
 
 
-def _validate_stage_target(
-  config: CeligoConfig,
-  block_index: int,
-  stage_x_mm: float,
-  stage_y_mm: float,
-) -> None:
-  x_axis = config.hardware.x_axis
-  y_axis = config.hardware.y_axis
-  if x_axis is not None and not x_axis.min_position <= stage_x_mm <= x_axis.max_position:
-    raise ValueError(
-      f"Block {block_index} X stage target {stage_x_mm:g} mm is outside "
-      f"{x_axis.min_position:g}..{x_axis.max_position:g} mm"
-    )
-  if y_axis is not None and not y_axis.min_position <= stage_y_mm <= y_axis.max_position:
-    raise ValueError(
-      f"Block {block_index} Y stage target {stage_y_mm:g} mm is outside "
-      f"{y_axis.min_position:g}..{y_axis.max_position:g} mm"
-    )
-
-
-def _selection_from_center(
-  center_x_mm: float,
-  center_y_mm: float,
-  block_shape: BlockShape,
-  geometry: _CaptureGeometry,
-) -> _BlockSelection:
-  columns, rows = block_shape
-  first_x_mm = center_x_mm - (columns - 1) * geometry.step_x_mm / 2.0
-  first_y_mm = center_y_mm - (rows - 1) * geometry.step_y_mm / 2.0
-  return _BlockSelection(
-    x_centers_mm=tuple(first_x_mm + index * geometry.step_x_mm for index in range(columns)),
-    y_centers_mm=tuple(first_y_mm + index * geometry.step_y_mm for index in range(rows)),
-  )
-
-
-def _selection_bounds(
-  selection: _BlockSelection,
-  geometry: _CaptureGeometry,
-) -> ScanRegion:
-  return ScanRegion(
-    left=selection.x_centers_mm[0] - geometry.frame_x_mm / 2.0,
-    top=selection.y_centers_mm[0] - geometry.frame_y_mm / 2.0,
-    right=selection.x_centers_mm[-1] + geometry.frame_x_mm / 2.0,
-    bottom=selection.y_centers_mm[-1] + geometry.frame_y_mm / 2.0,
-  )
-
-
-def _coverage_axis_centers(
-  start_mm: float,
-  end_mm: float,
-  frame_mm: float,
-  maximum_step_mm: float,
-) -> Tuple[float, ...]:
-  minimum_center = start_mm + frame_mm / 2.0
-  maximum_center = end_mm - frame_mm / 2.0
-  center_span = maximum_center - minimum_center
-  if center_span < -1e-9:
-    raise ValueError(
-      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the {frame_mm:g} mm camera frame"
-    )
-  if center_span <= 1e-9:
-    return ((start_mm + end_mm) / 2.0,)
-  interval_count = max(1, math.ceil(center_span / maximum_step_mm - 1e-12))
-  return _coverage_axis_centers_with_count(
-    start_mm,
-    end_mm,
-    frame_mm,
-    interval_count + 1,
-  )
-
-
-def _coverage_axis_centers_with_count(
-  start_mm: float,
-  end_mm: float,
-  frame_mm: float,
-  count: int,
-) -> Tuple[float, ...]:
-  minimum_center = start_mm + frame_mm / 2.0
-  maximum_center = end_mm - frame_mm / 2.0
-  if maximum_center < minimum_center - 1e-9:
-    raise ValueError(
-      f"Scan bound length {end_mm - start_mm:g} mm is smaller than the {frame_mm:g} mm camera frame"
-    )
-  if count == 1:
-    return ((start_mm + end_mm) / 2.0,)
-  step_mm = (maximum_center - minimum_center) / (count - 1)
-  centers = [minimum_center + index * step_mm for index in range(count)]
-  centers[-1] = maximum_center
-  return tuple(centers)
-
-
-def _chunks(values: Tuple[int, ...], size: int) -> List[Tuple[int, ...]]:
-  return [values[start : start + size] for start in range(0, len(values), size)]
-
-
-def _non_overlapping_block_centers(
-  start_mm: float,
-  end_mm: float,
-  block_mm: float,
-) -> Tuple[float, ...]:
-  available_mm = end_mm - start_mm
-  if block_mm > available_mm + 1e-9:
-    raise ValueError(
-      f"Imaging block length {block_mm:g} mm does not fit within scan bound "
-      f"length {available_mm:g} mm"
-    )
-  count = max(1, math.floor(available_mm / block_mm + 1e-12))
-  occupied_mm = count * block_mm
-  first_center_mm = start_mm + (available_mm - occupied_mm) / 2.0 + block_mm / 2.0
-  return tuple(first_center_mm + index * block_mm for index in range(count))
-
-
-def _candidate_block_centers(
-  start_mm: float,
-  end_mm: float,
-  block_mm: float,
-  step_mm: float,
-) -> Tuple[float, ...]:
-  minimum_center = start_mm + block_mm / 2.0
-  maximum_center = end_mm - block_mm / 2.0
-  if maximum_center < minimum_center - 1e-9:
-    raise ValueError(
-      f"Imaging block length {block_mm:g} mm does not fit within scan bound "
-      f"length {end_mm - start_mm:g} mm"
-    )
-  if maximum_center <= minimum_center + 1e-9:
-    return ((start_mm + end_mm) / 2.0,)
-  count = math.floor((maximum_center - minimum_center) / step_mm + 1e-12) + 1
-  candidates = [minimum_center + index * step_mm for index in range(count)]
-  if maximum_center - candidates[-1] > 1e-9:
-    candidates.append(maximum_center)
-  return tuple(candidates)
-
-
-def _contains(outer: ScanRegion, inner: ScanRegion) -> bool:
-  tolerance = 1e-9
-  return (
-    inner.left >= outer.left - tolerance
-    and inner.top >= outer.top - tolerance
-    and inner.right <= outer.right + tolerance
-    and inner.bottom <= outer.bottom + tolerance
-  )
-
-
 def _union_area(regions: Sequence[ScanRegion]) -> float:
   if not regions:
     return 0.0
@@ -1199,42 +1204,94 @@ def _union_area(regions: Sequence[ScanRegion]) -> float:
   return area
 
 
-def _describe_geometry(geometry: _SpecGeometry) -> str:
-  if isinstance(geometry, _PointGeometry):
-    columns, rows = geometry.block_shape
-    kind = "wells" if any(label is not None for label in geometry.labels) else "points"
-    return f"{kind}(count={len(geometry.centers_mm)}, block_shape={columns}x{rows})"
-  if isinstance(geometry, _RandomGeometry):
-    columns, rows = geometry.block_shape
-    return (
-      f"random(count={geometry.count}, block_shape={columns}x{rows}, "
-      f"seed={geometry.seed}, non_overlapping={geometry.non_overlapping})"
-    )
-  return (
-    f"full_coverage(X={geometry.bounds.left:g}..{geometry.bounds.right:g} mm, "
-    f"Y={geometry.bounds.top:g}..{geometry.bounds.bottom:g} mm)"
+def build_scan_plan(
+  config: CeligoConfig,
+  spec: ScanSpec,
+  *,
+  estimate_model: Optional[ScanEstimateModel] = None,
+) -> ScanPlan:
+  """Compile a complete scan specification without communicating with hardware."""
+  if not isinstance(config, CeligoConfig):
+    raise TypeError("config must be a CeligoConfig")
+  if not isinstance(spec, ScanSpec):
+    raise TypeError("spec must be a ScanSpec")
+  estimates = ScanEstimateModel() if estimate_model is None else estimate_model
+  if not isinstance(estimates, ScanEstimateModel):
+    raise TypeError("estimate_model must be a ScanEstimateModel")
+
+  capture_geometries = tuple(_capture_geometry(config, capture) for capture in spec.captures)
+  if spec.initial_brightfield_z_mm is not None:
+    z_axis = config.hardware.z_axis
+    if z_axis is None:
+      raise ValueError("Z travel must be configured for an explicit focus seed")
+    for capture in spec.captures:
+      z = (
+        spec.initial_brightfield_z_mm + config.channels[capture.channel].z_offset_to_brightfield_mm
+      )
+      if not z_axis.min_position <= z <= z_axis.max_position:
+        raise ValueError("initial channel focus is outside Z travel")
+  layouts = _build_layouts(spec.geometry, capture_geometries)
+  coordinate_systems = CoordinateSystems.from_config(
+    config.calibration,
+    config.hardware_defaults,
   )
 
+  blocks: List[ScanBlock] = []
+  frames: List[PlannedFrame] = []
+  footprints: List[ScanRegion] = []
+  next_position_index = 0
+  for block_index, layout in enumerate(layouts):
+    block, positions, block_footprints, next_position_index = _compile_block(
+      config=config,
+      coordinate_systems=coordinate_systems,
+      captures=spec.captures,
+      capture_geometries=capture_geometries,
+      block_index=block_index,
+      first_position_index=next_position_index,
+      layout=layout,
+    )
+    blocks.append(block)
+    footprints.extend(block_footprints)
+    for position, capture in positions:
+      frames.append(
+        PlannedFrame(
+          index=len(frames),
+          block=block,
+          position=position,
+          capture=capture,
+        )
+      )
 
-def _format_duration(duration: timedelta) -> str:
-  seconds = max(0, round(duration.total_seconds()))
-  hours, remainder = divmod(seconds, 3600)
-  minutes, seconds = divmod(remainder, 60)
-  parts = []
-  if hours:
-    parts.append(f"{hours}h")
-  if minutes or hours:
-    parts.append(f"{minutes}m")
-  parts.append(f"{seconds}s")
-  return " ".join(parts)
-
-
-def _format_bytes(byte_count: int) -> str:
-  units = ("B", "kB", "MB", "GB", "TB")
-  value = float(byte_count)
-  unit = units[0]
-  for unit in units:
-    if value < 1000.0 or unit == units[-1]:
-      break
-    value /= 1000.0
-  return f"{value:.3g} {unit}"
+  frame_count = len(frames)
+  stage_position_count = len(blocks)
+  autofocus_count = stage_position_count if spec.autofocus is not None else 0
+  exposure_seconds = sum(
+    0.0 if frame.capture.exposure_ms is None else frame.capture.exposure_ms / 1000.0
+    for frame in frames
+  )
+  duration_seconds = (
+    frame_count * estimates.seconds_per_frame
+    + exposure_seconds
+    + stage_position_count * estimates.seconds_per_stage_position
+    + autofocus_count * estimates.seconds_per_autofocus
+  )
+  calibration = config.calibration
+  storage_bytes = (
+    frame_count
+    * calibration.image_width_pixels
+    * calibration.image_height_pixels
+    * estimates.bytes_per_pixel
+  )
+  return ScanPlan(
+    spec=spec,
+    configuration_fingerprint=_configuration_fingerprint(config),
+    blocks=tuple(blocks),
+    frames=tuple(frames),
+    estimate_model=estimates,
+    frame_count=frame_count,
+    stage_position_count=stage_position_count,
+    autofocus_count=autofocus_count,
+    sampled_area_mm2=_union_area(footprints),
+    estimated_duration=timedelta(seconds=duration_seconds),
+    estimated_storage_bytes=storage_bytes,
+  )

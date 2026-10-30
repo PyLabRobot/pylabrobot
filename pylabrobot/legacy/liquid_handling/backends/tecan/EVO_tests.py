@@ -47,8 +47,8 @@ class EVOTests(AnyioTestBase):
       module: str,
       command: str,
       params: Optional[List[Optional[int]]] = None,
-      write_timeout: Optional[int] = None,
-      read_timeout: Optional[int] = None,
+      write_timeout: Optional[float] = None,
+      read_timeout: Optional[float] = None,
       wait: bool = True,
     ) -> Dict[str, Union[str, int, List[Union[int, str]]]]:
       del write_timeout, read_timeout, wait

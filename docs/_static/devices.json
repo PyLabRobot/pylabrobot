@@ -148,13 +148,18 @@
     "kind": "plate reader",
     "capabilities": [
       "absorbance",
-      "fluorescence",
-      "luminescence"
+      "heating",
+      "shaking"
     ],
-    "status": "full",
-    "api_version": "v0",
+    "status": "mostly",
+    "api_version": "v1",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194"
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194",
+    "needs_hardware_testing": false,
+    "api": "pylabrobot.agilent.biotek.synergy_ht.SynergyHT",
+    "code_slug": "agilent/biotek/synergy_ht",
+    "doc_slug": "agilent/synergy_ht/hello-world",
+    "notes": "Endpoint absorbance with optional shaking before reads on built-in 24- and 96-well plates."
   },
   {
     "id": "agrowtek-pump-array",

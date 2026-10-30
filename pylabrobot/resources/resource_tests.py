@@ -599,6 +599,21 @@ class TestResource(unittest.TestCase):
           for anchors in (("l", "f", "b"), ("c", "c", "c"), ("r", "b", "t")):
             self.assertEqual(node.get_absolute_location(*anchors), level_by_level(node, *anchors))
 
+  def test_location_wrt_a_turned_resource_is_along_its_axes(self):
+    """A location with respect to a turned resource is along that resource's axes."""
+    for angle in (0, 90, 180, -90, 37.5):
+      with self.subTest(angle=angle):
+        world = Resource("world", size_x=5000, size_y=5000, size_z=1000)
+        world.location = Coordinate.zero()
+        body = Resource("body", size_x=600, size_y=400, size_z=300, rotation=Rotation(z=angle))
+        world.assign_child_resource(body, location=Coordinate(2000, 2000, 0))
+        part = Resource("part", size_x=10, size_y=10, size_z=10)
+        body.assign_child_resource(part, location=Coordinate(10, 20, 30))
+        for anchors, expected in ((("l", "f", "b"), (10, 20, 30)), (("c", "c", "c"), (15, 25, 35))):
+          got = part.get_location_wrt(body, *anchors)
+          for axis, value in zip("xyz", expected):
+            self.assertAlmostEqual(getattr(got, axis), value, places=3)
+
   def test_rotate_composes_around_fixed_axes(self):
     resource = Resource("resource", size_x=10, size_y=10, size_z=10, rotation=Rotation(z=90))
     expected = matrix_multiply_3x3(

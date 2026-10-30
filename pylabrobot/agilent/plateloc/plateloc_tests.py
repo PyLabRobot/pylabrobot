@@ -1,4 +1,5 @@
 import contextlib
+import logging
 from collections import deque
 from dataclasses import replace
 from typing import Any, Awaitable, Callable, Deque, List, Optional, Type, Union, cast
@@ -391,15 +392,16 @@ class TestPlateLocLifecycle(AnyioTestBase):
     assert not device.is_active
 
   async def test_pending_cancellation_after_serial_entry_unwinds_before_body(
-    self, caplog: pytest.LogCaptureFixture
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
   ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     events: List[str] = []
     device, fake_io = make_device(events=events, device_type=RecordingPlateLoc)
     assert isinstance(device, RecordingPlateLoc)
     device.lifecycle_events = events
     body_reached = False
 
-    with caplog.at_level("INFO"), anyio.CancelScope() as scope:
+    with caplog.at_level("INFO", logger=plateloc_module.logger.name), anyio.CancelScope() as scope:
       fake_io.after_entry = scope.cancel
       async with device:
         body_reached = True

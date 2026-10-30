@@ -330,7 +330,7 @@ class TestShakingScope(AnyioTestBase):
     shaker = make_shaker(backend)
     body_error = ValueError("body failed")
 
-    async def slow_stop() -> None:
+    async def slow_stop(**backend_kwargs: Any) -> None:
       backend.events.append("stop")
       await anyio.sleep(0.1)
 
@@ -353,7 +353,7 @@ class TestShakingScope(AnyioTestBase):
     backend = RecordingShakerBackend()
     shaker = make_shaker(backend)
 
-    async def slow_stop() -> None:
+    async def slow_stop(**backend_kwargs: Any) -> None:
       backend.events.append("stop")
       await anyio.sleep(0.1)
 
@@ -379,7 +379,7 @@ class TestShakingScope(AnyioTestBase):
     shaker = make_shaker(backend)
     attempts = 0
 
-    async def unlock() -> None:
+    async def unlock(**backend_kwargs: Any) -> None:
       nonlocal attempts
       attempts += 1
       backend.events.append("unlock")

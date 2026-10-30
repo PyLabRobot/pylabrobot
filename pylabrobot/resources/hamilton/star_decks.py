@@ -1,5 +1,6 @@
 """Hamilton STAR, STARlet and STARplus decks."""
 
+import warnings
 from typing import Literal, Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
@@ -34,24 +35,35 @@ class HamiltonSTARDeck(HamiltonDeck):
     size_x: Optional[float] = None,
     size_y: Optional[float] = None,
     size_z: Optional[float] = None,
-    name="deck",
+    name: str = "deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     with_waste_block: bool = True,
     with_trash: bool = True,
     with_trash96: bool = True,
-    with_teaching_rack: bool = True,
+    with_teaching_needle_rack: bool = True,
     core_grippers: Optional[
       Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
     ] = "1000uL-5mL-on-waste",
     model: Optional[str] = None,
     num_rails: Optional[int] = None,
+    with_teaching_rack: Optional[bool] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size.
 
-    `with_trash` and `with_teaching_rack` require `with_waste_block` to be true. `num_rails` is
-    deprecated: it counted two more than `num_tracks`.
+    `with_trash` and `with_teaching_needle_rack` require `with_waste_block` to be true.
+    `num_rails` is deprecated: it counted two more than `num_tracks`. `with_teaching_rack` is
+    deprecated: use `with_teaching_needle_rack`.
     """
+
+    if with_teaching_rack is not None:
+      warnings.warn(
+        "`with_teaching_rack` is deprecated, use `with_teaching_needle_rack`: what stands in the"
+        " rack is a teaching needle, not a tip.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      with_teaching_needle_rack = with_teaching_rack
 
     # Defaulted only so a deck saved with `num_rails` can leave out `num_tracks`, which comes first.
     if size_x is None or size_y is None or size_z is None:
@@ -81,7 +93,11 @@ class HamiltonSTARDeck(HamiltonDeck):
 
     if with_waste_block:
       waste_block = Resource(
-        name=self.get_component_name("waste_block"), size_x=30, size_y=445.2, size_z=100
+        name=self.get_component_name("waste_block"),
+        size_x=30,
+        size_y=445.2,
+        size_z=100,
+        category="waste_block",
       )
       self.assign_child_resource(
         waste_block,
@@ -91,22 +107,14 @@ class HamiltonSTARDeck(HamiltonDeck):
       # assign trash area, positioned 25mm to the right of the waste block
       # only run if the waste block is actually assigned.
       if with_trash:
-        if with_waste_block:
-          waste_block_x = (
-            self.get_resource(self.get_component_name("waste_block")).get_location_wrt(self).x
-          )
-        else:
-          # Fallback: anchor to the rightmost rail when no waste block is present.
-          waste_block_x = self.track_to_location(self.num_tracks + 1).x
-
-        trash_x = waste_block_x + 25
+        trash_x = waste_block.get_location_wrt(self).x + 25
 
         self.assign_child_resource(
           resource=Trash(self.get_component_name("trash"), size_x=0, size_y=241.2, size_z=0),
           location=Coordinate(x=trash_x, y=190.6, z=137.1),
         )
 
-      if with_teaching_rack:
+      if with_teaching_needle_rack:
         tip_spots = [
           TipSpot(
             name=self.get_component_name(f"teaching_tip_rack_tip_spot_{i}"),
@@ -128,28 +136,34 @@ class HamiltonSTARDeck(HamiltonDeck):
           size_z=50.4,
           ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("ABCDEFGH")},
           with_tips=True,
-          model="hamilton_teaching_tip_rack",
+          model="hamilton_teaching_needle_rack",
         )
         waste_block.assign_child_resource(
-          teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
+          teaching_tip_rack, location=Coordinate(x=6.75, y=346.5, z=0)
         )
     else:
       if with_trash:
         raise RuntimeError("Trash area cannot be created when no waste block is present.")
-      if with_teaching_rack:
-        raise RuntimeError("Teaching rack cannot be created when no waste block is present.")
+      if with_teaching_needle_rack:
+        raise RuntimeError("Teaching needle rack cannot be created when no waste block is present.")
 
+    # `x` is where the channels take the tools, the holder's centre x.
     if core_grippers == "1000uL-at-waste":  # "at waste"
       x: float = 1338 if self.num_tracks == STAR_NUM_TRACKS else 798
+      holder = hamilton_core_gripper_1000ul_at_waste(name=self.get_component_name("core_grippers"))
       waste_block.assign_child_resource(
-        hamilton_core_gripper_1000ul_at_waste(name=self.get_component_name("core_grippers")),
-        location=Coordinate(x=x, y=105.550 - 26 - 9.5, z=205) - waste_block.location,
+        holder,
+        location=Coordinate(x=x - holder.get_size_x() / 2, y=105.550 - 26 - 9.5, z=205)
+        - waste_block.location,
       )
     elif core_grippers == "1000uL-5mL-on-waste":  # "on waste"
       x = 1337.5 if self.num_tracks == STAR_NUM_TRACKS else 797.5
+      holder = hamilton_core_gripper_1000ul_5ml_on_waste(
+        name=self.get_component_name("core_grippers")
+      )
       waste_block.assign_child_resource(
-        hamilton_core_gripper_1000ul_5ml_on_waste(name=self.get_component_name("core_grippers")),
-        location=Coordinate(x=x, y=125 - 18 - 21.5, z=200.5)  # probed
+        holder,
+        location=Coordinate(x=x - holder.get_size_x() / 2, y=125 - 18 - 21.5, z=200.5)  # probed
         - waste_block.location,
       )
 
@@ -157,7 +171,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     return {
       **super().serialize(),
       "with_waste_block": False,  # data encoded as child. (not very pretty to have this key though...)
-      "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
+      "with_teaching_needle_rack": False,  # data encoded as child.
       "core_grippers": None,  # data encoded as child. (not very pretty to have this key though...)
     }
 
@@ -196,11 +210,12 @@ def STARLetDeck(
   origin: Coordinate = Coordinate.zero(),
   with_trash: bool = True,
   with_trash96: bool = True,
-  with_teaching_rack: bool = True,
+  with_teaching_needle_rack: bool = True,
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
   name: str = "deck",
+  with_teaching_rack: Optional[bool] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck."""
 
@@ -213,6 +228,7 @@ def STARLetDeck(
     origin=origin,
     with_trash=with_trash,
     with_trash96=with_trash96,
+    with_teaching_needle_rack=with_teaching_needle_rack,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
   )
@@ -222,11 +238,12 @@ def STARDeck(
   origin: Coordinate = Coordinate.zero(),
   with_trash: bool = True,
   with_trash96: bool = True,
-  with_teaching_rack: bool = True,
+  with_teaching_needle_rack: bool = True,
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
   name: str = "deck",
+  with_teaching_rack: Optional[bool] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck."""
 
@@ -239,6 +256,7 @@ def STARDeck(
     origin=origin,
     with_trash=with_trash,
     with_trash96=with_trash96,
+    with_teaching_needle_rack=with_teaching_needle_rack,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
   )
@@ -256,11 +274,12 @@ def STARPlusDeck(
   origin: Coordinate = Coordinate.zero(),
   with_trash: bool = True,
   with_trash96: bool = True,
-  with_teaching_rack: bool = True,
+  with_teaching_needle_rack: bool = True,
   core_grippers: Optional[
     Literal["1000uL-at-waste", "1000uL-5mL-on-waste"]
   ] = "1000uL-5mL-on-waste",
   name: str = "deck",
+  with_teaching_rack: Optional[bool] = None,
 ) -> HamiltonSTARDeck:
   """Create a new STARplus deck.
 
@@ -276,6 +295,7 @@ def STARPlusDeck(
     origin=origin,
     with_trash=with_trash,
     with_trash96=with_trash96,
+    with_teaching_needle_rack=with_teaching_needle_rack,
     with_teaching_rack=with_teaching_rack,
     core_grippers=core_grippers,
   )
