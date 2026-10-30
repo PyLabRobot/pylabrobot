@@ -2,20 +2,19 @@
 
 import ast
 import builtins
-from dataclasses import dataclass
 import importlib.util
 import ipaddress
 import json
-from pathlib import Path
 import re
 import socket
 import subprocess
 import sys
-from typing import Any, Literal, Optional
 import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal, Optional
 
 import pytest
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -592,9 +591,7 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
     ("bioshake-interactive-setup", ("bs",)),
   ),
   "docs/user_guide/revvity/celigo/advanced-imaging.ipynb": (("connect", ("celigo",)),),
-  "docs/user_guide/revvity/celigo/components-and-diagnostics.ipynb": (
-    ("connect", ("celigo",)),
-  ),
+  "docs/user_guide/revvity/celigo/components-and-diagnostics.ipynb": (("connect", ("celigo",)),),
   "docs/user_guide/revvity/celigo/hello-world.ipynb": (("setup", ("celigo",)),),
   "docs/user_guide/sartorius/entris2/hello-world.ipynb": (("entris2-connect-code", ("scale",)),),
   "docs/user_guide/thermo_fisher/alps/alps300/hello-world.ipynb": (
@@ -606,9 +603,7 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
   "docs/user_guide/thermo_fisher/alps/alps5000/hello-world.ipynb": (
     ("alps5000-connect-code", ("sealer",)),
   ),
-  "docs/user_guide/thermo_fisher/btx/gemini/X2/hello-world.ipynb": (
-    ("setup-code", ("gemini",)),
-  ),
+  "docs/user_guide/thermo_fisher/btx/gemini/X2/hello-world.ipynb": (("setup-code", ("gemini",)),),
   "docs/user_guide/thermo_fisher/nanodrop_1000/hello-world.ipynb": (
     ("nanodrop-connect", ("nanodrop",)),
   ),

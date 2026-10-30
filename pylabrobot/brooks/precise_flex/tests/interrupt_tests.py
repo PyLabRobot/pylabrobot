@@ -39,33 +39,43 @@ def _make_arm() -> PreciseFlexDriver:
 class _CancellingIO:
   """Software transport that requests cancellation after a selected reply is consumed."""
 
-  def __init__(self, cancel_command: str) -> None:
+  def __init__(self, cancel_command: str, *, has_rail: bool = False) -> None:
     self.cancel_command = cancel_command
     self.commands: list[str] = []
+    self.raw_writes: list[bytes] = []
     self.consumed: list[str] = []
     self.scope: anyio.CancelScope | None = None
     self._current_command = ""
     self._cancelled = False
+    self._has_rail = has_rail
     self._host = "localhost"
     self._port = 10100
 
-  async def write(self, data: bytes) -> None:
+  async def write(self, data: bytes, timeout: float | None = None) -> None:
+    del timeout
+    self.raw_writes.append(data)
     self._current_command = data.decode("ascii").strip()
     self.commands.append(self._current_command)
 
-  async def readline(self) -> bytes:
+  async def readline(self, timeout: float | None = None) -> bytes:
+    if timeout is not None:
+      raise TimeoutError()
     self.consumed.append(self._current_command)
     if self._current_command == self.cancel_command and not self._cancelled:
       self._cancelled = True
       assert self.scope is not None
       self.scope.cancel()
+    if self._current_command == "wherej":
+      if self._has_rail:
+        return b"0 100.0 0.0 180.0 180.0 70.0 0.0\n"
+      return b"0 100.0 0.0 180.0 180.0 70.0\n"
     return b"0 1\n"
 
 
 def _make_cancelling_arm(
-  cancel_command: str, *, has_rail: bool = False
+  cancel_command: str, *, has_rail: bool = False, stub_eom: bool = True
 ) -> tuple[PreciseFlexDriver, _CancellingIO]:
-  io = _CancellingIO(cancel_command)
+  io = _CancellingIO(cancel_command, has_rail=has_rail)
   arm = PreciseFlexDriver(
     host="localhost",
     gripper_length=162.0,
@@ -75,7 +85,8 @@ def _make_cancelling_arm(
   )
   arm.io = cast(Any, io)
   arm.gripper.configuration = MagicMock(soft_limit_range=(0.0, 10_000.0))
-  arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
+  if stub_eom:
+    arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
   return arm, io
 
 
@@ -612,7 +623,8 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
     scope_ready = anyio.Event()
     scopes: list[anyio.CancelScope] = []
 
-    async def readline() -> bytes:
+    async def readline(timeout: float | None = None) -> bytes:
+      del timeout
       if io._current_command == "active":
         active_read_started.set()
         await release_active_reply.wait()
@@ -645,8 +657,54 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
 
     await _run_until_confirmed_cancellation(io, lambda: arm.gripper.move_to_jaw_position(80.0))
 
-    assert io.commands == ["GripOpenPos 520.0", "gripper 1"]
+    assert io.commands == ["wherej", "GripOpenPos 520.0", "gripper 1"]
     assert io.consumed == io.commands
+
+  async def test_cancelled_move_j_after_commit_halts_without_post_cancel_wherej(self) -> None:
+    move_command = "moveJ 1 100.0 10.0 180.0 180.0 70.0"
+    arm, io = _make_cancelling_arm(move_command)
+
+    await _run_until_confirmed_cancellation(
+      io, lambda: arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 10.0})
+    )
+
+    assert io.commands == ["wherej", move_command, "halt"]
+    assert io.consumed == ["wherej", move_command]
+    assert io.raw_writes[-1] == b"\nhalt\n"
+
+  async def test_cancelled_move_j_during_eom_wait_halts_once(self) -> None:
+    arm, io = _make_cancelling_arm("never", stub_eom=False)
+    post_move_reads = 0
+    polling_started = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def readline(timeout: float | None = None) -> bytes:
+      nonlocal post_move_reads
+      if timeout is not None:
+        raise TimeoutError()
+      io.consumed.append(io._current_command)
+      if io._current_command == "wherej":
+        if any(cmd.startswith("moveJ") for cmd in io.commands):
+          post_move_reads += 1
+          polling_started.set()
+          return f"0 100.0 {float(post_move_reads)} 180.0 180.0 70.0\n".encode("ascii")
+        return b"0 100.0 0.0 180.0 180.0 70.0\n"
+      return b"0 1\n"
+
+    io.readline = readline  # type: ignore[method-assign]
+
+    async def move() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        await arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 10.0})
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(move)
+      await polling_started.wait()
+      scopes[0].cancel()
+
+    assert io.raw_writes.count(b"\nhalt\n") == 1
+    assert io.commands[-1] == "halt"
 
   async def test_cancelled_rail_command_consumes_terminal_reply(self) -> None:
     arm, io = _make_cancelling_arm("MoveRail 1 1", has_rail=True)

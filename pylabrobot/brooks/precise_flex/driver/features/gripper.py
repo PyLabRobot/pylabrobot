@@ -5,8 +5,8 @@ through their open and close positions; a force-controlled grasp for `pickplate`
 """
 
 import dataclasses
-from functools import wraps
 import logging
+from functools import wraps
 from typing import (
   TYPE_CHECKING,
   Awaitable,
@@ -20,6 +20,9 @@ from typing import (
 )
 
 from pylabrobot.events import evented_operation
+from pylabrobot.resources.end_effector import MechanicalGripper
+
+from ...kinematics import PreciseFlexAxis
 
 if TYPE_CHECKING:
   from ..master import PreciseFlexDriver
@@ -41,6 +44,7 @@ def _admitted_motion(
       return await method(self, *args, **kwargs)
 
   return cast(Callable[Concatenate["PreciseFlexGripper", _P], Awaitable[_R]], wrapper)
+
 
 # Measured on a bench PF400: the servo overshoots, so a target at an axis end lands past it.
 _GRIPPER_LIMIT_HEADROOM = 0.5
@@ -86,6 +90,9 @@ class PreciseFlexGripper:
     """
     self._driver = driver
     self.configuration: Optional[PreciseFlexGripperConfiguration] = None
+    # What models the gripper. None until lifespan entry hangs it, only for a driver given a base
+    # plate.
+    self.resource: Optional[MechanicalGripper] = None
     self.closed_gripper_position = closed_gripper_position
     # closed_gripper_position was calibrated against this width, so discovery must not move it.
     self._anchor_width_mm = self.jaw_width_range[0]
@@ -144,16 +151,39 @@ class PreciseFlexGripper:
     the other way."""
     return self._anchor_width_mm + (units - self.closed_gripper_position)
 
+  def update_width(self, width: float) -> None:
+    """Stand the jaws on the resource that models them `width` apart.
+
+    Does nothing until the gripper is modelled. A width outside what the model says the fingers do
+    is left unset, and is logged.
+
+    Args:
+      width: how far apart the jaws stand, in mm.
+    """
+    if self.resource is None:
+      return
+    low, high = self.resource.jaw_range
+    if not low <= width <= high:
+      logger.warning(
+        "the gripper reports its jaws %.1f mm apart, outside the %.1f to %.1f mm the model says "
+        "they travel, so the model is left where it is",
+        width,
+        low,
+        high,
+      )
+      return
+    self.resource.jaw_width = width
+
   def _get_gripper_limits(self) -> Tuple[float, float]:
-    """The gripper axis's soft limits, refusing before setup has read them.
+    """Return the gripper axis's soft limits, refusing before discovery has read them.
 
     Raises:
-      RuntimeError: If setup has not read the limits; a target past the axis end strands it.
+      RuntimeError: If discovery has not read the limits; a target past the axis end strands it.
     """
     if self.configuration is None:
       raise RuntimeError(
         "the gripper axis's limits have not been read, so a target cannot be held inside them; "
-        "run setup() before moving the gripper"
+        "enter the driver lifespan before moving the gripper"
       )
     return self.configuration.soft_limit_range
 
@@ -191,15 +221,25 @@ class PreciseFlexGripper:
       await self._driver.send_command("gripper 1")
 
   async def _move_jaws(self, units: float, force_sensing: bool) -> None:
-    """The one path that drives the jaws: to `units` on the gripper axis, once the arm has stopped.
+    """The one path that drives the jaws: to `units` on the gripper axis, once the arm has stopped,
+    and reading where they did.
 
     Args:
       units: the gripper axis position, in the controller's units.
       force_sensing: True closes (``gripper 2``), False opens (``gripper 1``).
+
+    Raises:
+      ValueError: If opening the jaws would carry one into the column or the base plate, on a
+        modelled arm.
     """
     units = self._hold_within_gripper_limits(units)
-    await self._driver.arm._wait_for_eom()
-    await self._unchecked_fw_move_jaws(units, force_sensing)
+    # Held within the gripper's limits above; another axis out of range does not stop the jaws.
+    await self._driver.arm._guarded_move(
+      lambda current: [{**current, PreciseFlexAxis.GRIPPER: units}],
+      lambda _targets: self._unchecked_fw_move_jaws(units, force_sensing),
+      check_soft_limits=False,
+      retry_out_of_range=False,
+    )
 
   @_admitted_motion
   @evented_operation(

@@ -300,9 +300,33 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
     )
     arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
     await arm.move_to_x_position(500.0)
-    self.assertEqual(reads, 5)
+    self.assertEqual(reads, 4)  # 500.1 is within the increment, so 500.1 then 500.0 is two
     seated = cast(Coordinate, arm.resource.location)
     self.assertEqual(seated.x + arm.configuration.reference_point_from_left, 500.0)
+
+  async def test_an_arm_at_rest_one_increment_short_is_at_the_target(self):
+    """675.9 - 675.8 is a hair over 0.1 in floating point, so the check counts increments."""
+    reads = 0
+
+    async def answer(module: str, command: str, fmt=None, **kwargs):
+      nonlocal reads
+      if command != "RX":
+        return None
+      reads += 1
+      return f"{module}{command}rx+06758 +000067584"
+
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    async with driver:
+      arm = XArm(
+        SimpleNamespace(
+          left_side_panel_installed=False, configuration=driver.configuration, send_command=answer
+        ),  # type: ignore[arg-type]
+        side="left",
+      )
+      arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
+      with self.assertNoLogs("pylabrobot.hamilton.star.driver.features.x_arm", level="WARNING"):
+        await arm.move_to_x_position(675.9)
+    self.assertEqual(reads, 2)
 
   async def test_an_arm_that_never_arrives_gives_up_and_keeps_what_it_read(self):
     driver = await _both_arms()

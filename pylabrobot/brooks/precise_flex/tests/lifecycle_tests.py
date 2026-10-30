@@ -5,10 +5,11 @@ import pytest
 
 from pylabrobot.brooks.precise_flex import (
   PreciseFlexCartesianPose,
+  PreciseFlexDevice,
   PreciseFlexDriver,
   PreciseFlexRail,
 )
-from pylabrobot.brooks.precise_flex.tests.wire_tests import _REPLIES, _SETUP
+from pylabrobot.brooks.precise_flex.tests.wire_tests import _REPLIES, _SETUP, _SETUP_SKIP_HOME
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.io.socket import Socket
@@ -100,6 +101,7 @@ def make_arm(
 
 
 ENTRY = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP]]
+ENTRY_SKIP_HOME = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP_SKIP_HOME]]
 EXIT = ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]
 
 
@@ -108,6 +110,10 @@ def test_managed_methods_are_inherited() -> None:
   assert PreciseFlexDriver.stop is HasLifespan.stop
   assert PreciseFlexDriver.__aenter__ is HasLifespan.__aenter__
   assert PreciseFlexDriver.__aexit__ is HasLifespan.__aexit__
+  assert PreciseFlexDevice.setup is HasLifespan.setup
+  assert PreciseFlexDevice.stop is HasLifespan.stop
+  assert PreciseFlexDevice.__aenter__ is HasLifespan.__aenter__
+  assert PreciseFlexDevice.__aexit__ is HasLifespan.__aexit__
 
 
 class TestPreciseFlexLifecycle(AnyioTestBase):
@@ -129,7 +135,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     async with arm.lifespan(skip_home=True):
       events.append("body")
 
-    assert events == [event for event in ENTRY if event != "write:home"] + ["body"] + EXIT
+    assert events == ENTRY_SKIP_HOME + ["body"] + EXIT
 
   async def test_rejects_unknown_lifespan_options_before_socket_entry(self) -> None:
     events: list[str] = []
@@ -283,7 +289,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     async with arm.lifespan(skip_home=True):
       pass
 
-    cycle = [event for event in ENTRY if event != "write:home"] + EXIT
+    cycle = ENTRY_SKIP_HOME + EXIT
     assert events == cycle + cycle
 
   async def test_freedrive_scope_orders_events_body_and_commands(self) -> None:
@@ -301,7 +307,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
 
     assert (
       events
-      == [event for event in ENTRY if event != "write:home"]
+      == ENTRY_SKIP_HOME
       + [
         "write:freemode 1",
         "write:freemode 3",
@@ -379,7 +385,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
         await entered.wait()
         task_group.cancel_scope.cancel()
 
-    assert events.index("write:freemode -1", len(ENTRY)) < events.index("cancelled")
+    assert events.index("write:freemode -1", len(ENTRY_SKIP_HOME)) < events.index("cancelled")
 
   async def test_scope_rejects_direct_transitions_and_motion_but_allows_halt(self) -> None:
     events: list[str] = []
@@ -395,7 +401,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
           await arm.home()
         await arm.arm.halt()
 
-    scope_events = events[len([event for event in ENTRY if event != "write:home"]) : -len(EXIT)]
+    scope_events = events[len(ENTRY_SKIP_HOME) : -len(EXIT)]
     assert scope_events == [
       "write:freemode 1",
       "write:halt",
@@ -486,8 +492,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       motion_paused.set()
       await release_motion.wait()
 
-    async def finish_motion(build_target: object) -> None:
-      del build_target
+    async def finish_motion(*args: object, **kwargs: object) -> None:
+      del args, kwargs
       actions.append("motion.mutated")
 
     async def enter_scope() -> None:
@@ -500,7 +506,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
 
     await lifespan.__aenter__()
     arm.arm._set_speed = pause_speed  # type: ignore[method-assign]
-    arm.arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
+    arm.arm._guarded_move = finish_motion  # type: ignore[method-assign]
     try:
       async with anyio.create_task_group() as task_group:
         task_group.start_soon(run_motion)
@@ -532,8 +538,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       motion_paused.set()
       await release_motion.wait()
 
-    async def finish_motion(build_target: object) -> None:
-      del build_target
+    async def finish_motion(*args: object, **kwargs: object) -> None:
+      del args, kwargs
 
     async def start_freedrive(free_axes: Optional[list[int]] = None) -> None:
       del free_axes
@@ -559,7 +565,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
 
     async with arm.lifespan(skip_home=True):
       arm.arm._set_speed = pause_speed  # type: ignore[method-assign]
-      arm.arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
+      arm.arm._guarded_move = finish_motion  # type: ignore[method-assign]
       arm.arm._start_freedrive_transition = start_freedrive  # type: ignore[method-assign]
       baseline = list(events)
       async with anyio.create_task_group() as task_group:
@@ -591,8 +597,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       motion_paused.set()
       await release_motion.wait()
 
-    async def finish_motion(build_target: object) -> None:
-      del build_target
+    async def finish_motion(*args: object, **kwargs: object) -> None:
+      del args, kwargs
       actions.append("motion.mutated")
 
     async def exit_parent() -> None:
@@ -605,7 +611,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
 
     await lifespan.__aenter__()
     arm.arm._set_speed = pause_speed  # type: ignore[method-assign]
-    arm.arm._guarded_move_j = finish_motion  # type: ignore[method-assign]
+    arm.arm._guarded_move = finish_motion  # type: ignore[method-assign]
     try:
       async with anyio.create_task_group() as task_group:
         task_group.start_soon(run_motion)

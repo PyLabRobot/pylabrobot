@@ -1,5 +1,7 @@
-"""PreciseFlex driver: the controller link, its lifecycle, and the configuration."""
+"""PreciseFlex driver: the controller link, its lifecycle, the configuration, and the resource model
+it builds from one."""
 
+import dataclasses
 import json
 import logging
 import warnings
@@ -18,6 +20,7 @@ from typing import (
   Literal,
   Optional,
   ParamSpec,
+  Sequence,
   TypeVar,
   cast,
 )
@@ -36,6 +39,8 @@ from pylabrobot.brooks.precise_flex.kinematics import JointState
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import LifespanEventInfo, emit_event, evented_operation
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 
 from ..confirmed_firmware_versions import (
   SUPPORTED_ROBOT_TYPES,
@@ -44,6 +49,18 @@ from ..confirmed_firmware_versions import (
   suggest_entry,
 )
 from ..data_ids import DataID, PowerState, _parse_scalar
+from ..resource_model.pf400_end_effector import GRIPPER_TOOL_CENTER_POINT_Z, gripper
+from ..resource_model.pf400_manipulator import (
+  LINK_1_ABOVE_FLANGE_PLANE,
+  Z_CARRIAGE_REFERENCE_POINT,
+  Z_COLUMN_LOCATION,
+  link_1,
+  link_2,
+  z_carriage,
+  z_carriage_location,
+  z_column,
+  z_column_height,
+)
 from ..tcs_modules import missing_required_modules
 from .errors import PreciseFlexError
 from .features.arm import PreciseFlexArm, PreciseFlexArmConfiguration
@@ -92,6 +109,7 @@ class PreciseFlexDriver(HasLifespan):
     read_kinematics_from_device: bool = True,
     recover_out_of_range: bool = True,
     parking_position: Optional[JointState] = None,
+    base_plate: Optional[Resource] = None,
     declared_configuration_json: Optional[str] = None,
   ) -> None:
     """
@@ -100,8 +118,9 @@ class PreciseFlexDriver(HasLifespan):
         override; when ``read_kinematics_from_device`` is True (the default) the
         link lengths and tool length are read from the controller at setup and
         this value is only used if that read fails.
-      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
-        Depends on the mounted gripper. Always taken from here (not on the controller).
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip. A fallback, as
+        ``gripper_length`` is: with ``read_kinematics_from_device`` it is where the fitted
+        gripper's fingers grip, below the flange plane.
       read_kinematics_from_device: when True, read l1/l2 and the tool length from
         the controller at setup and use them for kinematics; the constructor's
         ``gripper_length`` then acts only as a fallback. Set False to force the
@@ -123,11 +142,14 @@ class PreciseFlexDriver(HasLifespan):
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
         elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
+      base_plate: the base plate to build the arm on. Optional: without one the driver still
+        drives the arm, and models nothing.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file.
         Discovery cross-checks it against what the device answers.
     """
     super().__init__()
+    self.base_plate = base_plate
     # What was declared this device is, read once here: the one place a configuration comes off a
     # file. Empty when nothing was declared.
     self.declared_configuration_json = declared_configuration_json
@@ -136,8 +158,8 @@ class PreciseFlexDriver(HasLifespan):
     )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
     self.timeout = timeout
-    # Serializes each request->reply exchange over the single shared controller socket; the
-    # rationale (and why it is kept though uncontended today) is in _locked_exchange.
+    # Serializes each request->reply exchange over the single shared controller socket; see
+    # `_locked_exchange` for framing details.
     self._command_lock = anyio.Lock()
     self._command_reconciled_callback: ContextVar[Optional[Callable[[str], None]]] = ContextVar(
       "precise_flex_command_reconciled_callback", default=None
@@ -171,10 +193,6 @@ class PreciseFlexDriver(HasLifespan):
       )
 
   # -- communication ---------------------------------------------------------
-
-  @property
-  def _io_lock(self) -> anyio.Lock:
-    return self._command_lock
 
   def _controller_reference(self) -> Dict[str, object]:
     """The controller's identity, as structured execution events name it."""
@@ -212,7 +230,6 @@ class PreciseFlexDriver(HasLifespan):
     command: str,
     *,
     read_deadline: Optional[float] = None,
-    reconcile_callback: Optional[Callable[[], None]] = None,
   ) -> str:
     """Write one command and read its one reply line, with the lock held.
 
@@ -261,8 +278,6 @@ class PreciseFlexDriver(HasLifespan):
             # Reject further writes until reconnect replaces the stream and clears its buffer.
             self.io._mark_connection_lost()
           raise
-        if reconcile_callback is not None:
-          reconcile_callback()
       await anyio.lowlevel.checkpoint()
       return reply
 
@@ -375,6 +390,76 @@ class PreciseFlexDriver(HasLifespan):
     """Report the closed Socket after the owned connection exits."""
     logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
+  async def _exit(self) -> None:
+    """Close the communications link immediately.
+
+    Note:
+      Does not affect any robots that may be active.
+    """
+    await self.io.write(b"exit\n")
+
+  async def _enter_link(self, stack: AsyncExitStackWithShielding) -> None:
+    """Open the controller socket on ``stack`` and switch it to PC response mode."""
+    stack.callback(self._log_disconnected)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._exit)
+
+    await self.set_response_mode("pc")
+    logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
+
+  def _create_feature_resources(self, configuration: "PreciseFlexConfiguration") -> None:
+    """Build the arm on its base plate, from a configuration. No motion.
+
+    The column is stood on the base plate, the carriage hung on it, the links on that and the
+    gripper on link 2, each placed by where its joint has to land. They stand at Z 0 with every
+    joint at 0 until a joint state is read. Does nothing for a driver given no base plate. An arm
+    already built keeps its parts.
+
+    Args:
+      configuration: what the arm reported: the declared one, or the one read on lifespan entry.
+    """
+    base_plate = self.base_plate
+    if base_plate is None:
+      return
+    device = base_plate.parent
+    if device is None:
+      logger.warning("the base plate belongs to no device, so the arm is not modelled")
+      return
+    if self.arm.resource is not None:
+      return
+    c = configuration.arm
+    column = z_column(name=f"{device.name}_z_column", height=z_column_height(c.z_range[1]))
+    base_plate.assign_child_resource(column, location=Z_COLUMN_LOCATION)
+    carriage = z_carriage(name=f"{device.name}_z_carriage")
+    column.assign_child_resource(carriage, location=z_carriage_location(0.0))
+    first = link_1(name=f"{device.name}_link_1", length=c.kinematics.l1)
+    # The reference point is the shoulder axis at the flange plane, which link 1 stands above.
+    above = Coordinate(0.0, 0.0, LINK_1_ABOVE_FLANGE_PLANE)
+    carriage.assign_child_resource(
+      first, location=Z_CARRIAGE_REFERENCE_POINT - first.proximal_joint + above
+    )
+    second = link_2(name=f"{device.name}_link_2", length=c.kinematics.l2)
+    # Link 2's underside lies in the flange plane, that far below link 1's.
+    below = Coordinate(0.0, 0.0, -LINK_1_ABOVE_FLANGE_PLANE)
+    first.assign_child_resource(
+      second, location=cast(Coordinate, first.distal_joint) - second.proximal_joint + below
+    )
+    hand = gripper(
+      name=f"{device.name}_gripper",
+      tool_length=c.kinematics.gripper_length,
+      # The axis's soft limits, in mm, as the gripper takes them when it adopts a configuration.
+      jaw_range=(
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[0]),
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[1]),
+      ),
+      intelliguide="v23" if configuration.has_vision_gripper else "s23",
+    )
+    second.assign_child_resource(
+      hand, location=cast(Coordinate, second.distal_joint) - hand.proximal_joint
+    )
+    self.arm.resource, self.arm.link_1, self.arm.link_2 = carriage, first, second
+    self.gripper.resource = hand
+
   async def _enter_lifespan(
     self,
     stack: AsyncExitStackWithShielding,
@@ -386,19 +471,15 @@ class PreciseFlexDriver(HasLifespan):
     if not isinstance(skip_home, bool):
       raise TypeError("skip_home must be a bool")
 
-    stack.callback(self._log_disconnected)
-    await stack.enter_async_context(self.io.lifespan())
-    stack.push_shielded_async_callback(self._exit)
-
-    await self.set_response_mode("pc")
-    logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
+    await self._enter_link(stack)
     await self.power_on_robot()
     stack.push_shielded_async_callback(self.power_off_robot)
     await self.attach(1)
     stack.push_shielded_async_callback(self.detach)
     stack.push_shielded_async_callback(self.arm._force_stop_freedrive)
     await self.arm.stop_freedrive_mode()
-    await self.discover()
+    configuration = await self.discover()
+    self._create_feature_resources(configuration)
     if not skip_home:
       await self.home()
     await self.arm._handle_out_of_range_axes()
@@ -407,8 +488,9 @@ class PreciseFlexDriver(HasLifespan):
     """Raise if what was declared cannot stand for what the device answered.
 
     Only what decides whether the two are the same kind of arm, set up the same way: what is
-    fitted, its link and tool lengths, and its soft limits. Identity is left out: a declaration
-    taken off one arm describes another of the same build.
+    fitted, the gripper among it, its link and tool lengths, and its soft limits. The model is built
+    from the declared ones and kept. Identity is left out: a declaration taken off one arm describes
+    another of the same build.
 
     Args:
       discovered: what the device answered.
@@ -420,11 +502,17 @@ class PreciseFlexDriver(HasLifespan):
     if declared is None:
       return
     arm, gripper = declared.arm, declared.gripper
+
+    def lengths(arm: PreciseFlexArmConfiguration) -> tuple:
+      return (arm.kinematics.l1, arm.kinematics.l2, arm.kinematics.gripper_length)
+
     must_match = (
       ("robot_type", declared.robot_type, discovered.robot_type),
       ("has_rail", declared.has_rail, discovered.has_rail),
       ("gripper.is_dual_gripper", gripper.is_dual_gripper, discovered.gripper.is_dual_gripper),
-      ("arm.kinematics", arm.kinematics, discovered.arm.kinematics),
+      # The gripper decides where the tool point stands below the flange plane.
+      ("has_vision_gripper", declared.has_vision_gripper, discovered.has_vision_gripper),
+      ("arm.kinematics (l1, l2, gripper_length)", lengths(arm), lengths(discovered.arm)),
       ("arm.soft_limits", arm.soft_limits, discovered.arm.soft_limits),
       ("gripper.soft_limit_range", gripper.soft_limit_range, discovered.gripper.soft_limit_range),
     )
@@ -448,6 +536,16 @@ class PreciseFlexDriver(HasLifespan):
       The configuration, also kept as ``configuration``.
     """
     configuration = await self._request_configuration()
+    if configuration.arm.kinematics_source == "device":
+      # The tool point is where the fitted gripper's fingers grip, below the flange plane.
+      tool_point_z = GRIPPER_TOOL_CENTER_POINT_Z[
+        "v23" if configuration.has_vision_gripper else "s23"
+      ]
+      arm = configuration.arm
+      kinematics_params = dataclasses.replace(arm.kinematics, gripper_z_offset=tool_point_z)
+      configuration = dataclasses.replace(
+        configuration, arm=dataclasses.replace(arm, kinematics=kinematics_params)
+      )
     self._check_declared_against(configuration)
     self._configuration = configuration
     self._adopt_configuration(self._configuration)
@@ -472,14 +570,6 @@ class PreciseFlexDriver(HasLifespan):
     return await self.discover()
 
   # -- device-level commands -------------------------------------------------
-
-  async def _exit(self) -> None:
-    """Close the communications link immediately.
-
-    Note:
-      Does not affect any robots that may be active.
-    """
-    await self.io.write(b"exit\n")
 
   ResponseMode = Literal["pc", "verbose"]
 
@@ -572,6 +662,11 @@ class PreciseFlexDriver(HasLifespan):
     """Detach the robot."""
     await self.attach(0)
 
+  async def _unchecked_fw_home(self) -> None:
+    """Send ``home`` to the controller. Nothing is guarded."""
+    self._reject_motion_during_freedrive_scope()
+    await self.send_command("home")
+
   @evented_operation(
     "precise_flex.home",
     lambda self: {"device": self._controller_reference()},
@@ -580,13 +675,32 @@ class PreciseFlexDriver(HasLifespan):
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
+    Only the jaws move: the other joints read their position. The jaws open to their stop and back
+    off, so on a modelled arm their opening to the hard limit is first checked against the column
+    and the base plate. Closing never carries a finger outward.
+
     Note:
       Requires power to be enabled.
       Requires robot to be attached.
       Waits until the homing is complete.
     """
     self._reject_motion_during_freedrive_scope()
-    await self.send_command("home")
+    gripper = self.gripper.configuration
+
+    def build_targets(current: JointState) -> List[JointState]:
+      if gripper is None:
+        return []
+      return [{**current, PreciseFlexAxis.GRIPPER: gripper.hard_limit_range[1]}]
+
+    async def unchecked_fw_move(_targets: Sequence[JointState]) -> None:
+      await self._unchecked_fw_home()
+
+    await self.arm._guarded_move(
+      build_targets,
+      unchecked_fw_move,
+      check_soft_limits=False,
+      retry_out_of_range=False,
+    )
 
   @_admitted_motion
   async def home_all(self) -> None:

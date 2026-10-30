@@ -258,6 +258,24 @@ class TestPreciseFlexCommandTransactions(AnyioTestBase):
     assert events[-1].context["run_id"] == "run-1"
 
 
+class TestPreciseFlexPose:
+  """Every joint's location, worked out from a joint state (l1 302, l2 289, gripper 162)."""
+
+  def test_straight_out(self) -> None:
+    arm = _make_arm()
+    joints = {
+      PreciseFlexAxis.BASE: 100.0,
+      PreciseFlexAxis.SHOULDER: 0.0,
+      PreciseFlexAxis.ELBOW: 0.0,
+      PreciseFlexAxis.WRIST: 0.0,
+    }
+    pose = arm.arm._forward_kinematics(joints)
+    assert pose.shoulder_joint_location == Coordinate(0.0, 0.0, 100.0)
+    assert pose.elbow_joint_location == Coordinate(302.0, 0.0, 100.0)
+    assert pose.wrist_joint_location == Coordinate(591.0, 0.0, 100.0)
+    assert pose.gripper_pose.location == Coordinate(753.0, 0.0, 100.0)
+
+
 class TestPreciseFlex400Gripper(AnyioTestBase):
   async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
     await super()._enter_lifespan(stack, **kwargs)
@@ -301,7 +319,7 @@ class TestPreciseFlex400Gripper(AnyioTestBase):
       lambda: arm.gripper.move_to_jaw_position(80.0, force_sensing=False),
       lambda: arm.gripper.move_to_jaw_position_firmware_units(520.0, force_sensing=False),
     ):
-      with pytest.raises(RuntimeError, match="run setup"):
+      with pytest.raises(RuntimeError, match="enter the driver lifespan"):
         await move()
     assert [c.args[0] for c in mocked(arm.send_command).call_args_list] == []
 
@@ -396,9 +414,6 @@ class TestPreciseFlexEvents(AnyioTestBase):
       event for event in events if event.name == "precise_flex.firmware_command.started"
     ]
     assert [event.data["command"] for event in firmware_events] == [
-      "wherej",
-      "wherej",
-      "wherej",
       "GripOpenPos 520.0",
       "gripper 1",
     ]
@@ -690,7 +705,14 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
       orientation="right",
       wrist="ccw",
     )
-    self.arm.arm._request_state = AsyncMock(return_value=(self.current_joints, self.current_pose))  # type: ignore[method-assign]
+    self.arm.arm.request_joint_state = AsyncMock(return_value=self.current_joints)  # type: ignore[method-assign]
+    # The route plans from the pose the joint state read gives.
+    stack.enter_context(
+      patch(
+        "pylabrobot.brooks.precise_flex.driver.features.arm.kinematics.fk",
+        return_value=self.current_pose,
+      )
+    )
 
   def _stub_profile_transport(self, profile: str = "1 50 0 100 100 0 0 25 0") -> None:
     async def respond(command: str, **kwargs: Any) -> str:
@@ -716,8 +738,8 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
     ]
 
   async def test_move_through_cartesian_poses_plans_from_one_state_snapshot(self) -> None:
-    """A smooth route snapshots state once, fills omitted pose fields from the planned pose,
-    queues all joint moves, then waits once at the end."""
+    """A smooth route reads the joint state once, fills omitted pose fields from the planned pose,
+    queues all joint moves, then reads once more where the arm stopped."""
     self._stub_profile_transport()
     poses = [
       PreciseFlexCartesianPose(
@@ -739,8 +761,7 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
     ) as ik:
       await self.arm.arm.move_through_cartesian_poses(poses)
 
-    mocked(self.arm.arm._request_state).assert_awaited_once()
-    mocked(self.arm.arm._wait_for_eom).assert_awaited_once()
+    assert mocked(self.arm.arm.request_joint_state).await_count == 2
     assert self._movej_cmds() == [
       "moveJ 1 110.0 10.0 20.0 30.0 70.0",
       "moveJ 1 120.0 11.0 21.0 31.0 70.0",
@@ -784,7 +805,7 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
 
     assert self._profile_cmds() == []
     assert self._movej_cmds() == ["moveJ 1 110.0 10.0 20.0 30.0 70.0"]
-    mocked(self.arm.arm._wait_for_eom).assert_awaited_once()
+    assert mocked(self.arm.arm.request_joint_state).await_count == 2
 
   async def test_move_through_cartesian_poses_blocks_before_motion_on_limit_failure(self) -> None:
     pose = PreciseFlexCartesianPose(
@@ -802,7 +823,29 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
 
     assert self._movej_cmds() == []
     assert self._profile_cmds() == []
-    mocked(self.arm.arm._wait_for_eom).assert_not_awaited()
+    # Read once to plan from, and not again: nothing was sent.
+    mocked(self.arm.arm.request_joint_state).assert_awaited_once()
+
+  async def test_move_through_cartesian_poses_blocks_before_profile_mutation_on_clearance_failure(
+    self,
+  ) -> None:
+    self._stub_profile_transport()
+    pose = PreciseFlexCartesianPose(
+      location=Coordinate(200.0, 20.0, 110.0),
+      rotation=Rotation(x=-180.0, y=90.0, z=10.0),
+    )
+    self.arm.arm._check_path_reachable = MagicMock(side_effect=ValueError("column clearance"))  # type: ignore[method-assign]
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.driver.master.kinematics.ik",
+      return_value={1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
+    ):
+      with pytest.raises(ValueError, match="column clearance"):
+        await self.arm.arm.move_through_cartesian_poses([pose])
+
+    assert self._movej_cmds() == []
+    assert self._profile_cmds() == []
+    mocked(self.arm.arm.request_joint_state).assert_awaited_once()
 
   async def test_cartesian_route_cancellation_halts_then_restores_profile(self) -> None:
     original = MotionProfile(1, 50.0, 0.0, 100.0, 100.0, 0.0, 0.0, 25.0, False)
@@ -810,7 +853,7 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
     route_waiting = anyio.Event()
     scopes: list[anyio.CancelScope] = []
     actions: list[str] = []
-    self.arm.arm._plan_cartesian_pose_route = AsyncMock(return_value=[target])  # type: ignore[method-assign]
+    self.arm.arm._plan_cartesian_pose_route = MagicMock(return_value=[target])  # type: ignore[method-assign]
     self.arm.arm.request_motion_profile_values = AsyncMock(return_value=original)  # type: ignore[method-assign]
 
     async def set_profile(
@@ -839,6 +882,8 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
       actions.append("restore" if profile_values.in_range == 25.0 else "blend")
 
     async def wait_for_route() -> None:
+      if "blend" not in actions:
+        return
       route_waiting.set()
       try:
         await anyio.sleep_forever()
@@ -847,8 +892,13 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
           actions.append("halt")
         raise
 
+    async def request_joint_state() -> dict[PreciseFlexAxis, float]:
+      await wait_for_route()
+      return dict(self.current_joints)
+
     self.arm.arm.set_motion_profile_values = set_profile  # type: ignore[assignment]
     self.arm.arm._wait_for_eom = wait_for_route  # type: ignore[assignment]
+    self.arm.arm.request_joint_state = request_joint_state  # type: ignore[method-assign]
 
     async def move() -> None:
       with anyio.CancelScope() as scope:
@@ -862,13 +912,55 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
 
     assert actions == ["blend", "halt", "restore"]
 
+  async def test_cartesian_route_cancellation_preserves_cancelled_when_restore_fails(self) -> None:
+    original = MotionProfile(1, 50.0, 0.0, 100.0, 100.0, 0.0, 0.0, 25.0, False)
+    target = dict(self.current_joints)
+    route_waiting = anyio.Event()
+    cancelled_propagated = False
+    self.arm.arm._plan_cartesian_pose_route = MagicMock(return_value=[target])  # type: ignore[method-assign]
+    self.arm.arm.request_motion_profile_values = AsyncMock(return_value=original)  # type: ignore[method-assign]
+
+    async def set_profile(*args: Any) -> None:
+      if args[7] == 25.0:
+        raise RuntimeError("socket closed during move")
+
+    blended_sent = False
+
+    async def request_joint_state() -> dict[PreciseFlexAxis, float]:
+      nonlocal blended_sent
+      if blended_sent:
+        route_waiting.set()
+        await anyio.sleep_forever()
+      blended_sent = True
+      return dict(self.current_joints)
+
+    self.arm.arm.set_motion_profile_values = set_profile  # type: ignore[assignment]
+    self.arm.arm.request_joint_state = request_joint_state  # type: ignore[method-assign]
+
+    with anyio.CancelScope() as scope:
+
+      async def cancel_once_waiting() -> None:
+        await route_waiting.wait()
+        scope.cancel()
+
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(cancel_once_waiting)
+        try:
+          await self.arm.arm.move_through_cartesian_poses([self.current_pose])
+        except anyio.get_cancelled_exc_class():
+          cancelled_propagated = True
+          raise
+
+    assert cancelled_propagated
+
   async def test_cartesian_route_cancellation_after_blend_commit_restores_profile(self) -> None:
     original = MotionProfile(1, 50.0, 0.0, 100.0, 100.0, 0.0, 0.0, 25.0, False)
     target = dict(self.current_joints)
     scopes: list[anyio.CancelScope] = []
     temporary_profile = "Profile 1 50.0 0.0 100.0 100.0 0.0 0.0 -1 0"
     arm, commands, consumed = _make_reply_cancelling_arm(temporary_profile, scopes)
-    arm.arm._plan_cartesian_pose_route = AsyncMock(return_value=[target])  # type: ignore[method-assign]
+    arm.arm.request_joint_state = AsyncMock(return_value=self.current_joints)  # type: ignore[method-assign]
+    arm.arm._plan_cartesian_pose_route = MagicMock(return_value=[target])  # type: ignore[method-assign]
     arm.arm.request_motion_profile_values = AsyncMock(return_value=original)  # type: ignore[method-assign]
     arm.arm._unchecked_fw_move_j = AsyncMock()  # type: ignore[method-assign]
     arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
@@ -892,7 +984,8 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
     original = MotionProfile(1, 50.0, 0.0, 100.0, 100.0, 0.0, 0.0, 25.0, False)
     profile_read = anyio.Event()
     scopes: list[anyio.CancelScope] = []
-    arm.arm._plan_cartesian_pose_route = AsyncMock(return_value=[self.current_joints])  # type: ignore[method-assign]
+    arm.arm.request_joint_state = AsyncMock(return_value=self.current_joints)  # type: ignore[method-assign]
+    arm.arm._plan_cartesian_pose_route = MagicMock(return_value=[self.current_joints])  # type: ignore[method-assign]
     arm.arm._unchecked_fw_move_j = AsyncMock()  # type: ignore[method-assign]
     arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
 
@@ -931,7 +1024,8 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
     io.readline = AsyncMock(return_value=b"0 1\n")
     arm = _make_transaction_arm(io)
     original = MotionProfile(1, 50.0, 0.0, 100.0, 100.0, 0.0, 0.0, 25.0, False)
-    arm.arm._plan_cartesian_pose_route = AsyncMock(return_value=[self.current_joints])  # type: ignore[method-assign]
+    arm.arm.request_joint_state = AsyncMock(return_value=self.current_joints)  # type: ignore[method-assign]
+    arm.arm._plan_cartesian_pose_route = MagicMock(return_value=[self.current_joints])  # type: ignore[method-assign]
     arm.arm.request_motion_profile_values = AsyncMock(return_value=original)  # type: ignore[method-assign]
     arm.arm._unchecked_fw_move_j = AsyncMock()  # type: ignore[method-assign]
     arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
@@ -952,7 +1046,7 @@ class TestPreciseFlexSmoothCartesianRoute(AnyioTestBase):
     original = MotionProfile(1, 50.0, 0.0, 100.0, 100.0, 0.0, 0.0, 25.0, False)
     target = dict(self.current_joints)
     profiles: list[MotionProfile] = []
-    self.arm.arm._plan_cartesian_pose_route = AsyncMock(return_value=[target])  # type: ignore[method-assign]
+    self.arm.arm._plan_cartesian_pose_route = MagicMock(return_value=[target])  # type: ignore[method-assign]
     self.arm.arm.request_motion_profile_values = AsyncMock(return_value=original)  # type: ignore[method-assign]
     self.arm.arm._unchecked_fw_move_j = AsyncMock(  # type: ignore[method-assign]
       side_effect=PreciseFlexError(-202, "move failed")
@@ -1092,7 +1186,7 @@ class TestPreciseFlex400AutoRecoverOnMove(AnyioTestBase):
       PreciseFlexAxis.WRIST: 0.0,
       PreciseFlexAxis.GRIPPER: 0.0,
     }
-    with patch.object(self.arm.arm, "_cart_to_joints", AsyncMock(return_value=in_range)):
+    with patch.object(self.arm.arm, "_cart_to_joints", MagicMock(return_value=in_range)):
       with pytest.raises(OutOfRangeOfMotionError) as error_info:
         await self.arm.arm.move_to_location(Coordinate(400.0, 0.0, 200.0), 0.0)
     assert PreciseFlexAxis.SHOULDER in error_info.value.axes
