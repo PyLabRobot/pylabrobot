@@ -592,7 +592,8 @@
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexDriver.</span></span><span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">skip_home</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexDriver.setup" title="Link to this definition">#</a></dt>
 <dd><p>Bring the arm fully up: <code class="docutils literal notranslate"><span class="pre">connect</span></code>, <code class="docutils literal notranslate"><span class="pre">initialize</span></code>, then <code class="docutils literal notranslate"><span class="pre">home</span></code> unless skipped.</p>
 <p><code class="docutils literal notranslate"><span class="pre">initialize</span></code> reads the configuration, and setup raises if that fails. The arm is then
-modelled, and axes outside their limits are dealt with.</p>
+modelled, before homing so the jaws’ opening is checked, and axes outside their limits are
+dealt with.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>skip_home</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – If True, skip the homing step during setup.</p>

@@ -595,6 +595,10 @@
 right, Z column at 3/4 of its discovered travel); assign one of the <code class="docutils literal notranslate"><span class="pre">PARKING_POSITION_*</span></code> class
 constants or any JointState to park elsewhere. Falls back to the firmware <code class="docutils literal notranslate"><span class="pre">movetosafe</span></code> while
 it is unset. No collision checks against 3rd-party obstacles.</p>
+<p>A parking pose says which way the gripper faces, and the wrist reaches that every full turn. On
+an arm that is modelled, a pose whose way there is refused is tried a full turn either side,
+the shorter turn first; the pose as written is taken whenever its way is clear. The arm is read
+for that, and again by the move.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>None</p>
