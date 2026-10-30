@@ -36,7 +36,7 @@ cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,opentrons,sila,pico,xarm,odyssey]"]
 test = [
   "pytest>=9.1",
   "pytest-xdist",
