@@ -591,6 +591,9 @@
 <dt class="sig sig-object py" id="pylabrobot.brooks.precise_flex.PreciseFlexDriver.home">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">PreciseFlexDriver.</span></span><span class="sig-name descname"><span class="pre">home</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.brooks.precise_flex.PreciseFlexDriver.home" title="Link to this definition">#</a></dt>
 <dd><p>Home the robot associated with this thread.</p>
+<p>Only the jaws move: the other joints read their position. The jaws open to their stop and back
+off, so on a modelled arm their opening to the hard limit is first checked against the column
+and the base plate. Closing never carries a finger outward.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Requires power to be enabled.
