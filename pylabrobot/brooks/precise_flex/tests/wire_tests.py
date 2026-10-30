@@ -4,6 +4,7 @@ A fake controller answers at the socket, from replies a PF400 gave and filled-in
 rest. Numbers compare to within 1e-9; everything else must match exactly.
 """
 
+import asyncio
 import contextlib
 import math
 import unittest
@@ -1640,6 +1641,106 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
         "Speed 1 60.0",
       ],
     )
+
+
+class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
+  """`HeightDetect`'s replies are the arm's: `0 4.15` on contact, -2101 at the limit. Its tool point
+  stands 51.25 mm below the Z joint."""
+
+  async def _arm(self, reply: str = "0 4.15", **overrides: str) -> Tuple[Any, _FakeController]:
+    fake = _FakeController(
+      {
+        "pd 112 0 0 1": "0 189117",
+        "wherej": "0 29.989 -31.304 102.074 -72.846 125.979",
+        "HeightDetect 1 -28.0 -15.0": reply,
+        "HeightDetect 2 -28.0 -15.0": "0 4.36",
+        **overrides,
+      }
+    )
+    arm = _make_arm(fake)
+    await arm.setup()
+    fake.sent.clear()
+    return arm, fake
+
+  async def test_contact_returns_the_tool_point_and_reads_where_the_arm_stopped(self):
+    arm, fake = await self._arm()
+    self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=-49.261), -47.10)
+    index = fake.sent.index("HeightDetect 1 -28.0 -15.0")
+    self.assertEqual(fake.sent[index + 1 :], ["state", "state", "wherej", "mspeed 50"])
+
+  async def test_reaching_the_end_returns_none_and_does_not_move_after(self):
+    arm, fake = await self._arm("-2101")
+    result = await arm.arm.probe_z_using_ztouch(
+      search_end_position=-49.261, post_detection_distance=2.0
+    )
+    self.assertIsNone(result)
+    self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
+
+  async def test_a_second_measurement_sends_mode_2(self):
+    arm, fake = await self._arm()
+    result = await arm.arm.probe_z_using_ztouch(
+      search_end_position=-49.261, perform_second_measurement_on_lift_off=True
+    )
+    self.assertEqual(result, -46.89)
+    self.assertIn("HeightDetect 2 -28.0 -15.0", fake.sent)
+
+  async def test_the_search_speed_is_the_default_or_the_argument_and_is_put_back(self):
+    for arguments, sent in (({}, "mspeed 20"), ({"search_speed_percent": 30}, "mspeed 30")):
+      with self.subTest(arguments):
+        arm, fake = await self._arm()
+        await arm.arm.probe_z_using_ztouch(search_end_position=-49.261, **arguments)
+        search = fake.sent.index("HeightDetect 1 -28.0 -15.0")
+        self.assertLess(fake.sent.index(sent), search)
+        self.assertGreater(fake.sent.index("mspeed 50"), search)
+
+  async def test_a_default_search_speed_out_of_range_is_refused_on_assignment(self):
+    arm, _ = await self._arm()
+    with self.assertRaises(ValueError):
+      arm.arm.default_ztouch_search_speed_percent = 4
+
+  async def test_no_licence_or_a_bad_argument_sends_no_search(self):
+    # The licence word with bit 14 cleared.
+    arm, fake = await self._arm(**{"pd 112 0 0 1": f"0 {189117 & ~(1 << 14)}"})
+    with self.assertRaises(RuntimeError):
+      await arm.arm.probe_z_using_ztouch(search_end_position=-49.261)
+    arm, fake = await self._arm()
+    for arguments in (
+      {"search_end_position": -49.261, "detection_force": 0.0},
+      {"search_end_position": -49.261, "search_speed_percent": 4},
+      {"search_end_position": -49.261, "post_detection_distance": -1.0},
+      {"search_end_position": -50.0},  # under the Z joint's soft limit
+      {"search_end_position": -26.0},  # under 10 mm of search
+    ):
+      with self.subTest(arguments), self.assertRaises(ValueError):
+        await arm.arm.probe_z_using_ztouch(**arguments)
+    self.assertFalse([c for c in fake.sent if c.startswith("HeightDetect")])
+
+  async def test_an_interrupt_halts_on_the_second_port_and_discards_the_false_height(self):
+    # The search's reply arrives once it ends: the false height a halted search gave on the arm.
+    arm, fake = await self._arm()
+    blocked = asyncio.Event()
+    late_replies = [b"0 176.87\r\n"]
+
+    async def readline(*args: Any, **kwargs: Any) -> bytes:
+      if fake.sent[-1:] and fake.sent[-1].startswith("HeightDetect"):
+        if not blocked.is_set():
+          blocked.set()
+          await asyncio.Event().wait()
+        if late_replies:
+          return late_replies.pop()
+      return await fake.readline()
+
+    arm.io.readline = AsyncMock(side_effect=readline)
+    status = MagicMock(setup=AsyncMock(), write=AsyncMock(), stop=AsyncMock())
+    with patch("pylabrobot.brooks.precise_flex.driver.features.arm.Socket", return_value=status):
+      task = asyncio.create_task(arm.arm.probe_z_using_ztouch(search_end_position=-49.261))
+      await blocked.wait()
+      task.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await task
+    status.write.assert_awaited_once_with(b"selectrobot 1\nhalt\n")
+    self.assertEqual(late_replies, [])
+    self.assertEqual(await arm.send_command("mspeed"), "50")
 
 
 class TestPreciseFlexDefaults(unittest.IsolatedAsyncioTestCase):
