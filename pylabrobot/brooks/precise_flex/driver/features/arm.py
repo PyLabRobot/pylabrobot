@@ -64,6 +64,8 @@ logger = logging.getLogger(__name__)
 
 # InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
 BLEND_IN_RANGE = -1
+# `state` values with no motion under way: halted, idle and jog (freedrive).
+_STOPPED_MOTION_STATES = ("0", "1", "10")
 # How near the column the gripper may be sent, in mm, seen from above; and how near the base plate,
 # seen from above or from its top face, whichever is further.
 _COLUMN_CLEARANCE = 5.0
@@ -258,43 +260,36 @@ class PreciseFlexArm:
     joints.update(zip(wire_order, map(float, parts)))
     return joints
 
-  async def _wait_for_eom(
-    self, poll_interval: float = 0.05, settle: float = 0.02, timeout: float = 60.0
-  ) -> None:
+  async def _wait_for_eom(self, poll_interval: float = 0.05, timeout: float = 60.0) -> None:
     """Wait until the arm has stopped moving, leaving the connection free.
 
-    Polls ``wherej`` and returns once three samples in a row agree within ``settle``. Two are not
-    enough: after a ``moveJ`` is accepted the arm creeps under ``settle`` for about 0.1 s (IO logs).
+    Polls ``state`` and returns once two samples in a row report no motion. Joint readings do not
+    tell: a slow start moves about as little per poll as an arm settling.
     An arm already stopped, also one stopped short of its target, returns at once.
 
-    The firmware's ``waitForEom`` is not used: it makes the controller ignore everything else on the
-    connection, ``halt`` included, until the move ends (hardware-verified). Every command that
+    The firmware's ``waitForEom`` is not used: it makes the controller ignore everything else on
+    this connection, ``halt`` included, until the move ends (hardware-verified). Every command that
     starts motion waits here first, since ``moveJ`` returns once accepted: without it a grip after
     an approach closes mid-descent.
 
     Raises:
-      TimeoutError: if the arm never settles within ``timeout`` seconds.
+      TimeoutError: if the arm never stops within ``timeout`` seconds.
       OperationInterrupted: on a user interrupt (the arm is halted and the connection kept).
     """
-
-    def _floats(reply: str) -> list[float]:
-      return [float(x) for x in reply.split()]
-
     # On interrupt, `halt` stops the move and the link is resynchronised and kept. It is sent
     # outside `_io_lock`: an emergency halt must not wait on another caller's read.
     async with halt_on_interrupt(lambda: halt_and_resync(self._driver.io, b"halt")):
-      previous = _floats(await self._driver.send_command("wherej"))
       deadline = time.monotonic() + timeout
-      still = 0
+      stopped = 0
       while True:
-        await asyncio.sleep(poll_interval)
-        current = _floats(await self._driver.send_command("wherej"))
-        still = still + 1 if all(abs(c - p) < settle for c, p in zip(current, previous)) else 0
-        if still == 2:
-          return  # three samples agree: stopped moving
+        # Compared as text: a stale reply after an interrupted command is not a stop, nor a crash.
+        state = await self.request_state()
+        stopped = stopped + 1 if state in _STOPPED_MOTION_STATES else 0
+        if stopped == 2:
+          return
         if time.monotonic() > deadline:
-          raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
-        previous = current
+          raise TimeoutError(f"motion did not stop within {timeout:.0f}s (state={state})")
+        await asyncio.sleep(poll_interval)
 
   def update_joint_state(self, joints: JointState) -> None:
     """Stand the resources that model the arm where every joint is.
