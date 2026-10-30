@@ -56,6 +56,26 @@ class _ByonoyAbsorbanceReaderPlateHolder(PlateHolder):
     super().check_can_drop_resource_here(resource, reassign=reassign)
 
 
+class _ByonoyAbsorbanceIlluminationUnitHolder(ResourceHolder):
+  """Illumination unit holder: blocks drops onto a plate taller than the unit clears."""
+
+  # The tallest plate, lid included, the illumination unit goes on over.
+  MAX_PLATE_SIZE_Z = 16.0
+
+  def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
+    base = self.parent
+    assert isinstance(base, ByonoyAbsorbanceBaseUnit)
+    plate = base.plate_holder.resource
+    if plate is not None:
+      top = plate.get_highest_known_point() - base.plate_holder.get_absolute_location().z
+      if top > self.MAX_PLATE_SIZE_Z:
+        raise RuntimeError(
+          f"Cannot drop resource {resource.name} onto {self.name}: {plate.name} stands {top:.2f} mm "
+          f"tall, above the {self.MAX_PLATE_SIZE_Z:.2f} mm the illumination unit clears."
+        )
+    super().check_can_drop_resource_here(resource, reassign=reassign)
+
+
 class ByonoyAbsorbanceBaseUnit(Resource):
   def __init__(
     self,
@@ -84,21 +104,19 @@ class ByonoyAbsorbanceBaseUnit(Resource):
     self.plate_holder = _ByonoyAbsorbanceReaderPlateHolder(
       name=self.name + "_plate_holder",
       size_x=127.76,
-      size_y=85.59,
+      size_y=85.48,
       size_z=0,
-      child_location=Coordinate(x=22.5, y=5.0, z=16.0),
       pedestal_size_z=0,
     )
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
+    self.assign_child_resource(self.plate_holder, location=Coordinate(x=22.5, y=5.0, z=16.0))
 
-    self.illumination_unit_holder = ResourceHolder(
+    self.illumination_unit_holder = _ByonoyAbsorbanceIlluminationUnitHolder(
       name=self.name + "_illumination_unit_holder",
       size_x=size_x,
       size_y=size_y,
       size_z=0,
-      child_location=Coordinate(x=0, y=0, z=14.1),
     )
-    self.assign_child_resource(self.illumination_unit_holder, location=Coordinate.zero())
+    self.assign_child_resource(self.illumination_unit_holder, location=Coordinate(x=0, y=0, z=14.1))
 
   def assign_child_resource(
     self, resource: Resource, location: Optional[Coordinate], reassign: bool = True
@@ -127,23 +145,71 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
   """
 
   _ERROR_NAMES = ABS96_ERROR_NAMES
+  _DD_IGNORE_ERRORS_IN_CALIBRATION = 0x800E
 
   def __init__(self, name: str = "byonoy_absorbance_96") -> None:
-    ByonoyAbsorbanceBaseUnit.__init__(self, name=name + "_base")
+    # Drawn with the parking unit's housing, which is the same part, until the detection unit is
+    # modelled on its own.
+    ByonoyAbsorbanceBaseUnit.__init__(self, name=name, model="byonoy_a96a_parking_unit")
     ByonoyDriver.__init__(
       self, pid=0x1199, device_type=ByonoyDevice.ABSORBANCE_96, name="Byonoy A96"
     )
     self.available_wavelengths: List[float] = []
 
-  async def setup(self) -> None:
-    await super().setup()
-    await self.initialize_measurements()
-    self.available_wavelengths = await self.request_available_absorbance_wavelengths()
-    logger.info(
-      "[%s] ready, available wavelengths: %s nm",
-      self.name,
-      self.available_wavelengths,
-    )
+  async def request_ignore_errors_in_calibration(self) -> bool:
+    """Read the firmware's experimental calibration-error override.
+
+    Field 0x800E is ``state.ignore_errors_in_calibration`` on A96A firmware
+    2024-10-23. This internal field is not a stable vendor API.
+    """
+    payload = Writer().u16(self._DD_IGNORE_ERRORS_IN_CALIBRATION).u8(0).finish()
+    response = await self.send_command(report_id=0x0200, payload=payload, routing_info=b"\x80\x40")
+    assert response is not None
+    r = Reader(response[2:])
+    field_index, flags = r.u16(), r.u8()
+    if field_index != self._DD_IGNORE_ERRORS_IN_CALIBRATION or flags & 0x0F != 0x01:
+      raise RuntimeError("Unexpected field or type for ignore_errors_in_calibration.")
+    value = r.u32()
+    if value not in (0, 1):
+      raise RuntimeError(f"Unexpected ignore_errors_in_calibration value: {value}.")
+    return bool(value)
+
+  async def set_ignore_errors_in_calibration(self, enabled: bool) -> None:
+    """Set and verify the firmware's experimental calibration-error override.
+
+    Diagnostic use only: suppressing an error does not establish a valid calibration.
+    The field address is specific to A96A firmware 2024-10-23. Save the original
+    value with :meth:`request_ignore_errors_in_calibration` and restore it in a
+    ``finally`` block. Setup only enables this override when explicitly requested.
+    """
+    if not isinstance(enabled, bool):
+      raise TypeError("enabled must be a bool.")
+    if self._in_flight_trigger is not None:
+      raise RuntimeError("Cannot change calibration-error override during a measurement.")
+    payload = Writer().u16(self._DD_IGNORE_ERRORS_IN_CALIBRATION).u8(0).u32(int(enabled)).finish()
+    command = self._assemble_command(0x0210, payload, routing_info=b"\x00\x40")
+    async with self._io_lock:
+      await self.io.write(command)
+      deadline = time.monotonic() + 10
+      while True:
+        if time.monotonic() >= deadline:
+          raise TimeoutError("Timed out waiting for calibration-error override acknowledgement.")
+        response = await self.io.read(64, timeout=30)
+        if len(response) < 6:
+          continue
+        r = Reader(response)
+        if r.u16() != 0x0020 or r.u16() != 0x0210:
+          continue
+        code = r.u16()
+        if code != 0:
+          raise RuntimeError(f"Firmware rejected calibration-error override: 0x{code:04x}.")
+        break
+    if await self.request_ignore_errors_in_calibration() != enabled:
+      raise RuntimeError("Calibration-error override readback does not match requested value.")
+    if enabled:
+      logger.warning(
+        "[%s] calibration-error override enabled; calibration may be invalid", self.name
+      )
 
   async def request_available_absorbance_wavelengths(self) -> List[float]:
     response = await self.send_command(
@@ -260,6 +326,36 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
       is_reference=True,
     )
 
+  async def setup(self, *, ignore_errors_in_calibration: bool = False) -> None:
+    """Connect and initialize absorbance measurements.
+
+    Args:
+      ignore_errors_in_calibration: Temporarily enable the experimental firmware
+        override during calibration. The previous setting is restored even if
+        calibration fails. Defaults to False, which leaves the setting unchanged.
+        This diagnostic option does not establish measurement accuracy and relies
+        on an internal field identified on A96A firmware 2024-10-23.
+    """
+    if not isinstance(ignore_errors_in_calibration, bool):
+      raise TypeError("ignore_errors_in_calibration must be a bool.")
+    await super().setup()
+    original_override = None
+    if ignore_errors_in_calibration:
+      original_override = await self.request_ignore_errors_in_calibration()
+    try:
+      if ignore_errors_in_calibration:
+        await self.set_ignore_errors_in_calibration(True)
+      await self.initialize_measurements()
+    finally:
+      if original_override is not None:
+        await self.set_ignore_errors_in_calibration(original_override)
+    self.available_wavelengths = await self.request_available_absorbance_wavelengths()
+    logger.info(
+      "[%s] ready, available wavelengths: %s nm",
+      self.name,
+      self.available_wavelengths,
+    )
+
   async def read_absorbance(
     self,
     plate: Plate,
@@ -309,6 +405,7 @@ def byonoy_sbs_adapter(name: str) -> ResourceHolder:
       y=-(95.48 - 85.48) / 2,
       z=17.0,
     ),
+    model="byonoy_a96a_sbs_adapter",
   )
 
 
@@ -320,7 +417,7 @@ def byonoy_a96a_illumination_unit(name: str) -> Resource:
     size_x=size_x,
     size_y=size_y,
     size_z=42.898,
-    model="Byonoy A96A Illumination Unit",
+    model="byonoy_a96a_illumination_unit",
     preferred_pickup_location=Coordinate(x=size_x / 2, y=size_y / 2, z=29.5),
   )
 
@@ -332,12 +429,12 @@ def byonoy_a96a_detection_unit(name: str) -> ByonoyAbsorbance96:
 
 def byonoy_a96a_parking_unit(name: str) -> ByonoyAbsorbanceBaseUnit:
   """Create a Byonoy A96A detection unit holder (base only, no backend)."""
-  return ByonoyAbsorbanceBaseUnit(name=name)
+  return ByonoyAbsorbanceBaseUnit(name=name, model="byonoy_a96a_parking_unit")
 
 
 def byonoy_a96a(name: str, assign: bool = True) -> Tuple[ByonoyAbsorbance96, Resource]:
   """Create a full Byonoy A96A setup (reader + illumination unit)."""
-  reader = byonoy_a96a_detection_unit(name=name + "_reader")
+  reader = byonoy_a96a_detection_unit(name=name)
   illumination_unit = byonoy_a96a_illumination_unit(name=name + "_illumination_unit")
   if assign:
     reader.illumination_unit_holder.assign_child_resource(illumination_unit)

@@ -12,13 +12,14 @@ import json
 import struct
 import unittest
 from typing import Dict, List, Tuple
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 pytest.importorskip("numpy")
 pytest.importorskip("grpc")
 
+import grpc
 import numpy as np  # type: ignore[import-not-found]
 
 from pylabrobot.io.sila.grpc import (
@@ -191,7 +192,7 @@ def _make_backend(
     filter_cubes=filter_cubes or {},
   )
   channel = _MockChannel()
-  backend._channel = channel
+  backend._channel = Mock(spec=grpc.Channel, wraps=channel)
   backend._lock_id = "pylabrobot"
   backend._locked = True
   return backend, channel

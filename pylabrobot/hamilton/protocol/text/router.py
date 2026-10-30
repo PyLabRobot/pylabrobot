@@ -63,13 +63,16 @@ class ReplyRouter:
     self._parse_id = parse_id
     self._raise_for_error = raise_for_error
 
+    # TODO: not used by the reader yet.
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
 
     self.id_ = 0
     self._reading_thread: Optional[threading.Thread] = None
     self._reading_thread_stop = threading.Event()
+    # The reading thread and the event loop both change this, so every change goes through the lock.
     self._waiting_tasks: List[HamiltonTask] = []
+    self._waiting_tasks_lock = threading.Lock()
 
   def start(self) -> None:
     """Begin reading replies. The caller opens the transport first."""
@@ -83,11 +86,12 @@ class ReplyRouter:
     if self._reading_thread is not None:
       self._reading_thread.join(timeout=10)
       self._reading_thread = None
-    for task in self._waiting_tasks:
+    with self._waiting_tasks_lock:
+      waiting, self._waiting_tasks = self._waiting_tasks, []
+    for task in waiting:
       task.loop.call_soon_threadsafe(
         task.fut.set_exception, RuntimeError("Stopping the reply router.")
       )
-    self._waiting_tasks.clear()
 
   def next_id(self) -> int:
     """continuously generate unique ids 0 <= x < 10000."""
@@ -115,17 +119,28 @@ class ReplyRouter:
     Returns:
       The reply, or None when `wait` is False.
     """
-    await self.io.write(cmd.encode(), timeout=write_timeout)
-
     if not wait:
+      await self.io.write(cmd.encode(), timeout=write_timeout)
       return None
 
     if read_timeout is None:
       read_timeout = self.read_timeout
 
+    # Wait for the reply before asking for it. The reading thread runs alongside this one, and a
+    # device can answer before a task registered after the write would exist - the reply then
+    # arrives with nothing waiting for it, is dropped, and the command times out with its answer
+    # already gone past. Registering first closes that window; the task is taken back off again if
+    # the write never happens.
     loop = asyncio.get_event_loop()
     fut: asyncio.Future[str] = loop.create_future()
-    self._start_reading(id_, loop, fut, cmd, read_timeout)
+    task = self._start_reading(id_, loop, fut, cmd, read_timeout)
+    try:
+      await self.io.write(cmd.encode(), timeout=write_timeout)
+    except BaseException:
+      with self._waiting_tasks_lock:
+        if task in self._waiting_tasks:
+          self._waiting_tasks.remove(task)
+      raise
     return await fut
 
   async def send_raw(
@@ -151,18 +166,24 @@ class ReplyRouter:
     fut: asyncio.Future,
     cmd: str,
     timeout: int,
-  ) -> None:
-    """Submit a task to the reading thread."""
+  ) -> HamiltonTask:
+    """Submit a task to the reading thread, and hand it back so a caller can take it off again.
+
+    Returns:
+      The task now waiting for a reply.
+    """
 
     timeout_time = time.time() + timeout
-    self._waiting_tasks.append(
-      HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
-    )
+    task = HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
+    with self._waiting_tasks_lock:
+      self._waiting_tasks.append(task)
 
     if self._reading_thread is None or not self._reading_thread.is_alive():
       self._reading_thread_stop.clear()
       self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
       self._reading_thread.start()
+
+    return task
 
   def _reading_thread_main(self) -> None:
     loop = asyncio.new_event_loop()
@@ -182,17 +203,20 @@ class ReplyRouter:
     """
 
     while not self._reading_thread_stop.is_set():
-      for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
-        task = self._waiting_tasks[idx]
-        if time.time() > task.timeout_time:
-          logger.warning("Timeout while waiting for response to command %s.", task.cmd)
-          task.loop.call_soon_threadsafe(
-            task.fut.set_exception,
-            TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
-          )
-          del self._waiting_tasks[idx]
+      with self._waiting_tasks_lock:
+        now = time.time()
+        timed_out = [task for task in self._waiting_tasks if now > task.timeout_time]
+        for task in timed_out:
+          self._waiting_tasks.remove(task)
+        waiting = len(self._waiting_tasks)
+      for task in timed_out:
+        logger.warning("Timeout while waiting for response to command %s.", task.cmd)
+        task.loop.call_soon_threadsafe(
+          task.fut.set_exception,
+          TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
+        )
 
-      if len(self._waiting_tasks) == 0:
+      if waiting == 0:
         await asyncio.sleep(0.01)
         continue
 
@@ -212,17 +236,30 @@ class ReplyRouter:
         continue
 
       module_and_command = resp[: self.module_id_length + 2]
-      for idx in range(len(self._waiting_tasks)):
-        task = self._waiting_tasks[idx]
-        # if the command has no id, we have to check the command itself
-        if response_id == task.id_ or (
-          task.id_ is None and task.cmd.startswith(module_and_command)
-        ):
-          try:
-            self._raise_for_error(resp)
-          except Exception as e:
-            task.loop.call_soon_threadsafe(task.fut.set_exception, e)
-          else:
-            task.loop.call_soon_threadsafe(task.fut.set_result, resp)
-          del self._waiting_tasks[idx]
-          break
+      with self._waiting_tasks_lock:
+        matched = next(
+          (
+            task
+            for task in self._waiting_tasks
+            # if the command has no id, we have to check the command itself
+            if response_id == task.id_
+            or (task.id_ is None and task.cmd.startswith(module_and_command))
+          ),
+          None,
+        )
+        if matched is not None:
+          self._waiting_tasks.remove(matched)
+
+      if matched is None:
+        # Deliberately not guessed at. Handing it to whichever outstanding command shares its
+        # module and code answers that command with something that was never its answer, and a
+        # reply arriving with nothing waiting for it is worth seeing rather than repairing.
+        logger.warning("nothing was waiting for this reply, and it was dropped: %s", resp)
+        continue
+
+      try:
+        self._raise_for_error(resp)
+      except Exception as e:
+        matched.loop.call_soon_threadsafe(matched.fut.set_exception, e)
+      else:
+        matched.loop.call_soon_threadsafe(matched.fut.set_result, resp)

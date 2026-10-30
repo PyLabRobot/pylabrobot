@@ -63,7 +63,7 @@ await star.setup()
 input("Confirm the deck is clear and press Enter to continue...")
 await star.pip.backend.position_components_for_free_iswap_y_range()
 await star.driver.iswap.move_y(y=300)
-x = star.deck.rails_to_location(star.deck.num_rails / 2).x
+x = star.deck.track_to_location(star.deck.num_tracks // 2 + 1).x
 await star.driver.iswap.move_x(x=x)
 ```
 

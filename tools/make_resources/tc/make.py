@@ -207,7 +207,7 @@ def main(pc, tc, p, tr, tcr):
           o.write(f"      size_z={size_z},\n")
         elif bc == "TecanTipRack":
           tip_name = name + "_tip"
-          total_tip_length = float(dim[12][0]) / 10
+          tip_length = float(dim[12][0]) / 10
           has_filter = dim[13] == "1"
           maximal_volume = float(dim[11][0])
           # all tip types in tip racks are Disposable Tips?
@@ -216,14 +216,14 @@ def main(pc, tc, p, tr, tcr):
           tcr.write(f"\n\n")
           tcr.write(f"def {tip_name}() -> TecanTip:\n")
           tcr.write(f'  """ Tip for {name} """\n')
-          if total_tip_length <= 0:
+          if tip_length <= 0:
             # print a warning, because this parameter is confusing in the file and I don't have
             # have a device to test this on. tbc.
-            tcr.write('  print("WARNING: total_tip_length <= 0.")\n')
+            tcr.write('  print("WARNING: size_z <= 0.")\n')
             tcr.write('  print("Please get in touch at https://discuss.pylabrobot.org")\n')
           tcr.write(f"  return TecanTip(\n")
           tcr.write(f"    has_filter={has_filter},\n")
-          tcr.write(f"    total_tip_length={total_tip_length},\n")
+          tcr.write(f"    size_z={tip_length},\n")
           tcr.write(f"    maximal_volume={maximal_volume},\n")
           tcr.write(f"    tip_type={tip_type}\n")
           tcr.write(f"  )\n")

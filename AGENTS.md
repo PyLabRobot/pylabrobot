@@ -12,6 +12,10 @@ configuration side projects.
 **Never drive real hardware without explicit, per-run approval.** Approval from a previous run does
 not carry over.
 
+## Testing judgment
+
+Add tests when they meaningfully cover behavior that could regress; do not test every request by default.
+
 ## Required reading
 
 Before making any change, read the

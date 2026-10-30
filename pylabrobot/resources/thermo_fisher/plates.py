@@ -1,5 +1,6 @@
 """Thermo Fisher Scientific  Inc. (and all its brand) plates"""
 
+import logging
 import math
 
 from pylabrobot.resources.height_volume_functions import (
@@ -14,6 +15,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 from pylabrobot.utils.interpolation import interpolate_1d
+
+logger = logging.getLogger(__name__)
 
 # Please conform with the 'manufacturer-first, then brands' naming principle:
 
@@ -357,7 +360,17 @@ def thermo_AB_384_wellplate_40uL_Vb_MicroAmp(name: str) -> Plate:
   """Thermo Fisher Scientific cat. no.: 4309849, 4326270, 4343814 (with barcode), 4343370 (w/o barcode).
 
   https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042831.pdf
+
+  The wells sit flush with the plate's own base: section A-A of drawing 4310286 dimensions 9.70
+  from the underside to the top face, and the 0.61 below the wells is the wall at their bottom, not
+  a standoff. So `dz` is zero because it was drawn that way, not because nobody measured it - and
+  on a holder with a pedestal this plate comes to rest on its wells rather than on its skirt.
   """
+  logger.info(
+    "%s is one of the few skirted plates whose wells sit flush with its own base, so on a holder "
+    "with a pedestal it comes to rest on its wells rather than on its skirt.",
+    name,
+  )
   diameter = 3.17
   return Plate(
     name=name,

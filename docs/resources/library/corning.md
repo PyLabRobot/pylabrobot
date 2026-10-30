@@ -45,6 +45,7 @@ Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/e
 |-|-|-|
 | 'Cor_Axy_24_wellplate_10mL_Vb'<br>Part no.: P-DW-10ML-24-C-S, P-DW-10ML-24-C<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C-S) | ![](img/corning_axygen/Cor_Axy_24_wellplate_10mL_Vb.jpg) | `Cor_Axy_24_wellplate_10mL_Vb` |
 | 'Cor_Axy_96_wellplate_500uL_Ub'<br>Part no.: P-96-450V-C-S, P-96-450V-C ("-S" indicates sterile labware)<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2c/US/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-96-450V-C-S) | ![](img/corning_axygen/Cor_Axy_96_wellplate_500uL_Ub.png) | `Cor_Axy_96_wellplate_500uL_Ub` |
+| 'cor_axy_1_troughplate_rowVb'<br>Part no.: RES-SW8-HP-SI<br>Single-well reservoir, 8 V-bottom trenches across the rows | | `cor_axy_1_troughplate_rowVb` |
 
 ## Corning - Costar
 

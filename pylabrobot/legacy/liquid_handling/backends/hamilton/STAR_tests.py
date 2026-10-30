@@ -19,21 +19,43 @@ from pylabrobot.resources import (
   PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
+  TIP_CAR_480BC_A00,
   Container,
   Coordinate,
   Lid,
+  ResourceHolder,
   ResourceStack,
+  TipRack,
   agenbio_1_troughplate_190mL_Fl,
   celltreat_96_wellplate_350uL_Ub,
   cor_96_wellplate_360uL_Fb,
+  hamilton_96_tiprack_10uL,
+  hamilton_96_tiprack_10uL_filter,
+  hamilton_96_tiprack_10uL_NTR,
+  hamilton_96_tiprack_50uL,
+  hamilton_96_tiprack_50uL_filter,
+  hamilton_96_tiprack_50uL_NTR,
+  hamilton_96_tiprack_300uL,
+  hamilton_96_tiprack_300uL_filter_slim,
+  hamilton_96_tiprack_300uL_NTR,
   hamilton_96_tiprack_1000uL,
   hamilton_96_tiprack_1000uL_filter,
+  hamilton_mfx_carrier_L5_base,
+  hamilton_mfx_resourceholder_ntr,
+  hamilton_mfx_tiprackholder_standard,
+  hamilton_tip_carrier_L5_ntr_a00,
+  no_tip_tracking,
   no_volume_tracking,
   set_tip_tracking,
 )
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.greiner import Greiner_384_wellplate_28ul_Fb
-from pylabrobot.resources.hamilton import STARDeck, STARLetDeck, hamilton_96_tiprack_300uL_filter
+from pylabrobot.resources.hamilton import (
+  STARDeck,
+  STARLetDeck,
+  hamilton_96_tiprack_300uL_filter,
+  hamilton_core_gripper_tool,
+)
 
 from .STAR_backend import (
   CommandSyntaxError,
@@ -657,6 +679,33 @@ class STARCommandCatcher(STARBackend):
     self.stop_finished = True
 
 
+class TestSTARCoreGripperRegistration(unittest.IsolatedAsyncioTestCase):
+  """Grippers require an existing firmware definition."""
+
+  async def test_named_deck_gripper_pickup(self):
+    """Named deck mounts and their tools remain usable by the legacy driver."""
+    backend = STARCommandCatcher()
+    deck = STARDeck(name="custom_deck")
+    lh = LiquidHandler(backend=backend, deck=deck)
+    await lh.setup()
+    try:
+      await backend.pick_up_core_gripper_tools(front_channel=7)
+      self.assertTrue(any("C0ZT" in command for command in backend.commands))
+    finally:
+      await lh.stop()
+
+  async def test_gripper_uses_existing_definition_and_refuses_registration(self):
+    backend = STARCommandCatcher()
+    tool = hamilton_core_gripper_tool("gripper")
+    self.assertEqual(await backend.get_or_assign_tip_type_index(tool), 14)
+    self.assertEqual(backend.commands, [])
+
+    backend._tip_type_indices.clear()
+    with self.assertRaisesRegex(AssertionError, "No firmware definition for CO-RE gripper"):
+      await backend.get_or_assign_tip_type_index(tool)
+    self.assertEqual(backend.commands, [])
+
+
 class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test STAR backend for liquid handling."""
 
@@ -674,7 +723,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
     self.tip_car[2] = self.tip_rack2 = hamilton_96_tiprack_1000uL_filter(name="tip_rack_02")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
@@ -696,7 +745,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       nesting_z_height=10,
     )
     self.other_plate.assign_child_resource(lid)
-    self.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, track=9)
 
     class BlueBucket(Container):
       def __init__(self, name: str):
@@ -724,6 +773,30 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
     set_tip_tracking(enabled=False)
+
+  async def test_teaching_needle_pickup_and_return(self):
+    """Teaching needles retain their pickup and return heights in the integrated holder."""
+    rack = self.deck.get_resource("teaching_tip_rack")
+    await self.lh.pick_up_tips(rack.get_all_items(), use_channels=list(range(8)))
+    pickup = next(
+      call.kwargs["cmd"]
+      for call in self.STAR._write_and_read_command.call_args_list
+      if call.kwargs["cmd"].startswith("C0TP")
+    )
+    parsed_pickup = parse_star_fw_string(pickup, "tp####tz####")
+    self.assertEqual((parsed_pickup["tp"], parsed_pickup["tz"]), (1830, 1750))
+
+    self.STAR._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.return_tips(use_channels=list(range(8)))
+    drop = next(
+      call.kwargs["cmd"]
+      for call in self.STAR._write_and_read_command.call_args_list
+      if call.kwargs["cmd"].startswith("C0TR")
+    )
+    parsed_drop = parse_star_fw_string(drop, "tp####tz####")
+    self.assertEqual((parsed_drop["tp"], parsed_drop["tz"]), (1830, 1750))
 
   async def test_core_read_barcode_success(self):
     """core_read_barcode_of_picked_up_resource should send ZB and return a Barcode."""
@@ -1755,8 +1828,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = hamilton_96_tiprack_1000uL(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
-    assert tr.location == Coordinate(82.6, 0, 0)
-    deck.assign_child_resource(tip_car, rails=2)
+    assert tr.location == Coordinate(78.3, -3.95, -6.0)
+    deck.assign_child_resource(tip_car, track=2)
     await lh.setup()
 
     await lh.pick_up_tips(tr["A4:A1"])
@@ -1768,10 +1841,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.STAR._write_and_read_command.assert_has_calls(
       [
         _any_write_and_read_command_call(
-          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz2163th2450td0"
+          "C0TPid0002xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2262tz2162th2450td0"
         ),
         _any_write_and_read_command_call(
-          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz2183th2450te2450ti1"
+          "C0TRid0003xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2262tz2182th2450te2450ti1"
         ),
       ]
     )
@@ -1820,10 +1893,10 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
 
     self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
     self.plt_car[0] = self.plate = celltreat_96_wellplate_350uL_Ub(name="plate", with_lid=True)
-    self.deck.assign_child_resource(self.plt_car, rails=15)
+    self.deck.assign_child_resource(self.plt_car, track=15)
 
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
-    self.deck.assign_child_resource(self.plt_car2, rails=3)
+    self.deck.assign_child_resource(self.plt_car2, track=3)
 
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
@@ -1947,12 +2020,12 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
 
     tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
     tip_carrier[1] = self.tip_rack = hamilton_96_tiprack_1000uL(name="tip_rack")
-    self.deck.assign_child_resource(tip_carrier, rails=1)
+    self.deck.assign_child_resource(tip_carrier, track=1)
 
     plt_carrier = PLT_CAR_L5AC_A00(name="plt_carrier")
     plt_carrier[0] = self.plate = agenbio_1_troughplate_190mL_Fl(name="plate")
     self.well = self.plate.get_well("A1")
-    self.deck.assign_child_resource(plt_carrier, rails=10)
+    self.deck.assign_child_resource(plt_carrier, track=10)
 
     self.star._num_channels = 8
     self.star._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
@@ -2154,7 +2227,7 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
-  """Test STAR tip pickup and drop Z position calculations for all tip sizes."""
+  """Test STAR tip pickup and drop Z positions for 10, 50, 300, and 1000 uL tips."""
 
   async def asyncSetUp(self):
     self.backend = STARBackend()
@@ -2171,7 +2244,7 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     await self.lh.setup()
     set_tip_tracking(enabled=False)
@@ -2215,8 +2288,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.pick_up_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TP")
-    self.assertEqual(tp, 2248)
-    self.assertEqual(tz, 2168)
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
 
     self.backend._write_and_read_command.reset_mock()
     self.backend._write_and_read_command.return_value = (
@@ -2224,8 +2297,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     )
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TR")
-    self.assertEqual(tp, 2248)
-    self.assertEqual(tz, 2168)
+    self.assertEqual(tp, 2244)
+    self.assertEqual(tz, 2164)
 
     tip_rack.unassign()
 
@@ -2259,8 +2332,8 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.pick_up_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TP")
-    self.assertEqual(tp, 2266)
-    self.assertEqual(tz, 2166)
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2164)
 
     self.backend._write_and_read_command.reset_mock()
     self.backend._write_and_read_command.return_value = (
@@ -2268,10 +2341,277 @@ class TestSTARTipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
     )
     await self.lh.drop_tips(tip_rack["A1"])
     tp, tz = self._get_tp_tz_from_calls("C0TR")
-    self.assertEqual(tp, 2266)
-    self.assertEqual(tz, 2186)
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2184)
 
     tip_rack.unassign()
+
+  async def test_300uL_filter_slim_tips(self):
+    from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL_filter_slim
+
+    tip_rack = hamilton_96_tiprack_300uL_filter_slim("tips")
+    self.tip_car[1] = tip_rack
+
+    # the slim tip has the high volume collar, so it is picked up like a 1000 uL tip
+    await self.lh.pick_up_tips(tip_rack["A1"])
+    self.assertIn(
+      "C0TTid0001tt01tf1tl0870tv03450tg3tu0",
+      [call.kwargs.get("cmd") for call in self.backend._write_and_read_command.call_args_list],
+    )
+    tp, tz = self._get_tp_tz_from_calls("C0TP")
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2164)
+
+    self.backend._write_and_read_command.reset_mock()
+    self.backend._write_and_read_command.return_value = (
+      "C0TRid0001kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+    )
+    await self.lh.drop_tips(tip_rack["A1"])
+    tp, tz = self._get_tp_tz_from_calls("C0TR")
+    self.assertEqual(tp, 2264)
+    self.assertEqual(tz, 2184)
+
+    tip_rack.unassign()
+
+
+class TestSTAR96TipPickupDropAllSizes(unittest.IsolatedAsyncioTestCase):
+  """Test 96-head pickup and return commands for all four standard filtered tip sizes."""
+
+  async def asyncSetUp(self):
+    """Set up a full-size STAR with mocked communication and a carrier on track 1."""
+    self.backend = STARBackend()
+    self.backend._write_and_read_command = unittest.mock.AsyncMock()
+    self.backend.io = unittest.mock.AsyncMock()
+    self.backend._num_channels = 8
+    self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.backend.setup = unittest.mock.AsyncMock()
+    self.backend._core_parked = True
+    self.backend._iswap_parked = True
+
+    self.deck = STARDeck()
+    self.tip_car = TIP_CAR_480_A00("tip_carrier")
+    self.deck.assign_child_resource(self.tip_car, track=1)
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+    await self.lh.setup()
+
+  async def _assert_pickup_and_return(self, rack: TipRack) -> None:
+    """Assert pickup and return commands at the verified 216.4 mm deposit height."""
+    self.tip_car[1] = rack
+    with no_tip_tracking():
+      await self.lh.pick_up_tips96(rack)
+      with self.subTest(operation="pickup"):
+        self.backend._write_and_read_command.assert_has_calls(
+          [
+            _any_write_and_read_command_call("C0EPid0003xs01179xd0yh2418tt01wu0za2164zh2450ze2450"),
+          ]
+        )
+
+      self.backend._write_and_read_command.reset_mock()
+      await self.lh.return_tips96()
+      with self.subTest(operation="return"):
+        self.backend._write_and_read_command.assert_has_calls(
+          [
+            _any_write_and_read_command_call("C0ERid0004xs01179xd0yh2418za2164zh2450ze2450"),
+          ]
+        )
+
+  async def test_10uL_tips(self):
+    """Check 10 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_10uL_filter("tips")))
+
+  async def test_50uL_tips(self):
+    """Check 50 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_50uL_filter("tips")))
+
+  async def test_300uL_tips(self):
+    """Check 300 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_300uL_filter("tips")))
+
+  async def test_1000uL_tips(self):
+    """Check 1000 uL filtered-tip pickup and return with the 96 head."""
+    await self._assert_pickup_and_return(cast(TipRack, hamilton_96_tiprack_1000uL_filter("tips")))
+
+
+class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
+  """The firmware commands sent for Hamilton tip racks, checked command by command."""
+
+  async def asyncSetUp(self):
+    self.backend = STARBackend()
+    self.backend._write_and_read_command = unittest.mock.AsyncMock(
+      side_effect=lambda **kwargs: (
+        "C0TRid0000kz000 000 000 000 000 000 000 000vz000 000 000 000 000 000 000 000"
+        if kwargs["cmd"].startswith("C0TR")
+        else None
+      )
+    )
+    self.backend.io = unittest.mock.AsyncMock()
+    self.backend._num_channels = 8
+    self.backend._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
+    self.backend._extended_conf = _DEFAULT_EXTENDED_CONFIGURATION
+    self.backend.setup = unittest.mock.AsyncMock()
+    self.backend._core_parked = True
+    self.backend._iswap_parked = True
+    self.deck = STARDeck()
+    self.module = hamilton_mfx_resourceholder_ntr("ntr4_module")
+    self.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("mfx_carrier", modules={3: self.module}),
+      location=Coordinate(932.5, 63, 100),
+    )
+    self.ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
+    self.deck.assign_child_resource(self.ntr_carrier, location=Coordinate(752.5, 63, 100))
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+    await self.lh.setup()
+
+  def _sent(self, prefix: str) -> str:
+    """The last command sent that starts with `prefix`, without its id."""
+    cmds = [str(c.kwargs["cmd"]) for c in self.backend._write_and_read_command.call_args_list]
+    cmd = [c for c in cmds if c.startswith(prefix)][-1]
+    return cmd[:4] + cmd[10:]
+
+  async def test_nested_tip_racks_ground_truth(self):
+    # tip definition (without its index), start of pick up, channel drop tp/tz (stop disc, ti1)
+    tips = {
+      "10uL": (hamilton_96_tiprack_10uL_NTR, "tf0tl0219tv00150tg1tu0", "1900", "tp1900tz1820"),
+      "50uL": (hamilton_96_tiprack_50uL_NTR, "tf0tl0424tv00650tg2tu0", "1920", "tp1920tz1840"),
+      "300uL": (hamilton_96_tiprack_300uL_NTR, "tf0tl0519tv04000tg2tu0", "1920", "tp1920tz1840"),
+    }
+    # holder, A1 x and A1 y (0.1 mm)
+    holders = [
+      ("ntr4_module", self.module, "09505", {"10uL": 4340, "50uL": 4340, "300uL": 4340}),
+      ("ntr_carrier", None, "07704", {"10uL": 1458, "50uL": 2418, "300uL": 3378}),
+    ]
+    sites = {"10uL": 0, "50uL": 1, "300uL": 2}
+    for holder_name, module, xs, a1_y in holders:
+      for size, (rack_fn, definition, tp, drop) in tips.items():
+        with self.subTest(holder=holder_name, tip=size):
+          rack = rack_fn(f"{holder_name}_{size}")
+          holder = module if module is not None else self.ntr_carrier.sites[sites[size]]
+          holder.assign_child_resource(rack)
+          self.backend._write_and_read_command.reset_mock()
+          self.backend._tip_type_indices.clear()  # so each tip definition is sent
+
+          await self.lh.pick_up_tips(rack["A1:H1"])
+          xp = " ".join([xs] * 8)
+          yp = " ".join(f"{a1_y[size] - 90 * row:04}" for row in range(8))
+          tt = self._sent("C0TT")[4:8]
+          self.assertEqual(self._sent("C0TT"), f"C0TT{tt}{definition}")
+          self.assertEqual(
+            self._sent("C0TP"), f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz1840th2450td0"
+          )
+          await self.lh.drop_tips(rack["A1:H1"])
+          self.assertEqual(
+            self._sent("C0TR"), f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1"
+          )
+
+          await self.lh.pick_up_tips96(rack)
+          self.assertEqual(
+            self._sent("C0EP"), f"C0EPxs{xs}xd0yh{a1_y[size]}{tt}wu0za1840zh2450ze2450"
+          )
+          await self.lh.drop_tips96(rack)
+          self.assertEqual(self._sent("C0ER"), f"C0ERxs{xs}xd0yh{a1_y[size]}za1840zh2450ze2450")
+          holder.unassign_child_resource(rack)
+
+  async def test_framed_tip_racks_on_tip_carrier_ground_truth(self):
+    carriers = {x: TIP_CAR_480BC_A00(f"tip_carrier_{x}") for x in (437.5, 572.5)}
+    for x, carrier in carriers.items():
+      self.deck.assign_child_resource(carrier, location=Coordinate(x, 63, 100))
+    # rack, carrier x, site, tip definition (without its index), start of pick up, channel drop tp/tz
+    # (stop disc, ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 437.5, 0, "tf0tl0219tv00150tg1tu0", "2224", "tp2224tz2144"),
+      (hamilton_96_tiprack_50uL, 437.5, 1, "tf0tl0424tv00650tg2tu0", "2244", "tp2244tz2164"),
+      (hamilton_96_tiprack_300uL, 572.5, 0, "tf0tl0519tv04000tg2tu0", "2244", "tp2244tz2164"),
+      (
+        hamilton_96_tiprack_1000uL_filter,
+        572.5,
+        1,
+        "tf1tl0871tv10650tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+      (
+        hamilton_96_tiprack_300uL_filter_slim,
+        572.5,
+        2,
+        "tf1tl0870tv03450tg3tu0",
+        "2264",
+        "tp2264tz2184",
+      ),
+    ]
+    for rack_fn, carrier_x, site, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        rack = rack_fn(rack_fn.__name__)
+        carriers[carrier_x][site] = rack
+        self.backend._write_and_read_command.reset_mock()
+        self.backend._tip_type_indices.clear()  # so each tip definition is sent
+
+        await self.lh.pick_up_tips(rack["A1:H1"])
+        # A1 17.9 mm right of the carrier, 145.8 mm back on site 0, sites 96 mm apart (0.1 mm)
+        xs = f"{round(carrier_x * 10) + 179:05}"
+        a1_y = 1458 + 960 * site
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
+        tt = self._sent("C0TT")[4:8]
+        self.assertEqual(self._sent("C0TT"), f"C0TT{tt}{definition}")
+        self.assertEqual(
+          self._sent("C0TP"), f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2164th2450td0"
+        )
+        await self.lh.drop_tips(rack["A1:H1"])
+        self.assertEqual(
+          self._sent("C0TR"), f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1"
+        )
+
+        await self.lh.pick_up_tips96(rack)
+        self.assertEqual(self._sent("C0EP"), f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2164zh2450ze2450")
+        await self.lh.drop_tips96(rack)
+        self.assertEqual(self._sent("C0ER"), f"C0ERxs{xs}xd0yh{a1_y}za2164zh2450ze2450")
+
+  async def test_framed_tip_racks_on_mfx_tip_module_ground_truth(self):
+    self.deck.unassign_child_resource(self.ntr_carrier)
+    modules: dict[int, ResourceHolder] = {
+      slot: hamilton_mfx_tiprackholder_standard(f"tip_module_{slot}") for slot in (0, 1, 4)
+    }
+    self.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("tip_module_carrier", modules=modules),
+      location=Coordinate(752.5, 63, 100),
+    )
+    # rack, slot, tip definition (without its index), start of pick up, channel drop tp/tz (stop disc,
+    # ti1)
+    tips = [
+      (hamilton_96_tiprack_10uL, 0, "tf0tl0219tv00150tg1tu0", "2222", "tp2222tz2142"),
+      (hamilton_96_tiprack_50uL, 1, "tf0tl0424tv00650tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_300uL, 4, "tf0tl0519tv04000tg2tu0", "2242", "tp2242tz2162"),
+      (hamilton_96_tiprack_1000uL_filter, 0, "tf1tl0871tv10650tg3tu0", "2262", "tp2262tz2182"),
+      (hamilton_96_tiprack_300uL_filter_slim, 1, "tf1tl0870tv03450tg3tu0", "2262", "tp2262tz2182"),
+    ]
+    for rack_fn, slot, definition, tp, drop in tips:
+      with self.subTest(tip=rack_fn.__name__):
+        rack = rack_fn(rack_fn.__name__)
+        modules[slot].assign_child_resource(rack)
+        self.backend._write_and_read_command.reset_mock()
+        self.backend._tip_type_indices.clear()  # so each tip definition is sent
+
+        await self.lh.pick_up_tips(rack["A1:H1"])
+        # A1 146.0 mm back on slot 0, slots 96 mm apart (0.1 mm)
+        xs, a1_y = "07705", 1460 + 960 * slot
+        xp = " ".join([xs] * 8)
+        yp = " ".join(f"{a1_y - 90 * row:04}" for row in range(8))
+        tt = self._sent("C0TT")[4:8]
+        self.assertEqual(self._sent("C0TT"), f"C0TT{tt}{definition}")
+        self.assertEqual(
+          self._sent("C0TP"), f"C0TPxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{tt}tp{tp}tz2162th2450td0"
+        )
+        await self.lh.drop_tips(rack["A1:H1"])
+        self.assertEqual(
+          self._sent("C0TR"), f"C0TRxp{xp}yp{yp}tm1 1 1 1 1 1 1 1{drop}th2450te2450ti1"
+        )
+
+        await self.lh.pick_up_tips96(rack)
+        self.assertEqual(self._sent("C0EP"), f"C0EPxs{xs}xd0yh{a1_y}{tt}wu0za2162zh2450ze2450")
+        await self.lh.drop_tips96(rack)
+        self.assertEqual(self._sent("C0ER"), f"C0ERxs{xs}xd0yh{a1_y}za2162zh2450ze2450")
+        modules[slot].unassign_child_resource(rack)
 
 
 class TestChannelsMinimumYSpacing(unittest.IsolatedAsyncioTestCase):
@@ -2392,11 +2732,11 @@ class TestProbeLiquidHeights(unittest.IsolatedAsyncioTestCase):
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
-    self.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, track=9)
 
     self.STAR._num_channels = 8
     self.STAR._machine_conf = _DEFAULT_MACHINE_CONFIGURATION
@@ -2615,11 +2955,11 @@ class TestChatterboxLastLLDHeights(unittest.IsolatedAsyncioTestCase):
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")
-    self.deck.assign_child_resource(self.tip_car, rails=1)
+    self.deck.assign_child_resource(self.tip_car, track=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = cor_96_wellplate_360uL_Fb(name="plate_01")
-    self.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, track=9)
 
     await self.lh.setup()
 

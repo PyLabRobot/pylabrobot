@@ -52,6 +52,7 @@ def cor_falcon_tube_15mL_Vb(name: str) -> Tube:
     size_z=120,
     model=cor_falcon_tube_15mL_Vb.__name__,
     max_volume=15_000,
+    material_z_thickness=1.47,  # measured
   )
 
 

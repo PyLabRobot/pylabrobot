@@ -61,6 +61,36 @@ Do not use reflective attribute access. `getattr`, `setattr`, `hasattr`, `delatt
 
 Define explicit, typed methods and properties instead. When a value or callable must be selected by name, use a typed mapping with a fixed set of keys. Model behavioral differences with normal control flow or polymorphism so static analysis and readers can see every supported path.
 
+Define before use. Within a module, a function, class or constant comes above the code that uses it; within a class, a method comes above the methods that call it. A file then reads top to bottom, each part building only on what is already written above it.
+
+## Device command-line tools
+
+`plr dev <device>` dispatches to a CLI module owned by that device. The root launcher in
+`pylabrobot/cli.py` handles device selection and forwards the remaining arguments. Registrations
+in `pylabrobot/cli_registry.py` contain module paths and help text, so root help does not import
+device drivers or their optional dependencies. With no registrations, `plr dev` explains that
+no device CLIs are available.
+
+To add a device CLI:
+
+1. Add a `cli.py` beside the device implementation with a
+   `main(argv: Optional[Sequence[str]] = None) -> None` entry point. It parses the remaining
+   arguments and owns the device's commands, options, and handlers.
+2. Add one entry to `DEVICE_CLIS` with a unique command name and the module's full import path:
+
+   ```python
+   "my-device": DeviceCLI("pylabrobot.vendor.device.cli", "My device tools"),
+   ```
+
+   Replace the example name and module path with the device's own values. The root launcher
+   needs no changes.
+3. Test dispatch, help, and invalid arguments without opening hardware connections.
+
+A device with multiple operations can use `argparse` subparsers and
+`parser.set_defaults(handler=...)` to select a handler. Parse arguments before calling
+`args.handler(args)`. Handlers own their event loops and device lifecycles. Importing a CLI
+module must not start operations. Device and operation help are handled by the device's CLI.
+
 ## API conventions
 
 Use PyLabRobot's [default units](../user_guide/getting-started/units.md) in public APIs. Omit the unit from a parameter or attribute name when it uses the PyLabRobot default—for example, use `temperature`, not `temperature_celsius`. Deviate from the default only for a compelling reason, make the alternative unit explicit, and document why it is necessary. Convert device-native units internally.
@@ -77,6 +107,11 @@ saving generated SVG files in the documentation source tree.
 To build the documentation, run `make docs` in the root directory. The documentation will be built in `docs/build`. Run `open docs/build/index.html` to open the documentation in your browser.
 
 ## Common Tasks
+
+### Testing a device
+
+You can contribute by testing PyLabRobot on hardware you have access to and reporting successful
+runs or failures. See {doc}`/user_guide/needs-testing` for the device table and reporting process.
 
 ### Fixing a bug
 
