@@ -8,10 +8,13 @@ import asyncio
 import contextlib
 import dataclasses
 import logging
+import math
+import sys
 import time
 from typing import (
   TYPE_CHECKING,
   AsyncIterator,
+  Awaitable,
   Callable,
   ClassVar,
   Dict,
@@ -21,10 +24,14 @@ from typing import (
   Optional,
   Sequence,
   Tuple,
+  cast,
 )
 
 from pylabrobot.events import coordinate_reference, evented_operation
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.end_effector import MechanicalGripper
+from pylabrobot.resources.manipulator import LinkBody
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 
 from ... import kinematics
@@ -35,10 +42,19 @@ from ...kinematics import (
   JointState,
   PreciseFlexAxis,
   PreciseFlexCartesianPose,
+  PreciseFlexPose,
   WorkEnvelope,
   Wrist,
 )
-from ..errors import OutOfRangeOfMotionError, PreciseFlexError
+from ...resource_model.pf400_end_effector import GRIPPER_BODY_OUTLINE
+from ...resource_model.pf400_manipulator import (
+  BASE_PLATE_SIZE,
+  SHOULDER_AXIS,
+  Z_COLUMN_LOCATION,
+  Z_COLUMN_OUTLINE,
+  z_carriage_location,
+)
+from ..errors import OperationInterrupted, OutOfRangeOfMotionError, PreciseFlexError
 from .rail import PreciseFlexRail
 
 if TYPE_CHECKING:
@@ -48,6 +64,9 @@ logger = logging.getLogger(__name__)
 
 # InRange sentinel that lets the controller blend through waypoints instead of stopping at each one.
 BLEND_IN_RANGE = -1
+# How near the column the gripper may be sent, in mm, seen from above; and how near the base plate,
+# seen from above or from its top face, whichever is further.
+_COLUMN_CLEARANCE = 5.0
 
 
 def _snap_to_current(
@@ -171,8 +190,8 @@ class MotionProfile(NamedTuple):
 class PreciseFlexArm:
   """The arm of a PreciseFlex: its joints, read and moved through the controller.
 
-  Reached as `driver.arm`. Sends through the driver's `send_command`; every commanded joint move
-  goes through `_guarded_move_j`.
+  Reached as `driver.arm`. Sends through the driver's `send_command`; every move whose target joint
+  states are known before it is sent goes through `_guarded_move`.
   """
 
   # What the driver sends when a caller leaves the value out. Tune one arm by assigning on the
@@ -204,6 +223,11 @@ class PreciseFlexArm:
     """
     self._driver = driver
     self.configuration: Optional[PreciseFlexArmConfiguration] = None
+    # What models the arm: the carriage on the column and the two links. None until setup hangs
+    # them, which it does only for a driver given a base plate.
+    self.resource: Optional[Resource] = None
+    self.link_1: Optional[LinkBody] = None
+    self.link_2: Optional[LinkBody] = None
     self.profile_index: int = 1
     self.station_index: int = 1
     self.horizontal_compliance: bool = False
@@ -272,6 +296,28 @@ class PreciseFlexArm:
           raise TimeoutError(f"motion did not settle within {timeout:.0f}s (current={current})")
         previous = current
 
+  def update_joint_state(self, joints: JointState) -> None:
+    """Stand the resources that model the arm where every joint is.
+
+    The carriage is stood where the Z drive is, and each member is turned about the joint it turns
+    on to the angle that joint reports. Does nothing until the arm is modelled.
+
+    Args:
+      joints: the joint state, as ``request_joint_state`` returns it.
+    """
+    if self.resource is None or self.link_1 is None or self.link_2 is None:
+      return
+    self.resource.location = z_carriage_location(joints[PreciseFlexAxis.BASE])
+    self.link_1.rotate_to(
+      z=joints[PreciseFlexAxis.SHOULDER], pivot_coordinate=self.link_1.proximal_joint
+    )
+    self.link_2.rotate_to(
+      z=joints[PreciseFlexAxis.ELBOW], pivot_coordinate=self.link_2.proximal_joint
+    )
+    gripper = self._driver.gripper.resource
+    if gripper is not None:
+      gripper.rotate_to(z=joints[PreciseFlexAxis.WRIST], pivot_coordinate=gripper.proximal_joint)
+
   async def request_joint_state(self) -> JointState:
     """Get the current joint position of the arm."""
     await self._wait_for_eom()
@@ -283,7 +329,34 @@ class PreciseFlexArm:
         break
     else:
       raise PreciseFlexError(-1, "Unexpected response format from wherej command.")
-    return self._parse_angles_response(parts)
+    joints = self._parse_angles_response(parts)
+    self.update_joint_state(joints)
+    self._driver.gripper.update_width(
+      self._driver.gripper._firmware_units_to_mm(joints[PreciseFlexAxis.GRIPPER])
+    )
+    return joints
+
+  async def _request_joint_state_after_move(self) -> None:
+    """Wait for the arm to stop and read where it did, on a move's success and its failure alike.
+
+    Called from a move's ``finally``. After an accepted move a failure of the read is raised: the
+    controller answers a fault during the motion (a collision, a stall) on the next command. After
+    a failed move it is logged and swallowed, so it does not replace the move's own error. An
+    interrupt is passed on.
+    """
+    # The move's own error, while this runs in its `finally`.
+    move_failed = sys.exc_info()[1] is not None
+    try:
+      await self.request_joint_state()
+    except OperationInterrupted:
+      raise
+    except Exception:
+      if not move_failed:
+        raise
+      logger.warning(
+        "[PreciseFlex %s] could not read where the arm stopped; its model is stale",
+        self._driver.io._host,
+      )
 
   async def request_state(self) -> str:
     """Return state of motion.
@@ -321,7 +394,7 @@ class PreciseFlexArm:
 
   async def _unchecked_fw_move_j(self, profile_index: int, joint_coords: JointState) -> None:
     """Move the robot using joint coordinates, handling rail configuration. Raw moveJ - the
-    out-of-range guard lives in the caller (``_guarded_move_j``), not in this primitive."""
+    out-of-range guard lives in the caller (``_guarded_move``), not in this primitive."""
     angles_str = " ".join(str(joint_coords[axis]) for axis in self._WIRE_ORDER)
     if self._driver._has_rail:
       # The rail's value goes last, and the line has always ended with a space after it.
@@ -331,9 +404,8 @@ class PreciseFlexArm:
   async def _unchecked_fw_move_one_axis(self, axis: PreciseFlexAxis, position: float) -> None:
     """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
 
-    Used for recovery: the controller blocks a normal move while an axis is out of
-    range, but allows a single-axis move heading back into range. Does not wait for
-    the motion to complete.
+    The controller blocks a normal move while an axis is out of range, but allows a single-axis
+    move heading back into range. Does not wait for the motion to complete.
     """
     await self._driver.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
 
@@ -386,15 +458,15 @@ class PreciseFlexArm:
       target[PreciseFlexAxis.RAIL] = cart.rail_position
     return target, cart
 
-  async def _cart_to_joints(self, cart: PreciseFlexCartesianPose) -> JointState:
-    """Convert a Cartesian location into a full joint dict using our IK.
+  def _cart_to_joints(self, cart: PreciseFlexCartesianPose, joints: JointState) -> JointState:
+    """Convert a Cartesian location into a full joint dict using our IK, from the joints read.
 
     Any of cart.orientation, cart.wrist, and cart.rail_position left as None
     default to the current pose - picks the configuration closest to where the
-    arm is now. Fetches current joint state for the gripper and rail axes so
-    callers get a complete joint dict, ready for `_guarded_move_j`.
+    arm is now. The gripper and rail axes come from `joints`, so callers get a
+    complete joint dict, ready for `_guarded_move`.
     """
-    joints, current = await self._request_state()
+    current = kinematics.fk(joints, self._driver._kinematics_params)
     return self._plan_cartesian_pose(cart, joints, current)[0]
 
   # -- speed and motion profiles -------------------------------------------------------------------
@@ -1060,6 +1132,337 @@ class PreciseFlexArm:
       f"{axis.name} at {value} (soft limit {limit})" for axis, (value, limit) in axes.items()
     )
 
+  def _refuse_closing_the_gripper(self, current: JointState, target: JointState) -> None:
+    """Refuse a joint move that would close the jaws: a joint move senses no force.
+
+    Raises:
+      ValueError: If the target's gripper axis is below the live one.
+    """
+    if target[PreciseFlexAxis.GRIPPER] < current[PreciseFlexAxis.GRIPPER]:
+      raise ValueError(
+        f"the joint move would close the gripper from {current[PreciseFlexAxis.GRIPPER]} to "
+        f"{target[PreciseFlexAxis.GRIPPER]} without sensing force; close it with "
+        f"gripper.move_to_jaw_position, or pass close_gripper_without_force_sensing=True"
+      )
+
+  def _assert_within_soft_limits(self, current: JointState, target: JointState) -> None:
+    """Raise if the current pose or the target is outside the soft limits; -1012 on the controller.
+
+    Does nothing until the configuration is discovered.
+
+    Raises:
+      OutOfRangeOfMotionError: If an axis stands out of range now. Homing does not fix it (the
+        rotary axes are absolute); ``recover_axes_within_limits()`` does.
+      ValueError: If the target is out of range, as a pose taught in freedrive can be; re-teach it.
+    """
+    out_of_range = self._axes_outside_soft_limits(current)
+    if out_of_range:
+      raise OutOfRangeOfMotionError(
+        f"axis out of range: {self._fmt_axes(out_of_range)}. The controller rejects every "
+        "commanded move while an axis is out of range. Homing will not recover it (the rotary "
+        "axes are absolute); call recover_axes_within_limits() to drive it back into range.",
+        axes=out_of_range,
+      )
+    for axis, (value, limit) in self._axes_outside_soft_limits(target).items():
+      raise ValueError(
+        f"{axis.name} target {value} is outside its soft limit {limit}; the controller "
+        f"would reject the move (-1012). Re-teach this pose within the envelope."
+      )
+
+  def _forward_kinematics(self, joints: JointState) -> PreciseFlexPose:
+    """Where a joint state puts every joint of the arm and its gripper. Nothing is read.
+
+    Args:
+      joints: the joint state, as ``request_joint_state`` returns it.
+    """
+    p = self._driver._kinematics_params
+    elbow, wrist = kinematics.compute_elbow_and_wrist(
+      p, math.radians(joints[PreciseFlexAxis.SHOULDER]), math.radians(joints[PreciseFlexAxis.ELBOW])
+    )
+    # The shoulder axis rides the rail and the Z drive, and the two joints stand from it.
+    shoulder = Coordinate(
+      x=joints.get(PreciseFlexAxis.RAIL, 0.0), y=0.0, z=joints[PreciseFlexAxis.BASE]
+    )
+    return PreciseFlexPose(
+      shoulder_joint_location=shoulder,
+      elbow_joint_location=shoulder + Coordinate(x=elbow[0], y=elbow[1], z=0.0),
+      wrist_joint_location=shoulder + Coordinate(x=wrist[0], y=wrist[1], z=0.0),
+      gripper_pose=kinematics.fk(joints, p),
+      joints=dict(joints),
+    )
+
+  def _get_gripper_outlines(self, jaw_width: float) -> Dict[str, List[Tuple[float, float]]]:
+    """The gripper's body, jaws and fingers seen from above, about its wrist joint.
+
+    Args:
+      jaw_width: how far apart the fingers stand, in mm.
+
+    Returns:
+      Each part's name and the points round it, with the gripper lying along +x.
+    """
+    gripper = cast(MechanicalGripper, self._driver.gripper.resource)
+    joint = gripper.proximal_joint
+    # The body the driver fitted, by whether the controller counts cameras.
+    outline = GRIPPER_BODY_OUTLINE[
+      "v23" if self._driver.configuration.has_vision_gripper else "s23"
+    ]
+    outlines = {gripper.body.name: [(x - joint.x, y - joint.y) for x, y in outline]}
+    for finger, jaw, side in zip(gripper.fingers, gripper.jaws, (1.0, -1.0)):
+      # The finger's facing surface stands half the width from the grip centre, and its jaw stands
+      # where that puts it.
+      bolted, stood = cast(Coordinate, finger.location), cast(Coordinate, jaw.location)
+      facing = side * jaw_width / 2
+      corner = facing if side > 0 else facing - finger.get_size_y()
+      for part, x, y in (
+        (finger, stood.x + bolted.x - joint.x, corner),
+        (jaw, stood.x - joint.x, corner - bolted.y),
+      ):
+        x_2, y_2 = x + part.get_size_x(), y + part.get_size_y()
+        outlines[part.name] = [(x, y), (x_2, y), (x_2, y_2), (x, y_2)]
+    return outlines
+
+  def _get_column_outline(self) -> List[Tuple[float, float]]:
+    """The column seen from above, about the shoulder axis, which it does not turn about."""
+    # The shoulder axis within the column, which stands on the base plate.
+    axis = SHOULDER_AXIS - Z_COLUMN_LOCATION
+    return [(x - axis.x, y - axis.y) for x, y in Z_COLUMN_OUTLINE]
+
+  def _get_link_2_outline(self) -> List[Tuple[float, float]]:
+    """Link 2 seen from above, about the elbow joint: its two hubs and the tangents joining them.
+
+    Drawn round the outside of each hub, so the link lies within it.
+
+    Returns:
+      The points round it, counter-clockwise, with the link lying along +x.
+    """
+    link = cast(LinkBody, self.link_2)
+    length = cast(float, link.length)
+    elbow_hub = link.proximal_joint.x
+    wrist_hub = link.get_size_x() - cast(Coordinate, link.distal_joint).x
+    # Where the tangents touch each hub, as an angle from the link's line.
+    touch = math.acos((elbow_hub - wrist_hub) / length)
+    outline: List[Tuple[float, float]] = []
+    for centre, radius, start, arc in (
+      (0.0, elbow_hub, touch, 2 * (math.pi - touch)),
+      (length, wrist_hub, -touch, 2 * touch),
+    ):
+      # The corners where lines touching the hub at 16 even steps round its far side meet.
+      step = arc / 16
+      corner = radius / math.cos(step / 2)
+      outline += [
+        (
+          centre + corner * math.cos(start + (i + 0.5) * step),
+          corner * math.sin(start + (i + 0.5) * step),
+        )
+        for i in range(16)
+      ]
+    return outline
+
+  def _get_base_plate_outline(self) -> List[Tuple[float, float]]:
+    """The base plate seen from above, about the shoulder axis, which stands at its front face."""
+    size_x, size_y = BASE_PLATE_SIZE[0], BASE_PLATE_SIZE[1]
+    corners = ((0.0, 0.0), (size_x, 0.0), (size_x, size_y), (0.0, size_y))
+    return [(x - SHOULDER_AXIS.x, y - SHOULDER_AXIS.y) for x, y in corners]
+
+  def _get_gripper_below_flange_plane(self) -> Dict[str, float]:
+    """How far below the flange plane the gripper's body, each jaw and each finger reach, in mm."""
+    gripper = cast(MechanicalGripper, self._driver.gripper.resource)
+    joint = gripper.proximal_joint
+    below = {gripper.body.name: joint.z - cast(Coordinate, gripper.body.location).z}
+    for finger, jaw in zip(gripper.fingers, gripper.jaws):
+      # A finger is bolted on its jaw, which stands on the gripper.
+      stood, bolted = cast(Coordinate, jaw.location), cast(Coordinate, finger.location)
+      below[jaw.name] = joint.z - stood.z
+      below[finger.name] = joint.z - stood.z - bolted.z
+    return below
+
+  def _get_gripper_outlines_at(self, joints: JointState) -> Dict[str, List[Tuple[float, float]]]:
+    """The gripper's outlines seen from above at this joint state, about the shoulder axis.
+
+    Args:
+      joints: the joint state to place them at.
+    """
+    pose = self._forward_kinematics(joints)
+    # From the shoulder axis, which the rail carries along with the column.
+    wrist = pose.wrist_joint_location - pose.shoulder_joint_location
+    yaw = math.radians(pose.gripper_pose.rotation.z)
+    jaw_width = self._driver.gripper._firmware_units_to_mm(joints[PreciseFlexAxis.GRIPPER])
+    return {
+      name: [
+        (
+          wrist.x + x * math.cos(yaw) - y * math.sin(yaw),
+          wrist.y + x * math.sin(yaw) + y * math.cos(yaw),
+        )
+        for x, y in outline
+      ]
+      for name, outline in self._get_gripper_outlines(jaw_width).items()
+    }
+
+  def _get_column_clearance(self, joints: JointState) -> Optional[Tuple[str, float]]:
+    """Which part of the gripper or link 2 would stand nearest the column here, and how near.
+
+    Worked out from the joint state and the resource model, seen from above; nothing is read and the
+    model is not moved. Link 1 turns about the shoulder axis in the carriage, and is not looked at.
+
+    Args:
+      joints: the joint state to work it out at.
+
+    Returns:
+      The part's name and its clearance in mm, negative when it overlaps. None when the arm is not
+      modelled.
+    """
+    if self.resource is None or self.link_2 is None or self._driver.gripper.resource is None:
+      return None
+    pose = self._forward_kinematics(joints)
+    # Link 2 turns about the elbow joint, lying along the shoulder and elbow turned together.
+    elbow = pose.elbow_joint_location - pose.shoulder_joint_location
+    heading = math.radians(joints[PreciseFlexAxis.SHOULDER] + joints[PreciseFlexAxis.ELBOW])
+    outlines = self._get_gripper_outlines_at(joints)
+    outlines[self.link_2.name] = [
+      (
+        elbow.x + x * math.cos(heading) - y * math.sin(heading),
+        elbow.y + x * math.sin(heading) + y * math.cos(heading),
+      )
+      for x, y in self._get_link_2_outline()
+    ]
+    column = self._get_column_outline()
+    return min(
+      (
+        (name, kinematics.compute_outline_clearance(outline, column))
+        for name, outline in outlines.items()
+      ),
+      key=lambda nearest: nearest[1],
+    )
+
+  def _get_base_plate_clearance(self, joints: JointState) -> Optional[Tuple[str, float]]:
+    """Which part of the gripper would stand nearest the base plate at this joint state, how near.
+
+    A part's clearance is the further of its gap seen from above and its height above the plate's
+    top face: it reaches the plate only when it is both over it and down at it. Nothing is read.
+
+    Args:
+      joints: the joint state to work it out at.
+
+    Returns:
+      The part's name and its clearance in mm, negative when it overlaps. None when the arm is not
+      modelled.
+    """
+    if self.resource is None or self._driver.gripper.resource is None:
+      return None
+    plate = self._get_base_plate_outline()
+    # The flange plane above the plate's top face: the shoulder axis stands at it with Z at 0.
+    above = SHOULDER_AXIS.z + joints[PreciseFlexAxis.BASE] - BASE_PLATE_SIZE[2]
+    below = self._get_gripper_below_flange_plane()
+    return min(
+      (
+        (name, max(kinematics.compute_outline_clearance(outline, plate), above - below[name]))
+        for name, outline in self._get_gripper_outlines_at(joints).items()
+      ),
+      key=lambda nearest: nearest[1],
+    )
+
+  def _check_path_reachable(self, current: JointState, target: JointState) -> None:
+    """Raise if a joint move would carry the gripper or link 2 into the column or the base plate.
+
+    A joint move turns every joint from where it is to its target together, so the path is taken as
+    the straight line between the two joint states and checked at steps along it, for each of the
+    two in turn. A step is as long as the clearance in hand allows any part to travel, and never
+    shorter than half `_COLUMN_CLEARANCE`: far from them few poses are looked at, near as many as it
+    takes. Every pose looked at stands `_COLUMN_CLEARANCE` clear, and between two of them no part
+    comes nearer than three quarters of it. An arm that starts nearer than that may move away, and
+    no nearer. Skipped when the arm is not modelled.
+
+    Args:
+      current: the joint state the arm stands at.
+      target: the joint state it is being sent to.
+
+    Raises:
+      ValueError: If a pose on the way would stand the gripper's body, a jaw, a finger or link 2
+        within `_COLUMN_CLEARANCE` of the column, or the gripper of the base plate.
+    """
+    if self.resource is None or self.link_2 is None or self._driver.gripper.resource is None:
+      return
+    gripper = cast(MechanicalGripper, self._driver.gripper.resource)
+    # How far any point of the gripper stands from the wrist joint, with the jaws as wide as they
+    # stand anywhere on the way.
+    jaw_width = max(
+      gripper.jaw_range[1],
+      *(
+        self._driver.gripper._firmware_units_to_mm(j[PreciseFlexAxis.GRIPPER])
+        for j in (current, target)
+      ),
+    )
+    radius = max(
+      math.hypot(x, y)
+      for outline in self._get_gripper_outlines(jaw_width).values()
+      for x, y in outline
+    )
+    link = cast(LinkBody, self.link_2)
+    hub = max(link.proximal_joint.x, link.get_size_x() - cast(Coordinate, link.distal_joint).x)
+    lowest = max(self._get_gripper_below_flange_plane().values())
+    p = self._driver._kinematics_params
+    # How far a point of the gripper can travel: each joint's turn, by its distance from that point,
+    # and Z's travel, which carries every point as far. Link 2 reaches less far past the wrist.
+    travel = (
+      sum(
+        math.radians(abs(target[axis] - current[axis])) * reach
+        for axis, reach in (
+          (PreciseFlexAxis.SHOULDER, p.l1 + p.l2 + radius),
+          (PreciseFlexAxis.ELBOW, p.l2 + radius),
+          (PreciseFlexAxis.WRIST, radius),
+        )
+      )
+      + abs(target[PreciseFlexAxis.GRIPPER] - current[PreciseFlexAxis.GRIPPER])
+      + abs(target[PreciseFlexAxis.BASE] - current[PreciseFlexAxis.BASE])
+    )
+    # The column stands the full height, so only the base plate's top face lets a part pass over.
+    for obstacle, outline, top, get_clearance in (
+      ("the column", self._get_column_outline(), math.inf, self._get_column_clearance),
+      (
+        "the base plate",
+        self._get_base_plate_outline(),
+        BASE_PLATE_SIZE[2],
+        self._get_base_plate_clearance,
+      ),
+    ):
+      clearance = cast(Tuple[str, float], get_clearance(current))[1]
+      leaving = clearance < _COLUMN_CLEARANCE
+      fraction = 0.0
+      while fraction < 1.0:
+        step = max(clearance - _COLUMN_CLEARANCE, _COLUMN_CLEARANCE / 2)
+        fraction = 1.0 if travel == 0.0 else min(1.0, fraction + step / travel)
+        on_the_way = {
+          axis: current[axis] + (target[axis] - current[axis]) * fraction for axis in target
+        }
+        pose = self._forward_kinematics(on_the_way)
+        wrist = pose.wrist_joint_location - pose.shoulder_joint_location
+        elbow = pose.elbow_joint_location - pose.shoulder_joint_location
+        # The gripper lies within `radius` of the wrist joint and above its lowest point, and link 2
+        # within `hub` of the line between its joints, higher still: clear by that much, all are.
+        spare = max(
+          min(
+            kinematics.compute_outline_clearance([(wrist.x, wrist.y)], outline) - radius,
+            kinematics.compute_outline_clearance([(elbow.x, elbow.y), (wrist.x, wrist.y)], outline)
+            - hub,
+          ),
+          SHOULDER_AXIS.z + on_the_way[PreciseFlexAxis.BASE] - lowest - top,
+        )
+        if spare >= _COLUMN_CLEARANCE:
+          clearance, leaving = spare, False
+          continue
+        before = clearance
+        name, clearance = cast(Tuple[str, float], get_clearance(on_the_way))
+        if clearance >= _COLUMN_CLEARANCE:
+          leaving = False
+        elif not leaving or clearance < before:
+          raise ValueError(
+            f"on the way, with the shoulder at {on_the_way[PreciseFlexAxis.SHOULDER]:.1f}, "
+            f"the elbow at {on_the_way[PreciseFlexAxis.ELBOW]:.1f} and the wrist at "
+            f"{on_the_way[PreciseFlexAxis.WRIST]:.1f}, {name} "
+            f"would stand {clearance:.1f} mm from {obstacle}, nearer than the "
+            f"{_COLUMN_CLEARANCE} mm kept clear of it"
+          )
+
   async def recover_axes_within_limits(
     self,
     speed_percent: Optional[float] = None,
@@ -1081,10 +1484,15 @@ class PreciseFlexArm:
         a large unattended single-axis sweep risks a collision, so it is left for the
         caller to recover manually (e.g. by freedriving). Pass None to move regardless.
 
+    Raises:
+      ValueError: If a recovery move would carry the gripper into the column or the base plate, on
+        a modelled arm.
+
     Returns:
       The axes moved, as ``axis -> recovered target``. Empty when nothing recoverable
       is out of range or the configuration was not discovered. The wrist and rail are
-      never auto-recovered (see :attr:`_RECOVERY_ORDER`).
+      never auto-recovered (see :attr:`_RECOVERY_ORDER`), nor a gripper open past its limit:
+      bringing it in would close the jaws without sensing force.
     """
     if speed_percent is None:
       speed_percent = self.default_recovery_speed_percent
@@ -1101,6 +1509,8 @@ class PreciseFlexArm:
           continue
         value, (lo, hi) = outside[axis]
         above = value > hi  # which limit is violated; both moves below hinge on this
+        if axis == PreciseFlexAxis.GRIPPER and above:
+          continue  # bringing it in would close the jaws without sensing force
         overshoot = (value - hi) if above else (lo - value)
         if max_distance is not None and overshoot > max_distance:
           continue  # too far out to move unattended; left for the post-condition to raise
@@ -1117,8 +1527,13 @@ class PreciseFlexArm:
           hi,
           target,
         )
-        await self._unchecked_fw_move_one_axis(axis, target)
-        await self._wait_for_eom()
+        # Out of range is what is being recovered, so neither the limits nor -1012 are acted on.
+        await self._guarded_move(
+          lambda current: [{**current, axis: target}],
+          lambda _targets: self._unchecked_fw_move_one_axis(axis, target),
+          check_soft_limits=False,
+          retry_out_of_range=False,
+        )
         recovered[axis] = target
     finally:
       await self._set_speed(prior_speed)  # don't leave the profile at the slow recovery speed
@@ -1162,51 +1577,49 @@ class PreciseFlexArm:
         axes=outside,
       )
 
-  def _assert_within_soft_limits(self, current: JointState, target: JointState) -> None:
-    """Raise if the current pose or the target is outside the soft limits; -1012 on the controller.
+  async def _guarded_move(
+    self,
+    build_targets: Callable[[JointState], Sequence[JointState]],
+    unchecked_fw_move: Callable[[Sequence[JointState]], Awaitable[None]],
+    *,
+    check_soft_limits: bool = True,
+    retry_out_of_range: bool = True,
+  ) -> None:
+    """The one path for every move whose target joint states are known before it is sent.
 
-    Does nothing until the configuration is discovered.
-
-    Raises:
-      OutOfRangeOfMotionError: If an axis stands out of range now. Homing does not fix it (the
-        rotary axes are absolute); ``recover_axes_within_limits()`` does.
-      ValueError: If the target is out of range, as a pose taught in freedrive can be; re-teach it.
-    """
-    out_of_range = self._axes_outside_soft_limits(current)
-    if out_of_range:
-      raise OutOfRangeOfMotionError(
-        f"axis out of range: {self._fmt_axes(out_of_range)}. The controller rejects every "
-        "commanded move while an axis is out of range. Homing will not recover it (the rotary "
-        "axes are absolute); call recover_axes_within_limits() to drive it back into range.",
-        axes=out_of_range,
-      )
-    for axis, (value, limit) in self._axes_outside_soft_limits(target).items():
-      raise ValueError(
-        f"{axis.name} target {value} is outside its soft limit {limit}; the controller "
-        f"would reject the move (-1012). Re-teach this pose within the envelope."
-      )
-
-  async def _guarded_move_j(self, build_target: Callable[[JointState], JointState]) -> None:
-    """The one path to ``_unchecked_fw_move_j``: read, check, send.
-
-    Reads the live pose once the arm has stopped, checks it and the target against the soft limits,
-    and sends the move. On -1012 with ``recover_out_of_range`` set it recovers the axes once and
-    tries again.
+    Reads the live pose once the arm has stopped, builds the targets from it, checks each target
+    against the soft limits and the way along it against the column and the base plate, sends, and
+    reads where the arm stopped, on success and failure alike. On -1012 with
+    ``recover_out_of_range`` set it recovers the axes once and tries again.
 
     Args:
-      build_target: maps the pose just read to the full target; run again for the second attempt.
+      build_targets: maps the pose just read to the joint states the move passes through, in
+        order; run again for the second attempt.
+      unchecked_fw_move: sends the move to those targets.
+      check_soft_limits: whether each target is checked against the soft limits. The column and the
+        base plate are checked either way.
+      retry_out_of_range: whether -1012 recovers the axes and tries once more.
     """
 
     async def attempt() -> None:
       current = await self.request_joint_state()
-      target = build_target(current)
-      self._assert_within_soft_limits(current, target)
-      await self._unchecked_fw_move_j(profile_index=self.profile_index, joint_coords=target)
+      targets = build_targets(current)
+      start = current
+      for target in targets:
+        if check_soft_limits:
+          self._assert_within_soft_limits(start, target)
+        self._check_path_reachable(start, target)
+        start = target
+      try:
+        await unchecked_fw_move(targets)
+      finally:
+        # A move returns once accepted: this waits for the arm to stop, then reads where it did.
+        await self._request_joint_state_after_move()
 
     try:
       await attempt()
     except OutOfRangeOfMotionError as exc:
-      if not self._driver._recover_out_of_range:
+      if not (retry_out_of_range and self._driver._recover_out_of_range):
         raise
       host = self._driver.io._host
       logger.warning(
@@ -1230,7 +1643,7 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.move_to_joint_position",
-    lambda self, joint_state, speed_percent=None: {
+    lambda self, joint_state, speed_percent=None, close_gripper_without_force_sensing=False: {
       "device": self._driver._controller_reference(),
       "target_joint_position": _joint_state_reference(joint_state),
       "speed_percent": speed_percent,
@@ -1240,23 +1653,43 @@ class PreciseFlexArm:
     self,
     joint_state: JointState,
     speed_percent: Optional[float] = None,
+    *,
+    close_gripper_without_force_sensing: bool = False,
   ) -> None:
     """Move the arm to the specified joint state. A partial spec is merged over the live pose;
-    the move is guarded against out-of-range axes (see ``_guarded_move_j``).
+    the move is guarded against out-of-range axes (see ``_guarded_move``).
 
     Args:
       joint_state: Target joint state. Omitted axes keep their live values.
       speed_percent: Movement speed override as a percentage (0-100). If None, uses the current
         speed setting. It stays set afterwards; use ``at_speed`` to scope a speed to one move.
+      close_gripper_without_force_sensing: allow a gripper axis below the live one. A joint move
+        senses no force; close the jaws with ``gripper.move_to_jaw_position``.
+
+    Raises:
+      ValueError: If the move would close the jaws, unless asked.
     """
     if speed_percent is not None:
       await self._set_speed(speed_percent)
-    await self._guarded_move_j(lambda current: {**current, **joint_state})
+
+    def build_targets(current: JointState) -> List[JointState]:
+      target = {**current, **joint_state}
+      if not close_gripper_without_force_sensing:
+        self._refuse_closing_the_gripper(current, target)
+      return [target]
+
+    await self._guarded_move(
+      build_targets, lambda targets: self._unchecked_fw_move_j(self.profile_index, targets[0])
+    )
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
     _, pose = await self._request_state()
     return pose
+
+  async def request_pose(self) -> PreciseFlexPose:
+    """Where every joint of the arm is, worked out from the joint state; nothing else is asked."""
+    return self._forward_kinematics(await self.request_joint_state())
 
   # -- cartesian motion ----------------------------------------------------------------------------
 
@@ -1294,7 +1727,7 @@ class PreciseFlexArm:
     rail_position: Optional[float] = None,
   ) -> None:
     """Move the arm to the specified Cartesian location. The IK target is guarded against
-    out-of-range axes (see ``_guarded_move_j``).
+    out-of-range axes (see ``_guarded_move``).
 
     Args:
       location: Target Cartesian location.
@@ -1322,24 +1755,24 @@ class PreciseFlexArm:
       orientation=orientation,
       wrist=wrist,
     )
-    joints = await self._cart_to_joints(coords)
-    await self._guarded_move_j(lambda _current: joints)
+    await self._guarded_move(
+      lambda current: [self._cart_to_joints(coords, current)],
+      lambda targets: self._unchecked_fw_move_j(self.profile_index, targets[0]),
+    )
 
-  async def _plan_cartesian_pose_route(
-    self, poses: Sequence[PreciseFlexCartesianPose]
+  def _plan_cartesian_pose_route(
+    self, poses: Sequence[PreciseFlexCartesianPose], current: JointState
   ) -> List[JointState]:
-    """Plan a Cartesian pose route into joint targets, snapshotting state once.
+    """Plan a Cartesian pose route into joint targets, from the joint state already read.
 
     Unlike :meth:`_cart_to_joints`, this does not query the controller for every waypoint: it
-    reads the current state once and resolves each waypoint's IK from the previous waypoint's
-    result. Omitted pose fields inherit from the previous pose so IK branch selection remains
-    continuous across the route.
+    resolves each waypoint's IK from the previous waypoint's result. Omitted pose fields inherit
+    from the previous pose so IK branch selection remains continuous across the route.
     """
-    prev_joints, prev_pose = await self._request_state()
+    prev_joints, prev_pose = current, kinematics.fk(current, self._driver._kinematics_params)
     targets: List[JointState] = []
     for pose in poses:
       target, cart = self._plan_cartesian_pose(pose, prev_joints, prev_pose)
-      self._assert_within_soft_limits(prev_joints, target)
       targets.append(target)
       prev_joints = target
       prev_pose = cart
@@ -1406,28 +1839,27 @@ class PreciseFlexArm:
     if speed_percent is not None:
       await self._set_speed(speed_percent)
 
-    targets = await self._plan_cartesian_pose_route(poses)
-
     profile_index = self.profile_index
-    original_profile = None
-    should_restore_profile = False
-    if blend:
-      original_profile = await self.request_motion_profile_values(profile_index)
-      should_restore_profile = original_profile.in_range != BLEND_IN_RANGE
-      if should_restore_profile:
-        await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
+    blended: List[MotionProfile] = []
 
-    try:
+    async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
+      if blend:
+        original_profile = await self.request_motion_profile_values(profile_index)
+        if original_profile.in_range != BLEND_IN_RANGE:
+          await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
+          blended.append(original_profile)
       for target in targets:
         await self._unchecked_fw_move_j(profile_index=profile_index, joint_coords=target)
+
+    try:
+      await self._guarded_move(
+        lambda current: self._plan_cartesian_pose_route(poses, current), unchecked_fw_move
+      )
     finally:
-      # Let queued motion settle before returning or restoring the profile - restoring InRange
+      # Restored once the read after the route has let queued motion settle: restoring InRange
       # mid-move would change the in-flight blend.
-      try:
-        await self._wait_for_eom()
-      finally:
-        if should_restore_profile and original_profile is not None:
-          await self.set_motion_profile_values(*original_profile)
+      for original_profile in blended:
+        await self.set_motion_profile_values(*original_profile)
 
   async def _unchecked_fw_request_cartesian_destination(
     self, mode: int = 0
@@ -1509,7 +1941,9 @@ class PreciseFlexArm:
     """Change righty to lefty or back through the customizable locations. Nothing is guarded."""
     await self._driver.send_command(f"ChangeConfig {grip_mode}")
 
-  async def change_elbow_orientation(self, grip_mode: int = 0) -> None:
+  async def change_elbow_orientation(
+    self, grip_mode: int = 0, *, close_gripper_without_force_sensing: bool = False
+  ) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using customizable locations.
 
     Uses customizable locations to avoid hitting robot during change.
@@ -1520,15 +1954,26 @@ class PreciseFlexArm:
       grip_mode: Gripper control mode.
       0 = do not change gripper (default)
       1 = open gripper
-      2 = close gripper
+      2 = close gripper, by position: refused unless asked
+      close_gripper_without_force_sensing: allow ``grip_mode=2``.
+
+    Raises:
+      ValueError: If ``grip_mode`` is 2, unless asked.
     """
+    if grip_mode == 2 and not close_gripper_without_force_sensing:
+      raise ValueError(
+        "grip_mode=2 closes the gripper without sensing force; pass "
+        "close_gripper_without_force_sensing=True"
+      )
     await self._unchecked_fw_change_elbow_orientation(grip_mode)
 
   async def _unchecked_fw_change_elbow_orientation_by_algorithm(self, grip_mode: int) -> None:
     """Change righty to lefty or back by the controller's algorithm. Nothing is guarded."""
     await self._driver.send_command(f"ChangeConfig2 {grip_mode}")
 
-  async def change_elbow_orientation_by_algorithm(self, grip_mode: int = 0) -> None:
+  async def change_elbow_orientation_by_algorithm(
+    self, grip_mode: int = 0, *, close_gripper_without_force_sensing: bool = False
+  ) -> None:
     """Change Robot configuration from Righty to Lefty or vice versa using algorithm.
 
     Uses an algorithm to avoid hitting robot during change.
@@ -1539,8 +1984,17 @@ class PreciseFlexArm:
       grip_mode: Gripper control mode.
       0 = do not change gripper (default)
       1 = open gripper
-      2 = close gripper
+      2 = close gripper, by position: refused unless asked
+      close_gripper_without_force_sensing: allow ``grip_mode=2``.
+
+    Raises:
+      ValueError: If ``grip_mode`` is 2, unless asked.
     """
+    if grip_mode == 2 and not close_gripper_without_force_sensing:
+      raise ValueError(
+        "grip_mode=2 closes the gripper without sensing force; pass "
+        "close_gripper_without_force_sensing=True"
+      )
     await self._unchecked_fw_change_elbow_orientation_by_algorithm(grip_mode)
 
   # -- pick up and drop ----------------------------------------------------------------------------
@@ -1570,6 +2024,32 @@ class PreciseFlexArm:
       f"placeplate {self.station_index} {horizontal_compliance_int} "
       f"{self.horizontal_compliance_torque}"
     )
+
+  async def _guarded_plate_j(
+    self,
+    build_station: Callable[[JointState], JointState],
+    unchecked_fw_plate: Callable[[], Awaitable[None]],
+  ) -> None:
+    """Write the station and run the controller's pick or place at it, guarded.
+
+    Only the straight joint move to the station is checked against the column and the base plate.
+    The controller's own approach, depart and any detour through its park pose are not seen by it.
+
+    Args:
+      build_station: maps the pose just read to the station's full joint state.
+      unchecked_fw_plate: `_unchecked_fw_pick_plate` or `_unchecked_fw_place_plate`.
+
+    Raises:
+      ValueError: If the joint move to the station would carry the gripper into the column or the
+        base plate.
+    """
+
+    async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
+      await self._unchecked_fw_set_joint_angles(self.station_index, targets[0])
+      await self._unchecked_fw_set_grip_detail()
+      await unchecked_fw_plate()
+
+    await self._guarded_move(lambda current: [build_station(current)], unchecked_fw_move)
 
   @evented_operation(
     "precise_flex.pick_up_at_joint_position",
@@ -1618,9 +2098,9 @@ class PreciseFlexArm:
       finger_speed_percent=finger_speed_percent,
       grasp_force=grasp_force,
     )
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_pick_plate()
+    await self._guarded_plate_j(
+      lambda current: {**current, **joint_state}, self._unchecked_fw_pick_plate
+    )
 
   @evented_operation(
     "precise_flex.drop_at_joint_position",
@@ -1647,9 +2127,9 @@ class PreciseFlexArm:
       joint_state,
       resource_width,
     )
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_place_plate()
+    await self._guarded_plate_j(
+      lambda current: {**current, **joint_state}, self._unchecked_fw_place_plate
+    )
 
   @evented_operation(
     "precise_flex.pick_up_at_location",
@@ -1728,10 +2208,9 @@ class PreciseFlexArm:
       finger_speed_percent=finger_speed_percent,
       grasp_force=grasp_force,
     )
-    joint_state = await self._cart_to_joints(coords)
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_pick_plate()
+    await self._guarded_plate_j(
+      lambda current: self._cart_to_joints(coords, current), self._unchecked_fw_pick_plate
+    )
 
   @evented_operation(
     "precise_flex.drop_at_location",
@@ -1788,10 +2267,9 @@ class PreciseFlexArm:
       orientation=orientation,
       wrist=wrist,
     )
-    joint_state = await self._cart_to_joints(coords)
-    await self._unchecked_fw_set_joint_angles(self.station_index, joint_state)
-    await self._unchecked_fw_set_grip_detail()
-    await self._unchecked_fw_place_plate()
+    await self._guarded_plate_j(
+      lambda current: self._cart_to_joints(coords, current), self._unchecked_fw_place_plate
+    )
 
   # -- parking -------------------------------------------------------------------------------------
 
@@ -1840,18 +2318,69 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.park",
-    lambda self: {"device": self._driver._controller_reference()},
+    lambda self, close_gripper_without_force_sensing=False: {
+      "device": self._driver._controller_reference()
+    },
   )
-  async def park(self) -> None:
+  async def park(self, *, close_gripper_without_force_sensing: bool = False) -> None:
     """Move to ``self.parking_position``; defaults at setup, reassignable at runtime.
 
     ``parking_position`` is filled at setup with ``PARKING_POSITION_RIGHT`` (a planar fold facing
     right, Z column at 3/4 of its discovered travel); assign one of the ``PARKING_POSITION_*`` class
     constants or any JointState to park elsewhere. Falls back to the firmware ``movetosafe`` while
     it is unset. No collision checks against 3rd-party obstacles.
+
+    A parking pose says which way the gripper faces, and the wrist reaches that every full turn. On
+    an arm that is modelled, a pose whose way there is refused is tried a full turn either side,
+    the shorter turn first; the pose as written is taken whenever its way is clear. The arm is read
+    for that, and again by the move.
+
+    Args:
+      close_gripper_without_force_sensing: allow a parking pose whose gripper axis is below the live
+        one, and the ``movetosafe`` fallback, which closes the jaws by position first.
+
+    Raises:
+      ValueError: If parking would close the jaws, unless asked.
     """
     if self.parking_position is None:
-      await self._unchecked_fw_park()
+      if not close_gripper_without_force_sensing:
+        raise ValueError(
+          "parking with no parking_position sends movetosafe, which closes the gripper without "
+          "sensing force; set parking_position, or pass close_gripper_without_force_sensing=True"
+        )
+      # Where the controller's own safe position is, the driver does not know: only read it after.
+      try:
+        await self._unchecked_fw_park()
+      finally:
+        await self._request_joint_state_after_move()
       return
     pose = self._parking_pose_with_default_z(self.parking_position)
-    await self.move_to_joint_state(joint_state=pose)
+    if self.resource is not None and PreciseFlexAxis.WRIST in pose:
+      current = await self.request_joint_state()
+      low, high = self._get_soft_limits().get(PreciseFlexAxis.WRIST, (-math.inf, math.inf))
+      written = pose[PreciseFlexAxis.WRIST]
+      # As written first, then a full turn either way, the shorter first.
+      turns = sorted(
+        (written + 360.0 * turn for turn in (0, -1, 1)),
+        key=lambda wrist: (wrist != written, abs(wrist - current[PreciseFlexAxis.WRIST])),
+      )
+      for wrist in turns:
+        if not low <= wrist <= high:
+          continue
+        try:
+          self._check_path_reachable(current, {**current, **pose, PreciseFlexAxis.WRIST: wrist})
+        except ValueError:
+          continue
+        if wrist != written:
+          logger.info(
+            "[PreciseFlex %s] parking with the wrist at %s, not %s: the way to it is clear",
+            self._driver.io._host,
+            wrist,
+            written,
+          )
+        pose = {**pose, PreciseFlexAxis.WRIST: wrist}
+        break
+    # A pose no turn of which is clear is sent as written, and refused there with where it fails.
+    await self.move_to_joint_state(
+      joint_state=pose, close_gripper_without_force_sensing=close_gripper_without_force_sensing
+    )

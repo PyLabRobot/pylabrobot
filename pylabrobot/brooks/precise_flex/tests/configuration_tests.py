@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from pylabrobot.brooks.precise_flex import kinematics
+from pylabrobot.brooks.precise_flex.device import RECORDING_PF400
 from pylabrobot.brooks.precise_flex.driver.configuration import (
   PreciseFlexAxis,
   PreciseFlexConfiguration,
@@ -19,14 +20,6 @@ from pylabrobot.brooks.precise_flex.tests.wire_tests import (
   _RAIL_REPLIES,
   _FakeController,
   _make_arm,
-)
-
-# What an extended-reach PreciseFlex 400 with 400 mm of Z travel reported about itself.
-RECORDING_PF400 = os.path.join(
-  os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-  "driver",
-  "recordings",
-  "pf400_extended_400mm.json",
 )
 
 
@@ -224,8 +217,14 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase)
       soft_limits={**self.recorded.arm.soft_limits, PreciseFlexAxis.SHOULDER: (-90.0, 90.0)},
     )
     for answered, named in (
-      (dataclasses.replace(self.recorded, arm=standard), r"arm.kinematics: declared .*l1=302.0"),
-      (dataclasses.replace(self.recorded, arm=longer_tool), "gripper_length=170.0"),
+      (
+        dataclasses.replace(self.recorded, arm=standard),
+        r"arm.kinematics \(l1, l2, gripper_length\): declared \(302.0",
+      ),
+      (
+        dataclasses.replace(self.recorded, arm=longer_tool),
+        r"device answers \(302.0, 289.0, 170.0\)",
+      ),
       (dataclasses.replace(self.recorded, arm=narrowed), "arm.soft_limits"),
       (
         dataclasses.replace(self.recorded, rail=PreciseFlexRailConfiguration((0.0, 1000.0))),

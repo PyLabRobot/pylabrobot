@@ -1424,6 +1424,130 @@ class TestCoveredTipRacks(unittest.IsolatedAsyncioTestCase):
     self.backend.drop_tips96.assert_not_called()
 
 
+class TestLiquidHandlerTrackerRollback(unittest.IsolatedAsyncioTestCase):
+  """A rejected operation must not leave earlier tracker changes pending."""
+
+  async def asyncSetUp(self):
+    self.backend = _create_mock_backend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack")
+    self.source = cor_96_wellplate_360uL_Fb(name="source")
+    self.destination = cor_96_wellplate_360uL_Fb(name="destination")
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.deck.assign_child_resource(self.source, location=Coordinate(100, 100, 0))
+    self.deck.assign_child_resource(self.destination, location=Coordinate(300, 100, 0))
+    await self.lh.setup()
+    set_tip_tracking(True)
+    set_volume_tracking(True)
+
+  async def asyncTearDown(self):
+    set_tip_tracking(False)
+    set_volume_tracking(False)
+
+  def assert_no_pending_tip_changes(self, trackers):
+    for tracker in trackers:
+      state = tracker.serialize()
+      self.assertEqual(state["pending_tip"], state["tip"])
+
+  def assert_no_pending_volume_changes(self, trackers):
+    for tracker in trackers:
+      self.assertEqual(tracker.pending_volume, tracker.volume)
+
+  async def test_pick_up_tips96_rolls_back_when_a_later_channel_has_a_tip(self):
+    spare = hamilton_96_tiprack_300uL_filter(name="spare").get_item(0).get_tip()
+    self.lh.head96[10].add_tip(spare, commit=True)
+
+    with self.assertRaises(HasTipError):
+      await self.lh.pick_up_tips96(self.tip_rack)
+
+    self.assertFalse(self.lh.head96[0].has_tip)
+    self.assertTrue(self.lh.head96[10].has_tip)
+    self.assertTrue(self.tip_rack.get_item(0).has_tip())
+    self.assert_no_pending_tip_changes(
+      [self.lh.head96[i] for i in range(96)]
+      + [spot.tracker for spot in self.tip_rack.get_all_items()]
+    )
+    self.backend.pick_up_tips96.assert_not_called()
+
+  async def test_drop_tips96_rolls_back_when_a_later_tip_contains_liquid(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    self.lh.head96[10].get_tip().tracker.set_volume(5)
+
+    with self.assertRaisesRegex(RuntimeError, "Cannot drop tip with volume"):
+      await self.lh.drop_tips96(self.tip_rack)
+
+    self.assertTrue(self.lh.head96[0].has_tip)
+    self.assertFalse(self.tip_rack.get_item(0).has_tip())
+    self.assert_no_pending_tip_changes(
+      [self.lh.head96[i] for i in range(96)]
+      + [spot.tracker for spot in self.tip_rack.get_all_items()]
+    )
+    self.backend.drop_tips96.assert_not_called()
+
+  async def test_aspirate96_rolls_back_when_a_later_well_is_empty(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    for well in self.source.get_all_items():
+      well.tracker.set_volume(100)
+    self.source.get_item(10).tracker.set_volume(0)
+    tip_trackers = [self.lh.head96[i].get_tip().tracker for i in range(96)]
+
+    with self.assertRaises(TooLittleLiquidError):
+      await self.lh.aspirate96(self.source, volume=50)
+
+    self.assert_no_pending_volume_changes(tip_trackers)
+    self.assert_no_pending_volume_changes([well.tracker for well in self.source.get_all_items()])
+    self.backend.aspirate96.assert_not_called()
+
+  async def test_dispense96_rolls_back_when_a_later_tip_has_too_little_liquid(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    tip_trackers = [self.lh.head96[i].get_tip().tracker for i in range(96)]
+    for tracker in tip_trackers:
+      tracker.set_volume(50)
+    tip_trackers[10].set_volume(5)
+
+    with self.assertRaises(TooLittleLiquidError):
+      await self.lh.dispense96(self.destination, volume=20)
+
+    self.assert_no_pending_volume_changes(tip_trackers)
+    self.assert_no_pending_volume_changes(
+      [well.tracker for well in self.destination.get_all_items()]
+    )
+    self.backend.dispense96.assert_not_called()
+
+  async def test_pick_up_tips_rolls_back_when_a_later_channel_has_a_tip(self):
+    spare = hamilton_96_tiprack_300uL_filter(name="spare").get_item(0).get_tip()
+    self.lh.head[1].add_tip(spare, commit=True)
+    spots = [self.tip_rack.get_item("A1"), self.tip_rack.get_item("B1")]
+
+    with self.assertRaises(HasTipError):
+      await self.lh.pick_up_tips(spots, use_channels=[0, 1])
+
+    self.assertFalse(self.lh.head[0].has_tip)
+    self.assertTrue(self.lh.head[1].has_tip)
+    self.assertTrue(spots[0].has_tip())
+    self.assert_no_pending_tip_changes(
+      [self.lh.head[0], self.lh.head[1], spots[0].tracker, spots[1].tracker]
+    )
+    self.backend.pick_up_tips.assert_not_called()
+
+  async def test_drop_tips_rolls_back_when_a_later_destination_is_occupied(self):
+    await self.lh.pick_up_tips(
+      [self.tip_rack.get_item("A1"), self.tip_rack.get_item("B1")], use_channels=[0, 1]
+    )
+    destinations = [self.tip_rack.get_item("A1"), self.tip_rack.get_item("C1")]
+
+    with self.assertRaises(HasTipError):
+      await self.lh.drop_tips(destinations, use_channels=[0, 1])
+
+    self.assertTrue(self.lh.head[0].has_tip)
+    self.assertFalse(destinations[0].has_tip())
+    self.assert_no_pending_tip_changes(
+      [self.lh.head[0], self.lh.head[1]] + [spot.tracker for spot in destinations]
+    )
+    self.backend.drop_tips.assert_not_called()
+
+
 class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = _create_mock_backend(num_channels=8)
