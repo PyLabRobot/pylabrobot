@@ -7,5 +7,6 @@
 :maxdepth: 1
 
 debug
+daily-maintenance
 hardware/index
 ```
