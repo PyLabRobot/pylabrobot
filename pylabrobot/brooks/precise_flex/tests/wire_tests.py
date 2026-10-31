@@ -1666,14 +1666,18 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     arm, fake = await self._arm()
     self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=-49.261), -47.10)
     index = fake.sent.index("HeightDetect 1 -28.0 -15.0")
-    self.assertEqual(fake.sent[index + 1 :], ["state", "state", "wherej", "mspeed 50"])
+    self.assertEqual(fake.sent[index + 1 : index + 5], ["state", "state", "wherej", "mspeed 50"])
+    self.assertIn("moveJ 1 6.15 -31.304 102.074 -72.846 125.979", fake.sent[index + 5 :])
 
   async def test_reaching_the_end_returns_none_and_does_not_move_after(self):
     arm, fake = await self._arm("-2101")
-    result = await arm.arm.probe_z_using_ztouch(
-      search_end_position=-49.261, post_detection_distance=2.0
-    )
+    result = await arm.arm.probe_z_using_ztouch(search_end_position=-49.261)
     self.assertIsNone(result)
+    self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
+
+  async def test_a_post_detection_distance_of_0_does_not_move_after(self):
+    arm, fake = await self._arm()
+    await arm.arm.probe_z_using_ztouch(search_end_position=-49.261, post_detection_distance=0)
     self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
 
   async def test_a_second_measurement_sends_mode_2(self):

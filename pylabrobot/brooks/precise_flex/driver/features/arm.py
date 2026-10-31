@@ -2393,7 +2393,7 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.probe_z_using_ztouch",
-    lambda self, *, search_start_position=None, search_end_position=None, approach_speed_percent=None, search_speed_percent=None, detection_force=15.0, perform_second_measurement_on_lift_off=False, post_detection_distance=None, move_to_parking_position_after=False: {
+    lambda self, *, search_start_position=None, search_end_position=None, approach_speed_percent=None, search_speed_percent=None, detection_force=15.0, perform_second_measurement_on_lift_off=False, post_detection_distance=2.0, move_to_parking_position_after=False: {
       "device": self._driver._controller_reference(),
       "search_start_position": search_start_position,
       "search_end_position": search_end_position,
@@ -2410,7 +2410,7 @@ class PreciseFlexArm:
     search_speed_percent: Optional[int] = None,
     detection_force: float = 15.0,
     perform_second_measurement_on_lift_off: bool = False,
-    post_detection_distance: Optional[float] = None,
+    post_detection_distance: float = 2.0,
     move_to_parking_position_after: bool = False,
   ) -> Optional[float]:
     """Lower the arm until the gripper presses on something, and read the height.
@@ -2428,8 +2428,8 @@ class PreciseFlexArm:
         ``default_ztouch_search_speed_percent`` when None. The search has no speed of its own.
       detection_force: the force at which the search stops, in N.
       perform_second_measurement_on_lift_off: whether to measure again while lifting off.
-      post_detection_distance: where to rest above what it met, in mm. Where the search left it,
-        some mm above, when None. Not moved when the search met nothing.
+      post_detection_distance: where to rest above what it met, in mm. Not moved when 0, or when the
+        search met nothing.
       move_to_parking_position_after: whether to park afterwards, instead of resting.
 
     Returns:
@@ -2445,7 +2445,7 @@ class PreciseFlexArm:
     """
     if detection_force <= 0:
       raise ValueError(f"detection_force must be above 0 N, is {detection_force}")
-    if post_detection_distance is not None and post_detection_distance < 0:
+    if post_detection_distance < 0:
       raise ValueError(
         f"post_detection_distance must not be negative, is {post_detection_distance}"
       )
@@ -2506,9 +2506,9 @@ class PreciseFlexArm:
     pressed = None if contact[0] is None else round(contact[0] + offset, 2)
     if move_to_parking_position_after:
       await self.park()
-    elif pressed is not None and post_detection_distance is not None:
+    elif pressed is not None and post_detection_distance > 0:
       await self.move_to_joint_state(
-        {PreciseFlexAxis.BASE: pressed + post_detection_distance - offset}
+        {PreciseFlexAxis.BASE: round(pressed + post_detection_distance - offset, 2)}
       )
     return pressed
 
