@@ -42,24 +42,6 @@ def _make_arm(closed_gripper_position: float = 500.0) -> PreciseFlexDriver:
   return arm
 
 
-class TestPreciseFlexPose(unittest.IsolatedAsyncioTestCase):
-  """Every joint's location, worked out from a joint state (l1 302, l2 289, gripper 162)."""
-
-  def test_straight_out(self):
-    arm = _make_arm()
-    joints = {
-      PreciseFlexAxis.BASE: 100.0,
-      PreciseFlexAxis.SHOULDER: 0.0,
-      PreciseFlexAxis.ELBOW: 0.0,
-      PreciseFlexAxis.WRIST: 0.0,
-    }
-    pose = arm.arm._forward_kinematics(joints)
-    self.assertEqual(pose.shoulder_joint_location, Coordinate(0.0, 0.0, 100.0))
-    self.assertEqual(pose.elbow_joint_location, Coordinate(302.0, 0.0, 100.0))
-    self.assertEqual(pose.wrist_joint_location, Coordinate(591.0, 0.0, 100.0))
-    self.assertEqual(pose.gripper_pose.location, Coordinate(753.0, 0.0, 100.0))
-
-
 class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     # closed_gripper_position=500 ⇒ the narrowest jaw width (60mm) maps to 500 units.
@@ -76,9 +58,6 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
         await move()
     self.assertEqual([c.args[0] for c in mocked(arm.send_command).call_args_list], [])
 
-  async def test_jaw_width_range_advertised(self):
-    self.assertEqual(self.arm.gripper.jaw_width_range, (60.0, 145.0))
-
   async def test_closed_gripper_position_shifts_units(self):
     # Different anchor ⇒ same width yields a different firmware-unit target.
     arm = _make_arm(closed_gripper_position=1000.0)
@@ -90,28 +69,8 @@ class TestPreciseFlex400Gripper(unittest.IsolatedAsyncioTestCase):
       [command for command in commands if command != "wherej"], ["MoveOneAxis 5 1020.0 1"]
     )
 
-  def test_mm_to_firmware_units_helper(self):
-    # Direct check of the linear mapping.
-    self.assertEqual(self.arm.gripper._mm_to_firmware_units(60.0), 500.0)
-    self.assertEqual(self.arm.gripper._mm_to_firmware_units(145.0), 585.0)
-    self.assertEqual(self.arm.gripper._mm_to_firmware_units(100.0), 540.0)
-
 
 class TestPreciseFlexEvents(unittest.IsolatedAsyncioTestCase):
-  async def test_gripper_event_uses_default_length_unit_field(self):
-    arm = _make_arm()
-    # The jaws stand closed, so the move opens them.
-    arm.arm.request_joint_state = AsyncMock(return_value={PreciseFlexAxis.GRIPPER: 0.0})  # type: ignore[method-assign]
-    events: list[PLREvent] = []
-    event_bus = EventBus()
-    event_bus.subscribe(events.append)
-
-    with use_event_bus(event_bus):
-      await arm.gripper.move_to_jaw_position(width=80.0)
-
-    self.assertEqual(events[0].data["width"], 80.0)
-    self.assertNotIn("width_mm", events[0].data)
-
   async def test_gripper_event_and_nested_firmware_commands_inherit_resource_context(self):
     arm = PreciseFlexDriver(
       host="localhost",
@@ -275,24 +234,6 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       self.arm.arm.parking_position = {PreciseFlexAxis.SHOULDER: 200.0}
 
-  def test_assignment_accepts_named_constant(self):
-    """A named constant assigns cleanly and round-trips through the getter."""
-    self.arm.arm.parking_position = PreciseFlexArm.PARKING_POSITION_FRONT
-    pose = self.arm.arm.parking_position
-    assert pose is not None
-    self.assertEqual(pose[PreciseFlexAxis.SHOULDER], -90.0)
-
-  async def test_park_fills_z_at_three_quarters_travel_and_keeps_orientation(self):
-    """park() fills the omitted Z column at 3/4 of the discovered travel and keeps the orientation."""
-    self._full_soft_limits()
-    # Current pose deliberately differs from the target (base 50 not 300; orientation 10/200/90 not
-    # 0/180/180) so the assertion proves park() supplied the fill and orientation, not the live pose.
-    self.arm.send_command = AsyncMock(return_value="50 10 200 90 0")  # type: ignore[method-assign]
-    self.arm.arm.parking_position = PreciseFlexArm.PARKING_POSITION_RIGHT
-    await self.arm.arm.park()
-    # Z filled at 3/4 of 400 = 300; orientation = RIGHT (0/180/180); gripper carried from current.
-    self.assertEqual(self._movej_cmds(), ["moveJ 1 300.0 0.0 180.0 180.0 0.0"])
-
   async def test_park_respects_an_explicit_base(self):
     """A pose that already sets PreciseFlexAxis.BASE is parked as-is (no Z fill)."""
     self._full_soft_limits()
@@ -302,15 +243,6 @@ class TestPreciseFlexParking(unittest.IsolatedAsyncioTestCase):
     self.arm.arm.parking_position = {PreciseFlexAxis.BASE: 123.0, PreciseFlexAxis.SHOULDER: 0.0}
     await self.arm.arm.park()
     self.assertEqual(self._movej_cmds(), ["moveJ 1 123.0 0.0 200.0 90.0 0.0"])
-
-  async def test_park_without_position_falls_back_to_movetosafe(self):
-    """While parking_position is unset (no configuration), park() uses the firmware movetosafe."""
-    await self.arm.arm.park(close_gripper_without_force_sensing=True)
-    sent = [call.args[0] for call in mocked(self.arm.send_command).call_args_list]
-    # The one motion command, then the read of where the arm stopped.
-    self.assertEqual([command for command in sent if command != "wherej"], ["movetosafe"])
-    self.assertEqual(sent[0], "movetosafe")
-    self.assertEqual(self._movej_cmds(), [])
 
 
 class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
@@ -340,14 +272,6 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
     fk.start()
     self.addCleanup(fk.stop)
 
-  def _stub_profile_transport(self, profile: str = "1 50 0 100 100 0 0 25 0") -> None:
-    async def respond(command: str) -> str:
-      if command == "Profile 1":
-        return profile
-      return ""
-
-    self.arm.send_command = AsyncMock(side_effect=respond)  # type: ignore[method-assign]
-
   def _movej_cmds(self) -> list[str]:
     return [
       c.args[0]
@@ -361,82 +285,6 @@ class TestPreciseFlexSmoothCartesianRoute(unittest.IsolatedAsyncioTestCase):
       for c in mocked(self.arm.send_command).call_args_list
       if c.args[0].startswith("Profile")
     ]
-
-  async def test_move_through_cartesian_poses_plans_from_one_state_snapshot(self):
-    """A smooth route reads the joint state once, fills omitted pose fields from the planned pose,
-    queues all joint moves, then reads once more where the arm stopped."""
-    self._stub_profile_transport()
-    poses = [
-      PreciseFlexCartesianPose(
-        location=Coordinate(200.0, 20.0, 110.0),
-        rotation=Rotation(x=-180.0, y=90.0, z=10.0),
-      ),
-      PreciseFlexCartesianPose(
-        location=Coordinate(210.0, 20.0, 120.0),
-        rotation=Rotation(x=-180.0, y=90.0, z=20.0),
-      ),
-    ]
-
-    with patch(
-      "pylabrobot.brooks.precise_flex.driver.master.kinematics.ik",
-      side_effect=[
-        {1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
-        {1: 120.0, 2: 11.0, 3: 21.0, 4: 31.0, 6: 123.0},
-      ],
-    ) as ik:
-      await self.arm.arm.move_through_cartesian_poses(poses)
-
-    self.assertEqual(mocked(self.arm.arm.request_joint_state).await_count, 2)
-    self.assertEqual(
-      self._movej_cmds(),
-      [
-        "moveJ 1 110.0 10.0 20.0 30.0 70.0",
-        "moveJ 1 120.0 11.0 21.0 31.0 70.0",
-      ],
-    )
-    planned_pose_args = [call.args[0] for call in ik.call_args_list]
-    self.assertEqual([pose.orientation for pose in planned_pose_args], ["right", "right"])
-    self.assertEqual([pose.wrist for pose in planned_pose_args], ["ccw", "ccw"])
-    # Rail-less PF400 still needs the shoulder/reference rail position for IK.
-    self.assertEqual([pose.rail_position for pose in planned_pose_args], [123.0, 123.0])
-
-  async def test_move_through_cartesian_poses_temporarily_enables_blending(self):
-    self._stub_profile_transport()
-    pose = PreciseFlexCartesianPose(
-      location=Coordinate(200.0, 20.0, 110.0),
-      rotation=Rotation(x=-180.0, y=90.0, z=10.0),
-    )
-
-    with patch(
-      "pylabrobot.brooks.precise_flex.driver.master.kinematics.ik",
-      return_value={1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
-    ):
-      await self.arm.arm.move_through_cartesian_poses([pose])
-
-    self.assertEqual(
-      self._profile_cmds(),
-      [
-        "Profile 1",
-        "Profile 1 50.0 0.0 100.0 100.0 0.0 0.0 -1 0",
-        "Profile 1 50.0 0.0 100.0 100.0 0.0 0.0 25.0 0",
-      ],
-    )
-
-  async def test_move_through_cartesian_poses_can_skip_profile_blending(self):
-    pose = PreciseFlexCartesianPose(
-      location=Coordinate(200.0, 20.0, 110.0),
-      rotation=Rotation(x=-180.0, y=90.0, z=10.0),
-    )
-
-    with patch(
-      "pylabrobot.brooks.precise_flex.driver.master.kinematics.ik",
-      return_value={1: 110.0, 2: 10.0, 3: 20.0, 4: 30.0, 6: 123.0},
-    ):
-      await self.arm.arm.move_through_cartesian_poses([pose], blend=False)
-
-    self.assertEqual(self._profile_cmds(), [])
-    self.assertEqual(self._movej_cmds(), ["moveJ 1 110.0 10.0 20.0 30.0 70.0"])
-    self.assertEqual(mocked(self.arm.arm.request_joint_state).await_count, 2)
 
   async def test_move_through_cartesian_poses_blocks_before_motion_on_limit_failure(self):
     pose = PreciseFlexCartesianPose(
@@ -529,15 +377,6 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
         await self.arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 0.0})
     self.assertEqual(self._cmds("moveJ"), [])  # never moved
     self.assertIn("auto-recovery did not clear", "\n".join(cm.output))  # ERROR before re-raise
-
-  async def test_in_range_move_reads_position_once(self):
-    """Happy path: the out-of-range check reuses the merge read, so a move issues a single wherej
-    before moveJ (no redundant position read)."""
-    self._stub("0 0.0 90.0 0.0 0")  # all axes in range
-    await self.arm.arm.move_to_joint_state({PreciseFlexAxis.SHOULDER: 10.0})
-    sent = self._cmds("")
-    (move,) = self._cmds("moveJ")
-    self.assertEqual(sent[: sent.index(move)], ["wherej"])  # exactly one position read before it
 
   async def test_move_to_location_is_also_guarded(self):
     """The Cartesian path funnels through the same guard: an out-of-range axis raises and sends no

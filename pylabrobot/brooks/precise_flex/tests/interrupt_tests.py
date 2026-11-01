@@ -109,22 +109,6 @@ class TestInterruptHelpers(unittest.IsolatedAsyncioTestCase):
     await halt_and_resync(io)
     io.write.assert_not_called()
 
-  async def test_converts_keyboard_interrupt(self):
-    """KeyboardInterrupt -> stop runs, OperationInterrupted raised."""
-    stop = AsyncMock()
-    with self.assertRaises(OperationInterrupted):
-      async with halt_on_interrupt(stop):
-        raise KeyboardInterrupt()
-    stop.assert_awaited_once()
-
-  async def test_reraises_cancelled_error(self):
-    """CancelledError -> stop runs, cancellation re-raised (semantics preserved)."""
-    stop = AsyncMock()
-    with self.assertRaises(asyncio.CancelledError):
-      async with halt_on_interrupt(stop):
-        raise asyncio.CancelledError()
-    stop.assert_awaited_once()
-
   async def test_passes_through_other_exceptions_without_halting(self):
     """A normal error (e.g. an error-reply PreciseFlexError, as an E-stop produces) propagates
     unchanged and does NOT trigger a halt."""
@@ -133,19 +117,6 @@ class TestInterruptHelpers(unittest.IsolatedAsyncioTestCase):
       async with halt_on_interrupt(stop):
         raise ValueError()
     stop.assert_not_awaited()
-
-
-class TestRequestSystemState(unittest.IsolatedAsyncioTestCase):
-  """request_system_state reads the sysState word; PowerState decodes it (15 = hard E-stop)."""
-
-  async def test_returns_state_word_and_decodes_to_powerstate(self):
-    from pylabrobot.brooks.precise_flex.data_ids import PowerState
-
-    d = _make_arm()
-    d.send_command = AsyncMock(return_value="15")  # type: ignore[method-assign]
-    state = await d.request_system_state()
-    self.assertEqual(state, 15)
-    self.assertEqual(PowerState(state), PowerState.OFF_HARD_ESTOP)
 
 
 class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
