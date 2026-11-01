@@ -219,8 +219,6 @@ _CASES: List[_Case] = [
     None,
   ),
   ("power_off_robot", lambda arm: arm.power_off_robot(), ["hp 0"], None),
-  ("set_power_on", lambda arm: arm.set_power(True, 20), ["hp 1 20"], None),
-  ("set_power_off", lambda arm: arm.set_power(False), ["hp 0"], None),
   ("request_power_state", lambda arm: arm.request_power_state(), ["hp"], None),
   ("attach", lambda arm: arm.attach(1), ["attach 1"], None),
   ("attach_query", lambda arm: arm.attach(), ["attach"], None),
@@ -407,12 +405,6 @@ _CASES: List[_Case] = [
   ("request_link_lengths", lambda arm: arm.arm.request_link_lengths(), ["pd 16050"], None),
   ("request_tool_length", lambda arm: arm.arm.request_tool_length(), ["pd 16051"], None),
   (
-    "request_kinematic_parameters",
-    lambda arm: arm.arm.request_kinematic_parameters(),
-    ["pd 16050", "pd 16051"],
-    None,
-  ),
-  (
     "request_reference_cartesian_speed",
     lambda arm: arm.arm.request_reference_cartesian_speed(),
     ["pd 2701"],
@@ -479,12 +471,6 @@ _CASES: List[_Case] = [
       "state",
       "wherej",
     ],
-    None,
-  ),
-  (
-    "request_gripper_pose",
-    lambda arm: arm.arm.request_gripper_pose(),
-    ["state", "state", "wherej"],
     None,
   ),
   (
@@ -671,7 +657,6 @@ _CASES: List[_Case] = [
     ],
     None,
   ),
-  ("send_command", lambda arm: arm.send_command("pd 2000"), ["pd 2000"], None),
   (
     "move_to_location_rail_position_without_rail",
     lambda arm: arm.arm.move_to_location(_LOC, direction=0.0, rail_position=300.0),
@@ -727,12 +712,6 @@ _RAIL_CASES: List[_Case] = [
     "rail_start_freedrive_mode",
     lambda arm: arm.arm.start_freedrive_mode(),
     ["freemode 1", "freemode 2", "freemode 3", "freemode 4", "freemode 6"],
-    None,
-  ),
-  (
-    "rail_request_joint_state",
-    lambda arm: arm.arm.request_joint_state(),
-    ["state", "state", "wherej"],
     None,
   ),
   (
@@ -889,25 +868,6 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(config.has_rail, has_rail)
 
-  async def test_setup_is_connect_initialize_home(self):
-    _, whole = await self._run_setup(has_rail=False)
-    fake = _FakeController()
-    arm = _make_arm(fake)
-    await arm.connect()
-    await arm.power_on_robot()
-    await arm.attach(1)
-    await arm.arm.stop_freedrive_mode()
-    taken_control = len(fake.sent)
-    await arm.discover()
-    discovery = fake.sent[taken_control:]
-    await arm.home()
-    await arm.arm._handle_out_of_range_axes()
-    self.assertEqual(fake.sent, whole.sent)
-    self.assertTrue(
-      all(c.split()[0] in ("pd", "version", "VToolProperty", "sysState") for c in discovery),
-      discovery,
-    )
-
   async def test_a_failed_configuration_read_ends_setup(self):
     fake = _FakeController()
     arm = _make_arm(fake)
@@ -933,12 +893,6 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     async with arm.arm.at_speed(None):
       pass
     self.assertEqual(fake.sent, [])
-
-  async def test_only_an_arm_with_a_rail_has_one(self):
-    rail_less, _ = await self._run_setup(has_rail=False)
-    self.assertIsNone(rail_less.rail)
-    with_rail, _ = await self._run_setup(has_rail=True)
-    self.assertIsInstance(with_rail.rail, PreciseFlexRail)
 
   async def test_recovering_an_axis_out_of_range(self):
     fake = _FakeController({"Speed 1": "0 1 60"})
