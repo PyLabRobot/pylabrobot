@@ -755,7 +755,7 @@ _RAIL_CASES: List[_Case] = [
   ),
 ]
 
-_SETUP = [
+_SETUP_BEFORE_HOME = [
   "mode 0",
   "hp 1 20",
   "attach 1",
@@ -786,99 +786,17 @@ _SETUP = [
   "pd 2701",
   "pd 2703",
   "sysState",
-  "state",
-  "state",
-  "wherej",
-  "home",
-  "state",
-  "state",
-  "wherej",
-  "pd 2800",
-  "state",
-  "state",
-  "wherej",
 ]
 
-_SETUP_SKIP_HOME = [
-  "mode 0",
-  "hp 1 20",
-  "attach 1",
-  "freemode -1",
-  "pd 16078",
-  "pd 16077",
-  "pd 2003",
-  "pd 2002",
-  "version",
-  "VToolProperty System CameraCount",
-  "pd 2700",
-  "pd 2702",
-  "pd 2704",
-  "pd 2705",
-  "pd 2706",
-  "pd 16050",
-  "pd 16051",
-  "pd 100",
-  "pd 101",
-  "pd 102",
-  "pd 103",
-  "pd 110",
-  "pd 116",
-  "pd 2000",
-  "pd 2004",
-  "pd 16076",
-  "pd 16075",
-  "pd 2701",
-  "pd 2703",
-  "sysState",
-  "pd 2800",
-  "state",
-  "state",
-  "wherej",
-]
+_SETUP_AFTER_HOME = ["pd 2800", "state", "state", "wherej"]
 
-_RAIL_SETUP = [
-  "mode 0",
-  "hp 1 20",
-  "attach 1",
-  "freemode -1",
-  "pd 16078",
-  "pd 16077",
-  "pd 2003",
-  "pd 2002",
-  "version",
-  "VToolProperty System CameraCount",
-  "pd 2700",
-  "pd 2702",
-  "pd 2704",
-  "pd 2705",
-  "pd 2706",
-  "pd 16050",
-  "pd 16051",
-  "pd 100",
-  "pd 101",
-  "pd 102",
-  "pd 103",
-  "pd 110",
-  "pd 116",
-  "pd 2000",
-  "pd 2004",
-  "pd 16076",
-  "pd 16075",
-  "pd 2701",
-  "pd 2703",
-  "sysState",
-  "state",
-  "state",
-  "wherej",
-  "home",
-  "state",
-  "state",
-  "wherej",
-  "pd 2800",
-  "state",
-  "state",
-  "wherej",
-]
+_SETUP_SKIP_HOME = _SETUP_BEFORE_HOME + _SETUP_AFTER_HOME
+
+_SETUP = (
+  _SETUP_BEFORE_HOME
+  + ["state", "state", "wherej", "home", "state", "state", "wherej"]
+  + _SETUP_AFTER_HOME
+)
 
 
 class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
@@ -921,7 +839,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_with_rail(self):
     _, fake = await self._run_setup(has_rail=True)
-    self.assert_wire(fake.sent, _RAIL_SETUP)
+    self.assert_wire(fake.sent, _SETUP)
 
   async def _check(self, cases: List[_Case], has_rail: bool) -> None:
     for name, call, expected, error in cases:
