@@ -474,6 +474,12 @@ _CASES: List[_Case] = [
     None,
   ),
   (
+    "request_gripper_pose",
+    lambda arm: arm.arm.request_gripper_pose(),
+    ["state", "state", "wherej"],
+    None,
+  ),
+  (
     "move_to_location",
     lambda arm: arm.arm.move_to_location(_LOC, direction=0.0),
     [
