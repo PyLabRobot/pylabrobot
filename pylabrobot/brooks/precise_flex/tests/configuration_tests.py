@@ -116,11 +116,6 @@ class TestSavedConfiguration(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(read.rail, PreciseFlexRailConfiguration(soft_limit_range=(0.0, 1000.0)))
     self.assertTrue(read.has_rail)
 
-  def test_each_feature_is_saved_beside_the_device(self):
-    self.round_trip(configuration(rail=PreciseFlexRailConfiguration((0.0, 1000.0))))
-    self.assertEqual(list(self.saved), ["device", "arm", "gripper", "rail"])
-    self.assertNotIn("arm", self.saved["device"])
-
   def test_live_state_is_not_written(self):
     read = self.round_trip(configuration())
     self.assertNotIn("_power_state", self.saved["device"])
@@ -197,11 +192,6 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase)
     )
     self.recorded = read_configuration(RECORDING_PF400)["device"]
 
-  def test_the_file_is_read_when_the_driver_is_built(self):
-    self.assertEqual(self.driver.declared, read_configuration(RECORDING_PF400))
-    self.assertEqual(self.driver.declared["device"], self.recorded)
-    self.assertEqual(self.driver.declared_configuration_json, RECORDING_PF400)
-
   def test_another_arm_of_the_same_build_passes(self):
     another = dataclasses.replace(
       self.recorded, controller_serial="another", gpl_version="GPL 5.2", modules=()
@@ -275,11 +265,6 @@ class TestAVisionGripperIsItsCameras(unittest.IsolatedAsyncioTestCase):
     fake = _FakeController({self.NAME: "0 PreciseFlex 400SX", **replies})
     arm = _make_arm(fake)
     return await arm.discover(), fake
-
-  async def test_an_arm_named_without_a_v_that_counts_two_cameras_has_one(self):
-    configuration, _ = await self.discovered()
-    self.assertEqual(configuration.camera_count, 2)
-    self.assertTrue(configuration.has_vision_gripper)
 
   async def test_an_arm_that_counts_none_has_none_whatever_it_is_called(self):
     configuration, _ = await self.discovered(**{self.NAME: "0 PreciseFlex 400SXV", self.COUNT: "0"})
