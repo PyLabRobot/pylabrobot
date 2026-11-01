@@ -1,0 +1,50 @@
+﻿:orphan:
+
+
+pylabrobot.brooks.precise\_flex.PreciseFlexVision
+=================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. autoclass:: PreciseFlexVision
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PreciseFlexVision.__init__
+      ~PreciseFlexVision.capture_image
+      ~PreciseFlexVision.discover_configuration
+      ~PreciseFlexVision.enumerate_project
+      ~PreciseFlexVision.request_camera_count
+      ~PreciseFlexVision.request_camera_height
+      ~PreciseFlexVision.request_camera_name
+      ~PreciseFlexVision.request_camera_resolutions
+      ~PreciseFlexVision.request_camera_type
+      ~PreciseFlexVision.request_camera_width
+      ~PreciseFlexVision.request_is_licensed
+      ~PreciseFlexVision.request_processes
+      ~PreciseFlexVision.request_project_name
+      ~PreciseFlexVision.request_projects
+      ~PreciseFlexVision.request_stereo_parameters
+      ~PreciseFlexVision.request_vision_tool_properties
+      ~PreciseFlexVision.request_vision_tool_property
+      ~PreciseFlexVision.request_vision_tool_property_info
+      ~PreciseFlexVision.request_vision_tool_property_value
+      ~PreciseFlexVision.request_vision_tool_type
+      ~PreciseFlexVision.request_vision_tool_types
+      ~PreciseFlexVision.request_vision_tools
+      ~PreciseFlexVision.request_vision_version
+      ~PreciseFlexVision.save_image
+      ~PreciseFlexVision.setup
+      ~PreciseFlexVision.start_led
+      ~PreciseFlexVision.stop_led
+   
+   

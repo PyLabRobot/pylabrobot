@@ -20,6 +20,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexConfiguration
       ~PreciseFlexConfiguration.hard_limits
       ~PreciseFlexConfiguration.has_rail
       ~PreciseFlexConfiguration.has_vision_gripper
+      ~PreciseFlexConfiguration.has_vision_server
       ~PreciseFlexConfiguration.is_dual_gripper
       ~PreciseFlexConfiguration.is_vision_gripper
       ~PreciseFlexConfiguration.kinematics

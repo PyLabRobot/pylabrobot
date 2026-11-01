@@ -28,6 +28,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexDriver
       ~PreciseFlexDriver.min_gripper_width
       ~PreciseFlexDriver.parking_position
       ~PreciseFlexDriver.profile_index
+      ~PreciseFlexDriver.vision_server_connected
    
    
 
@@ -70,6 +71,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexDriver
       ~PreciseFlexDriver.pick_up_at_location
       ~PreciseFlexDriver.power_off_robot
       ~PreciseFlexDriver.power_on_robot
+      ~PreciseFlexDriver.read_next_vision_server_result
       ~PreciseFlexDriver.recover_axes_within_limits
       ~PreciseFlexDriver.recover_from_fault
       ~PreciseFlexDriver.release_brake
@@ -117,6 +119,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexDriver
       ~PreciseFlexDriver.request_tool_length
       ~PreciseFlexDriver.request_tool_transformation_values
       ~PreciseFlexDriver.request_version
+      ~PreciseFlexDriver.request_vision_server_property
       ~PreciseFlexDriver.reset
       ~PreciseFlexDriver.save_configuration
       ~PreciseFlexDriver.select_robot
