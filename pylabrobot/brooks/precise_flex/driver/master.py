@@ -1324,12 +1324,15 @@ class PreciseFlexDriver:
     lambda self: {"device": self._controller_reference()},
   )
   async def recover_from_fault(self) -> None:
-    """Re-enable power and re-attach after a fault that dropped power; home only if not homed.
+    """Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.
 
-    A soft envelope error (``-3122``) leaves the arm homed, so no homing runs; homing opens the
-    jaws to their stop. Does not drive the arm to any pose. Confirm the obstacle is removed first.
-    The envelope error clears itself; a latched fatal that blocks power-on needs a reset (DataID
-    247) or reboot.
+    A collision trips an envelope error (``-3100`` hard / ``-3122`` soft, see
+    :func:`~pylabrobot.brooks.precise_flex.driver.errors.is_collision`); the servo stops the arm
+    itself and high power drops. This re-enables power, re-attaches, and re-homes. It does **not**
+    drive the arm to any pose; confirm the obstacle is removed before calling.
+
+    The envelope error auto-clears, so no explicit clear is needed; a latched fatal that blocks
+    power-on is surfaced by ``power_on_robot`` for the operator to reset (DataID 247) or reboot.
 
     Raises:
       PreciseFlexError: if a hard E-stop is engaged (release the button first) or power cannot be
@@ -1341,8 +1344,7 @@ class PreciseFlexDriver:
       )
     await self.power_on_robot()
     await self.attach(1)
-    if not await self._is_robot_homed():
-      await self.home()
+    await self.home()
 
   # -- deprecated: moved to the arm, gripper and rail ---------------------------------------------
 
