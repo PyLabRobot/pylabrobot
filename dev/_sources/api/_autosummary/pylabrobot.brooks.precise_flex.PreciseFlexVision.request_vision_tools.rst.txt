@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexVision.request\_vision\_tools
+========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexVision.request_vision_tools

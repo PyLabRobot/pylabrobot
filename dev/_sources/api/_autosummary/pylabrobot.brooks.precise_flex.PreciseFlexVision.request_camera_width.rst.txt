@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexVision.request\_camera\_width
+========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexVision.request_camera_width

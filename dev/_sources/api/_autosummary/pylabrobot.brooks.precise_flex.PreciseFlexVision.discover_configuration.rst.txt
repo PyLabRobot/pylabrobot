@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexVision.discover\_configuration
+=========================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexVision.discover_configuration

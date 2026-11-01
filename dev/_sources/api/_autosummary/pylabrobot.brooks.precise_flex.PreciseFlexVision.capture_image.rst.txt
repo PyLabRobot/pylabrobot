@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexVision.capture\_image
+================================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexVision.capture_image
