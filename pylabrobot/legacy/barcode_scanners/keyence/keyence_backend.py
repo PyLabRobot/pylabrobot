@@ -88,7 +88,7 @@ class KeyenceBarcodeScannerBackend(BarcodeScannerBackend):
       if gap.cancel_called:
         break
       buf.extend(chunk)
-      if chunk == b"\r":
+      if b"\r" in buf:
         break
     return buf.decode(self.serial_messaging_encoding).strip()
 

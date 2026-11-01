@@ -91,6 +91,11 @@ class TestKeyenceSendCommand(AnyioTestBase):
     await backend.send_command("LOFF")
     assert len(serial.read.calls) == 3
 
+  async def test_stops_reading_at_terminator_multibyte_chunk(self) -> None:
+    backend, serial = make_backend([], reads=[b"MOTORON\r", b"unused"])
+    assert await backend.send_command("RMOTOR") == "MOTORON"
+    assert len(serial.read.calls) == 1
+
   async def test_quiet_read_is_an_empty_reply(self) -> None:
     async def idle() -> bytes:
       await anyio.sleep_forever()

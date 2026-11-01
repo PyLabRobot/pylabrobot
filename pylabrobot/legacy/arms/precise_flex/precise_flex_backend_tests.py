@@ -538,7 +538,7 @@ class TestPreciseFlexSetupCompatibility(AnyioTestBase):
     assert not backend.is_active
 
 
-class PreciseFlexBackendTests(AnyioTestBase):
+class TestPreciseFlexBackend(AnyioTestBase):
   """Unit tests for PreciseFlexBackend"""
 
   def assertEqual(self, actual: Any, expected: Any) -> None:

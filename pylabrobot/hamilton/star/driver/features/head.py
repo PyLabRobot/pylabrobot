@@ -23,6 +23,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
+import anyio
+
 from pylabrobot.concurrency import SiblingTaskErrors, non_cancelling_task_group
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.resources.coordinate import Coordinate
@@ -1085,9 +1087,10 @@ class Head:
         read_timeout=read_timeout,
       )
     finally:
-      await self._record_where_it_stopped("y")
-      await self._restore_drive_parameter("yv", speed, was_speed)
-      await self._restore_drive_parameter("yr", acceleration, was_acceleration)
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("y")
+        await self._restore_drive_parameter("yv", speed, was_speed)
+        await self._restore_drive_parameter("yr", acceleration, was_acceleration)
 
   # -- x and y together ----------------------------------------------------------------------------
 
@@ -1257,9 +1260,10 @@ class Head:
         read_timeout=read_timeout,
       )
     finally:
-      await self._record_where_it_stopped("z")
-      await self._restore_drive_parameter("zv", speed, was_speed)
-      await self._restore_drive_parameter("zr", acceleration, was_acceleration)
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("z")
+        await self._restore_drive_parameter("zv", speed, was_speed)
+        await self._restore_drive_parameter("zr", acceleration, was_acceleration)
 
   async def move_tool_bottom_to_z_position(
     self,

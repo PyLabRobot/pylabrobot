@@ -8,6 +8,9 @@ import unittest
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 from unittest.mock import DEFAULT, AsyncMock, patch
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR, RECORDING_STARLET
 from pylabrobot.hamilton.star.driver.configuration import read_configuration
@@ -23,6 +26,7 @@ from pylabrobot.resources.hamilton import STARDeck, STARLetDeck
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.tip import Tip
 from pylabrobot.serializer import serialize
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # The 96-head on the device this package ships a recording of.
 RECORDED_HEAD96 = cast(
@@ -1515,3 +1519,98 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.head.dispense(self.trough, piston_volume=50.0)
     self.assertEqual(len(self.sent), 1)
+
+
+class TestHeadCancellationShielding(AnyioTestBase):
+  """Cancelling `move_to_y_position` or `move_stop_disc_to_z_position` mid-move still records where
+  the head stopped and restores its volatile drive registers under a shielded cancel scope."""
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    self.driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    await stack.enter_async_context(self.driver.lifespan())
+    self.head = cast(Head96, self.driver.x_arm.head96)
+
+  async def test_move_to_y_position_restores_registers_when_cancelled(self) -> None:
+    c = self.head.configuration
+    was_speed = await self.head.request_drive_parameter("yv")
+    was_acceleration = await self.head.request_drive_parameter("yr")
+    real_send_command = self.driver.send_command
+    sent: List[Tuple[str, str, Dict[str, Any]]] = []
+    entered = anyio.Event()
+
+    async def intercept_send(module: str, command: str, **kwargs: Any) -> Any:
+      if module == c.module and command == "YA":
+        entered.set()
+        await anyio.sleep_forever()
+      if module == c.module and command in ("RY", "AA"):
+        sent.append((module, command, kwargs))
+      return await real_send_command(module, command, **kwargs)
+
+    cancelled_seen = False
+    with patch.object(self.driver, "send_command", side_effect=intercept_send):
+      with anyio.CancelScope() as scope:
+
+        async def cancel_once_moving() -> None:
+          await entered.wait()
+          scope.cancel()
+
+        async with anyio.create_task_group() as tg:
+          tg.start_soon(cancel_once_moving)
+          try:
+            await self.head.move_to_y_position(200.0, speed=100.0, acceleration=200.0)
+          except anyio.get_cancelled_exc_class():
+            cancelled_seen = True
+            raise
+
+    assert cancelled_seen
+    commands = [cmd for _, cmd, _ in sent]
+    assert commands == ["RY", "AA", "AA"]
+    assert sent[1][2] == {
+      "yv": f"{c.y_drive_mm_to_increments(was_speed):0{c.drive_parameters['yv']}}"
+    }
+    assert sent[2][2] == {
+      "yr": f"{c.y_drive_acceleration_mm_to_increments(was_acceleration):0{c.drive_parameters['yr']}}"
+    }
+
+  async def test_move_stop_disc_to_z_position_restores_registers_when_cancelled(self) -> None:
+    c = self.head.configuration
+    was_speed = await self.head.request_drive_parameter("zv")
+    was_acceleration = await self.head.request_drive_parameter("zr")
+    real_send_command = self.driver.send_command
+    sent: List[Tuple[str, str, Dict[str, Any]]] = []
+    entered = anyio.Event()
+
+    async def intercept_send(module: str, command: str, **kwargs: Any) -> Any:
+      if module == c.module and command == "ZA":
+        entered.set()
+        await anyio.sleep_forever()
+      if module == c.module and command in ("RZ", "AA"):
+        sent.append((module, command, kwargs))
+      return await real_send_command(module, command, **kwargs)
+
+    cancelled_seen = False
+    with patch.object(self.driver, "send_command", side_effect=intercept_send):
+      with anyio.CancelScope() as scope:
+
+        async def cancel_once_moving() -> None:
+          await entered.wait()
+          scope.cancel()
+
+        async with anyio.create_task_group() as tg:
+          tg.start_soon(cancel_once_moving)
+          try:
+            await self.head.move_stop_disc_to_z_position(200.0, speed=50.0, acceleration=200.0)
+          except anyio.get_cancelled_exc_class():
+            cancelled_seen = True
+            raise
+
+    assert cancelled_seen
+    commands = [cmd for _, cmd, _ in sent]
+    assert commands == ["RZ", "AA", "AA"]
+    assert sent[1][2] == {
+      "zv": f"{c.z_drive_mm_to_increments(was_speed):0{c.drive_parameters['zv']}}"
+    }
+    assert sent[2][2] == {
+      "zr": f"{c.z_drive_acceleration_mm_to_increments(was_acceleration):0{c.drive_parameters['zr']}}"
+    }

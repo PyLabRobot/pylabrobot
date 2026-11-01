@@ -100,6 +100,7 @@ class TCPSession(HasLifespan):
     self.command_lock = anyio.Lock()
     self.pending: Optional[PendingTransaction] = None
     self._reader_group: Optional[anyio.abc.TaskGroup] = None
+    self._reader_scope: Optional[anyio.CancelScope] = None
     self._reader_started = False
     self._write_finished: Optional[anyio.Event] = None
     self._subscriptions: set[EventSubscription] = set()
@@ -110,9 +111,17 @@ class TCPSession(HasLifespan):
     await stack.enter_async_context(self._io.lifespan())
     self.state = SessionState.CONNECTING
     group = await stack.enter_task_group()
+    reader_scope = anyio.CancelScope(shield=True)
     self._reader_group = group
-    stack.callback(group.cancel_scope.cancel)
+    self._reader_scope = reader_scope
+    stack.callback(self._stop_reader, reader_scope, group)
     stack.push_shielded_async_callback(self._finish_session)
+
+  def _stop_reader(self, reader_scope: anyio.CancelScope, group: anyio.abc.TaskGroup) -> None:
+    """Stop the shielded reader before its task group joins."""
+    reader_scope.shield = False
+    reader_scope.cancel()
+    group.cancel_scope.cancel()
 
   async def _finish_session(self) -> None:
     """Join an in-flight write before failing waiters and closing the socket."""
@@ -124,6 +133,7 @@ class TCPSession(HasLifespan):
     self.fail(ConnectionError("Hamilton TCP session stopped - enter a new lifespan"))
     self.state = SessionState.CLOSED
     self._reader_group = None
+    self._reader_scope = None
     self._reader_started = False
 
   def require_active(self) -> None:
@@ -217,11 +227,12 @@ class TCPSession(HasLifespan):
     if self.state is not SessionState.CONNECTING:
       raise RuntimeError("Reader can only start after connecting")
     group = self._reader_group
-    if group is None:
+    reader_scope = self._reader_scope
+    if group is None or reader_scope is None:
       raise RuntimeError("Session must be entered before starting its reader")
     self.state = SessionState.READY
     self._reader_started = True
-    group.start_soon(self._read_loop)
+    group.start_soon(self._read_loop, reader_scope)
 
   @property
   def reader_started(self) -> bool:
@@ -249,23 +260,27 @@ class TCPSession(HasLifespan):
       return None
     return CommandResponse.from_bytes(data)
 
-  async def _read_loop(self) -> None:
+  async def _read_loop(self, reader_scope: anyio.CancelScope) -> None:
     """Read independently of request deadlines and route only recognized frames."""
     try:
-      while self.state is not SessionState.CLOSED:
-        try:
-          message = await self.read_message(timeout=float("inf"))
-        except ValueError as exc:
-          logger.warning("Skipping unparsable frame: %s", exc)
-          continue
-        if isinstance(message, CommandResponse):
-          self.deliver(message)
+      with reader_scope:
+        while self.state is not SessionState.CLOSED:
+          try:
+            message = await self.read_message(timeout=float("inf"))
+          except ValueError as exc:
+            logger.warning("Skipping unparsable frame: %s", exc)
+            continue
+          if isinstance(message, CommandResponse):
+            self.deliver(message)
     except Exception as exc:
       if self.state is SessionState.CLOSED:
         return
       self.fail(exc)
       logger.warning("Hamilton TCP reader stopped: %s", exc)
       raise
+    finally:
+      if self.state is not SessionState.CLOSED:
+        self.fail(ConnectionError("Hamilton TCP reader stopped"))
 
   def deliver(self, message: CommandResponse) -> None:
     """Route events and hand only matching terminal responses to the caller."""

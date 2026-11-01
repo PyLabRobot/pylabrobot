@@ -331,6 +331,61 @@ class TestNativeSessionOwnership(AnyioTestBase):
         await session.exchange(TestCommandSerialization._Cmd(Address(1, 1, 257)))
       assert len(io.writes) == 1
 
+  async def test_reader_remains_available_during_cancelled_lifespan_cleanup(self) -> None:
+    """Shielded LIFO cleanup registered after the session can still transact on outer cancellation."""
+    io = _MemorySocket()
+    session = TCPSession(io)
+    body_started = anyio.Event()
+    cleanup_completed = anyio.Event()
+    events: list[str] = []
+    scope = anyio.CancelScope()
+
+    async def respond(request: HarpPacket) -> None:
+      events.append(f"write:{request.seq}")
+      io.feed(_response(sequence=request.seq))
+
+    async def cleanup() -> None:
+      events.append("cleanup.start")
+      response = await session.exchange(
+        TestCommandSerialization._Cmd(Address(1, 1, 257)), read_timeout=1
+      )
+      events.append(f"cleanup.reply:{response.harp.seq}")
+      cleanup_completed.set()
+
+    async def run_lifespan() -> None:
+      with scope:
+        async with AsyncExitStackWithShielding() as stack:
+          await stack.enter_async_context(session.lifespan())
+          session.client_address = Address(2, 1, 65535)
+          session.start_reader()
+          stack.push_shielded_async_callback(cleanup, shield_timeout=1)
+          # Let the background reader enter its read loop before cancelling the outer scope.
+          await anyio.sleep(0)
+          body_started.set()
+          try:
+            await anyio.sleep_forever()
+          except anyio.get_cancelled_exc_class():
+            events.append("body.cancelled")
+            raise
+
+    io.on_write = respond
+    with anyio.fail_after(5):
+      async with anyio.create_task_group() as tasks:
+        tasks.start_soon(run_lifespan)
+        await body_started.wait()
+        scope.cancel()
+        await cleanup_completed.wait()
+
+    assert scope.cancelled_caught
+    assert events == [
+      "body.cancelled",
+      "cleanup.start",
+      "write:1",
+      "cleanup.reply:1",
+    ]
+    assert session.state is SessionState.CLOSED
+    assert io.closed
+
 
 class _UnusedExecutor:
   """Discovery-only tests replace all wire-facing methods."""

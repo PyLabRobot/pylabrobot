@@ -687,6 +687,149 @@ class TestHead96CrashRecovery(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.cb.send_command.await_count, 2)
 
 
+class TestShieldedRegisterRestore(unittest.IsolatedAsyncioTestCase):
+  """Cancelling `head96_move_y`, `head96_move_stop_disk_z`, or `slow_iswap` mid-operation still
+  restores the pre-command firmware registers under a shielded cancel scope."""
+
+  async def asyncSetUp(self) -> None:
+    self.cb = STARChatterboxBackend()
+    self.cb.set_deck(STARLetDeck())
+    self.cb.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+    with self.assertWarns(DeprecationWarning):
+      await self.cb.setup()
+    assert self.cb._head96_information is not None
+    y_min, y_max = self.cb._head96_information.y_range
+    z_min, z_max = self.cb._head96_information.z_range
+    self.y_target = round((y_min + y_max) / 2, 1)
+    self.z_target = round((z_min + z_max) / 2, 1)
+
+  async def test_head96_move_y_restores_registers_when_cancelled(self) -> None:
+    self.cb.head96_request_y_speed = unittest.mock.AsyncMock(return_value=390.62)
+    self.cb.head96_request_y_acceleration = unittest.mock.AsyncMock(return_value=546.88)
+    aa_writes: list[dict[str, Any]] = []
+    entered = anyio.Event()
+
+    async def fake_send_command(module: str, command: str, **kwargs: Any) -> dict[str, Any]:
+      await anyio.lowlevel.checkpoint()
+      if command == "YA":
+        entered.set()
+        await anyio.sleep_forever()
+      if command == "AA":
+        aa_writes.append({"module": module, **kwargs})
+      return {}
+
+    self.cb.send_command = fake_send_command
+    cancelled_seen = False
+
+    with anyio.CancelScope() as scope:
+
+      async def cancel_once_moving() -> None:
+        await entered.wait()
+        scope.cancel()
+
+      async with anyio.create_task_group() as tg:
+        tg.start_soon(cancel_once_moving)
+        try:
+          await self.cb.head96_move_y(self.y_target, speed=100.0, acceleration=200.0)
+        except anyio.get_cancelled_exc_class():
+          cancelled_seen = True
+          raise
+
+    self.assertTrue(cancelled_seen)
+    self.assertEqual(
+      aa_writes,
+      [
+        {"module": "H0", "yv": f"{self.cb._head96_y_drive_mm_to_increment(390.62):05}"},
+        {"module": "H0", "yr": f"{self.cb._head96_y_drive_mm_to_increment(546.88):05}"},
+      ],
+    )
+
+  async def test_head96_move_stop_disk_z_restores_registers_when_cancelled(self) -> None:
+    self.cb.head96_request_z_speed = unittest.mock.AsyncMock(return_value=85.0)
+    self.cb.head96_request_z_acceleration = unittest.mock.AsyncMock(return_value=400.0)
+    aa_writes: list[dict[str, Any]] = []
+    entered = anyio.Event()
+
+    async def fake_send_command(module: str, command: str, **kwargs: Any) -> dict[str, Any]:
+      await anyio.lowlevel.checkpoint()
+      if command == "ZA":
+        entered.set()
+        await anyio.sleep_forever()
+      if command == "AA":
+        aa_writes.append({"module": module, **kwargs})
+      return {}
+
+    self.cb.send_command = fake_send_command
+    cancelled_seen = False
+
+    with anyio.CancelScope() as scope:
+
+      async def cancel_once_moving() -> None:
+        await entered.wait()
+        scope.cancel()
+
+      async with anyio.create_task_group() as tg:
+        tg.start_soon(cancel_once_moving)
+        try:
+          await self.cb.head96_move_stop_disk_z(self.z_target, speed=50.0, acceleration=200.0)
+        except anyio.get_cancelled_exc_class():
+          cancelled_seen = True
+          raise
+
+    self.assertTrue(cancelled_seen)
+    expected_zr = self.cb._head96_z_drive_mm_to_increment(400.0)
+    self.assertEqual(
+      aa_writes,
+      [
+        {"module": "H0", "zv": f"{self.cb._head96_z_drive_mm_to_increment(85.0):05}"},
+        {"module": "H0", "zr": f"{expected_zr:06}"},
+      ],
+    )
+
+  async def test_slow_iswap_restores_registers_when_cancelled(self) -> None:
+    backend = STARBackend()
+    aa_writes: list[dict[str, Any]] = []
+    entered = anyio.Event()
+
+    async def fake_send_command(module: str, command: str, **kwargs: Any) -> dict[str, Any]:
+      await anyio.lowlevel.checkpoint()
+      if command == "RA":
+        return {"wv": 65000} if kwargs.get("ra") == "wv" else {"tv": 75000}
+      if command == "AA":
+        aa_writes.append({"module": module, **kwargs})
+      return {}
+
+    backend.send_command = fake_send_command
+    cancelled_seen = False
+
+    with anyio.CancelScope() as scope:
+
+      async def cancel_once_entered() -> None:
+        await entered.wait()
+        scope.cancel()
+
+      async with anyio.create_task_group() as tg:
+        tg.start_soon(cancel_once_entered)
+        try:
+          async with backend.slow_iswap(wrist_velocity=10_000, gripper_velocity=15_000):
+            entered.set()
+            await anyio.sleep_forever()
+        except anyio.get_cancelled_exc_class():
+          cancelled_seen = True
+          raise
+
+    self.assertTrue(cancelled_seen)
+    self.assertEqual(
+      aa_writes,
+      [
+        {"module": "R0", "wv": 15_000},
+        {"module": "R0", "tv": 10_000},
+        {"module": "R0", "wv": 65000},
+        {"module": "R0", "tv": 75000},
+      ],
+    )
+
+
 class TestiSWAPYMaxBootstrap(unittest.IsolatedAsyncioTestCase):
   """`_iswap_rotation_drive_request_y_max` runs during setup, before
   `iswap_information` exists, so it must not read it (regression: it used to,

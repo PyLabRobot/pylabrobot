@@ -7669,10 +7669,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     finally:
       # Restore the pre-command register values, skipping the AA write where the move's value
       # already matched what was there (compared in increments, the unit actually stored).
-      if speed_increment != prev_speed_increment:
-        await self._head96_set_y_speed(prev_speed)
-      if acceleration_increment != prev_acceleration_increment:
-        await self._head96_set_y_acceleration(prev_acceleration)
+      with anyio.CancelScope(shield=True):
+        if speed_increment != prev_speed_increment:
+          await self._head96_set_y_speed(prev_speed)
+        if acceleration_increment != prev_acceleration_increment:
+          await self._head96_set_y_acceleration(prev_acceleration)
 
   @_requires_head96
   async def head96_move_z(
@@ -7815,10 +7816,11 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     finally:
       # Restore the pre-command register values, skipping the AA write where the move's value
       # already matched what was there (compared in increments, the unit actually stored).
-      if speed_increment != prev_speed_increment:
-        await self._head96_set_z_speed(prev_speed)
-      if acceleration_increment != prev_acceleration_increment:
-        await self._head96_set_z_acceleration(prev_acceleration)
+      with anyio.CancelScope(shield=True):
+        if speed_increment != prev_speed_increment:
+          await self._head96_set_z_speed(prev_speed)
+        if acceleration_increment != prev_acceleration_increment:
+          await self._head96_set_z_acceleration(prev_acceleration)
 
   async def head96_request_tip_length(self) -> float:
     """Measures the length of the tips on the 96-head; the head's counterpart of
@@ -14165,8 +14167,9 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     try:
       yield
     finally:
-      await self.send_command("R0", "AA", wv=original_wv)
-      await self.send_command("R0", "AA", tv=original_tv)
+      with anyio.CancelScope(shield=True):
+        await self.send_command("R0", "AA", wv=original_wv)
+        await self.send_command("R0", "AA", tv=original_tv)
 
   # HamiltonHeaterShakerInterface
 
