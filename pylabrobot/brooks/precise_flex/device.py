@@ -11,6 +11,7 @@ from typing import Optional
 from pylabrobot.brooks.precise_flex.driver.features.arm import PreciseFlexArm
 from pylabrobot.brooks.precise_flex.driver.features.gripper import PreciseFlexGripper
 from pylabrobot.brooks.precise_flex.driver.features.rail import PreciseFlexRail
+from pylabrobot.brooks.precise_flex.driver.features.vision import PreciseFlexVision
 from pylabrobot.brooks.precise_flex.driver.master import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.driver.simulator import PreciseFlexSimulationDriver
 from pylabrobot.brooks.precise_flex.resource_model.pf400_manipulator import (
@@ -85,13 +86,19 @@ class PreciseFlexDevice(Resource):
     """The rail, if the arm stands on one."""
     return self.driver.rail
 
-  async def setup(self, skip_home: bool = False):
+  @property
+  def vision(self) -> Optional[PreciseFlexVision]:
+    """The vision feature, if setup found one."""
+    return self.driver.vision
+
+  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
     """Bring the device up.
 
     Args:
       skip_home: as `PreciseFlexDriver.setup` takes it.
+      skip_vision_setup: as `PreciseFlexDriver.setup` takes it.
     """
-    await self.driver.setup(skip_home=skip_home)
+    await self.driver.setup(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
 
   async def stop(self):
     """Put the device down."""

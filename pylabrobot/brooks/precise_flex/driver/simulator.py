@@ -70,7 +70,13 @@ class _SimulatedGripper(PreciseFlexGripper):
     super().__init__(driver, **kwargs)
     self._arm = arm
 
-  async def _unchecked_fw_move_jaws(self, units: float, force_sensing: bool) -> None:
+  async def _unchecked_fw_grasp_plate(
+    self, units: float, speed_percent: float, force: float
+  ) -> bool:
+    self._arm.simulated_joint_state[PreciseFlexAxis.GRIPPER] = units
+    return False  # a simulated gripper holds nothing
+
+  async def _unchecked_fw_release_plate(self, units: float, speed_percent: float) -> None:
     self._arm.simulated_joint_state[PreciseFlexAxis.GRIPPER] = units
 
 
@@ -159,3 +165,6 @@ class PreciseFlexSimulationDriver(PreciseFlexDriver):
         PreciseFlexAxis.GRIPPER: configuration.gripper.soft_limit_range[1],
       }
     return configuration
+
+  async def _setup_vision(self, vision_host: Optional[str]) -> None:
+    """A simulated arm has no vision server."""

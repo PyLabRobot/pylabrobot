@@ -14,6 +14,29 @@ class TestClassifyPF400Reach(unittest.TestCase):
     self.assertEqual(kinematics._classify_pf400_reach((500, 500)), "unknown")
 
 
+class TestOutlineClearance(unittest.TestCase):
+  """How far apart two convex outlines stand, and how deep they overlap."""
+
+  def test_apart_overlapping_and_never_more_than_the_true_distance(self):
+    square = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+
+    def moved(x: float, y: float):
+      return [(point_x + x, point_y + y) for point_x, point_y in square]
+
+    # A diamond's tip at the square's face: only the square's edge sees the 5 mm gap.
+    diamond = [(20.0, 0.0), (25.0, 5.0), (20.0, 10.0), (15.0, 5.0)]
+    for outline, other, clearance in (
+      (square, moved(13.0, 0.0), 3.0),
+      (moved(0.0, -17.0), square, 7.0),
+      (square, moved(8.0, 1.0), -2.0),
+      # Corner to corner they are 5 mm apart; the widest gap an edge leaves is 4 mm.
+      (square, moved(14.0, 13.0), 4.0),
+      (diamond, square, 5.0),
+    ):
+      with self.subTest(other=other):
+        self.assertAlmostEqual(kinematics.compute_outline_clearance(outline, other), clearance)
+
+
 class TestElbowAndWrist(unittest.TestCase):
   """Where the two joints stand: the one place the links' trigonometry is written."""
 
