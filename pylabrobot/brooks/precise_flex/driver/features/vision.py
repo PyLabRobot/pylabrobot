@@ -1,11 +1,11 @@
 """IntelliGuide vision capability for a PreciseFlex with a camera gripper.
 
-Folds the GPL vision wire primitives (``VToolProperty``, ``Vprocess``, ``VresultInfoString``,
-``LightControl``) together with the higher-level orchestrations, over the pure-transport
-``PreciseFlexDriver`` controller client. Held as the nullable ``PreciseFlexDriver.vision``, built at
+Folds the GPL vision wire primitives (``VToolProperty``, ``Vprocess``, ``LightControl``) together
+with the higher-level orchestrations, over the pure-transport ``PreciseFlexDriver`` controller
+client. Held as the nullable ``PreciseFlexDriver.vision``, built at
 setup only when the controller is set up for a vision server - so its existence is the capability
 gate (no per-method guards).
-Only ``locate_target`` moves the arm.
+Nothing here moves the arm.
 
 Password-free vision server image retrieval (``capture_image``) and vision-project enumeration use
 the separate vision server protocol rather than the TCS controller, and are added on top of
@@ -34,10 +34,7 @@ from typing import (
 if TYPE_CHECKING:
   from ..master import PreciseFlexDriver
 
-from pylabrobot.resources import Coordinate, Rotation
-
 from ...confirmed_firmware_versions import is_confirmed_vision_version
-from ...kinematics import PreciseFlexCartesianPose
 from ..errors import PreciseFlexError
 
 try:
@@ -90,9 +87,9 @@ def decode_jpeg(jpeg: bytes) -> "np.ndarray":
 class StereoParameters:
   """IntelliGuide stereo-locator configuration for one robot/camera pair.
 
-  Read with ``request_stereo_parameters`` (``StereoParam`` get) and written with
-  ``set_stereo_parameters`` (set). The dual-ArUco stereo locator uses these to find a
-  target; the fields and their order mirror the controller's ``StereoParam`` reply.
+  Read with ``request_stereo_parameters`` (``StereoParam`` get). The dual-ArUco stereo locator
+  uses these to find a target; the fields and their order mirror the controller's ``StereoParam``
+  reply.
   Requires the IntelliGuide vision module.
   """
 
@@ -137,16 +134,6 @@ class StereoParameters:
       distance_between_arucos=float(fields[7]),
       max_aruco_distance_estimate_error=float(fields[8]),
       wait_msecs=int(float(fields[9])),
-    )
-
-  def to_command_args(self) -> str:
-    """The 10 fields as the space-separated argument string for ``StereoParam`` set."""
-    return (
-      f"{self.process_name} {self.tool_name} "
-      f"{self.optimum_distance_to_target} {self.optimum_window_scale_factor} "
-      f"{self.wrist_axis_index} {self.aruco1_number} {self.aruco2_number} "
-      f"{self.distance_between_arucos} {self.max_aruco_distance_estimate_error} "
-      f"{self.wait_msecs}"
     )
 
 
@@ -241,8 +228,8 @@ class PreciseFlexVision:
 
   Reached as `driver.vision`, built at setup only when the controller has the IntelliGuide module,
   so its existence is the capability gate (no per-method guards). The wire primitives translate GPL
-  vision commands over the driver's transport; the orchestrations compose them. Only
-  ``locate_target`` moves the arm.
+  vision commands over the driver's transport; the orchestrations compose them.
+  Nothing here moves the arm.
 
   What the vision server holds::
 
@@ -331,28 +318,6 @@ class PreciseFlexVision:
       The ``Vprocess`` reply.
     """
     return await self.driver.send_command(f"Vprocess {name}")
-
-  async def _vresult_info_string(
-    self, tool: Optional[str] = None, index: Optional[int] = None
-  ) -> str:
-    """``VresultInfoString`` - a result's text (e.g. a decoded barcode), or the last result's.
-
-    The wire pads the value with a leading space, which is stripped.
-
-    Args:
-      tool: the result's tool name; give with ``index``, or omit both for the last result.
-      index: the 1-based result index; give with ``tool``, or omit both for the last result.
-
-    Returns:
-      The result's text, with the leading-space pad stripped.
-
-    Raises:
-      ValueError: if exactly one of ``tool`` / ``index`` is given.
-    """
-    if (tool is None) != (index is None):
-      raise ValueError("tool and index must be given together, or both omitted")
-    suffix = f" {tool} {index}" if tool is not None else ""
-    return (await self.driver.send_command(f"VresultInfoString{suffix}")).strip()
 
   # -- camera info ---------------------------------------------------------
 
@@ -749,29 +714,6 @@ class PreciseFlexVision:
     finally:
       await self._set_vision_tool_property(acquire_tool, "acquiremode", "NORMAL_ACQUIRE")
 
-  # -- barcode reading (BarcodeRead) ---------------------------------------
-
-  async def set_barcode_symbologies(
-    self, tool: str, symbologies: List[str], *, enabled: bool = True
-  ) -> None:
-    """Enable (or disable) the given barcode symbologies on a BarcodeRead tool; no arm motion.
-
-    Each symbology is an independent boolean property (no master 1D/2D switch), e.g.
-    ``["code128", "qrcode"]``. Values are stored and take effect the next time the barcode tool runs
-    (``read_barcode``). Pass ``enabled=False`` to turn them off.
-    """
-    for symbology in symbologies:
-      # Stored only (no run-tool); the next read_barcode run applies them.
-      await self.driver._set_vision_server_property(f"{tool}.{symbology}", str(enabled).lower())
-
-  @requires_vision_tool_type("BarcodeRead")
-  async def read_barcode(
-    self, process_name: str, barcode_tool: str = "barcode_read1", index: int = 1
-  ) -> str:
-    """Run a process containing a BarcodeRead tool and return the decoded type+value; no motion."""
-    await self._run_vision_process(process_name)
-    return await self._vresult_info_string(barcode_tool, index)
-
   # -- stereo location (FiducialLocator) -----------------------------------
 
   async def request_stereo_parameters(
@@ -780,28 +722,3 @@ class PreciseFlexVision:
     """Read the IntelliGuide stereo-locator configuration (``StereoParam`` get); no motion."""
     reply = await self.driver.send_command(f"StereoParam {robot_number} {camera_number}")
     return StereoParameters.from_reply(reply)
-
-  async def set_stereo_parameters(
-    self, params: StereoParameters, robot_number: int = 1, camera_number: int = 1
-  ) -> None:
-    """Write the IntelliGuide stereo-locator configuration (``StereoParam`` set)."""
-    await self.driver.send_command(
-      f"StereoParam {robot_number} {camera_number} {params.to_command_args()}"
-    )
-
-  @requires_vision_tool_type("FiducialLocator")
-  async def locate_target(
-    self, robot_number: int = 1, camera_number: int = 1
-  ) -> PreciseFlexCartesianPose:
-    """Locate an ArUco target by stereo vision (``StereoLocate``); returns its robot-frame pose.
-
-    ACTION - this MOVES THE ARM: the selected gripper camera builds a stereo view by driving to
-    multiple viewpoints. Clear the workspace. Requires a prior stereoscopic calibration and a
-    configured locator. Returns x/y/z (mm) + rotation (deg).
-    """
-    reply = await self.driver.send_command(f"StereoLocate {robot_number} {camera_number}")
-    x, y, z, yaw, pitch, roll = (float(v) for v in reply.split())
-    return PreciseFlexCartesianPose(
-      location=Coordinate(x=x, y=y, z=z),
-      rotation=Rotation(x=roll, y=pitch, z=yaw),
-    )

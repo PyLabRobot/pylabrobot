@@ -32,7 +32,6 @@ _STEREO_PARAMETERS = "unknown_process unknown_tool 150 0.5 4 2 3 63 2 1000 "
 _CONTROLLER_REPLIES: Dict[str, str] = {
   **_REPLIES,
   "StereoParam 1 1": f"0 {_STEREO_PARAMETERS}",
-  "StereoLocate 1 1": "-4030",
   "VToolProperty System Info": "-4016",
   "Vprocess Camera1": "0 1",  # the arm's answer to a frame saved
   "Vprocess Camera2": "-4012 0",  # its answer to a process that failed (`Vprocess snap`)
@@ -411,37 +410,10 @@ _CASES: List[_Case] = [
     None,
   ),
   (
-    "set_barcode_symbologies",
-    lambda arm: _vision(arm).set_barcode_symbologies("barcode_read1", ["code128", "qrcode"]),
-    [
-      "vision: property set barcode_read1.code128 true",
-      "vision: property set barcode_read1.qrcode true",
-    ],
-    None,
-  ),
-  (
-    "read_barcode",
-    lambda arm: _vision(arm).read_barcode("Barcode"),
-    ["controller: Vprocess Barcode", "controller: VresultInfoString barcode_read1 1"],
-    _UNCHECKED,
-  ),
-  (
     "request_stereo_parameters",
     lambda arm: _vision(arm).request_stereo_parameters(),
     ["controller: StereoParam 1 1"],
     StereoParameters("unknown_process", "unknown_tool", 150.0, 0.5, 4, 2, 3, 63.0, 2.0, 1000),
-  ),
-  (
-    "set_stereo_parameters",
-    lambda arm: _vision(arm).set_stereo_parameters(StereoParameters.from_reply(_STEREO_PARAMETERS)),
-    ["controller: StereoParam 1 1 unknown_process unknown_tool 150.0 0.5 4 2 3 63.0 2.0 1000"],
-    None,
-  ),
-  (
-    "locate_target, nothing located",
-    lambda arm: _vision(arm).locate_target(),
-    ["controller: StereoLocate 1 1"],
-    PreciseFlexVisionError,
   ),
 ]
 
@@ -615,20 +587,20 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.network.sent, _STOP)
 
   async def test_a_method_needs_its_tool_type(self):
-    for name, configuration, sent in (
-      ("discovered without it", VisionConfiguration(discovered=True), []),
-      ("not discovered", VisionConfiguration(), ["controller: Vprocess Barcode"]),
+    for name, configuration, sends in (
+      ("discovered without it", VisionConfiguration(discovered=True), False),
+      ("not discovered", VisionConfiguration(), True),
     ):
       with self.subTest(name):
         arm = await self._arm()
         _vision(arm).configuration = configuration
         self.network.sent.clear()
-        if sent:
-          await _vision(arm).read_barcode("Barcode")
+        if sends:
+          await _vision(arm).start_led()
         else:
-          with self.assertRaisesRegex(RuntimeError, "'BarcodeRead' vision tool type"):
-            await _vision(arm).read_barcode("Barcode")
-        self.assertEqual(self.network.sent[:1], sent)
+          with self.assertRaisesRegex(RuntimeError, "'LightControl' vision tool type"):
+            await _vision(arm).start_led()
+        self.assertEqual(bool(self.network.sent), sends)
 
   @unittest.skipIf(_PILImage is None, "Pillow is not installed")
   async def test_capture_image_returns_the_wanted_frame(self):
