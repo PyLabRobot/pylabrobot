@@ -1326,9 +1326,10 @@ class PreciseFlexDriver:
   async def recover_from_fault(self) -> None:
     """Re-enable power and re-attach after a fault that dropped power; home only if not homed.
 
-    A soft envelope error (``-3122``) leaves the arm homed, so no homing runs; homing sweeps the
-    arm. Does not drive the arm to any pose. Confirm the obstacle is removed first. The envelope
-    error clears itself; a latched fatal that blocks power-on needs a reset (DataID 247) or reboot.
+    A soft envelope error (``-3122``) leaves the arm homed, so no homing runs; homing opens the
+    jaws to their stop. Does not drive the arm to any pose. Confirm the obstacle is removed first.
+    The envelope error clears itself; a latched fatal that blocks power-on needs a reset (DataID
+    247) or reboot.
 
     Raises:
       PreciseFlexError: if a hard E-stop is engaged (release the button first) or power cannot be
