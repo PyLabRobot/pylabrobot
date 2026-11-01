@@ -167,6 +167,7 @@ class TestTheRecordedPF400(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.recorded.arm.kinematics.gripper_length, 162.0)
     self.assertEqual(self.recorded.gripper.soft_limit_range, (69.0, 134.0))
     self.assertEqual(self.recorded.camera_count, 2)
+    self.assertTrue(self.recorded.has_vision_server)
     self.assertTrue(self.recorded.has_vision_gripper)
     self.assertFalse(self.recorded.has_rail)
 
