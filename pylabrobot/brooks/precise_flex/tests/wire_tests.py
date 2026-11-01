@@ -195,56 +195,12 @@ _Case = Tuple[
 
 # (name, call, commands sent, exception raised or None), each on an arm already set up.
 _CASES: List[_Case] = [
-  (
-    "stop",
-    lambda arm: arm.stop(),
-    [
-      "attach 0",
-      "hp 0",
-      "<io.write> exit",
-    ],
-    None,
-  ),
-  (
-    "request_mode",
-    lambda arm: arm.request_mode(),
-    [
-      "mode",
-    ],
-    None,
-  ),
-  (
-    "set_response_mode_pc",
-    lambda arm: arm.set_response_mode("pc"),
-    [
-      "mode 0",
-    ],
-    None,
-  ),
-  (
-    "set_response_mode_verbose",
-    lambda arm: arm.set_response_mode("verbose"),
-    [
-      "mode 1",
-    ],
-    None,
-  ),
-  (
-    "request_system_state",
-    lambda arm: arm.request_system_state(),
-    [
-      "sysState",
-    ],
-    None,
-  ),
-  (
-    "power_on_robot",
-    lambda arm: arm.power_on_robot(),
-    [
-      "hp 1 20",
-    ],
-    None,
-  ),
+  ("stop", lambda arm: arm.stop(), ["attach 0", "hp 0", "<io.write> exit"], None),
+  ("request_mode", lambda arm: arm.request_mode(), ["mode"], None),
+  ("set_response_mode_pc", lambda arm: arm.set_response_mode("pc"), ["mode 0"], None),
+  ("set_response_mode_verbose", lambda arm: arm.set_response_mode("verbose"), ["mode 1"], None),
+  ("request_system_state", lambda arm: arm.request_system_state(), ["sysState"], None),
+  ("power_on_robot", lambda arm: arm.power_on_robot(), ["hp 1 20"], None),
   (
     "recover_from_fault",
     lambda arm: arm.recover_from_fault(),
@@ -262,691 +218,252 @@ _CASES: List[_Case] = [
     ],
     None,
   ),
-  (
-    "power_off_robot",
-    lambda arm: arm.power_off_robot(),
-    [
-      "hp 0",
-    ],
-    None,
-  ),
-  (
-    "set_power_on",
-    lambda arm: arm.set_power(True, 20),
-    [
-      "hp 1 20",
-    ],
-    None,
-  ),
-  (
-    "set_power_off",
-    lambda arm: arm.set_power(False),
-    [
-      "hp 0",
-    ],
-    None,
-  ),
-  (
-    "request_power_state",
-    lambda arm: arm.request_power_state(),
-    [
-      "hp",
-    ],
-    None,
-  ),
-  (
-    "attach",
-    lambda arm: arm.attach(1),
-    [
-      "attach 1",
-    ],
-    None,
-  ),
-  (
-    "attach_query",
-    lambda arm: arm.attach(),
-    [
-      "attach",
-    ],
-    None,
-  ),
-  (
-    "detach",
-    lambda arm: arm.detach(),
-    [
-      "attach 0",
-    ],
-    None,
-  ),
+  ("power_off_robot", lambda arm: arm.power_off_robot(), ["hp 0"], None),
+  ("set_power_on", lambda arm: arm.set_power(True, 20), ["hp 1 20"], None),
+  ("set_power_off", lambda arm: arm.set_power(False), ["hp 0"], None),
+  ("request_power_state", lambda arm: arm.request_power_state(), ["hp"], None),
+  ("attach", lambda arm: arm.attach(1), ["attach 1"], None),
+  ("attach_query", lambda arm: arm.attach(), ["attach"], None),
+  ("detach", lambda arm: arm.detach(), ["attach 0"], None),
   (
     "home",
     lambda arm: arm.home(),
-    [
-      "state",
-      "state",
-      "wherej",
-      "home",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "home", "state", "state", "wherej"],
     None,
   ),
-  (
-    "home_all",
-    lambda arm: arm.home_all(),
-    [
-      "homeAll",
-    ],
-    None,
-  ),
-  (
-    "request_state",
-    lambda arm: arm.arm.request_state(),
-    [
-      "state",
-    ],
-    None,
-  ),
-  (
-    "request_parameter",
-    lambda arm: arm.request_parameter(2700),
-    [
-      "pd 2700",
-    ],
-    None,
-  ),
+  ("home_all", lambda arm: arm.home_all(), ["homeAll"], None),
+  ("request_state", lambda arm: arm.arm.request_state(), ["state"], None),
+  ("request_parameter", lambda arm: arm.request_parameter(2700), ["pd 2700"], None),
   (
     "request_parameter_indexed",
     lambda arm: arm.request_parameter(16050, 1, 2, 3),
-    [
-      "pd 16050 1 2 3",
-    ],
+    ["pd 16050 1 2 3"],
     None,
   ),
-  (
-    "set_parameter",
-    lambda arm: arm.set_parameter(2704, 140),
-    [
-      "pc 2704 140",
-    ],
-    None,
-  ),
+  ("set_parameter", lambda arm: arm.set_parameter(2704, 140), ["pc 2704 140"], None),
   (
     "set_parameter_indexed",
     lambda arm: arm.set_parameter(16050, 5, 1, 2, 3),
-    [
-      "pc 16050 1 2 3 5",
-    ],
+    ["pc 16050 1 2 3 5"],
     None,
   ),
   (
     "set_axis_parameter",
     lambda arm: arm.set_axis_parameter(2700, PreciseFlexAxis.SHOULDER, 300),
-    [
-      "pc 2700 1 0 2 300",
-    ],
+    ["pc 2700 1 0 2 300"],
     None,
   ),
-  (
-    "nop",
-    lambda arm: arm.nop(),
-    [
-      "nop",
-    ],
-    None,
-  ),
-  (
-    "request_signal",
-    lambda arm: arm.request_signal(10001),
-    [
-      "sig 10001",
-    ],
-    None,
-  ),
-  (
-    "set_signal",
-    lambda arm: arm.set_signal(10001, 1),
-    [
-      "sig 10001 1",
-    ],
-    None,
-  ),
-  (
-    "request_monitor_speed",
-    lambda arm: arm.arm.request_monitor_speed(),
-    [
-      "mspeed",
-    ],
-    None,
-  ),
-  (
-    "set_monitor_speed",
-    lambda arm: arm.arm.set_monitor_speed(50),
-    [
-      "mspeed 50",
-    ],
-    None,
-  ),
-  (
-    "request_payload",
-    lambda arm: arm.arm.request_payload(),
-    [
-      "payload",
-    ],
-    None,
-  ),
-  (
-    "set_payload",
-    lambda arm: arm.arm.set_payload(25),
-    [
-      "payload 25",
-    ],
-    None,
-  ),
-  (
-    "request_profile_speed",
-    lambda arm: arm.arm.request_profile_speed(1),
-    [
-      "Speed 1",
-    ],
-    None,
-  ),
-  (
-    "set_profile_speed",
-    lambda arm: arm.arm.set_profile_speed(1, 40),
-    [
-      "Speed 1 40",
-    ],
-    None,
-  ),
-  (
-    "request_profile_speed2",
-    lambda arm: arm.arm.request_profile_speed2(1),
-    [
-      "Speed2 1",
-    ],
-    None,
-  ),
-  (
-    "set_profile_speed2",
-    lambda arm: arm.arm.set_profile_speed2(1, 30),
-    [
-      "Speed2 1 30",
-    ],
-    None,
-  ),
+  ("nop", lambda arm: arm.nop(), ["nop"], None),
+  ("request_signal", lambda arm: arm.request_signal(10001), ["sig 10001"], None),
+  ("set_signal", lambda arm: arm.set_signal(10001, 1), ["sig 10001 1"], None),
+  ("request_monitor_speed", lambda arm: arm.arm.request_monitor_speed(), ["mspeed"], None),
+  ("set_monitor_speed", lambda arm: arm.arm.set_monitor_speed(50), ["mspeed 50"], None),
+  ("request_payload", lambda arm: arm.arm.request_payload(), ["payload"], None),
+  ("set_payload", lambda arm: arm.arm.set_payload(25), ["payload 25"], None),
+  ("request_profile_speed", lambda arm: arm.arm.request_profile_speed(1), ["Speed 1"], None),
+  ("set_profile_speed", lambda arm: arm.arm.set_profile_speed(1, 40), ["Speed 1 40"], None),
+  ("request_profile_speed2", lambda arm: arm.arm.request_profile_speed2(1), ["Speed2 1"], None),
+  ("set_profile_speed2", lambda arm: arm.arm.set_profile_speed2(1, 30), ["Speed2 1 30"], None),
   (
     "request_profile_acceleration",
     lambda arm: arm.arm.request_profile_acceleration(1),
-    [
-      "Accel 1",
-    ],
+    ["Accel 1"],
     None,
   ),
   (
     "set_profile_acceleration",
     lambda arm: arm.arm.set_profile_acceleration(1, 60),
-    [
-      "Accel 1 60",
-    ],
+    ["Accel 1 60"],
     None,
   ),
   (
     "request_profile_acceleration_ramp",
     lambda arm: arm.arm.request_profile_acceleration_ramp(1),
-    [
-      "AccRamp 1",
-    ],
+    ["AccRamp 1"],
     None,
   ),
   (
     "set_profile_acceleration_ramp",
     lambda arm: arm.arm.set_profile_acceleration_ramp(1, 0.2),
-    [
-      "AccRamp 1 0.2",
-    ],
+    ["AccRamp 1 0.2"],
     None,
   ),
   (
     "request_profile_deceleration",
     lambda arm: arm.arm.request_profile_deceleration(1),
-    [
-      "Decel 1",
-    ],
+    ["Decel 1"],
     None,
   ),
   (
     "set_profile_deceleration",
     lambda arm: arm.arm.set_profile_deceleration(1, 70),
-    [
-      "Decel 1 70",
-    ],
+    ["Decel 1 70"],
     None,
   ),
   (
     "request_profile_deceleration_ramp",
     lambda arm: arm.arm.request_profile_deceleration_ramp(1),
-    [
-      "DecRamp 1",
-    ],
+    ["DecRamp 1"],
     None,
   ),
   (
     "set_profile_deceleration_ramp",
     lambda arm: arm.arm.set_profile_deceleration_ramp(1, 0.3),
-    [
-      "DecRamp 1 0.3",
-    ],
+    ["DecRamp 1 0.3"],
     None,
   ),
   (
     "request_profile_in_range",
     lambda arm: arm.arm.request_profile_in_range(1),
-    [
-      "InRange 1",
-    ],
+    ["InRange 1"],
     None,
   ),
-  (
-    "set_profile_in_range",
-    lambda arm: arm.arm.set_profile_in_range(1, 10),
-    [
-      "InRange 1 10",
-    ],
-    None,
-  ),
+  ("set_profile_in_range", lambda arm: arm.arm.set_profile_in_range(1, 10), ["InRange 1 10"], None),
   (
     "request_profile_straight",
     lambda arm: arm.arm.request_profile_straight(1),
-    [
-      "Straight 1",
-    ],
+    ["Straight 1"],
     None,
   ),
   (
     "set_profile_straight_on",
     lambda arm: arm.arm.set_profile_straight(1, True),
-    [
-      "Straight 1 1",
-    ],
+    ["Straight 1 1"],
     None,
   ),
   (
     "set_profile_straight_off",
     lambda arm: arm.arm.set_profile_straight(1, False),
-    [
-      "Straight 1 0",
-    ],
+    ["Straight 1 0"],
     None,
   ),
   (
     "request_motion_profile_values",
     lambda arm: arm.arm.request_motion_profile_values(1),
-    [
-      "Profile 1",
-    ],
+    ["Profile 1"],
     None,
   ),
   (
     "set_motion_profile_values",
     lambda arm: arm.arm.set_motion_profile_values(1, 40, 30, 60, 70, 0.2, 0.3, 10, True),
-    [
-      "Profile 1 40 30 60 70 0.2 0.3 10 -1",
-    ],
+    ["Profile 1 40 30 60 70 0.2 0.3 10 -1"],
     None,
   ),
-  (
-    "release_brake",
-    lambda arm: arm.arm.release_brake(2),
-    [
-      "releaseBrake 2",
-    ],
-    None,
-  ),
-  (
-    "set_brake",
-    lambda arm: arm.arm.reengage_brake(2),
-    [
-      "setBrake 2",
-    ],
-    None,
-  ),
-  (
-    "zero_torque_on",
-    lambda arm: arm.arm.start_zero_torque(3),
-    [
-      "zeroTorque 1 3",
-    ],
-    None,
-  ),
-  (
-    "zero_torque_off",
-    lambda arm: arm.arm.stop_zero_torque(),
-    [
-      "zeroTorque 0",
-    ],
-    None,
-  ),
+  ("release_brake", lambda arm: arm.arm.release_brake(2), ["releaseBrake 2"], None),
+  ("set_brake", lambda arm: arm.arm.reengage_brake(2), ["setBrake 2"], None),
+  ("zero_torque_on", lambda arm: arm.arm.start_zero_torque(3), ["zeroTorque 1 3"], None),
+  ("zero_torque_off", lambda arm: arm.arm.stop_zero_torque(), ["zeroTorque 0"], None),
   (
     "start_freedrive_mode_all",
     lambda arm: arm.arm.start_freedrive_mode(),
-    [
-      "freemode 1",
-      "freemode 2",
-      "freemode 3",
-      "freemode 4",
-    ],
+    ["freemode 1", "freemode 2", "freemode 3", "freemode 4"],
     None,
   ),
   (
     "start_freedrive_mode_axes",
     lambda arm: arm.arm.start_freedrive_mode([1, 2]),
-    [
-      "freemode 1",
-      "freemode 2",
-    ],
+    ["freemode 1", "freemode 2"],
     None,
   ),
-  (
-    "stop_freedrive_mode",
-    lambda arm: arm.arm.stop_freedrive_mode(),
-    [
-      "freemode -1",
-    ],
-    None,
-  ),
-  (
-    "halt",
-    lambda arm: arm.arm.halt(),
-    [
-      "halt",
-    ],
-    None,
-  ),
-  (
-    "change_config",
-    lambda arm: arm.arm.change_elbow_orientation(1),
-    [
-      "ChangeConfig 1",
-    ],
-    None,
-  ),
+  ("stop_freedrive_mode", lambda arm: arm.arm.stop_freedrive_mode(), ["freemode -1"], None),
+  ("halt", lambda arm: arm.arm.halt(), ["halt"], None),
+  ("change_config", lambda arm: arm.arm.change_elbow_orientation(1), ["ChangeConfig 1"], None),
   (
     "change_config2",
     lambda arm: arm.arm.change_elbow_orientation_by_algorithm(1),
-    [
-      "ChangeConfig2 1",
-    ],
+    ["ChangeConfig2 1"],
     None,
   ),
-  (
-    "request_manufacturer",
-    lambda arm: arm.request_manufacturer(),
-    [
-      "pd 100",
-    ],
-    None,
-  ),
-  (
-    "request_controller_model",
-    lambda arm: arm.request_controller_model(),
-    [
-      "pd 101",
-    ],
-    None,
-  ),
-  (
-    "request_hardware_version",
-    lambda arm: arm.request_hardware_version(),
-    [
-      "pd 102",
-    ],
-    None,
-  ),
-  (
-    "request_gpl_version",
-    lambda arm: arm.request_gpl_version(),
-    [
-      "pd 103",
-    ],
-    None,
-  ),
-  (
-    "request_controller_serial",
-    lambda arm: arm.request_controller_serial(),
-    [
-      "pd 110",
-    ],
-    None,
-  ),
-  (
-    "request_robot_name",
-    lambda arm: arm.request_robot_name(),
-    [
-      "pd 2002",
-    ],
-    None,
-  ),
-  (
-    "request_robot_type",
-    lambda arm: arm.request_robot_type(),
-    [
-      "pd 116",
-    ],
-    None,
-  ),
-  (
-    "request_axis_count",
-    lambda arm: arm.request_axis_count(),
-    [
-      "pd 2000",
-    ],
-    None,
-  ),
-  (
-    "request_extra_axis_count",
-    lambda arm: arm.request_extra_axis_count(),
-    [
-      "pd 2004",
-    ],
-    None,
-  ),
-  (
-    "request_axis_mask",
-    lambda arm: arm.request_axis_mask(),
-    [
-      "pd 2003",
-    ],
-    None,
-  ),
-  (
-    "request_version",
-    lambda arm: arm.request_version(),
-    [
-      "version",
-    ],
-    None,
-  ),
+  ("request_manufacturer", lambda arm: arm.request_manufacturer(), ["pd 100"], None),
+  ("request_controller_model", lambda arm: arm.request_controller_model(), ["pd 101"], None),
+  ("request_hardware_version", lambda arm: arm.request_hardware_version(), ["pd 102"], None),
+  ("request_gpl_version", lambda arm: arm.request_gpl_version(), ["pd 103"], None),
+  ("request_controller_serial", lambda arm: arm.request_controller_serial(), ["pd 110"], None),
+  ("request_robot_name", lambda arm: arm.request_robot_name(), ["pd 2002"], None),
+  ("request_robot_type", lambda arm: arm.request_robot_type(), ["pd 116"], None),
+  ("request_axis_count", lambda arm: arm.request_axis_count(), ["pd 2000"], None),
+  ("request_extra_axis_count", lambda arm: arm.request_extra_axis_count(), ["pd 2004"], None),
+  ("request_axis_mask", lambda arm: arm.request_axis_mask(), ["pd 2003"], None),
+  ("request_version", lambda arm: arm.request_version(), ["version"], None),
   (
     "request_joint_limits_soft",
     lambda arm: arm.arm.request_joint_limits(),
-    [
-      "pd 16078",
-      "pd 16077",
-    ],
+    ["pd 16078", "pd 16077"],
     None,
   ),
   (
     "request_joint_limits_hard",
     lambda arm: arm.arm.request_joint_limits(hard=True),
-    [
-      "pd 16076",
-      "pd 16075",
-    ],
+    ["pd 16076", "pd 16075"],
     None,
   ),
-  (
-    "request_reference_speed",
-    lambda arm: arm.arm.request_reference_speed(),
-    [
-      "pd 2700",
-    ],
-    None,
-  ),
+  ("request_reference_speed", lambda arm: arm.arm.request_reference_speed(), ["pd 2700"], None),
   (
     "request_reference_acceleration",
     lambda arm: arm.arm.request_reference_acceleration(),
-    [
-      "pd 2702",
-    ],
+    ["pd 2702"],
     None,
   ),
-  (
-    "request_link_lengths",
-    lambda arm: arm.arm.request_link_lengths(),
-    [
-      "pd 16050",
-    ],
-    None,
-  ),
-  (
-    "request_tool_length",
-    lambda arm: arm.arm.request_tool_length(),
-    [
-      "pd 16051",
-    ],
-    None,
-  ),
+  ("request_link_lengths", lambda arm: arm.arm.request_link_lengths(), ["pd 16050"], None),
+  ("request_tool_length", lambda arm: arm.arm.request_tool_length(), ["pd 16051"], None),
   (
     "request_kinematic_parameters",
     lambda arm: arm.arm.request_kinematic_parameters(),
-    [
-      "pd 16050",
-      "pd 16051",
-    ],
+    ["pd 16050", "pd 16051"],
     None,
   ),
   (
     "request_reference_cartesian_speed",
     lambda arm: arm.arm.request_reference_cartesian_speed(),
-    [
-      "pd 2701",
-    ],
+    ["pd 2701"],
     None,
   ),
   (
     "request_reference_cartesian_acceleration",
     lambda arm: arm.arm.request_reference_cartesian_acceleration(),
-    [
-      "pd 2703",
-    ],
+    ["pd 2703"],
     None,
   ),
-  (
-    "request_max_speed_percent",
-    lambda arm: arm.arm.request_max_speed_percent(),
-    [
-      "pd 2704",
-    ],
-    None,
-  ),
+  ("request_max_speed_percent", lambda arm: arm.arm.request_max_speed_percent(), ["pd 2704"], None),
   (
     "request_max_acceleration_percent",
     lambda arm: arm.arm.request_max_acceleration_percent(),
-    [
-      "pd 2705",
-    ],
+    ["pd 2705"],
     None,
   ),
   (
     "request_max_deceleration_percent",
     lambda arm: arm.arm.request_max_deceleration_percent(),
-    [
-      "pd 2706",
-    ],
+    ["pd 2706"],
     None,
   ),
-  (
-    "request_base",
-    lambda arm: arm.arm.request_base(),
-    [
-      "base",
-    ],
-    None,
-  ),
-  (
-    "set_base",
-    lambda arm: arm.arm.set_base(1.0, 2.0, 3.0, 4.0),
-    [
-      "base 1.0 2.0 3.0 4.0",
-    ],
-    None,
-  ),
+  ("request_base", lambda arm: arm.arm.request_base(), ["base"], None),
+  ("set_base", lambda arm: arm.arm.set_base(1.0, 2.0, 3.0, 4.0), ["base 1.0 2.0 3.0 4.0"], None),
   (
     "request_tool_transformation_values",
     lambda arm: arm.arm.request_tool_transformation_values(),
-    [
-      "tool",
-    ],
+    ["tool"],
     None,
   ),
-  (
-    "reset",
-    lambda arm: arm.reset(1),
-    [
-      "reset 1",
-    ],
-    None,
-  ),
-  (
-    "request_selected_robot",
-    lambda arm: arm.request_selected_robot(),
-    [
-      "selectRobot",
-    ],
-    None,
-  ),
-  (
-    "select_robot",
-    lambda arm: arm.select_robot(1),
-    [
-      "selectRobot 1",
-    ],
-    None,
-  ),
+  ("reset", lambda arm: arm.reset(1), ["reset 1"], None),
+  ("request_selected_robot", lambda arm: arm.request_selected_robot(), ["selectRobot"], None),
+  ("select_robot", lambda arm: arm.select_robot(1), ["selectRobot 1"], None),
   (
     "recover_axes_within_limits",
     lambda arm: arm.arm.recover_axes_within_limits(),
-    [
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej"],
     None,
   ),
   (
     "request_joint_state",
     lambda arm: arm.arm.request_joint_state(),
-    [
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej"],
     None,
   ),
   (
     "move_to_joint_position",
     lambda arm: arm.arm.move_to_joint_state(_J),
-    [
-      "state",
-      "state",
-      "wherej",
-      "moveJ 1 200.0 10.0 170.0 20.0 100.0",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "moveJ 1 200.0 10.0 170.0 20.0 100.0", "state", "state", "wherej"],
     None,
   ),
   (
@@ -967,11 +484,7 @@ _CASES: List[_Case] = [
   (
     "request_gripper_pose",
     lambda arm: arm.arm.request_gripper_pose(),
-    [
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej"],
     None,
   ),
   (
@@ -1037,122 +550,47 @@ _CASES: List[_Case] = [
     ],
     None,
   ),
-  (
-    "dest_c",
-    lambda arm: arm.arm._unchecked_fw_request_cartesian_destination(),
-    [
-      "destC",
-    ],
-    None,
-  ),
-  (
-    "dest_j",
-    lambda arm: arm.arm.request_destination_joint_state(),
-    [
-      "destJ",
-    ],
-    None,
-  ),
-  (
-    "here_j",
-    lambda arm: arm.arm.set_station_to_current_joint_state(2),
-    [
-      "hereJ 2",
-    ],
-    None,
-  ),
+  ("dest_c", lambda arm: arm.arm._unchecked_fw_request_cartesian_destination(), ["destC"], None),
+  ("dest_j", lambda arm: arm.arm.request_destination_joint_state(), ["destJ"], None),
+  ("here_j", lambda arm: arm.arm.set_station_to_current_joint_state(2), ["hereJ 2"], None),
   (
     "here_c",
     lambda arm: arm.arm._unchecked_fw_set_station_to_current_cartesian_location(2),
-    [
-      "hereC 2",
-    ],
+    ["hereC 2"],
     None,
   ),
   (
     "move_gripper_open",
     lambda arm: arm.gripper.move_to_jaw_position(110.0),
-    [
-      "state",
-      "state",
-      "wherej",
-      "ReleasePlate 130.0 50.0",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "ReleasePlate 130.0 50.0", "state", "state", "wherej"],
     None,
   ),
   (
     "move_gripper_close",
     lambda arm: arm.gripper.move_to_jaw_position(50.0),
-    [
-      "state",
-      "state",
-      "wherej",
-      "GraspPlate 70.0 50.0 10.0",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "GraspPlate 70.0 50.0 10.0", "state", "state", "wherej"],
     None,
   ),
   (
     "move_to_jaw_position_firmware_units",
     lambda arm: arm.gripper.move_to_jaw_position_firmware_units(120.0),
-    [
-      "state",
-      "state",
-      "wherej",
-      "ReleasePlate 120.0 50.0",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "ReleasePlate 120.0 50.0", "state", "state", "wherej"],
     None,
   ),
   (
     "move_gripper_joint_position_force",
     lambda arm: arm.gripper.move_to_jaw_position_firmware_units(70.0, force_sensing=True),
-    [
-      "state",
-      "state",
-      "wherej",
-      "GraspPlate 70.0 50.0 10.0",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "GraspPlate 70.0 50.0 10.0", "state", "state", "wherej"],
     None,
   ),
   (
     "move_gripper_position",
     lambda arm: arm.gripper.move_to_jaw_position(50.0, force_sensing=False),
-    [
-      "state",
-      "state",
-      "wherej",
-      "MoveOneAxis 5 70.0 1",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej", "MoveOneAxis 5 70.0 1", "state", "state", "wherej"],
     None,
   ),
-  (
-    "sense_fully_closed",
-    lambda arm: arm.gripper.sense_fully_closed(),
-    [
-      "IsFullyClosed",
-    ],
-    None,
-  ),
-  (
-    "sense_each_fully_closed",
-    lambda arm: arm.gripper.sense_each_fully_closed(),
-    [],
-    ValueError,
-  ),
+  ("sense_fully_closed", lambda arm: arm.gripper.sense_fully_closed(), ["IsFullyClosed"], None),
+  ("sense_each_fully_closed", lambda arm: arm.gripper.sense_each_fully_closed(), [], ValueError),
   (
     "pick_up_at_joint_position",
     lambda arm: arm.arm.pick_up_at_joint_state(_J, resource_width=85.0),
@@ -1233,14 +671,7 @@ _CASES: List[_Case] = [
     ],
     None,
   ),
-  (
-    "send_command",
-    lambda arm: arm.send_command("pd 2000"),
-    [
-      "pd 2000",
-    ],
-    None,
-  ),
+  ("send_command", lambda arm: arm.send_command("pd 2000"), ["pd 2000"], None),
   (
     "move_to_location_rail_position_without_rail",
     lambda arm: arm.arm.move_to_location(_LOC, direction=0.0, rail_position=300.0),
@@ -1269,12 +700,7 @@ _RAIL_CASES: List[_Case] = [
   (
     "rail_move_rail",
     lambda arm: _rail(arm).move_rail(250.0),
-    [
-      "state",
-      "state",
-      "Rail 1 250.0",
-      "MoveRail 1 1",
-    ],
+    ["state", "state", "Rail 1 250.0", "MoveRail 1 1"],
     None,
   ),
   (
@@ -1294,37 +720,19 @@ _RAIL_CASES: List[_Case] = [
   (
     "rail_move_to_location",
     lambda arm: arm.arm.move_to_location(_LOC, direction=0.0, rail_position=300.0),
-    [
-      "state",
-      "state",
-      "Rail 1 300.0",
-      "MoveRail 1 1",
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "Rail 1 300.0", "MoveRail 1 1", "state", "state", "wherej"],
     ValueError,
   ),
   (
     "rail_start_freedrive_mode",
     lambda arm: arm.arm.start_freedrive_mode(),
-    [
-      "freemode 1",
-      "freemode 2",
-      "freemode 3",
-      "freemode 4",
-      "freemode 6",
-    ],
+    ["freemode 1", "freemode 2", "freemode 3", "freemode 4", "freemode 6"],
     None,
   ),
   (
     "rail_request_joint_state",
     lambda arm: arm.arm.request_joint_state(),
-    [
-      "state",
-      "state",
-      "wherej",
-    ],
+    ["state", "state", "wherej"],
     None,
   ),
   (
