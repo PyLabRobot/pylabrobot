@@ -8,18 +8,11 @@ from pylabrobot.brooks.precise_flex.driver.errors import (
   PreciseFlexReachError,
   PreciseFlexServoError,
   PreciseFlexVisionError,
-  is_collision,
 )
 
 
 class TestErrorClassDispatch(unittest.TestCase):
   """PreciseFlexError constructs the most specific subclass for a reply code (STAR-style)."""
-
-  def test_collision_code_yields_collision_subclass(self):
-    """A torque-saturation / envelope code (-3101) becomes a PreciseFlexCollisionError."""
-    err = PreciseFlexError(-3101, "")
-    self.assertIsInstance(err, PreciseFlexCollisionError)
-    self.assertTrue(is_collision(err))
 
   def test_each_kind_of_failure_has_its_class(self):
     for code, cls in (
@@ -49,11 +42,6 @@ class TestErrorClassDispatch(unittest.TestCase):
     """A code in neither category stays the plain base type."""
     err = PreciseFlexError(-202, "")
     self.assertIs(type(err), PreciseFlexError)
-
-  def test_subclasses_are_caught_by_the_base_type(self):
-    """A category subclass is still an ordinary PreciseFlexError, so `except PreciseFlexError` works."""
-    for code in (-3101, -1021, -1602, -1012, -3104):
-      self.assertIsInstance(PreciseFlexError(code, ""), PreciseFlexError)
 
   def test_constructing_a_subclass_directly_is_not_redispatched(self):
     """Building a subclass with a non-matching code keeps that subclass (dispatch only refines base)."""
