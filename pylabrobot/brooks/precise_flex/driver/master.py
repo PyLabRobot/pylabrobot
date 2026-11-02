@@ -460,15 +460,28 @@ class PreciseFlexDriver:
       skip_home: If True, skip the homing step during setup.
       skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
         Mirrors STAR's ``skip_*`` setup flags.
+
+    A setup that fails closes the links it opened: the controller takes one connection, and refuses
+    the next one while this one stays open.
     """
     await self.connect()
-    configuration = await self.initialize()
-    self._create_feature_resources(configuration)
-    if not skip_home:
-      await self.home()
-    await self.arm._handle_out_of_range_axes()
-    if not skip_vision_setup and configuration.has_vision_server:
-      await self._setup_vision(self._vision_host)
+    try:
+      configuration = await self.initialize()
+      self._create_feature_resources(configuration)
+      if not skip_home:
+        await self.home()
+      await self.arm._handle_out_of_range_axes()
+      if not skip_vision_setup and configuration.has_vision_server:
+        await self._setup_vision(self._vision_host)
+    except BaseException:
+      try:
+        await self._close_vision_server()
+        await self.io.stop()
+      except Exception:  # the setup's own error is the one to raise
+        logger.warning(
+          "[PreciseFlex %s] could not close the links after a failed setup", self.io._host
+        )
+      raise
 
   async def connect(self) -> None:
     """Open the link and agree the response protocol. Powers nothing, moves nothing."""

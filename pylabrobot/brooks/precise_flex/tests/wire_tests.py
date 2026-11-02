@@ -7,7 +7,7 @@ rest. Numbers compare to within 1e-9; everything else must match exactly.
 import contextlib
 import math
 import unittest
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.brooks.precise_flex import (
@@ -16,6 +16,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexAxis,
   PreciseFlexCartesianPose,
   PreciseFlexDriver,
+  PreciseFlexError,
   PreciseFlexGripper,
   PreciseFlexRail,
 )
@@ -825,6 +826,14 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
   async def test_setup_with_rail(self):
     _, fake = await self._run_setup(has_rail=True)
     self.assert_wire(fake.sent, _SETUP)
+
+  async def test_a_failed_setup_closes_the_connection(self):
+    # The arm answered `state` with -3101 while it pressed on something at power-on.
+    fake = _FakeController({"state": "-3101"})
+    arm = _make_arm(fake)
+    with self.assertRaises(PreciseFlexError):
+      await arm.setup(skip_home=True)
+    cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
   async def _check(self, cases: List[_Case], has_rail: bool) -> None:
     for name, call, expected, error in cases:
