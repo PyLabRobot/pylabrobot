@@ -1,6 +1,6 @@
 from .absorbance import Absorbance
 from .drawer import Drawer
-from .fluorescence import Fluorescence
+from .fluorescence import Fluorescence, VANTAstarZProfileResult
 from .luminescence import Luminescence
 from .measurement import (
   Measurement,

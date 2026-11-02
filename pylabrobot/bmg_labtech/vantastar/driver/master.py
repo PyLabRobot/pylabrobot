@@ -67,12 +67,14 @@ from .responses import (
   GainFocus,
   MeasurementData,
   MwBlockStatus,
+  ZProfileData,
   parse_confirmation,
   parse_gain_data,
   parse_measurement_data,
   parse_mw_block_data,
   parse_run_time,
   parse_well_list,
+  parse_z_profile,
   split_reply,
 )
 
@@ -198,11 +200,12 @@ _ALL_INCUBATOR_CHANNELS = 0x07
 
 
 # Gain and focus adjustment settings Voyager sends: a focus scan from 16 mm down in 0.2 mm steps
-# (1 mm stop, unused), a smoothed and interpolated focal curve, integration time 12.  Without the
-# focus it leaves the scan start at the field's default, 15 mm.
+# (1 mm stop, unused: the reader stops at a lowest height it chooses), a smoothed and interpolated
+# focal curve, integration time 12.  Without the focus it leaves the scan start at the field's
+# default, 15 mm.
 _FOCUS_SCAN_START = 1600
 _FOCUS_SCAN_START_UNUSED = 1500
-_FOCUS_SCAN_STEP = 20
+_FOCUS_SCAN_STEP = 0.2  # mm
 _FOCUS_SCAN_STOP = 100
 _FOCAL_CURVE_FLAGS = 0x03
 _GAIN_FOCUS_INTEGRATION_TIME = 12
@@ -1134,6 +1137,7 @@ class VANTAstarDriver:
     well_scan: WellScan = "point",
     scan_diameter: int = 3,
     flashes: int = 0,
+    focal_height_step: float = _FOCUS_SCAN_STEP,
   ) -> bytes:
     """GainPlateCommand fields for a top fluorescence gain and focus adjustment, either alone.
 
@@ -1141,12 +1145,13 @@ class VANTAstarDriver:
       monochromator: the read's monochromator settings.
       focal_height: mm; the height the gain is adjusted at when the focus is not.
       target_percent: the gain's target, percent of the detector range; 0 adjusts only the focus.
-      adjust_focus: also find the focal height (a scan from 16 mm down in 0.2 mm steps).
+      adjust_focus: also find the focal height (a scan from 16 mm down in ``focal_height_step``).
       geometry: the plate.
       well_mask: the reference wells (``encode_well_mask``); None uses every well.
       well_scan: adjust over the area a well-scanning read reads (point: at the centre);
         scan_diameter: its diameter, mm.
       flashes: flashes per well, sent with an orbital or spiral scan.
+      focal_height_step: mm between the focus scan's points (Voyager's 0.2 mm).
 
     Raises:
       ValueError: if ``target_percent`` is not 0-100.
@@ -1164,7 +1169,7 @@ class VANTAstarDriver:
       + bytes([_FOCAL_CURVE_FLAGS])
       + _focal_height_bytes(focal_height)
       + (_FOCUS_SCAN_START if adjust_focus else _FOCUS_SCAN_START_UNUSED).to_bytes(2, "big")
-      + _FOCUS_SCAN_STEP.to_bytes(2, "big")
+      + round(focal_height_step * 100).to_bytes(2, "big")
       + _FOCUS_SCAN_STOP.to_bytes(2, "big")
       + round(target_percent * 100).to_bytes(2, "big")
       + (0).to_bytes(2, "big")
@@ -1174,10 +1179,11 @@ class VANTAstarDriver:
       + (scan[1:] + flashes.to_bytes(2, "big") if well_scan != "point" else b"")
     )
 
-  async def adjust_gain_and_focus(self, parameters: bytes, *, timeout: float = 300.0) -> GainFocus:
-    """Run a gain and focus adjustment from prebuilt fields and return what it found.
+  async def _run_gain_focus(self, parameters: bytes, timeout: float) -> bytes:
+    """Run a gain and focus adjustment from prebuilt fields and return its GainDataResponse.
 
     Raises:
+      RuntimeError: if the drawer is open (nothing is sent).
       TimeoutError: if the adjustment takes longer than ``timeout`` seconds.
       CommandRefusedError: if the reader refuses the adjustment.
     """
@@ -1186,10 +1192,31 @@ class VANTAstarDriver:
       raise RuntimeError("the drawer is open; close it first")
     await self.send_command(CommandId.GAIN_PLATE, parameters)
     await self._wait_until_ready(timeout, self.default_poll_interval)
-    reply = await self.send_command(
+    return await self.send_command(
       CommandId.VALUES, bytes([ValuesType.GAIN_DATA]) + bytes(6), when_idle=False
     )
-    return parse_gain_data(reply)
+
+  async def adjust_gain_and_focus(self, parameters: bytes, *, timeout: float = 300.0) -> GainFocus:
+    """Run a gain and focus adjustment from prebuilt fields and return what it found.
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing is sent).
+      TimeoutError: if the adjustment takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the adjustment.
+    """
+    return parse_gain_data(await self._run_gain_focus(parameters, timeout))
+
+  async def measure_z_profile(self, parameters: bytes, *, timeout: float = 300.0) -> ZProfileData:
+    """Run a gain and focus adjustment from prebuilt fields with the focus, and return its focus
+    curve.
+
+    Raises:
+      RuntimeError: if the drawer is open (nothing is sent).
+      TimeoutError: if the adjustment takes longer than ``timeout`` seconds.
+      CommandRefusedError: if the reader refuses the adjustment.
+      ValueError: if the reply holds no focus curve (the fields did not adjust the focus).
+    """
+    return parse_z_profile(await self._run_gain_focus(parameters, timeout))
 
   # -- temperature ----------------------------------------------------------
 

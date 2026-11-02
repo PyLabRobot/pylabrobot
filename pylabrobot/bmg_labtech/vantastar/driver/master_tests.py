@@ -30,6 +30,8 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   ABSORBANCE_FIRST_PAGE,
   ABSORBANCE_LAST_PAGE,
   GAIN_DATA,
+  GAIN_DATA_GAIN,
+  GAIN_DATA_GAIN_AND_FOCUS,
   STATUS_HEATING,
   STATUS_INIT_RUNNING,
   STATUS_NOT_INITIALIZED,
@@ -364,6 +366,24 @@ class CommandTests(unittest.TestCase):
       well_mask=reference_wells,
     )
     self.assertEqual(bytes([0x0C]) + parameters, GAIN_PLATE)
+
+  def test_gain_focus_step(self):
+    """A focus scan in 0.1 mm steps changes only the step of Voyager's command (0.2 mm)."""
+    driver = make_driver(lambda p: b"")
+    parameters = driver.build_gain_focus(
+      MonochromatorSettings(388.1, 391.9, 431.5, 469.3, 480.7),
+      focal_height=5.0,
+      target_percent=10,
+      adjust_focus=True,
+      well_mask=encode_well_mask(12, 8, [(0, 0)]),
+      focal_height_step=0.1,
+    )
+    step = 17 + 48 + 7
+    self.assertEqual(parameters[step : step + 2], (10).to_bytes(2, "big"))
+    self.assertEqual(
+      parameters[:step] + parameters[step + 2 :],
+      GAIN_PLATE_GAIN_AND_FOCUS[1 : 1 + step] + GAIN_PLATE_GAIN_AND_FOCUS[1 + step + 2 :],
+    )
 
   def test_plate_geometry(self):
     """The standard 96-well plate encodes to the plate block of Voyager's absorbance RUN."""
@@ -798,6 +818,19 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(respond)
     result = await driver.adjust_gain_and_focus(GAIN_PLATE[1:])
     self.assertEqual((result.gain, result.focal_height), (2904, 3.0))
+
+  async def test_z_profile(self):
+    """A z-profile sends the gain and focus adjustment and returns the focus curve of the reply;
+    a reply without one (the gain alone) is refused."""
+    driver = make_driver(
+      lambda p: GAIN_DATA_GAIN_AND_FOCUS if p == VALUES_GAIN_DATA else STATUS_IDLE
+    )
+    data = await driver.measure_z_profile(GAIN_PLATE_GAIN_AND_FOCUS[1:])
+    self.assertEqual((data.gain, data.peak_focal_height, len(data.z_profile)), (600, 6.25, 70))
+    self.assertIn(GAIN_PLATE_GAIN_AND_FOCUS, commands(driver))
+    driver = make_driver(lambda p: GAIN_DATA_GAIN if p == VALUES_GAIN_DATA else STATUS_IDLE)
+    with self.assertRaises(ValueError):
+      await driver.measure_z_profile(GAIN_PLATE_GAIN[1:])
 
   async def test_estimate_run_time(self):
     """A time estimate sends the RUN with CalcTimeOnly set, its other fields unchanged, and returns

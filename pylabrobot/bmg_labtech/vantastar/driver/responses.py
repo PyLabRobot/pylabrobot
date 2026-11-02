@@ -43,10 +43,21 @@ _MD_CYCLE = 11
 _MD_START_TIME = 15
 _MD_VALUES = 23
 
-# GainDataResponse payload.
+# GainDataResponse payload: the gain found (0 without a target), the counts at it (u32) and their
+# percent of the detector range (u16, 0.01 %), the well's column and row (from 1), then the focus
+# curve: its point count (0 when the focus was not adjusted), the peak focal height (0.01 mm) and
+# the smoothed curve's counts there (u32), and per point a focal height (s32, 0.01 mm) and its
+# counts (u32).
 _GD_GAIN = 1  # u16
-_GD_FOCUS_CURVE_LENGTH = 11  # u16, 0 when the focus was not adjusted
-_GD_FOCAL_HEIGHT = 13  # u16, 0.01 mm
+_GD_COUNTS = 3
+_GD_PERCENT = 7
+_GD_COLUMN = 9
+_GD_ROW = 10
+_GD_FOCUS_CURVE_LENGTH = 11  # u16
+_GD_FOCAL_HEIGHT = 13  # u16
+_GD_FOCAL_COUNTS = 15
+_GD_FOCUS_CURVE = 19
+_GD_POINT_SIZE = 8
 
 # LayoutWellListDataResponse payload: columns, rows, layout flags (bits 6 and 7: per-well times
 # follow each well), reading direction, two move times (u32), moves (u16), then the wells count
@@ -430,4 +441,65 @@ def parse_gain_data(reply: bytes) -> GainFocus:
     focal_height=(
       int.from_bytes(p[_GD_FOCAL_HEIGHT : _GD_FOCAL_HEIGHT + 2], "big") / 100 if curve else None
     ),
+  )
+
+
+@dataclass(frozen=True)
+class ZProfileData:
+  """The focus curve of a gain and focus adjustment (GainDataResponse), as the reader reports it.
+
+  Attributes:
+    gain: the gain the reader fitted; 0 without a gain target.
+    counts: the counts at ``gain``; 0 without a gain target.
+    percent: ``counts`` in percent of the detector range; 0 without a gain target.
+    column, row: the well the reader names, from 1.
+    peak_focal_height: the focal height the reader computes as the curve's peak, in mm.
+    average_signal: the reader's smoothed curve at ``peak_focal_height``, counts: the average of
+      the five points around it when the peak falls on a point.
+    z_profile: (focal height in mm, counts) from the highest to the lowest point.
+  """
+
+  gain: int
+  counts: int
+  percent: float
+  column: int
+  row: int
+  peak_focal_height: float
+  average_signal: int
+  z_profile: List[Tuple[float, int]]
+
+
+def parse_z_profile(reply: bytes) -> ZProfileData:
+  """Parse the focus curve of a GainDataResponse (``_GD_*``).
+
+  Raises:
+    ValueError: if ``reply`` is not a GainDataResponse, is truncated, or holds no focus curve (the
+      focus was not adjusted).
+  """
+  if not reply or reply[0] != GAIN_DATA_ID:
+    raise ValueError(f"not a GainDataResponse: {reply[:16].hex()}")
+  _, _, p = split_reply(reply)
+  if len(p) < _GD_FOCUS_CURVE_LENGTH + 2:
+    raise ValueError(f"GainDataResponse too short: {reply.hex()}")
+  points = int.from_bytes(p[_GD_FOCUS_CURVE_LENGTH : _GD_FOCUS_CURVE_LENGTH + 2], "big")
+  if points == 0:
+    raise ValueError("the GainDataResponse holds no focus curve: the focus was not adjusted")
+  end = _GD_FOCUS_CURVE + points * _GD_POINT_SIZE
+  if len(p) < end:
+    raise ValueError(f"GainDataResponse cut short: {points} points, got {len(reply)} bytes")
+  return ZProfileData(
+    gain=int.from_bytes(p[_GD_GAIN : _GD_GAIN + 2], "big"),
+    counts=int.from_bytes(p[_GD_COUNTS : _GD_COUNTS + 4], "big"),
+    percent=int.from_bytes(p[_GD_PERCENT : _GD_PERCENT + 2], "big") / 100,
+    column=p[_GD_COLUMN],
+    row=p[_GD_ROW],
+    peak_focal_height=int.from_bytes(p[_GD_FOCAL_HEIGHT : _GD_FOCAL_HEIGHT + 2], "big") / 100,
+    average_signal=int.from_bytes(p[_GD_FOCAL_COUNTS : _GD_FOCAL_COUNTS + 4], "big"),
+    z_profile=[
+      (
+        int.from_bytes(p[i : i + 4], "big", signed=True) / 100,
+        int.from_bytes(p[i + 4 : i + 8], "big"),
+      )
+      for i in range(_GD_FOCUS_CURVE, end, _GD_POINT_SIZE)
+    ],
   )

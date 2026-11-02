@@ -26,6 +26,7 @@ VANTAstar
    driver.features.measurement.MonochromatorSettings
    driver.features.measurement.PlateGeometry
    driver.responses.GainFocus
+   VANTAstarZProfileResult
    driver.configuration.VANTAstarConfiguration
    driver.errors.CommandRefusedError
    driver.errors.DeviceError

@@ -19,6 +19,8 @@ from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
 from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   FLUORESCENCE_LAST_PAGE,
   GAIN_DATA,
+  GAIN_DATA_FOCUS,
+  GAIN_DATA_GAIN_AND_FOCUS,
   VOYAGER_FLUORESCENCE_ROW_A,
   load_flows,
 )
@@ -187,6 +189,95 @@ class GainFocusTests(unittest.IsolatedAsyncioTestCase):
     (command,) = [c for c in device.driver.io.commands if c[0] == 0x0C]  # type: ignore[attr-defined]
     self.assertEqual(command[1 + 17 + 48 : 1 + 17 + 48 + 2], bytes([0x20, 0x40]))  # with the focus
     self.assertEqual(command[1 + 17 + 48 + 11 : 1 + 17 + 48 + 13], bytes(2))  # target 0
+
+
+# The gain and focus fields of a GainPlateCommand, after its id, plate geometry and well mask.
+_GAIN_FOCUS_FIELDS = 1 + 17 + 48
+
+# 365/8 nm excitation, 400/10 nm emission.
+_CHANNEL_365_400 = FluorescenceChannel(
+  excitation_wavelength=365,
+  excitation_bandwidth=8,
+  emission_wavelength=400,
+  emission_bandwidth=10,
+)
+
+
+class ZProfileTests(unittest.IsolatedAsyncioTestCase):
+  """The z-profile of one well."""
+
+  @staticmethod
+  def _make_device(reply: bytes):
+    """A device that answers the gain data request with ``reply``, anything else with an idle
+    status."""
+    return make_device_answering(
+      lambda payload: (
+        reply if payload == master_tests.VALUES_GAIN_DATA else master_tests.STATUS_IDLE
+      )
+    )
+
+  async def test_gain_and_focus(self):
+    """A z-profile with a gain target scans the one well in 0.1 mm steps and returns the reply's
+    well, gain, counts, peak and points."""
+    device = self._make_device(GAIN_DATA_GAIN_AND_FOCUS)
+    plate = device.plate_holder.resource
+    assert plate is not None
+    result = await device.fluorescence.measure_z_profile(
+      _CHANNEL_365_400, well=plate.get_well("A1"), gain_target_percent=10
+    )
+    (command,) = [c for c in device.driver.io.commands if c[0] == 0x0C]  # type: ignore[attr-defined]
+    fields = command[_GAIN_FOCUS_FIELDS:]
+    self.assertEqual(command[1 + 17 : _GAIN_FOCUS_FIELDS], bytes([0x80]) + bytes(47))  # A1
+    self.assertEqual(fields[:2], bytes([0x20, 0x40]))  # with the focus
+    self.assertEqual(fields[5:9], (1600).to_bytes(2, "big") + (10).to_bytes(2, "big"))  # 16 mm, 0.1
+    self.assertEqual(fields[11:13], (1000).to_bytes(2, "big"))  # 10 %
+    self.assertEqual(result.well, "A1")
+    self.assertEqual(
+      (result.gain, result.peak_counts, result.peak_detector_percent), (600, 25549, 9.82)
+    )
+    self.assertEqual((result.peak_focal_height, result.average_signal), (6.25, 10139))
+    self.assertEqual((len(result.z_profile), result.z_profile[0]), (70, (16.0, 755)))
+    self.assertLessEqual(result.start_timestamp, result.end_timestamp)
+
+  async def test_profile_only(self):
+    """Without a gain target the scan sends a target of 0 and the result holds no gain; the well
+    is the one the reply names."""
+    device = self._make_device(GAIN_DATA_FOCUS)
+    plate = device.plate_holder.resource
+    assert plate is not None
+    result = await device.fluorescence.measure_z_profile(
+      _CHANNEL_365_400, well=plate.get_well("A12"), focal_height_step=0.2
+    )
+    (command,) = [c for c in device.driver.io.commands if c[0] == 0x0C]  # type: ignore[attr-defined]
+    fields = command[_GAIN_FOCUS_FIELDS:]
+    self.assertEqual(fields[7:9], (20).to_bytes(2, "big"))  # 0.2 mm
+    self.assertEqual(fields[11:13], bytes(2))  # no target
+    self.assertEqual(result.well, "A12")
+    self.assertIsNone(result.gain)
+    self.assertIsNone(result.peak_counts)
+    self.assertIsNone(result.peak_detector_percent)
+    self.assertEqual(result.peak_focal_height, 6.42)
+
+  async def test_arguments_are_checked(self):
+    """A step outside 0.1-1.0 mm or not in 0.1 mm steps, or a target outside 1-100 %, is refused
+    before anything is sent."""
+    device = make_device([])
+    plate = device.plate_holder.resource
+    assert plate is not None
+    for arguments in (
+      {"focal_height_step": 0.05},
+      {"focal_height_step": 0.15},
+      {"focal_height_step": 1.1},
+      {"gain_target_percent": 0},
+      {"gain_target_percent": 101},
+    ):
+      with self.subTest(**arguments), self.assertRaises(ValueError):
+        await device.fluorescence.measure_z_profile(
+          _CHANNEL_365_400,
+          well=plate.get_well("A1"),
+          **arguments,  # type: ignore[arg-type]
+        )
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
 
 class FocalHeightTests(unittest.IsolatedAsyncioTestCase):

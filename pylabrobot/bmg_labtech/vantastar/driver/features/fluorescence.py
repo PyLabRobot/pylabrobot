@@ -1,11 +1,12 @@
-"""Top fluorescence intensity: endpoint and spectrum reads through the monochromators, and
-the automatic gain and focus.
+"""Top fluorescence intensity: endpoint and spectrum reads through the monochromators, the
+automatic gain and focus, and z-profiles.
 
 A read goes through one or more fluorescence channels (``FluorescenceChannel``,
 ``pylabrobot.lib.fluorescence``), each an excitation and an emission wavelength and bandwidth.
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union, overload
 
@@ -49,11 +50,43 @@ _DEFAULT_SETTLING_TIME = 0.5
 # A channel's optics: excitation wavelength and bandwidth, emission wavelength and bandwidth, and
 # the dichroic split (None for the automatic one).
 _Optics = Tuple[float, float, float, float, Optional[float]]
+# The steps between a z-profile's points the API takes, mm.
+_Z_PROFILE_STEP_RANGE = (0.1, 1.0)
+
+
+@dataclass(frozen=True)
+class VANTAstarZProfileResult:
+  """The z-scan of one well as the reader reports it (``Fluorescence.measure_z_profile``).
+
+  Attributes:
+    well: the identifier of the scanned well, as the reader names it (``"A1"``).
+    gain: the detector gain the reader fits at the peak for the target; None without a target.
+    z_profile: (focal height in mm, counts) from the highest to the lowest point; the counts at a
+      gain the reader chooses for the scan: for the shape, not comparable across scans.
+    average_signal: the reader's smoothed z-profile at ``peak_focal_height``, counts: the average
+      of the five points around it when the peak falls on a point.
+    peak_counts: the counts at ``gain``; None without a target.
+    peak_detector_percent: ``peak_counts`` in percent of the detector's 260,000 counts, as the
+      target; None without a target.
+    peak_focal_height: the focal height the reader computes as the z-profile's peak, in mm.
+    start_timestamp: when the z-scan started.
+    end_timestamp: when its result was in.
+  """
+
+  well: str
+  gain: Optional[int]
+  z_profile: List[Tuple[float, int]]
+  average_signal: int
+  peak_counts: Optional[int]
+  peak_detector_percent: Optional[float]
+  peak_focal_height: float
+  start_timestamp: datetime
+  end_timestamp: datetime
 
 
 class Fluorescence(Measurement):
-  """Top fluorescence intensity measurement (RUN, MeasurementMode 0) and the gain and focus
-  adjustment (GainPlateCommand).
+  """Top fluorescence intensity measurement (RUN, MeasurementMode 0), and the gain and focus
+  adjustment and z-profiles (GainPlateCommand).
 
   Reached as ``driver.fluorescence``.
   """
@@ -577,6 +610,7 @@ class Fluorescence(Measurement):
     brightest reference well reads at ``target_percent`` of the detector range, as Voyager's
     automatic gain and focus does.  Voyager's autofocus adjusts the focus once more on every well
     of the read, without the gain (``adjust_gain=False``), and reads at the height found.
+    ``measure_z_profile`` returns the whole scan of one well.
 
     Args:
       fluorescence_channel: the read's ``FluorescenceChannel``, as in ``measure``.
@@ -625,3 +659,100 @@ class Fluorescence(Measurement):
       flashes=settings.flashes or _DEFAULT_FLASHES,
     )
     return await self._driver.adjust_gain_and_focus(parameters, timeout=timeout)
+
+  async def measure_z_profile(
+    self,
+    fluorescence_channel: FluorescenceChannel,
+    *,
+    well: Well,
+    gain_target_percent: Optional[float] = None,
+    focal_height_step: float = 0.1,
+    monochromator: Optional[MonochromatorSettings] = None,
+    plate: Optional[Plate] = None,
+    timeout: float = 300.0,
+  ) -> VANTAstarZProfileResult:
+    """Measure the z-profile of ``well`` from the top and, with a target, fit the gain at its peak,
+    to analyse or debug the focus.
+
+    - The reader reads the well from 16 mm (Voyager's start) down in ``focal_height_step`` steps
+      to a lowest height it chooses (2.2-2.4 mm on the 96-well plates tested), and computes the
+      peak from the smoothed profile (about 12 s in 0.1 or 0.2 mm steps).  The coarser the steps,
+      the coarser the peak: in 1.0 mm steps the reader put it at the lowest point, 3.0 mm, where
+      0.1 mm steps put it at 3.8 mm.
+    - With ``gain_target_percent`` it then fits the gain so the well reads that percent of the
+      detector range at the peak (about 12-17 s in all).
+    - It is the scan of ``adjust_gain_and_focus`` on one well, which returns only the gain and the
+      peak's focal height.
+
+    Args:
+      fluorescence_channel: the optics, as in ``measure``.
+      well: the well to scan.
+      gain_target_percent: 1-100; None measures the z-profile only.
+      focal_height_step: mm between the profile's points, 0.1-1.0 in 0.1 mm steps (Voyager's
+        automatic focus uses 0.2).
+      monochromator: band edges, dichroic and slits instead of the computed ones.
+      plate: the plate; None uses the plate on the plate holder.
+      timeout: seconds the scan may take.
+
+    Returns:
+      The z-profile, its peak, and the gain with a target.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder, or the drawer is open.
+      ValueError: if an argument is out of range (``_get_optics``), the well is not on the plate,
+        or the reply names a well not on the plate.
+      TimeoutError: if the scan takes longer than ``timeout`` seconds.
+    """
+    if gain_target_percent is not None and not 1 <= gain_target_percent <= 100:
+      raise ValueError(f"gain_target_percent must be 1-100, got {gain_target_percent}")
+    lowest, highest = _Z_PROFILE_STEP_RANGE
+    if not (
+      lowest - 1e-9 <= focal_height_step <= highest + 1e-9
+      and abs(focal_height_step * 10 - round(focal_height_step * 10)) < 1e-9
+    ):
+      raise ValueError(
+        f"focal_height_step must be {lowest}-{highest} mm in 0.1 mm steps, got {focal_height_step}"
+      )
+    excitation, excitation_bandwidth, emission, emission_bandwidth, dichroic = self._get_optics(
+      fluorescence_channel
+    )
+    if monochromator is None:
+      monochromator = compute_monochromator_settings(
+        excitation, excitation_bandwidth, emission, emission_bandwidth, dichroic
+      )
+    plate = self._get_plate(plate)
+    parameters = self._driver.build_gain_focus(
+      monochromator,
+      focal_height=self._get_focal_height(None, plate, [well]),
+      target_percent=0 if gain_target_percent is None else gain_target_percent,
+      adjust_focus=True,
+      geometry=get_plate_geometry(plate),
+      well_mask=self._get_well_mask(plate, [well]),
+      focal_height_step=focal_height_step,
+    )
+    logger.info(
+      "z-profile: %s/%s nm on %s of %s, gain target %s %%",
+      excitation,
+      emission,
+      plate.get_child_identifier(well),
+      plate.name,
+      gain_target_percent,
+    )
+    start_timestamp = datetime.now()
+    data = await self._driver.measure_z_profile(parameters, timeout=timeout)
+    end_timestamp = datetime.now()
+    if not (1 <= data.column <= plate.num_items_x and 1 <= data.row <= plate.num_items_y):
+      raise ValueError(
+        f"the reply names a well not on the plate, got column {data.column}, row {data.row}"
+      )
+    return VANTAstarZProfileResult(
+      well=_get_identifier(data.row - 1, data.column - 1),
+      gain=data.gain or None,
+      z_profile=data.z_profile,
+      average_signal=data.average_signal,
+      peak_counts=data.counts or None,
+      peak_detector_percent=data.percent or None,
+      peak_focal_height=data.peak_focal_height,
+      start_timestamp=start_timestamp,
+      end_timestamp=end_timestamp,
+    )

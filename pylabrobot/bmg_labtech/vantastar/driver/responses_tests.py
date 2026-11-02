@@ -17,6 +17,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses import (
   parse_mw_block_data,
   parse_run_time,
   parse_well_list,
+  parse_z_profile,
   split_reply,
 )
 
@@ -259,6 +260,39 @@ GAIN_DATA = bytes.fromhex(
 )
 # The reply to a gain adjustment alone on A1 (target 90 %, focal height 4.5 mm): gain 719.
 GAIN_DATA_GAIN = bytes.fromhex("0525202600000002cf00038ddf22fe01010000")
+# The replies to the gain and focus on A1 at a 10 % target, and to the focus alone on the six wells
+# (master_tests.GAIN_PLATE_GAIN_AND_FOCUS and GAIN_PLATE_FOCUS): 70 points each, from 16.0 mm down
+# to 2.2 mm.
+GAIN_DATA_GAIN_AND_FOCUS = bytes.fromhex(
+  "052520260000000258000063cd03d60101004602710000279b00000640000002f30000062c0000033100000618000003"
+  "24000006040000034b000005f000000378000005dc0000038c000005c8000003e2000005b4000003d0000005a0000004"
+  "080000058c00000435000005780000047b000005640000046200000550000004f50000053c0000050300000528000005"
+  "76000005140000059c0000050000000600000004ec000005fc000004d8000006aa000004c4000006db000004b0000007"
+  "490000049c000007ea000004880000083800000474000008e200000460000009000000044c00000a3e0000043800000a"
+  "6c0000042400000c290000041000000cab000003fc00000e2f000003e800000ed2000003d400000fe1000003c0000010"
+  "e3000003ac0000128000000398000014a500000384000015a700000370000017f30000035c000017f80000034800001b"
+  "870000033400001c780000032000001f850000030c00002033000002f80000218a000002e40000228d000002d0000025"
+  "37000002bc000025d1000002a80000268f000002940000281f00000280000027130000026c0000280500000258000027"
+  "dd000002440000271700000230000025100000021c0000255800000208000023d2000001f400002317000001e0000022"
+  "16000001cc00001ffa000001b800001f29000001a400001dd10000019000001cc80000017c00001abb00000168000019"
+  "d3000001540000175b00000140000016690000012c000014d40000011800001381000001040000116f000000f0000010"
+  "85000000dc00000fa8"
+)
+GAIN_DATA_FOCUS = bytes.fromhex(
+  "0525222600000000000000000000000c010046028200002a7100000640000003330000062c0000037b00000618000003"
+  "b0000006040000038b000005f0000003f9000005dc000003e9000005c8000004ad000005b40000043d000005a0000005"
+  "050000058c000004ad000005780000056d0000056400000530000005500000059e0000053c0000056900000528000006"
+  "6d00000514000006420000050000000735000004ec0000070d000004d8000007fc000004c4000007e7000004b0000008"
+  "ea0000049c0000094c00000488000009670000047400000ac40000046000000acf0000044c00000ca80000043800000c"
+  "880000042400000f090000041000000eb7000003fc00001136000003e8000011fb000003d40000144d000003c0000016"
+  "47000003ac000017d600000398000019dd0000038400001a5b0000037000001cf70000035c00001cb600000348000020"
+  "800000033400001ebd000003200000229d0000030c00002239000002f8000024b1000002e4000024ea000002d0000027"
+  "be000002bc0000273e000002a8000027f40000029400002bc60000028000002af70000026c00002b910000025800002a"
+  "42000002440000284200000230000024ca0000021c00002547000002080000231d000001f4000021b1000001e000001f"
+  "1a000001cc00001f95000001b800001da2000001a400001e310000019000001c7f0000017c00001a6d00000168000018"
+  "f200000154000017f800000140000017270000012c000014de00000118000013ba0000010400001022000000f000000f"
+  "b8000000dc00000e6a"
+)
 
 # The well list of an absorbance spectrum of A1, A6, A12, H1, H6 and H12, and its block status as
 # the read starts and once the block is stored.
@@ -385,6 +419,47 @@ class GainDataTests(unittest.TestCase):
     result = parse_gain_data(GAIN_DATA_GAIN)
     self.assertEqual(result.gain, 719)
     self.assertIsNone(result.focal_height)
+
+
+class ZProfileDataTests(unittest.TestCase):
+  """Parsing the focus curve of the reply to a gain and focus adjustment."""
+
+  def test_gain_and_focus(self):
+    """The reply to the gain and focus on A1 gives the gain, its counts and percent, the well, the
+    peak and the 70 points from 16.0 mm down to 2.2 mm in 0.2 mm steps."""
+    data = parse_z_profile(GAIN_DATA_GAIN_AND_FOCUS)
+    self.assertEqual((data.gain, data.counts, data.percent), (600, 25549, 9.82))
+    self.assertEqual((data.column, data.row), (1, 1))
+    self.assertEqual((data.peak_focal_height, data.average_signal), (6.25, 10139))
+    self.assertEqual(len(data.z_profile), 70)
+    self.assertEqual((data.z_profile[0], data.z_profile[-1]), ((16.0, 755), (2.2, 4008)))
+    heights = [height for height, _ in data.z_profile]
+    self.assertEqual(heights, [round(16.0 - 0.2 * i, 1) for i in range(70)])
+
+  def test_focus_alone(self):
+    """The reply to the focus alone gives the curve, the well it names and no gain."""
+    data = parse_z_profile(GAIN_DATA_FOCUS)
+    self.assertEqual((data.gain, data.counts, data.percent), (0, 0, 0.0))
+    self.assertEqual((data.column, data.row), (12, 1))
+    self.assertEqual((data.peak_focal_height, len(data.z_profile)), (6.42, 70))
+
+  def test_average_signal_at_a_point(self):
+    """With the peak on a point (3.0 mm), the average signal is the average of the five points
+    around it."""
+    data = parse_z_profile(GAIN_DATA)
+    index = [height for height, _ in data.z_profile].index(data.peak_focal_height)
+    five = [counts for _, counts in data.z_profile[index - 2 : index + 3]]
+    self.assertEqual(data.average_signal, sum(five) // 5)
+
+  def test_gain_alone_has_no_focus_curve(self):
+    """A gain adjustment's reply holds no focus curve."""
+    with self.assertRaises(ValueError):
+      parse_z_profile(GAIN_DATA_GAIN)
+
+  def test_cut_short(self):
+    """A reply cut within its points is refused."""
+    with self.assertRaises(ValueError):
+      parse_z_profile(GAIN_DATA_GAIN_AND_FOCUS[:-8])
 
 
 # The reader's replies to time estimates (RUN with CalcTimeOnly) for a 96-well read at 450 nm, and for
