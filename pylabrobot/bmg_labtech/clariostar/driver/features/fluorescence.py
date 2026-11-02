@@ -1124,7 +1124,8 @@ class Fluorescence(Measurement):
   # Z-profiles
   # ----------------------------------------
 
-  # The gain definition bytes of `09`, the z-scan.
+  # The gain definition bytes of `09`, the z-scan; the first takes the optic's bit
+  # (`_OPTIC_POSITIONS`).
   _Z_PROFILE_GAIN_DEFINITION = bytes([0x04, 0x08])
   # The step between focal heights, in 0.01 mm: the only one verified.
   _Z_PROFILE_RESOLUTION = 10
@@ -1140,16 +1141,18 @@ class Fluorescence(Measurement):
     fluorescence_channel: FluorescenceChannel,
     maximum_focal_height: float,
     gain_target_percent: Optional[float],
+    optic_position: str,
     *,
     timeout: Optional[float] = None,
   ) -> None:
-    """Raise if the fluorescence channel, maximum focal height, target or timeout is out of range.
+    """Raise if the fluorescence channel, maximum focal height, target, optic or timeout is out of
+    range.
 
     Raises:
       ValueError: listing every violation: the fluorescence channel's
         (`_check_fluorescence_channel`), a maximum focal height not in 0.1 mm steps above 0 within
-        `focal_height_range` (the reader refuses 0), a target not above 0 up to 100 %, a timeout
-        not positive.
+        `focal_height_range` (the reader refuses 0), a target not above 0 up to 100 %, the optic's
+        (`_check_optic_position`), a timeout not positive.
     """
     errors = self._check_fluorescence_channel(fluorescence_channel)
     lowest, highest = self.configuration.focal_height_range
@@ -1164,6 +1167,7 @@ class Fluorescence(Measurement):
       )
     if gain_target_percent is not None and not 0 < gain_target_percent <= 100:
       errors.append(f"gain_target_percent must be above 0 up to 100, got {gain_target_percent}")
+    errors += self._check_optic_position(optic_position)
     if timeout is not None and not timeout > 0:
       errors.append(f"timeout must be positive, got {timeout}")
     if errors:
@@ -1178,12 +1182,13 @@ class Fluorescence(Measurement):
     fluorescence_channel: FluorescenceChannel,
     maximum_focal_height: float,
     gain_target_percent: Optional[float],
+    optic_position: str,
   ) -> bytes:
     """`09`'s 42 parameter bytes.
 
-    The plate's geometry, the well's column and row (from 1), the gain definition, the resolution,
-    `maximum_focal_height`, the target in 0.01 % (0 without), then the optics:
-    `_Z_PROFILE_OPTICS_HEADER` and a RUN fluorescence channel's bytes without its gain and
+    The plate's geometry, the well's column and row (from 1), the gain definition with the optic's
+    bit, the resolution, `maximum_focal_height`, the target in 0.01 % (0 without), then the
+    optics: `_Z_PROFILE_OPTICS_HEADER` and a RUN fluorescence channel's bytes without its gain and
     closing `00` (`_encode_optics`).
     """
     index = next(i for i, item in enumerate(plate.get_all_items()) if item is well)
@@ -1196,7 +1201,8 @@ class Fluorescence(Measurement):
     return (
       self._encode_plate_geometry(plate)
       + bytes([index // rows + 1, index % rows + 1])
-      + self._Z_PROFILE_GAIN_DEFINITION
+      + bytes([self._Z_PROFILE_GAIN_DEFINITION[0] | self._OPTIC_POSITIONS[optic_position]])
+      + self._Z_PROFILE_GAIN_DEFINITION[1:]
       + self._Z_PROFILE_RESOLUTION.to_bytes(2, "big")
       + round(maximum_focal_height * 100).to_bytes(2, "big")
       + target.to_bytes(2, "big")
@@ -1311,10 +1317,11 @@ class Fluorescence(Measurement):
     *,
     well: Well,
     gain_target_percent: Optional[float] = None,
-    maximum_focal_height: float = 15.0,
+    maximum_focal_height: Optional[float] = None,
+    optic_position: Optional[OpticPosition] = None,
     timeout: Optional[float] = None,
   ) -> CLARIOstarZProfileResult:
-    """Measure the z-profile of `well` from the top and, with a target, fit the gain at its peak.
+    """Measure the z-profile of `well` and, with a target, fit the gain at its peak.
 
     - The reader reads the well from `maximum_focal_height` down in 0.1 mm steps to a lowest
       height it chooses (0.7 mm and -0.6 mm on hardware), and computes the peak (about 8 s).
@@ -1329,7 +1336,9 @@ class Fluorescence(Measurement):
       well: the well to scan, on the plate in the plate holder.
       gain_target_percent: above 0 up to 100; None measures the z-profile only.
       maximum_focal_height: the height the scan starts at, mm above 0 in 0.1 mm steps within
-        `configuration.focal_height_range`.
+        `configuration.focal_height_range`; None for 15 mm from the top. The bottom optic's
+        range is not known, so give it for the bottom.
+      optic_position: "top" or "bottom"; `default_optic_position` when None.
       timeout: seconds the z-scan may take; `default_read_timeout` when None.
 
     Returns:
@@ -1342,19 +1351,25 @@ class Fluorescence(Measurement):
         the well is not on the plate, or the reply is not a z-profile.
       TimeoutError: if the z-scan takes longer than `timeout` seconds.
     """
+    optic = self.default_optic_position if optic_position is None else optic_position
+    if maximum_focal_height is None:
+      if optic == "bottom":
+        raise ValueError("give maximum_focal_height for the bottom optic")
+      maximum_focal_height = 15.0
     filled = self._get_filled_fluorescence_channel(fluorescence_channel)
     self._check_z_profile_arguments(
-      filled, maximum_focal_height, gain_target_percent, timeout=timeout
+      filled, maximum_focal_height, gain_target_percent, optic, timeout=timeout
     )
     plate, _ = self._get_plate_and_wells(MeasurementSettings(), None, [well])
     parameters = self._compute_z_profile_parameters(
-      plate, well, filled, maximum_focal_height, gain_target_percent
+      plate, well, filled, maximum_focal_height, gain_target_percent, optic
     )
     logger.info(
-      "z-profile: %s on %s of %s, gain target %s %%",
+      "z-profile: %s on %s of %s from the %s, gain target %s %%",
       self._describe_fluorescence_channel(filled),
       plate.get_child_identifier(well),
       plate.name,
+      optic,
       gain_target_percent,
     )
     start_timestamp = datetime.now()
@@ -1720,6 +1735,7 @@ class Fluorescence(Measurement):
         filled,
         well=targets[0],
         gain_target_percent=gain_target_percent if gain is None else None,
+        optic_position=optic,
         timeout=timeout,
       )
       focal_height = z_profile.peak_focal_height
