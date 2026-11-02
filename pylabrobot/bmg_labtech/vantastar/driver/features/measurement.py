@@ -327,6 +327,30 @@ class Measurement:
     return plate_holder.resource
 
   @staticmethod
+  def _compute_default_focal_height(wells: Sequence[Well], percent: float) -> float:
+    """The focal height ``percent`` of the depth up ``wells``, mm above the plate's base, as the
+    CLARIOstar computes it: the well's location, its floor and the percent of its depth, rounded
+    to 0.1 mm.
+
+    Raises:
+      ValueError: if a well has no location or floor thickness, or the wells differ in that height.
+    """
+    heights = set()
+    for well in wells:
+      if well.location is None:
+        raise ValueError(f"well {well.name} has no location on its plate")
+      try:
+        floor = well.material_z_thickness
+      except NotImplementedError as error:
+        raise ValueError(f"well {well.name} has no floor thickness; give focal_height") from error
+      heights.add(round(well.location.z + floor + well.get_size_z() * percent / 100, 1))
+    if len(heights) > 1:
+      raise ValueError(
+        f"the wells' default focal heights differ ({sorted(heights)} mm); give focal_height"
+      )
+    return heights.pop()
+
+  @staticmethod
   def _get_well_mask(plate: Plate, wells: Optional[Sequence[Well]]) -> Optional[bytes]:
     """The well mask of ``wells`` on ``plate``; None for every well."""
     if wells is None:

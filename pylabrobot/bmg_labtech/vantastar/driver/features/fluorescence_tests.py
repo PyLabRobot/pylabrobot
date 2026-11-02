@@ -170,5 +170,35 @@ class GainFocusTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(command[1 + 17 + 48 + 11 : 1 + 17 + 48 + 13], bytes(2))  # target 0
 
 
+class FocalHeightTests(unittest.IsolatedAsyncioTestCase):
+  """The focal height a read takes when none is given."""
+
+  def test_default_is_a_quarter_of_the_well_depth(self):
+    """The default is 25 % of the wells' depth above their floor: 6.2 mm on the 96-well plate
+    (cor_96_wellplate_360uL_Fb); a given focal height is kept."""
+    device = make_device([])
+    plate = device.plate_holder.resource
+    assert plate is not None
+    self.assertEqual(device.fluorescence._get_focal_height(None, plate, None), 6.2)  # type: ignore[arg-type]
+    self.assertEqual(device.fluorescence._get_focal_height(5.0, plate, None), 5.0)  # type: ignore[arg-type]
+
+  async def test_a_read_without_focal_height_sends_the_default(self):
+    """A read without a focal height sends the RUN of a read at the default, 6.2 mm."""
+    runs = []
+    for focal_height in (None, 6.2):
+      device = make_device([FLUORESCENCE_LAST_PAGE])
+      await device.fluorescence.measure(
+        365, 400, excitation_bandwidth=8, emission_bandwidth=10, focal_height=focal_height, gain=500
+      )
+      runs.append([c for c in device.driver.io.commands if c[0] == 0x04])  # type: ignore[attr-defined]
+    self.assertEqual(runs[0], runs[1])
+
+  def test_the_percent_is_checked(self):
+    """A default percent outside 0-100 is refused."""
+    device = make_device([])
+    with self.assertRaises(ValueError):
+      device.fluorescence.default_focal_height_percent_of_well_depth = 101
+
+
 if __name__ == "__main__":
   unittest.main()

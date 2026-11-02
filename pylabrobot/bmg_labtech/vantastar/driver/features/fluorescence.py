@@ -3,7 +3,7 @@ the automatic gain and focus."""
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
 from pylabrobot.lib.fluorescence.results import FluorescenceResult, FluorescenceSpectrumResult
 from pylabrobot.resources import Plate, Well
@@ -20,6 +20,9 @@ from .measurement import (
   compute_scan_monochromators,
   get_plate_geometry,
 )
+
+if TYPE_CHECKING:
+  from ..master import VANTAstarDriver
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,40 @@ class Fluorescence(Measurement):
 
   Reached as ``driver.fluorescence``.
   """
+
+  def __init__(self, driver: "VANTAstarDriver"):
+    """
+    Args:
+      driver: the driver to send commands through.
+    """
+    super().__init__(driver)
+    self._default_focal_height_percent_of_well_depth = 25.0
+
+  @property
+  def default_focal_height_percent_of_well_depth(self) -> float:
+    """The focal height a read takes when none is given: this percent of the wells' depth above
+    their floor (25 %, as on the CLARIOstar; 6.2 mm on a Thermo SureSTART 96-well plate, where the
+    reader's autofocus found 6.2-6.6 mm)."""
+    return self._default_focal_height_percent_of_well_depth
+
+  @default_focal_height_percent_of_well_depth.setter
+  def default_focal_height_percent_of_well_depth(self, value: float) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 100:
+      raise ValueError(
+        f"default_focal_height_percent_of_well_depth must be 0 to 100 %, got {value!r}"
+      )
+    self._default_focal_height_percent_of_well_depth = value
+
+  def _get_focal_height(
+    self, focal_height: Optional[float], plate: Plate, wells: Optional[Sequence[Well]]
+  ) -> float:
+    """``focal_height``, or the default for the wells read (every well of ``plate`` when None)."""
+    if focal_height is not None:
+      return focal_height
+    return self._compute_default_focal_height(
+      plate.get_all_items() if wells is None else wells,
+      self._default_focal_height_percent_of_well_depth,
+    )
 
   @staticmethod
   def _check_optics(
@@ -168,7 +205,7 @@ class Fluorescence(Measurement):
     *,
     excitation_bandwidth: float,
     emission_bandwidth: float,
-    focal_height: float,
+    focal_height: Optional[float] = None,
     gain: Optional[int] = None,
     dichroic_split_wavelength: Optional[float] = None,
     monochromator: Optional[MonochromatorSettings] = None,
@@ -194,7 +231,9 @@ class Fluorescence(Measurement):
       emission_wavelength: nm.
       excitation_bandwidth: nm, 8-100.
       emission_bandwidth: nm, 8-100.
-      focal_height: mm, in 0.1 mm steps (``adjust_gain_and_focus`` finds one).
+      focal_height: mm above the plate's base, in 0.1 mm steps; None takes
+        ``default_focal_height_percent_of_well_depth`` of the wells' depth above their floor
+        (``adjust_gain_and_focus`` finds one).
       gain: the detector gain; required unless ``enhanced_dynamic_range``.
       dichroic_split_wavelength: nm; None sets it as Voyager does automatically, midway between the
         excitation's upper and the emission's lower edge.  The tested reader refuses a dichroic
@@ -222,7 +261,7 @@ class Fluorescence(Measurement):
       emission_wavelength,
       excitation_bandwidth=excitation_bandwidth,
       emission_bandwidth=emission_bandwidth,
-      focal_height=focal_height,
+      focal_height=self._get_focal_height(focal_height, plate, wells),
       gain=gain,
       dichroic_split_wavelength=dichroic_split_wavelength,
       monochromator=monochromator,
@@ -253,7 +292,7 @@ class Fluorescence(Measurement):
     cycle_time: int,
     excitation_bandwidth: float,
     emission_bandwidth: float,
-    focal_height: float,
+    focal_height: Optional[float] = None,
     gain: Optional[int] = None,
     dichroic_split_wavelength: Optional[float] = None,
     monochromator: Optional[MonochromatorSettings] = None,
@@ -276,7 +315,9 @@ class Fluorescence(Measurement):
         cycle time shorter than one cycle takes (``CommandRefusedError``, quit code 60).
       excitation_bandwidth: nm, 8-100.
       emission_bandwidth: nm, 8-100.
-      focal_height: mm, in 0.1 mm steps.
+      focal_height: mm above the plate's base, in 0.1 mm steps; None takes
+        ``default_focal_height_percent_of_well_depth`` of the wells' depth above their floor
+        (``adjust_gain_and_focus`` finds one).
       gain: the detector gain; required unless ``enhanced_dynamic_range``.
       dichroic_split_wavelength: nm; None as in ``measure``.
       monochromator: band edges, dichroic and slits to read with instead of the computed ones.
@@ -304,7 +345,7 @@ class Fluorescence(Measurement):
       emission_wavelength,
       excitation_bandwidth=excitation_bandwidth,
       emission_bandwidth=emission_bandwidth,
-      focal_height=focal_height,
+      focal_height=self._get_focal_height(focal_height, plate, wells),
       gain=gain,
       dichroic_split_wavelength=dichroic_split_wavelength,
       monochromator=monochromator,
@@ -337,7 +378,7 @@ class Fluorescence(Measurement):
     excitation_bandwidth: float,
     emission_bandwidth: float,
     gain: int,
-    focal_height: float,
+    focal_height: Optional[float] = None,
     excitation_wavelength: Optional[float] = None,
     emission_wavelength: Optional[float] = None,
     step_size: int = 1,
@@ -365,7 +406,9 @@ class Fluorescence(Measurement):
       emission_bandwidth: nm, 8-100.
       gain: the detector gain (``adjust_gain_and_focus`` at a representative wavelength pair finds
         one).
-      focal_height: mm, in 0.1 mm steps.
+      focal_height: mm above the plate's base, in 0.1 mm steps; None takes
+        ``default_focal_height_percent_of_well_depth`` of the wells' depth above their floor
+        (``adjust_gain_and_focus`` finds one).
       excitation_wavelength: nm, the fixed excitation of an emission spectrum; None when
         excitation is scanned.
       emission_wavelength: nm, the fixed emission of an excitation spectrum; None when emission is
@@ -415,7 +458,7 @@ class Fluorescence(Measurement):
       last,
       len(scanned),
       gain=gain,
-      focal_height=focal_height,
+      focal_height=self._get_focal_height(focal_height, plate, wells),
       flashes=flashes,
       settling_time=settling_time,
       geometry=get_plate_geometry(plate),
