@@ -3,6 +3,7 @@ replies, against the values Voyager exported for the same reads."""
 
 import unittest
 from typing import Any, Dict
+from unittest import mock
 
 from pylabrobot.bmg_labtech.vantastar.device_tests import (
   PHOTOCATALYST_WELLS,
@@ -11,12 +12,17 @@ from pylabrobot.bmg_labtech.vantastar.device_tests import (
   make_recorded_device,
 )
 from pylabrobot.bmg_labtech.vantastar.driver import master_tests
+from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
+  compute_monochromator_settings,
+  get_plate_geometry,
+)
 from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   FLUORESCENCE_LAST_PAGE,
   GAIN_DATA,
   VOYAGER_FLUORESCENCE_ROW_A,
   load_flows,
 )
+from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 
 
 class FluorescenceTests(unittest.IsolatedAsyncioTestCase):
@@ -34,7 +40,14 @@ class FluorescenceTests(unittest.IsolatedAsyncioTestCase):
     """A fluorescence read gives Voyager's counts for row A and the temperature."""
     device = make_device([FLUORESCENCE_LAST_PAGE])
     result = await device.fluorescence.measure(
-      365, 400, excitation_bandwidth=8, emission_bandwidth=10, focal_height=5.0, gain=500
+      FluorescenceChannel(
+        excitation_wavelength=365,
+        excitation_bandwidth=8,
+        emission_wavelength=400,
+        emission_bandwidth=10,
+      ),
+      focal_height=5.0,
+      gain=500,
     )
     self.assertEqual([result.data[f"A{c}"] for c in range(1, 13)], VOYAGER_FLUORESCENCE_ROW_A)
     self.assertEqual(result.temperature, 26.3)
@@ -82,10 +95,12 @@ class FluorescenceArgumentTests(unittest.IsolatedAsyncioTestCase):
     ):
       with self.assertRaises(ValueError):
         await device.fluorescence.measure(
-          excitation,
-          emission,
-          excitation_bandwidth=excitation_bandwidth,
-          emission_bandwidth=emission_bandwidth,
+          FluorescenceChannel(
+            excitation_wavelength=excitation,
+            excitation_bandwidth=excitation_bandwidth,
+            emission_wavelength=emission,
+            emission_bandwidth=emission_bandwidth,
+          ),
           focal_height=5.0,
           gain=500,
         )
@@ -137,10 +152,12 @@ class GainFocusTests(unittest.IsolatedAsyncioTestCase):
     assert plate is not None
     with self.assertRaises(ValueError):
       await device.fluorescence.adjust_gain_and_focus(
-        365,
-        400,
-        excitation_bandwidth=8,
-        emission_bandwidth=10,
+        FluorescenceChannel(
+          excitation_wavelength=365,
+          excitation_bandwidth=8,
+          emission_wavelength=400,
+          emission_bandwidth=10,
+        ),
         wells=plate.get_items(["A1"]),
         adjust_gain=False,
         adjust_focus=False,
@@ -158,10 +175,12 @@ class GainFocusTests(unittest.IsolatedAsyncioTestCase):
     plate = device.plate_holder.resource
     assert plate is not None
     await device.fluorescence.adjust_gain_and_focus(
-      365,
-      400,
-      excitation_bandwidth=8,
-      emission_bandwidth=10,
+      FluorescenceChannel(
+        excitation_wavelength=365,
+        excitation_bandwidth=8,
+        emission_wavelength=400,
+        emission_bandwidth=10,
+      ),
       wells=plate.get_items(PHOTOCATALYST_WELLS),
       adjust_gain=False,
     )
@@ -188,7 +207,14 @@ class FocalHeightTests(unittest.IsolatedAsyncioTestCase):
     for focal_height in (None, 6.2):
       device = make_device([FLUORESCENCE_LAST_PAGE])
       await device.fluorescence.measure(
-        365, 400, excitation_bandwidth=8, emission_bandwidth=10, focal_height=focal_height, gain=500
+        FluorescenceChannel(
+          excitation_wavelength=365,
+          excitation_bandwidth=8,
+          emission_wavelength=400,
+          emission_bandwidth=10,
+        ),
+        focal_height=focal_height,
+        gain=500,
       )
       runs.append([c for c in device.driver.io.commands if c[0] == 0x04])  # type: ignore[attr-defined]
     self.assertEqual(runs[0], runs[1])
@@ -198,6 +224,73 @@ class FocalHeightTests(unittest.IsolatedAsyncioTestCase):
     device = make_device([])
     with self.assertRaises(ValueError):
       device.fluorescence.default_focal_height_percent_of_well_depth = 101
+
+
+class ChannelTests(unittest.IsolatedAsyncioTestCase):
+  """Fluorescence channels: the default bandwidths, and several channels in one read."""
+
+  async def test_default_bandwidths(self):
+    """A channel without bandwidths reads at 8 nm excitation and 12 nm emission, the VANTAstar's
+    defaults."""
+    runs = []
+    for channel in (
+      FluorescenceChannel(excitation_wavelength=365, emission_wavelength=400),
+      FluorescenceChannel(
+        excitation_wavelength=365,
+        excitation_bandwidth=8,
+        emission_wavelength=400,
+        emission_bandwidth=12,
+      ),
+    ):
+      device = make_device([FLUORESCENCE_LAST_PAGE])
+      result = await device.fluorescence.measure(channel, focal_height=5.0, gain=500)
+      self.assertEqual((result.excitation_bandwidth, result.emission_bandwidth), (8, 12))
+      runs.append([c for c in master_tests.commands(device.driver) if c[0] == 0x04])
+    self.assertEqual(runs[0], runs[1])
+
+  async def test_several_channels_go_in_one_run(self):
+    """Two channels build one RUN with both monochromators and a gain for each."""
+    device = make_device([])
+    run_measurement = mock.AsyncMock(side_effect=RuntimeError("the RUN fields were taken"))
+    device.driver.run_measurement = run_measurement  # type: ignore[method-assign]
+    channels = [
+      FluorescenceChannel(
+        excitation_wavelength=365,
+        excitation_bandwidth=8,
+        emission_wavelength=400,
+        emission_bandwidth=10,
+      ),
+      FluorescenceChannel(
+        excitation_wavelength=485,
+        excitation_bandwidth=16,
+        emission_wavelength=528,
+        emission_bandwidth=20,
+      ),
+    ]
+    with self.assertRaises(RuntimeError):
+      await device.fluorescence.measure(channels, focal_height=5.0, gain=[500, 700])
+    plate = device.plate_holder.resource
+    assert plate is not None
+    expected = device.driver.build_fluorescence_run(
+      [
+        compute_monochromator_settings(365, 8, 400, 10),
+        compute_monochromator_settings(485, 16, 528, 20),
+      ],
+      gains=[500, 700],
+      focal_height=5.0,
+      flashes=20,
+      settling_time=0.5,
+      geometry=get_plate_geometry(plate),  # type: ignore[arg-type]
+    )
+    self.assertEqual(run_measurement.call_args.args[0], expected)
+
+  async def test_gains_must_match_the_channels(self):
+    """One gain for two channels in a list is refused before anything is sent."""
+    device = make_device([])
+    channel = FluorescenceChannel(excitation_wavelength=365, emission_wavelength=400)
+    with self.assertRaises(ValueError):
+      await device.fluorescence.measure([channel, channel], focal_height=5.0, gain=[500])
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":

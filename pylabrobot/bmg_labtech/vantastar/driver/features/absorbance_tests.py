@@ -3,11 +3,17 @@ replies, against the values Voyager exported for the same reads."""
 
 import unittest
 from typing import Any, Dict
+from unittest import mock
 
 from pylabrobot.bmg_labtech.vantastar.device_tests import (
   PHOTOCATALYST_WELLS,
   make_device,
   make_recorded_device,
+)
+from pylabrobot.bmg_labtech.vantastar.driver import master_tests
+from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
+  MeasurementSettings,
+  ShakeSettings,
 )
 from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   ABSORBANCE_FIRST_PAGE,
@@ -109,12 +115,51 @@ class AbsorbanceArgumentTests(unittest.IsolatedAsyncioTestCase):
     device = make_device([])
     for settling_time in (0, 1.04):
       with self.assertRaises(ValueError):
-        await device.absorbance.measure([450], settling_time=settling_time)
+        await device.absorbance.measure(
+          [450], measurement_settings=MeasurementSettings(settling_time=settling_time)
+        )
     with self.assertRaises(ValueError):
-      await device.absorbance.measure([450], flashes=501)
+      await device.absorbance.measure([450], measurement_settings=MeasurementSettings(flashes=501))
     with self.assertRaises(ValueError):
       await device.absorbance.measure_kinetic([450], cycles=1001, cycle_time=10)
     self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
+
+
+class ReadSettingsTests(unittest.IsolatedAsyncioTestCase):
+  """Measurement and shake settings reaching the reader."""
+
+  async def test_shake_settings_shake_right_before_the_read(self):
+    """Shake settings send the shaker's command right before the RUN, as Voyager does."""
+    device = make_device([ABSORBANCE_FIRST_PAGE, ABSORBANCE_LAST_PAGE])
+    await device.absorbance.measure(
+      [600], shake_settings=ShakeSettings(pattern="double_orbital", speed=300, duration=10)
+    )
+    sent = [c for c in master_tests.commands(device.driver) if c[0] in (0x27, 0x04)]
+    self.assertEqual([c[0] for c in sent], [0x27, 0x04])
+    self.assertEqual(sent[0], master_tests.SHAKE_DOUBLE_ORBITAL_300_10)
+
+  async def test_reading_order_reaches_the_run(self):
+    """The reading order sets the RUN's reading-mode byte: column by column from the bottom right
+    corner, in one direction."""
+    device = make_device([ABSORBANCE_FIRST_PAGE, ABSORBANCE_LAST_PAGE])
+    settings = MeasurementSettings(
+      corner="bottom_right", reading_direction="column_major", bidirectional=False
+    )
+    await device.absorbance.measure([600], measurement_settings=settings)
+    (run,) = [c for c in master_tests.commands(device.driver) if c[0] == 0x04]
+    self.assertEqual(run[67], 0x02 | 0x08 | 0x20 | 0x40 | 0x80)
+
+  async def test_pause_before_reading(self):
+    """A pause before reading waits that many seconds before the RUN."""
+    device = make_device([ABSORBANCE_FIRST_PAGE, ABSORBANCE_LAST_PAGE])
+    with mock.patch(
+      "pylabrobot.bmg_labtech.vantastar.driver.features.measurement.asyncio.sleep",
+      new_callable=mock.AsyncMock,
+    ) as sleep:
+      await device.absorbance.measure(
+        [600], measurement_settings=MeasurementSettings(pause_before_reading=2)
+      )
+    sleep.assert_any_await(2)
 
 
 if __name__ == "__main__":

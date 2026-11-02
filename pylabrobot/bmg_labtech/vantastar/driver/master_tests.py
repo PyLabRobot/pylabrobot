@@ -19,7 +19,6 @@ from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
   LUMINESCENCE_NO_FILTER,
   STANDARD_96,
   MonochromatorSettings,
-  WellScan,
   compute_monochromator_settings,
   compute_scan_monochromators,
   encode_plate_geometry,
@@ -412,7 +411,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
       flashes=16,
       settling_time=0.1,
       well_mask=self.six,
-      well_scan=WellScan("orbital", 3),
+      well_scan="orbital",
+      scan_diameter=3,
     )
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_SPECTRUM_ORBITAL)
 
@@ -440,7 +440,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
       flashes=10,
       settling_time=0.2,
       well_mask=self.ir,
-      well_scan=WellScan("spiral", 3),
+      well_scan="spiral",
+      scan_diameter=3,
     )
     self.assertEqual(bytes([0x04]) + run, RUN_EXCITATION_SCAN_SPIRAL)
 
@@ -531,7 +532,8 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
       target_percent=0,
       adjust_focus=True,
       well_mask=self.ir,
-      well_scan=WellScan("spiral", 3),
+      well_scan="spiral",
+      scan_diameter=3,
       flashes=10,
     )
     self.assertEqual(bytes([0x0C]) + spiral, GAIN_PLATE_FOCUS_SPIRAL)
@@ -553,7 +555,7 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     """A well scan of 0 mm diameter is refused."""
     with self.assertRaises(ValueError):
       self.driver.build_absorbance_run(
-        [450], flashes=22, settling_time=0.5, well_scan=WellScan("orbital", 0)
+        [450], flashes=22, settling_time=0.5, well_scan="orbital", scan_diameter=0
       )
 
 

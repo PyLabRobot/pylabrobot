@@ -44,14 +44,17 @@ from .features.luminescence import Luminescence
 from .features.measurement import (
   DEFAULT_APERTURE_DISTANCE,
   STANDARD_96,
+  Corner,
   MonochromatorSettings,
   PlateGeometry,
+  ReadingDirection,
   WellScan,
   _focal_height_bytes,
   _hundredth_mm,
   _tenth_nm,
   encode_monochromator,
   encode_plate_geometry,
+  encode_reading_mode,
   encode_well_mask,
   encode_well_scan,
 )
@@ -614,23 +617,35 @@ class VANTAstarDriver:
     geometry: PlateGeometry,
     well_mask: Optional[bytes],
     settling_time: float,
-    well_scan: Optional[WellScan] = None,
+    well_scan: WellScan = "point",
+    scan_diameter: int = 3,
+    corner: Corner = "top_left",
+    reading_direction: ReadingDirection = "row_major",
+    bidirectional: bool = True,
   ) -> bytes:
     """RUN bytes shared by every measurement mode: plate(17) + layout mode(1) + well mask(48) +
     reading mode (0x02: WellPlateModeKinetic, not CalcTimeOnly) + mode byte (MeasurementMode in
     bits 0-1, BottomMeas bit 6) + option byte (UseAutoGain bit 6) + 1 + TimeStampMatchValue(4) +
     shaking(20, off: Voyager shakes with a separate command) + shaking position 9999/9999 + well
-    scanning (``encode_well_scan``) + settling time (20 ms steps)."""
+    scanning (``encode_well_scan``) + settling time (20 ms steps); the reading-mode byte carries
+    the reading order (``encode_reading_mode``)."""
     mask = well_mask if well_mask is not None else encode_well_mask(geometry.columns, geometry.rows)
     return (
       encode_plate_geometry(geometry)
       + b"\x00"
       + mask
-      + bytes([0x02, mode_byte, options, 0x00])
+      + bytes(
+        [
+          0x02 | encode_reading_mode(corner, reading_direction, bidirectional),
+          mode_byte,
+          options,
+          0x00,
+        ]
+      )
       + bytes(4)
       + bytes(20)
       + bytes.fromhex("270f270f")
-      + encode_well_scan(well_scan)
+      + encode_well_scan(well_scan, scan_diameter)
       + bytes([round(settling_time / 0.02)])
     )
 
@@ -674,7 +689,11 @@ class VANTAstarDriver:
     settling_time: float,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
-    well_scan: Optional[WellScan] = None,
+    well_scan: WellScan = "point",
+    scan_diameter: int = 3,
+    corner: Corner = "top_left",
+    reading_direction: ReadingDirection = "row_major",
+    bidirectional: bool = True,
     cycles: int = 1,
     cycle_time: int = 0,
   ) -> bytes:
@@ -690,7 +709,8 @@ class VANTAstarDriver:
       settling_time: seconds to settle before reading each well (20 ms steps).
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
-      well_scan: average over an area of each well; None reads the centre.
+      well_scan: point, orbital or spiral (``encode_well_scan``); scan_diameter: its diameter, mm.
+      corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
       cycles: reads of the plate (kinetic cycles).
       cycle_time: whole seconds from one cycle's start to the next.
     """
@@ -708,6 +728,10 @@ class VANTAstarDriver:
         well_mask=well_mask,
         settling_time=settling_time,
         well_scan=well_scan,
+        scan_diameter=scan_diameter,
+        corner=corner,
+        reading_direction=reading_direction,
+        bidirectional=bidirectional,
       )
       + optics
       + self._encode_run_tail(flashes, cycles, cycle_time)
@@ -723,7 +747,11 @@ class VANTAstarDriver:
     settling_time: float,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
-    well_scan: Optional[WellScan] = None,
+    well_scan: WellScan = "point",
+    scan_diameter: int = 3,
+    corner: Corner = "top_left",
+    reading_direction: ReadingDirection = "row_major",
+    bidirectional: bool = True,
   ) -> bytes:
     """RUN fields for an absorbance spectrum (MeasurementMode 2 with no discrete wavelengths): start,
     stop and step in 0.1 nm, then the reference wavelengths of an endpoint read.
@@ -736,7 +764,8 @@ class VANTAstarDriver:
       settling_time: seconds to settle before reading each well (20 ms steps).
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
-      well_scan: average over an area of each well; None reads the centre.
+      well_scan: point, orbital or spiral (``encode_well_scan``); scan_diameter: its diameter, mm.
+      corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
     """
     optics = (
       b"\x00"
@@ -753,6 +782,10 @@ class VANTAstarDriver:
         well_mask=well_mask,
         settling_time=settling_time,
         well_scan=well_scan,
+        scan_diameter=scan_diameter,
+        corner=corner,
+        reading_direction=reading_direction,
+        bidirectional=bidirectional,
       )
       + optics
       + self._encode_run_tail(flashes)
@@ -769,7 +802,11 @@ class VANTAstarDriver:
     enhanced_dynamic_range: bool = False,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
-    well_scan: Optional[WellScan] = None,
+    well_scan: WellScan = "point",
+    scan_diameter: int = 3,
+    corner: Corner = "top_left",
+    reading_direction: ReadingDirection = "row_major",
+    bidirectional: bool = True,
     cycles: int = 1,
     cycle_time: int = 0,
   ) -> bytes:
@@ -785,7 +822,8 @@ class VANTAstarDriver:
       enhanced_dynamic_range: read with enhanced dynamic range.
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
-      well_scan: average over an area of each well; None reads the centre.
+      well_scan: point, orbital or spiral (``encode_well_scan``); scan_diameter: its diameter, mm.
+      corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
       cycles: reads of the plate (kinetic cycles).
       cycle_time: whole seconds from one cycle's start to the next.
     """
@@ -812,6 +850,10 @@ class VANTAstarDriver:
         well_mask=well_mask,
         settling_time=settling_time,
         well_scan=well_scan,
+        scan_diameter=scan_diameter,
+        corner=corner,
+        reading_direction=reading_direction,
+        bidirectional=bidirectional,
       )
       + optics
       + self._encode_run_tail(flashes, cycles, cycle_time)
@@ -829,7 +871,11 @@ class VANTAstarDriver:
     settling_time: float,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
-    well_scan: Optional[WellScan] = None,
+    well_scan: WellScan = "point",
+    scan_diameter: int = 3,
+    corner: Corner = "top_left",
+    reading_direction: ReadingDirection = "row_major",
+    bidirectional: bool = True,
   ) -> bytes:
     """RUN fields for a top fluorescence scan (MeasurementMode 0, ChromaticScan1): the number of
     points, then the monochromator settings of the first and the last point; the reader steps
@@ -845,7 +891,8 @@ class VANTAstarDriver:
       settling_time: seconds to settle before reading each well (20 ms steps).
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
-      well_scan: average over an area of each well; None reads the centre.
+      well_scan: point, orbital or spiral (``encode_well_scan``); scan_diameter: its diameter, mm.
+      corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
 
     Raises:
       ValueError: if ``points`` is not 2-65535.
@@ -869,6 +916,10 @@ class VANTAstarDriver:
         well_mask=well_mask,
         settling_time=settling_time,
         well_scan=well_scan,
+        scan_diameter=scan_diameter,
+        corner=corner,
+        reading_direction=reading_direction,
+        bidirectional=bidirectional,
       )
       + optics
       + self._encode_run_tail(flashes)
@@ -884,6 +935,9 @@ class VANTAstarDriver:
     aperture_distance: float = DEFAULT_APERTURE_DISTANCE,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
+    corner: Corner = "top_left",
+    reading_direction: ReadingDirection = "row_major",
+    bidirectional: bool = True,
   ) -> bytes:
     """RUN fields for a top luminescence endpoint read (MeasurementMode 1).  Not tested on a reader.
 
@@ -899,6 +953,7 @@ class VANTAstarDriver:
       aperture_distance: mm between the top optic's aperture and the plate (0.01 mm steps).
       geometry: the plate.
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
+      corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
     """
     if gains is not None and len(gains) != len(monochromators):
       raise ValueError(f"{len(monochromators)} chromatics but {len(gains)} gains")
@@ -920,6 +975,9 @@ class VANTAstarDriver:
         options=_USE_AUTO_GAIN if gains is None else 0x00,
         geometry=geometry,
         well_mask=well_mask,
+        corner=corner,
+        reading_direction=reading_direction,
+        bidirectional=bidirectional,
         settling_time=settling_time,
       )
       + optics
@@ -1091,7 +1149,8 @@ class VANTAstarDriver:
     adjust_focus: bool,
     geometry: PlateGeometry = STANDARD_96,
     well_mask: Optional[bytes] = None,
-    well_scan: Optional[WellScan] = None,
+    well_scan: WellScan = "point",
+    scan_diameter: int = 3,
     flashes: int = 0,
   ) -> bytes:
     """GainPlateCommand fields for a top fluorescence gain and focus adjustment, either alone.
@@ -1103,8 +1162,9 @@ class VANTAstarDriver:
       adjust_focus: also find the focal height (a scan from 16 mm down in 0.2 mm steps).
       geometry: the plate.
       well_mask: the reference wells (``encode_well_mask``); None uses every well.
-      well_scan: adjust over the area a well-scanning read reads; None at the centre.
-      flashes: flashes per well, sent with ``well_scan``.
+      well_scan: adjust over the area a well-scanning read reads (point: at the centre);
+        scan_diameter: its diameter, mm.
+      flashes: flashes per well, sent with an orbital or spiral scan.
 
     Raises:
       ValueError: if ``target_percent`` is not 0-100.
@@ -1112,7 +1172,7 @@ class VANTAstarDriver:
     if not 0 <= target_percent <= 100:
       raise ValueError(f"target_percent must be 0-100, got {target_percent}")
     mask = well_mask if well_mask is not None else encode_well_mask(geometry.columns, geometry.rows)
-    scan = encode_well_scan(well_scan)
+    scan = encode_well_scan(well_scan, scan_diameter)
     flags = (_AUTO_SET_FOCAL_HEIGHT if adjust_focus else 0x00) | scan[0]
     return (
       encode_plate_geometry(geometry)
@@ -1129,7 +1189,7 @@ class VANTAstarDriver:
       + _GAIN_FOCUS_INTEGRATION_TIME.to_bytes(2, "big")
       + bytes([_MONO_POSITIONS])
       + encode_monochromator(monochromator)
-      + (scan[1:] + flashes.to_bytes(2, "big") if well_scan is not None else b"")
+      + (scan[1:] + flashes.to_bytes(2, "big") if well_scan != "point" else b"")
     )
 
   async def adjust_gain_and_focus(self, parameters: bytes, *, timeout: float = 300.0) -> GainFocus:

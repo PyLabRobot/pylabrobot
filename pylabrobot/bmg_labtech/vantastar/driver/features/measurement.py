@@ -1,12 +1,14 @@
 """What every measurement feature (RUN) shares: the RUN parameters and their encoding, the plate and
 its wells."""
 
+import asyncio
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.resources import CrossSectionType, Plate, Well
 
 from ..responses import MeasurementData
+from .shaker import ShakePattern, Shaker
 
 if TYPE_CHECKING:
   from ..master import VANTAstarDriver
@@ -17,21 +19,138 @@ _FIXED_SLIT = 3
 # Luminescence's aperture distance when none is given (Voyager's default, 0.5 mm).
 DEFAULT_APERTURE_DISTANCE = 0.5
 
-WellScanMode = Literal["orbital", "spiral"]
 ScanSide = Literal["excitation", "emission"]
+WellScan = Literal["point", "orbital", "spiral", "matrix"]
+Corner = Literal["top_left", "top_right", "bottom_left", "bottom_right"]
+ReadingDirection = Literal["column_major", "row_major"]
 
-# WellScanningMode values (RUN and GainPlateCommand).
-_WELL_SCAN_MODES = {"orbital": 3, "spiral": 4}
+# WellScanningMode values (RUN and GainPlateCommand): a point read, orbital, spiral.  Voyager's
+# matrix scans (1 standard, 2 user defined) are not supported here.
+_WELL_SCAN_MODES = {"point": 0, "orbital": 3, "spiral": 4}
+# RUN reading-mode bits, as Voyager sets them for its reading directions: column by column, start at
+# the right column, start at the bottom row, every row or column in one direction.
+_COLUMN_WISE = 0x08
+_START_AT_RIGHT_COLUMN = 0x20
+_START_AT_BOTTOM_ROW = 0x40
+_UNIDIRECTIONAL = 0x80
+_CORNERS = ("top_left", "top_right", "bottom_left", "bottom_right")
+_READING_DIRECTIONS = ("column_major", "row_major")
 
 
 @dataclass(frozen=True)
-class WellScan:
-  """Averaging over an area of each well instead of reading its centre: the reader reads along an
-  orbit, or a spiral, of ``diameter`` mm around the centre.  The reader refuses a diameter wider
-  than the well (quit code 65; 7 mm on a 96-well plate with 6.96 mm wells)."""
+class MeasurementSettings:
+  """How a read reads the plate: the fields of the CLARIOstar's ``MeasurementSettings``, with the
+  VANTAstar's defaults and ranges.
 
-  mode: WellScanMode
-  diameter: int
+  Attributes:
+    pause_before_reading: whole seconds to wait before the read, after any shaking; None does not
+      wait.  The driver waits; the reader is idle meanwhile.
+    corner: the corner the reader starts at.
+    reading_direction: row_major reads row by row (the reader's default); column_major column by
+      column.
+    bidirectional: read every other row or column backwards (meander, the default); False reads all
+      in one direction.  Results are in plate order; reading orders other than the default have not
+      been tested on a reader yet.
+    settling_time: seconds to settle before each well, 0.02-1.0 in 20 ms steps (the reader refuses
+      others, quit code 43); None for the read's default.
+    well_scan: read each well at its centre (point), or average along a circle (orbital) or a spiral
+      of ``scan_diameter``.  A matrix well scan is not supported.
+    scan_diameter: orbital or spiral diameter, a whole mm from 1 to the plate's well diameter (the
+      reader refuses a wider one, quit code 65).
+    flashes: flashes per well, 1-500 (the reader refuses more, quit code 60); None for the read's
+      default.
+    matrix_size: points per side of a matrix scan; a matrix well scan is not supported, so None.
+
+  Raises:
+    ValueError: on construction, listing every field of the wrong kind or out of the reader's range
+      (``check`` adds the rules that need the plate).
+  """
+
+  pause_before_reading: Optional[int] = None
+  corner: Corner = "top_left"
+  reading_direction: ReadingDirection = "row_major"
+  bidirectional: bool = True
+  settling_time: Optional[float] = None
+  well_scan: WellScan = "point"
+  scan_diameter: int = 3
+  flashes: Optional[int] = None
+  matrix_size: Optional[int] = None
+
+  def __post_init__(self) -> None:
+    """Raise listing every field of the wrong kind or out of the reader's range."""
+    errors = []
+    pause = self.pause_before_reading
+    if pause is not None and (isinstance(pause, bool) or not isinstance(pause, int) or pause < 0):
+      errors.append(f"pause_before_reading must be whole seconds, at least 0, is {pause!r}")
+    if self.corner not in _CORNERS:
+      errors.append(f"corner must be one of {list(_CORNERS)}, got {self.corner!r}")
+    if self.reading_direction not in _READING_DIRECTIONS:
+      errors.append(
+        f"reading_direction must be one of {list(_READING_DIRECTIONS)}, got "
+        f"{self.reading_direction!r}"
+      )
+    if not isinstance(self.bidirectional, bool):
+      errors.append(f"bidirectional must be True or False, is {self.bidirectional!r}")
+    settling = self.settling_time
+    if settling is not None and (
+      isinstance(settling, bool)
+      or not isinstance(settling, (int, float))
+      or not 0.02 <= settling <= 1.0
+    ):
+      errors.append(f"settling_time must be 0.02-1.0 s, is {settling!r}")
+    if self.well_scan == "matrix" or self.matrix_size is not None:
+      errors.append("a matrix well scan is not supported on the VANTAstar")
+    elif self.well_scan not in _WELL_SCAN_MODES:
+      errors.append(f"well_scan must be one of {list(_WELL_SCAN_MODES)}, got {self.well_scan!r}")
+    diameter = self.scan_diameter
+    if isinstance(diameter, bool) or not isinstance(diameter, int) or not 1 <= diameter <= 0xFF:
+      errors.append(f"scan_diameter must be a whole mm of 1-255, is {diameter!r}")
+    flashes = self.flashes
+    if flashes is not None and (
+      isinstance(flashes, bool) or not isinstance(flashes, int) or not 1 <= flashes <= 500
+    ):
+      errors.append(f"flashes must be 1-500, is {flashes!r}")
+    if errors:
+      raise ValueError("; ".join(errors))
+
+  def check(self, plate: Plate) -> None:
+    """Raise if these settings cannot read ``plate``: a well scan wider than its wells.
+
+    Raises:
+      ValueError: if ``scan_diameter`` is above the well diameter for an orbital or spiral scan.
+    """
+    if self.well_scan == "point":
+      return
+    first = plate.get_all_items()[0]
+    well_size = min(first.get_size_x(), first.get_size_y())
+    if self.scan_diameter > well_size:
+      raise ValueError(
+        f"scan_diameter {self.scan_diameter} mm is wider than the wells of {plate.name} "
+        f"({well_size} mm)"
+      )
+
+
+@dataclass(frozen=True)
+class ShakeSettings:
+  """Shaking the plate before the read: the fields of the CLARIOstar's ``ShakeSettings``.  The
+  shaker shakes right before the read, as Voyager does.
+
+  Attributes:
+    pattern: how the plate moves: "orbital", "linear" or "double_orbital".
+    speed: rpm, a multiple of 100; the tested reader reports 700 rpm as its maximum.
+    duration: whole seconds.
+
+  Raises:
+    ValueError: on construction, if a field is invalid (``Shaker.build_shake``).
+  """
+
+  pattern: ShakePattern
+  speed: int
+  duration: int
+
+  def __post_init__(self) -> None:
+    """Raise if a field is invalid (``Shaker.build_shake``)."""
+    Shaker.build_shake(self.pattern, self.speed, self.duration)
 
 
 @dataclass(frozen=True)
@@ -163,20 +282,41 @@ def compute_scan_monochromators(
   return points[0], points[1]
 
 
-def encode_well_scan(well_scan: Optional[WellScan]) -> bytes:
-  """The RUN well scanning fields: the mode, then for a scan the matrix width (0) and the diameter
-  in mm; a point read is mode 0 alone.
+def encode_well_scan(well_scan: WellScan, scan_diameter: int) -> bytes:
+  """The RUN well scanning fields: the mode, then for an orbital or spiral scan the matrix width (0)
+  and the diameter in mm; a point read is mode 0 alone.
 
   Raises:
-    ValueError: if the mode is unknown or the diameter not 1-255 mm.
+    ValueError: if the well scan is not point, orbital or spiral, or the diameter not 1-255 mm.
   """
-  if well_scan is None:
+  if well_scan not in _WELL_SCAN_MODES:
+    raise ValueError(f"well_scan must be one of {list(_WELL_SCAN_MODES)}, got {well_scan!r}")
+  if well_scan == "point":
     return b"\x00"
-  if well_scan.mode not in _WELL_SCAN_MODES:
-    raise ValueError(f"well scan mode must be one of {sorted(_WELL_SCAN_MODES)}")
-  if not 1 <= well_scan.diameter <= 0xFF:
-    raise ValueError(f"well scan diameter must be 1-255 mm, got {well_scan.diameter}")
-  return bytes([_WELL_SCAN_MODES[well_scan.mode], 0, well_scan.diameter])
+  if not 1 <= scan_diameter <= 0xFF:
+    raise ValueError(f"scan_diameter must be 1-255 mm, got {scan_diameter}")
+  return bytes([_WELL_SCAN_MODES[well_scan], 0, scan_diameter])
+
+
+def encode_reading_mode(
+  corner: Corner, reading_direction: ReadingDirection, bidirectional: bool
+) -> int:
+  """The RUN reading-mode bits of a reading order, as Voyager sets them for its reading directions;
+  the default (top left, row by row, meander) sets none.
+
+  Raises:
+    ValueError: if the corner or the direction is unknown.
+  """
+  if corner not in _CORNERS:
+    raise ValueError(f"corner must be one of {list(_CORNERS)}, got {corner!r}")
+  if reading_direction not in _READING_DIRECTIONS:
+    raise ValueError(f"reading_direction must be one of {list(_READING_DIRECTIONS)}")
+  return (
+    (_COLUMN_WISE if reading_direction == "column_major" else 0)
+    | (_START_AT_RIGHT_COLUMN if corner in ("top_right", "bottom_right") else 0)
+    | (_START_AT_BOTTOM_ROW if corner in ("bottom_left", "bottom_right") else 0)
+    | (0 if bidirectional else _UNIDIRECTIONAL)
+  )
 
 
 def _tenth_nm(wavelength: float) -> bytes:
@@ -327,6 +467,48 @@ class Measurement:
     return plate_holder.resource
 
   @staticmethod
+  def _get_settings(
+    settings: Optional[MeasurementSettings], plate: Plate, *, flashes: int, settling_time: float
+  ) -> MeasurementSettings:
+    """``settings`` (the defaults when None), checked against ``plate``, with the read's default
+    flashes and settling time where they are None.
+
+    Raises:
+      ValueError: if the settings cannot read ``plate`` (``MeasurementSettings.check``).
+    """
+    settings = MeasurementSettings() if settings is None else settings
+    settings.check(plate)
+    return replace(
+      settings,
+      flashes=flashes if settings.flashes is None else settings.flashes,
+      settling_time=settling_time if settings.settling_time is None else settings.settling_time,
+    )
+
+  @staticmethod
+  def _get_run_fields(settings: MeasurementSettings) -> Dict[str, Any]:
+    """The driver builders' keyword arguments of resolved ``settings`` (``_get_settings``)."""
+    return {
+      "flashes": settings.flashes,
+      "settling_time": settings.settling_time,
+      "well_scan": settings.well_scan,
+      "scan_diameter": settings.scan_diameter,
+      "corner": settings.corner,
+      "reading_direction": settings.reading_direction,
+      "bidirectional": settings.bidirectional,
+    }
+
+  async def _prepare(
+    self, settings: MeasurementSettings, shake_settings: Optional[ShakeSettings]
+  ) -> None:
+    """Shake before the read (``shake_settings``), then wait ``pause_before_reading``."""
+    if shake_settings is not None:
+      await self._driver.shaker.shake(
+        shake_settings.pattern, shake_settings.speed, shake_settings.duration
+      )
+    if settings.pause_before_reading:
+      await asyncio.sleep(settings.pause_before_reading)
+
+  @staticmethod
   def _compute_default_focal_height(wells: Sequence[Well], percent: float) -> float:
     """The focal height ``percent`` of the depth up ``wells``, mm above the plate's base, as the
     CLARIOstar computes it: the well's location, its floor and the percent of its depth, rounded
@@ -358,23 +540,10 @@ class Measurement:
     return encode_well_mask(plate.num_items_x, plate.num_items_y, _get_measured_wells(plate, wells))
 
   @staticmethod
-  def _check_settling_time(settling_time: float) -> None:
-    """Raise unless the settling time is one the reader takes: 0.02-1.0 s (it refuses 0 and longer
-    times, quit code 43)."""
-    if not 0.02 <= settling_time <= 1.0:
-      raise ValueError(f"settling_time must be 0.02-1.0 s, got {settling_time}")
-
-  @staticmethod
   def _check_wells(data: MeasurementData, measured: List[Tuple[int, int]]) -> None:
     """Raise unless the reader measured as many wells as were asked for."""
     if data.wells != len(measured):
       raise RuntimeError(f"the reader measured {data.wells} wells, {len(measured)} were asked for")
-
-  @staticmethod
-  def _check_flashes(flashes: int) -> None:
-    """Raise unless ``flashes`` is 1-500, the reader's maximum (it refuses more, quit code 60)."""
-    if not 1 <= flashes <= 500:
-      raise ValueError(f"flashes must be 1-500, got {flashes}")
 
   @staticmethod
   def _check_cycles(cycles: int, cycle_time: int) -> None:

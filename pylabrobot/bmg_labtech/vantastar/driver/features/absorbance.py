@@ -13,7 +13,8 @@ from ..responses import (
 )
 from .measurement import (
   Measurement,
-  WellScan,
+  MeasurementSettings,
+  ShakeSettings,
   _get_identifier,
   _get_measured_wells,
   get_plate_geometry,
@@ -22,6 +23,9 @@ from .measurement import (
 # Absorbance wavelengths Voyager offers, in nm.
 MINIMUM_ABSORBANCE_WAVELENGTH = 220
 MAXIMUM_ABSORBANCE_WAVELENGTH = 1000
+# Flashes and settling time when the measurement settings give none: Voyager's "precise" preset.
+_DEFAULT_FLASHES = 22
+_DEFAULT_SETTLING_TIME = 0.5
 
 
 class Absorbance(Measurement):
@@ -41,6 +45,14 @@ class Absorbance(Measurement):
           f"wavelength must be {MINIMUM_ABSORBANCE_WAVELENGTH}-{MAXIMUM_ABSORBANCE_WAVELENGTH} nm, "
           f"got {wavelength}"
         )
+
+  def _get_absorbance_settings(
+    self, measurement_settings: Optional[MeasurementSettings], plate: Plate
+  ) -> MeasurementSettings:
+    """``measurement_settings`` with absorbance's default flashes and settling time filled in."""
+    return self._get_settings(
+      measurement_settings, plate, flashes=_DEFAULT_FLASHES, settling_time=_DEFAULT_SETTLING_TIME
+    )
 
   def _get_results(
     self,
@@ -70,26 +82,25 @@ class Absorbance(Measurement):
     *,
     plate: Optional[Plate] = None,
     wells: Optional[Sequence[Well]] = None,
-    flashes: int = 22,
-    settling_time: float = 0.5,
-    well_scan: Optional[WellScan] = None,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
     timeout: float = 300.0,
   ) -> List[AbsorbanceResult]:
     """Measure the absorbance of the plate at each wavelength (endpoint).
 
-    The defaults are Voyager's "precise" preset.  The optical density is computed as Voyager
-    computes it, against the reader's 100% and reference values; it is not pathlength-corrected.
-    Voyager reports optical densities above 3.5 as 3.5; these are the computed values, ``inf`` for a
-    well that lets no measurable light through.  Averaging over an orbit or spiral reads higher
-    optical densities than the centre, near the well's edge (Voyager's too).
+    The default flashes and settling time (22, 0.5 s) are Voyager's "precise" preset.  The optical
+    density is computed as Voyager computes it, against the reader's 100% and reference values; it
+    is not pathlength-corrected.  Voyager reports optical densities above 3.5 as 3.5; these are the
+    computed values, ``inf`` for a well that lets no measurable light through.  Averaging over an
+    orbit or spiral reads higher optical densities than the centre, near the well's edge (Voyager's
+    too).
 
     Args:
       wavelengths: 1 to 8 wavelengths in nm (220-1000).
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-500).
-      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
-      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      measurement_settings: how to read; None reads with the defaults.
+      shake_settings: shake the plate before the read; None does not shake.
       timeout: seconds the run may take.
 
     Returns:
@@ -100,18 +111,16 @@ class Absorbance(Measurement):
       ValueError: if an argument is out of range.
     """
     self._check_wavelengths(wavelengths)
-    self._check_flashes(flashes)
-    self._check_settling_time(settling_time)
     plate = self._get_plate(plate)
+    settings = self._get_absorbance_settings(measurement_settings, plate)
     measured = _get_measured_wells(plate, wells)
     parameters = self._driver.build_absorbance_run(
       wavelengths,
-      flashes=flashes,
-      settling_time=settling_time,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
-      well_scan=well_scan,
+      **self._get_run_fields(settings),
     )
+    await self._prepare(settings, shake_settings)
     start = datetime.now()
     data = await self._driver.run_measurement(parameters, timeout=timeout)
     end = datetime.now()
@@ -125,9 +134,8 @@ class Absorbance(Measurement):
     cycle_time: int,
     plate: Optional[Plate] = None,
     wells: Optional[Sequence[Well]] = None,
-    flashes: int = 22,
-    settling_time: float = 0.5,
-    well_scan: Optional[WellScan] = None,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
     timeout: Optional[float] = None,
   ) -> List[List[AbsorbanceResult]]:
     """Measure the absorbance of the plate at each wavelength ``cycles`` times, the reader starting
@@ -140,9 +148,8 @@ class Absorbance(Measurement):
         cycle time shorter than one cycle takes (``CommandRefusedError``, quit code 60).
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-500).
-      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
-      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      measurement_settings: how to read; None reads with the defaults.
+      shake_settings: shake the plate before the first cycle; None does not shake.
       timeout: seconds the run may take; None allows the cycles plus 300 s.
 
     Returns:
@@ -156,20 +163,18 @@ class Absorbance(Measurement):
     """
     self._check_wavelengths(wavelengths)
     self._check_cycles(cycles, cycle_time)
-    self._check_flashes(flashes)
-    self._check_settling_time(settling_time)
     plate = self._get_plate(plate)
+    settings = self._get_absorbance_settings(measurement_settings, plate)
     measured = _get_measured_wells(plate, wells)
     parameters = self._driver.build_absorbance_run(
       wavelengths,
-      flashes=flashes,
-      settling_time=settling_time,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
-      well_scan=well_scan,
       cycles=cycles,
       cycle_time=cycle_time,
+      **self._get_run_fields(settings),
     )
+    await self._prepare(settings, shake_settings)
     start = datetime.now()
     blocks = await self._driver.run_blocks(
       parameters, timeout=cycles * cycle_time + 300.0 if timeout is None else timeout
@@ -190,9 +195,8 @@ class Absorbance(Measurement):
     *,
     plate: Optional[Plate] = None,
     wells: Optional[Sequence[Well]] = None,
-    flashes: int = 22,
-    settling_time: float = 0.5,
-    well_scan: Optional[WellScan] = None,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
     timeout: float = 600.0,
   ) -> AbsorbanceSpectrumResult:
     """Measure the absorbance spectrum of the plate: every wavelength at once, well by well (the
@@ -204,9 +208,8 @@ class Absorbance(Measurement):
       step_size: nm between wavelengths, a whole nm dividing the range.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      flashes: flashes per well (1-500).
-      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
-      well_scan: average over an orbit or spiral in each well; None reads the centre.
+      measurement_settings: how to read; None reads with the defaults.
+      shake_settings: shake the plate before the read; None does not shake.
       timeout: seconds the run may take.
 
     Returns:
@@ -218,20 +221,18 @@ class Absorbance(Measurement):
     """
     self._check_wavelengths([start_wavelength, end_wavelength])
     scanned = self._get_scan_wavelengths(start_wavelength, end_wavelength, step_size)
-    self._check_flashes(flashes)
-    self._check_settling_time(settling_time)
     plate = self._get_plate(plate)
+    settings = self._get_absorbance_settings(measurement_settings, plate)
     measured = _get_measured_wells(plate, wells)
     parameters = self._driver.build_absorbance_spectrum_run(
       start_wavelength,
       end_wavelength,
       step_size,
-      flashes=flashes,
-      settling_time=settling_time,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
-      well_scan=well_scan,
+      **self._get_run_fields(settings),
     )
+    await self._prepare(settings, shake_settings)
     start = datetime.now()
     blocks = await self._driver.run_absorbance_spectrum(parameters, timeout=timeout)
     end = datetime.now()

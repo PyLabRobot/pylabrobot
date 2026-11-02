@@ -11,13 +11,18 @@ from .measurement import (
   DEFAULT_APERTURE_DISTANCE,
   LUMINESCENCE_NO_FILTER,
   Measurement,
+  MeasurementSettings,
   MonochromatorSettings,
+  ShakeSettings,
   _get_identifier,
   _get_measured_wells,
   get_plate_geometry,
 )
 
 logger = logging.getLogger(__name__)
+
+# Settling time when the measurement settings give none: Voyager's luminescence protocol.
+_DEFAULT_SETTLING_TIME = 0.02
 
 
 class Luminescence(Measurement):
@@ -36,7 +41,8 @@ class Luminescence(Measurement):
     monochromator: MonochromatorSettings = LUMINESCENCE_NO_FILTER,
     plate: Optional[Plate] = None,
     wells: Optional[Sequence[Well]] = None,
-    settling_time: float = 0.02,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
     timeout: float = 600.0,
   ) -> LuminescenceResult:
     """Measure the luminescence of the plate from the top (endpoint).  NOT TESTED on a reader with
@@ -55,7 +61,9 @@ class Luminescence(Measurement):
         Voyager's luminescence protocol does.
       plate: the plate to measure; None uses the plate on the plate holder.
       wells: the wells to measure; None measures every well.
-      settling_time: seconds to settle before reading each well (0.02-1.0, 20 ms steps).
+      measurement_settings: how to read; None reads with the defaults (20 ms settling).  Its
+        ``flashes`` and ``well_scan`` do not apply: a luminescence read integrates at the centre.
+      shake_settings: shake the plate before the read; None does not shake.
       timeout: seconds the run may take.
 
     Returns:
@@ -68,18 +76,30 @@ class Luminescence(Measurement):
     logger.warning("luminescence has not been tested on a VANTAstar; please report how it behaves")
     if not 0.01 <= integration_time <= 655.35:
       raise ValueError(f"integration_time must be 0.01-655.35 s, got {integration_time}")
-    self._check_settling_time(settling_time)
+    if measurement_settings is not None and (
+      measurement_settings.flashes is not None or measurement_settings.well_scan != "point"
+    ):
+      raise ValueError("a luminescence read takes no flashes and no well scan")
     plate = self._get_plate(plate)
+    settings = self._get_settings(
+      measurement_settings, plate, flashes=1, settling_time=_DEFAULT_SETTLING_TIME
+    )
     measured = _get_measured_wells(plate, wells)
     parameters = self._driver.build_luminescence_run(
       [monochromator],
       gains=None if gain is None else [gain],
       integration_time=integration_time,
-      settling_time=settling_time,
+      settling_time=_DEFAULT_SETTLING_TIME
+      if settings.settling_time is None
+      else settings.settling_time,
       aperture_distance=aperture_distance,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
+      corner=settings.corner,
+      reading_direction=settings.reading_direction,
+      bidirectional=settings.bidirectional,
     )
+    await self._prepare(settings, shake_settings)
     start = datetime.now()
     data = await self._driver.run_measurement(parameters, timeout=timeout)
     end = datetime.now()
