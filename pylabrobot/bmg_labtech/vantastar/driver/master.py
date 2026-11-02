@@ -10,10 +10,11 @@ The commands are sent with the fields and in the order BMG's Voyager software us
 """
 
 import asyncio
+import contextvars
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import (
@@ -149,6 +150,14 @@ class VANTAstarStatus:
 # ---------------------------------------------------------------------------
 
 
+class _Estimated(Exception):
+  """Ends a read under ``VANTAstarDriver.estimate_duration`` at its RUN, with the estimate."""
+
+  def __init__(self, seconds: int):
+    super().__init__(seconds)
+    self.seconds = seconds
+
+
 class CommandId:
   """Command ids: the first byte of every outgoing payload."""
 
@@ -189,6 +198,10 @@ _WITHOUT_CALIBRATION = 0x8000
 # RUN fields: the reading-mode byte and its CalcTimeOnly bit, set for a time estimate without a read.
 _READING_MODE = 66
 _CALC_TIME_ONLY = 0x01
+# Set while ``VANTAstarDriver.estimate_duration`` runs its read, in that task only.
+_estimating: contextvars.ContextVar[bool] = contextvars.ContextVar(
+  "vantastar_estimating", default=False
+)
 # MwBlockCommand GetStatusOfMeasDataBlock with a send block size of 65535.
 _MW_BLOCK_STATUS = bytes([CommandId.MW_BLOCK, 0x00, 0x00, 0x00, 0xFF, 0xFF])
 # MwBlockCommand ReleaseMeasDataBlock, of kinetic cycle 1, as Voyager sends it after the last well of
@@ -535,7 +548,15 @@ class VANTAstarDriver:
       FrameError: if every attempt gets a missing or malformed reply.
       CommandRefusedError: if the reader refused the command.
       DeviceError: if the reader reports a device error.
+      RuntimeError: under ``estimate_duration``, for any command but STATUS and a time estimate.
     """
+    if _estimating.get() and not (
+      command_id == CommandId.STATUS
+      or (command_id == CommandId.RUN and body[_READING_MODE] & _CALC_TIME_ONLY)
+    ):
+      raise RuntimeError(
+        f"estimate_duration estimates a read only; the call sent command 0x{command_id:02x}"
+      )
     payload = bytes([command_id]) + body
     if when_idle and command_id != CommandId.STATUS:
       await self._wait_until_ready(self.default_read_timeout, self.default_poll_interval)
@@ -985,8 +1006,9 @@ class VANTAstarDriver:
     """The run time in s the reader expects for a read of the RUN fields ``parameters``, without
     reading: the RUN is sent with CalcTimeOnly set, as Voyager sends it while a method is edited.
 
-    On the tested reader every read finished 3-7 s before its estimate (a read sent with the drawer
-    out took longer: the reader first moves the plate in).  Each read logs its estimate at INFO.
+    On the tested reader every read finished 2.5-7 s before its estimate (a read sent with the
+    drawer out took longer: the reader first moves the plate in).  Each read logs its estimate at
+    INFO.
 
     Raises:
       CommandRefusedError: if the reader refuses the fields, as it refuses them for a read.
@@ -994,6 +1016,38 @@ class VANTAstarDriver:
     fields = bytearray(parameters)
     fields[_READING_MODE] |= _CALC_TIME_ONLY
     return parse_run_time(await self.send_command(CommandId.RUN, bytes(fields)))
+
+  @property
+  def estimating(self) -> bool:
+    """Whether the current task runs a read under ``estimate_duration``."""
+    return _estimating.get()
+
+  async def estimate_duration(self, read: Callable[[], Awaitable[Any]]) -> int:
+    """The run time in s the reader expects for the read ``read`` makes, without reading.
+
+    ``read`` is called as usual, e.g. ``lambda: reader.absorbance.measure([450])``.  When the read
+    reaches its RUN, the RUN is sent with CalcTimeOnly set (``estimate_run_time``) and the call
+    ends there with the reader's estimate: one read, the first.  Meanwhile shaking before the read
+    and ``pause_before_reading`` are skipped, so the estimate leaves them out, and any other
+    command (a drawer move, a gain and focus adjustment) is refused: nothing moves.
+
+    On the tested reader every read finished 2.5-7 s before its estimate.  A reader without the
+    luminescence module estimates a luminescence read too, which it then refuses (quit code 205).
+
+    Raises:
+      ValueError: if ``read`` ends without a read.
+      RuntimeError: if ``read`` sends another command, or as the read raises it (the drawer is
+        open, no plate).
+      CommandRefusedError: if the reader refuses the read's fields, as it refuses them for a read.
+    """
+    token = _estimating.set(True)
+    try:
+      await read()
+    except _Estimated as estimated:
+      return estimated.seconds
+    finally:
+      _estimating.reset(token)
+    raise ValueError("the call ended without a read to estimate")
 
   async def _run(
     self, parameters: bytes, *, timeout: float, by_well: bool
@@ -1003,6 +1057,8 @@ class VANTAstarDriver:
     status = await self.request_status()
     if status.drawer_open:
       raise RuntimeError("the drawer is open; close it first")
+    if _estimating.get():
+      raise _Estimated(await self.estimate_run_time(parameters))
 
     self._measuring = True
     try:

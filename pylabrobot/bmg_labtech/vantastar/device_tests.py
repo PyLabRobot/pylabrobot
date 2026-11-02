@@ -1,19 +1,27 @@
-"""Tests for the VANTAstar device: stopping with a plate left in, and the plate holder following the
-drawer; and the devices on the driver's fake USB link the feature tests use."""
+"""Tests for the VANTAstar device: stopping with a plate left in, the plate holder following the
+drawer, and the estimate of a read's run time; and the devices on the driver's fake USB link the
+feature tests use."""
 
 import unittest
 from collections import deque
 from dataclasses import replace
 from typing import Callable, Deque, List
+from unittest import mock
 
 from pylabrobot.bmg_labtech.vantastar.device import (
   VANTAstarDevice,
 )
 from pylabrobot.bmg_labtech.vantastar.driver import master_tests
+from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
+  MeasurementSettings,
+  ShakeSettings,
+)
 from pylabrobot.bmg_labtech.vantastar.driver.master import VANTAstarDriver, VANTAstarStatus
 from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
+  FLUORESCENCE_LAST_PAGE,
   load_flows,
 )
+from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
 
 PHOTOCATALYST_WELLS = ["A1", "A6", "A12", "H1", "H6", "H12"]
@@ -79,6 +87,78 @@ class StopTests(unittest.IsolatedAsyncioTestCase):
     plate = device.plate_holder.resource
     assert plate is not None
     device.plate_holder.unassign_child_resource(plate)  # allowed: the drawer is open
+
+
+# 365/8 nm excitation, 400/10 nm emission.
+CHANNEL_365_400 = FluorescenceChannel(
+  excitation_wavelength=365,
+  excitation_bandwidth=8,
+  emission_wavelength=400,
+  emission_bandwidth=10,
+)
+
+
+def sent(device: VANTAstarDevice) -> List[bytes]:
+  """The commands ``device`` sent, but STATUS."""
+  return [c for c in master_tests.commands(device.driver) if c[0] != 0x80]
+
+
+class EstimateDurationTests(unittest.IsolatedAsyncioTestCase):
+  """The reader's estimate of a read's run time, without reading."""
+
+  async def test_the_read_with_calc_time_only(self):
+    """An estimate sends only the RUN the read sends, with CalcTimeOnly set, and returns the
+    reader's estimate; the read after it reads."""
+    device = make_device([FLUORESCENCE_LAST_PAGE])
+    seconds = await device.estimate_duration(
+      lambda: device.fluorescence.measure(CHANNEL_365_400, focal_height=5.0, gain=500)
+    )
+    self.assertEqual(seconds, 95)
+    (estimate,) = sent(device)
+    self.assertFalse(device.driver.estimating)
+    await device.fluorescence.measure(CHANNEL_365_400, focal_height=5.0, gain=500)
+    run = sent(device)[1]
+    self.assertEqual(run[0], 0x04)
+    self.assertEqual((estimate[67], run[67]), (0x03, 0x02))  # CalcTimeOnly, then a read
+    self.assertEqual(estimate[:67] + estimate[68:], run[:67] + run[68:])
+
+  async def test_shaking_and_pause_are_skipped(self):
+    """Shaking before the read and the pause before reading are left out of an estimate."""
+    device = make_device([])
+    with mock.patch("asyncio.sleep", new_callable=mock.AsyncMock) as sleep:
+      seconds = await device.estimate_duration(
+        lambda: device.absorbance.measure(
+          [450],
+          measurement_settings=MeasurementSettings(pause_before_reading=5),
+          shake_settings=ShakeSettings(pattern="orbital", speed=300, duration=5),
+        )
+      )
+    self.assertEqual(seconds, 95)
+    self.assertEqual([c[0] for c in sent(device)], [0x04])  # no IdleMove
+    self.assertNotIn(mock.call(5), sleep.await_args_list)
+
+  async def test_other_commands_are_refused(self):
+    """An estimate of a drawer move or a gain and focus adjustment is refused before anything is
+    sent."""
+    device = make_device([])
+    plate = device.plate_holder.resource
+    assert plate is not None
+    with self.assertRaises(RuntimeError):
+      await device.estimate_duration(lambda: device.drawer.open())
+    with self.assertRaises(RuntimeError):
+      await device.estimate_duration(
+        lambda: device.fluorescence.adjust_gain_and_focus(
+          CHANNEL_365_400, wells=plate.get_items(["A1"])
+        )
+      )
+    self.assertEqual(sent(device), [])
+    self.assertFalse(device.driver.estimating)
+
+  async def test_without_a_read(self):
+    """A call that ends without a read has nothing to estimate."""
+    device = make_device([])
+    with self.assertRaises(ValueError):
+      await device.estimate_duration(lambda: device.drawer.sense_drawer_open())
 
 
 class PlateHolderTests(unittest.TestCase):

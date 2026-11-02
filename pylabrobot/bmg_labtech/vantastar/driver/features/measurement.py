@@ -499,7 +499,10 @@ class Measurement:
   async def _prepare(
     self, settings: MeasurementSettings, shake_settings: Optional[ShakeSettings]
   ) -> None:
-    """Shake before the read (``shake_settings``), then wait ``pause_before_reading``."""
+    """Shake before the read (``shake_settings``), then wait ``pause_before_reading``; neither
+    under ``estimate_duration``, whose estimate leaves them out."""
+    if self._driver.estimating:
+      return
     if shake_settings is not None:
       await self._driver.shaker.shake(
         shake_settings.pattern, shake_settings.speed, shake_settings.duration

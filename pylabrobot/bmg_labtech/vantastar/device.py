@@ -1,6 +1,6 @@
 """BMG Labtech VANTAstar plate reader as a PyLabRobot resource."""
 
-from typing import Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from pylabrobot.io.usb import USB
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
@@ -160,6 +160,19 @@ class VANTAstarDevice(Resource):
   async def setup(self) -> None:
     """Connect and initialize the reader (about 10 s)."""
     await self.driver.setup()
+
+  async def estimate_duration(self, read: Callable[[], Awaitable[Any]]) -> int:
+    """The run time in s the reader expects for a read, without reading: ``read`` is called as
+    usual, e.g. ``lambda: reader.absorbance.measure([450])``, and ends at the read's RUN with the
+    reader's estimate (``VANTAstarDriver.estimate_duration``).  Shaking before the read and
+    ``pause_before_reading`` are skipped and left out of the estimate; nothing moves.
+
+    Raises:
+      ValueError: if ``read`` ends without a read.
+      RuntimeError: if ``read`` sends a command other than a read's (a drawer move, a gain and
+        focus adjustment), or as the read raises it (the drawer is open, no plate).
+    """
+    return await self.driver.estimate_duration(read)
 
   async def stop(self, accept_plate_left_in_device: bool = False) -> None:
     """Stop a running measurement, close the drawer, and disconnect.
