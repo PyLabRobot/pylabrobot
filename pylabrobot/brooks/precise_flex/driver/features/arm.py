@@ -369,21 +369,8 @@ class PreciseFlexArm:
   ) -> tuple[float, float, float, float, float, float]:
     if len(parts) != 6:
       raise PreciseFlexError(-1, "Unexpected response format for Cartesian coordinates.")
-    return (
-      float(parts[0]),
-      float(parts[1]),
-      float(parts[2]),
-      float(parts[3]),
-      float(parts[4]),
-      float(parts[5]),
-    )
-
-  async def _request_state(
-    self,
-  ) -> tuple[JointState, PreciseFlexCartesianPose]:
-    """Single-query snapshot of joint state and the derived Cartesian pose."""
-    joints = await self.request_joint_state()
-    return joints, kinematics.fk(joints, self._driver._kinematics_params)
+    x, y, z, yaw, pitch, roll = map(float, parts)
+    return (x, y, z, yaw, pitch, roll)
 
   # -- motion primitives ---------------------------------------------------------------------------
 
@@ -1060,26 +1047,7 @@ class PreciseFlexArm:
     parts = data.split()
     if len(parts) != 6:
       raise PreciseFlexError(-1, "Unexpected response format from tool command.")
-    x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts)
-    return (x, y, z, yaw, pitch, roll)
-
-  async def _set_tool_transformation_values(
-    self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float
-  ) -> None:
-    """Set the tool transformation. The robot must be attached; motion in progress pauses.
-
-    Private: the kinematics read the tool once at setup, so changing it leaves
-    `request_gripper_pose` out of step with the controller until the configuration is read again.
-
-    Args:
-      x: Tool X coordinate.
-      y: Tool Y coordinate.
-      z: Tool Z coordinate.
-      yaw: Tool yaw rotation.
-      pitch: Tool pitch rotation.
-      roll: Tool roll rotation.
-    """
-    await self._driver.send_command(f"tool {x} {y} {z} {yaw} {pitch} {roll}")
+    return self._parse_xyz_response(parts)
 
   # -- range checks and recovery -------------------------------------------------------------------
 
@@ -1679,8 +1647,7 @@ class PreciseFlexArm:
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
-    _, pose = await self._request_state()
-    return pose
+    return kinematics.fk(await self.request_joint_state(), self._driver._kinematics_params)
 
   async def request_pose(self) -> PreciseFlexPose:
     """Where every joint of the arm is, worked out from the joint state; nothing else is asked."""
@@ -1729,7 +1696,7 @@ class PreciseFlexArm:
       direction: Approach direction, applied as the pose's z rotation in degrees.
       speed_percent: Movement speed override as a percentage (0-100). If None, uses the current
         speed setting. It stays set afterwards; use ``at_speed`` to scope a speed to one move.
-      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+      orientation: Elbow orientation (``"left"`` or ``"right"``). If None, the robot
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
@@ -1908,7 +1875,7 @@ class PreciseFlexArm:
     return self._parse_angles_response(parts)
 
   async def set_station_to_current_joint_state(self, station_index: int) -> None:
-    """Record the current position of the selected robot into the specified Location as angles.
+    """Store the current position of the selected robot into the specified Location as angles.
 
     The Location is automatically set to type "angles".
 
@@ -1920,7 +1887,7 @@ class PreciseFlexArm:
   async def _unchecked_fw_set_station_to_current_cartesian_location(
     self, station_index: int
   ) -> None:
-    """Record the current position of the selected robot into the specified Location as Cartesian.
+    """Store the current position of the selected robot into the specified Location as Cartesian.
 
     The Location object is automatically set to type "Cartesian".
     Can be used to change the pallet origin (index 1,1,1) value.
@@ -2168,7 +2135,7 @@ class PreciseFlexArm:
       finger_speed_percent: Finger closing speed as a percentage (0-100).
         ``default_finger_speed_percent`` when None.
       grasp_force: Grasp force in Newtons. ``default_grasp_force`` when None.
-      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+      orientation: Elbow orientation (``"left"`` or ``"right"``). If None, the robot
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
@@ -2236,7 +2203,7 @@ class PreciseFlexArm:
       location: Cartesian location to drop at.
       direction: Approach direction, applied as the pose's z rotation in degrees.
       resource_width: Width of the held resource, in mm.
-      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+      orientation: Elbow orientation (``"left"`` or ``"right"``). If None, the robot
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
