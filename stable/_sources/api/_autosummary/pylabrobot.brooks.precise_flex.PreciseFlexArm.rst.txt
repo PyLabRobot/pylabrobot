@@ -19,6 +19,8 @@ pylabrobot.brooks.precise\_flex.PreciseFlexArm
       ~PreciseFlexArm.PARKING_POSITION_FRONT
       ~PreciseFlexArm.PARKING_POSITION_RIGHT
       ~PreciseFlexArm.default_recovery_speed_percent
+      ~PreciseFlexArm.default_ztouch_approach_speed_percent
+      ~PreciseFlexArm.default_ztouch_search_speed_percent
       ~PreciseFlexArm.parking_position
    
    
@@ -43,6 +45,7 @@ pylabrobot.brooks.precise\_flex.PreciseFlexArm
       ~PreciseFlexArm.park
       ~PreciseFlexArm.pick_up_at_joint_state
       ~PreciseFlexArm.pick_up_at_location
+      ~PreciseFlexArm.probe_z_using_ztouch
       ~PreciseFlexArm.recover_axes_within_limits
       ~PreciseFlexArm.reengage_brake
       ~PreciseFlexArm.release_brake
