@@ -9,10 +9,10 @@ common driver in one place rather than duplicated per arm model.
 Scope - the PreciseFlex robot line. Implemented:
 
 - PreciseFlex 400 (PF400)
-- PreciseFlex 3400 (PF3400)
 
 To be added here:
 
+- PreciseFlex 3400 (PF3400)
 - PreciseFlex 100 / 1400 (PF100 / PF1400)
 - c-series: c3, c5, c8A, c10
 - direct-drive: DD4, DD6
