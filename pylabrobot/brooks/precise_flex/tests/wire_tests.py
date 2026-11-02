@@ -841,6 +841,17 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     server_io.stop.assert_awaited_once()
     cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
+  async def test_stop_after_a_failed_setup_keeps_the_setup_error(self):
+    fake = _FakeController({"state": "-3101"})
+    arm = _make_arm(fake)
+    with self.assertRaises(PreciseFlexError):
+      try:
+        await arm.setup(skip_home=True)
+      finally:
+        sent = len(fake.sent)
+        await arm.stop()
+    self.assertEqual(len(fake.sent), sent)
+
   async def test_a_failure_while_connecting_closes_the_link(self):
     fake = _FakeController({"mode 0": "-1"})
     arm = _make_arm(fake)

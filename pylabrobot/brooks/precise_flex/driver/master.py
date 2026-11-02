@@ -195,6 +195,8 @@ class PreciseFlexDriver:
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
+    # Whether the controller link is open, so `disconnect` after a failed setup does nothing.
+    self._connected = False
     self.timeout = timeout
     # Serializes each request->reply exchange over the single shared controller socket; the
     # rationale (and why it is kept though uncontended today) is in _locked_exchange.
@@ -495,11 +497,13 @@ class PreciseFlexDriver:
             self.io._host,
             error,
           )
+        self._connected = False
       raise
 
   async def connect(self) -> None:
     """Open the link and agree the response protocol. Powers nothing, moves nothing."""
     await self.io.setup()
+    self._connected = True
     await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
@@ -669,13 +673,17 @@ class PreciseFlexDriver:
   async def disconnect(self) -> None:
     """Hand the arm back and close the links. Moves nothing.
 
-    Drops high power as well as releasing the arm, because ``initialize`` raised it.
+    Drops high power as well as releasing the arm, because ``initialize`` raised it. Does nothing
+    when the link is not open, as after a setup that failed and handed the arm back.
     """
+    if not self._connected:
+      return
     await self.detach()
     await self.power_off_robot()
     await self._exit()
     await self._close_vision_server()
     await self.io.stop()
+    self._connected = False
     logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
   @evented_operation(
