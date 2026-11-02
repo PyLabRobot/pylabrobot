@@ -21,9 +21,10 @@ VANTAstar
    driver.features.luminescence.Luminescence
    driver.features.shaker.Shaker
    driver.features.temperature_controller.TemperatureController
+   MeasurementSettings
+   ShakeSettings
    driver.features.measurement.MonochromatorSettings
    driver.features.measurement.PlateGeometry
-   driver.features.measurement.WellScan
    driver.responses.GainFocus
    driver.configuration.VANTAstarConfiguration
    driver.errors.CommandRefusedError
