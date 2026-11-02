@@ -975,13 +975,13 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     self.assertIn("HeightDetect 2 -28.0 -15.0", fake.sent)
 
   async def test_the_search_speed_is_the_default_or_the_argument_and_is_put_back(self):
-    for arguments, sent in (({}, "mspeed 20"), ({"search_speed_percent": 30}, "mspeed 30")):
+    for arguments, sent in (({}, "mspeed 50"), ({"search_speed_percent": 40}, "mspeed 40")):
       with self.subTest(arguments):
-        arm, fake = await self._arm()
+        arm, fake = await self._arm(mspeed="0 30")
         await arm.arm.probe_z_using_ztouch(search_end_position=29.889, **arguments)
         search = fake.sent.index("HeightDetect 1 -28.0 -15.0")
         self.assertLess(fake.sent.index(sent), search)
-        self.assertGreater(fake.sent.index("mspeed 50"), search)
+        self.assertGreater(fake.sent.index("mspeed 30"), search)
 
   async def test_a_default_search_speed_out_of_range_is_refused_on_assignment(self):
     arm, _ = await self._arm()
@@ -991,7 +991,7 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
   async def test_the_approach_and_the_rest_run_at_the_default_or_the_argument_speed(self):
     # The profile speed was 20 before: the approach once ran at whatever it was.
     for arguments, sent in (
-      ({}, "Speed 1 10.0"),
+      ({}, "Speed 1 75.0"),
       ({"approach_speed_percent": 30.0}, "Speed 1 30.0"),
     ):
       with self.subTest(arguments):

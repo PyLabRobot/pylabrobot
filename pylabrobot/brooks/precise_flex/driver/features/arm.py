@@ -213,8 +213,8 @@ class PreciseFlexArm:
   # What the driver sends when a caller leaves the value out. Tune one arm by assigning on the
   # instance, or every arm by assigning on the class.
   default_recovery_speed_percent: float = 20.0
-  _default_ztouch_search_speed_percent: int = 20
-  _default_ztouch_approach_speed_percent: float = 10.0
+  _default_ztouch_search_speed_percent: int = 50
+  _default_ztouch_approach_speed_percent: float = 75.0
 
   # Parked orientations: planar folds, named for the way the gripper points. Z, gripper and rail are
   # left out: ``park()`` fills Z from the travel, and a held plate or a rail is not disturbed.
