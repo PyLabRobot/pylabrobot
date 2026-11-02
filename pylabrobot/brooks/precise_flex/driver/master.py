@@ -23,7 +23,6 @@ from pylabrobot.brooks.precise_flex.driver.configuration import (
   DEVICE_FEATURE_CONFIGURATIONS,
   PreciseFlexAxis,
   PreciseFlexConfiguration,
-  _warn_deprecated,
   read_configuration,
   to_jsonable,
 )
@@ -1345,22 +1344,36 @@ class PreciseFlexDriver:
 
   async def request_joint_position(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_joint_state``."""
-    _warn_deprecated("`request_joint_position` is deprecated, use `arm.request_joint_state`.")
+    warnings.warn(
+      "`request_joint_position` is deprecated, use `arm.request_joint_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_joint_state(*args, **kwargs)
 
   async def request_state(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_state``."""
-    _warn_deprecated("`request_state` is deprecated, use `arm.request_state`.")
+    warnings.warn(
+      "`request_state` is deprecated, use `arm.request_state`.", DeprecationWarning, stacklevel=2
+    )
     return await self.arm.request_state(*args, **kwargs)
 
   async def request_gripper_pose(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_gripper_pose``."""
-    _warn_deprecated("`request_gripper_pose` is deprecated, use `arm.request_gripper_pose`.")
+    warnings.warn(
+      "`request_gripper_pose` is deprecated, use `arm.request_gripper_pose`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_gripper_pose(*args, **kwargs)
 
   async def move_to_joint_position(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.move_to_joint_state``."""
-    _warn_deprecated("`move_to_joint_position` is deprecated, use `arm.move_to_joint_state`.")
+    warnings.warn(
+      "`move_to_joint_position` is deprecated, use `arm.move_to_joint_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "position" in kwargs:
       kwargs["joint_state"] = kwargs.pop("position")
     if "speed_pct" in kwargs:
@@ -1369,15 +1382,21 @@ class PreciseFlexDriver:
 
   async def move_to_location(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.move_to_location``."""
-    _warn_deprecated("`move_to_location` is deprecated, use `arm.move_to_location`.")
+    warnings.warn(
+      "`move_to_location` is deprecated, use `arm.move_to_location`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "speed_pct" in kwargs:
       kwargs["speed_percent"] = kwargs.pop("speed_pct")
     return await self.arm.move_to_location(*args, **kwargs)
 
   async def move_through_cartesian_poses(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.move_through_cartesian_poses``."""
-    _warn_deprecated(
-      "`move_through_cartesian_poses` is deprecated, use `arm.move_through_cartesian_poses`."
+    warnings.warn(
+      "`move_through_cartesian_poses` is deprecated, use `arm.move_through_cartesian_poses`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "speed_pct" in kwargs:
       kwargs["speed_percent"] = kwargs.pop("speed_pct")
@@ -1385,8 +1404,10 @@ class PreciseFlexDriver:
 
   async def recover_axes_within_limits(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.recover_axes_within_limits``."""
-    _warn_deprecated(
-      "`recover_axes_within_limits` is deprecated, use `arm.recover_axes_within_limits`."
+    warnings.warn(
+      "`recover_axes_within_limits` is deprecated, use `arm.recover_axes_within_limits`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "speed_pct" in kwargs:
       kwargs["speed_percent"] = kwargs.pop("speed_pct")
@@ -1394,9 +1415,11 @@ class PreciseFlexDriver:
 
   async def dest_c(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_destination_joint_state``."""
-    _warn_deprecated(
+    warnings.warn(
       "`dest_c` is deprecated: the controller's own Cartesian destination is no longer public. "
-      "`arm.request_destination_joint_state` gives the destination, in joints."
+      "`arm.request_destination_joint_state` gives the destination, in joints.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "arg1" in kwargs:
       kwargs["mode"] = kwargs.pop("arg1")
@@ -1404,23 +1427,33 @@ class PreciseFlexDriver:
 
   async def dest_j(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_destination_joint_state``."""
-    _warn_deprecated("`dest_j` is deprecated, use `arm.request_destination_joint_state`.")
+    warnings.warn(
+      "`dest_j` is deprecated, use `arm.request_destination_joint_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "arg1" in kwargs:
       kwargs["mode"] = kwargs.pop("arg1")
     return await self.arm.request_destination_joint_state(*args, **kwargs)
 
   async def here_j(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_station_to_current_joint_state``."""
-    _warn_deprecated("`here_j` is deprecated, use `arm.set_station_to_current_joint_state`.")
+    warnings.warn(
+      "`here_j` is deprecated, use `arm.set_station_to_current_joint_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "location_index" in kwargs:
       kwargs["station_index"] = kwargs.pop("location_index")
     return await self.arm.set_station_to_current_joint_state(*args, **kwargs)
 
   async def here_c(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_station_to_current_joint_state``."""
-    _warn_deprecated(
+    warnings.warn(
       "`here_c` is deprecated: storing a station as the controller's own Cartesian is no longer "
-      "public. `arm.set_station_to_current_joint_state` stores the same position, in joints."
+      "public. `arm.set_station_to_current_joint_state` stores the same position, in joints.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "location_index" in kwargs:
       kwargs["station_index"] = kwargs.pop("location_index")
@@ -1428,14 +1461,20 @@ class PreciseFlexDriver:
 
   async def move_gripper(self, width: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position``."""
-    _warn_deprecated("`move_gripper` is deprecated, use `gripper.move_to_jaw_position`.")
+    warnings.warn(
+      "`move_gripper` is deprecated, use `gripper.move_to_jaw_position`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.gripper.move_to_jaw_position(width, force_sensing=force_sensing)
 
   async def move_gripper_joint_position(self, position: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position_firmware_units``."""
-    _warn_deprecated(
+    warnings.warn(
       "`move_gripper_joint_position` is deprecated, use "
-      "`gripper.move_to_jaw_position_firmware_units`."
+      "`gripper.move_to_jaw_position_firmware_units`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.gripper.move_to_jaw_position_firmware_units(
       position, force_sensing=force_sensing
@@ -1443,115 +1482,179 @@ class PreciseFlexDriver:
 
   async def is_gripper_closed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``gripper.sense_fully_closed``."""
-    _warn_deprecated("`is_gripper_closed` is deprecated, use `gripper.sense_fully_closed`.")
+    warnings.warn(
+      "`is_gripper_closed` is deprecated, use `gripper.sense_fully_closed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.gripper.sense_fully_closed(*args, **kwargs)
 
   async def are_grippers_closed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``gripper.sense_each_fully_closed``."""
-    _warn_deprecated("`are_grippers_closed` is deprecated, use `gripper.sense_each_fully_closed`.")
+    warnings.warn(
+      "`are_grippers_closed` is deprecated, use `gripper.sense_each_fully_closed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.gripper.sense_each_fully_closed(*args, **kwargs)
 
   async def move_rail(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``rail.move_rail``."""
-    _warn_deprecated("`move_rail` is deprecated, use `rail.move_rail`.")
+    warnings.warn(
+      "`move_rail` is deprecated, use `rail.move_rail`.", DeprecationWarning, stacklevel=2
+    )
     return await self.arm._require_rail().move_rail(*args, **kwargs)
 
   @property
   def min_gripper_width(self) -> float:
     """Deprecated: use ``gripper.jaw_width_range``."""
-    _warn_deprecated("`min_gripper_width` is deprecated, use `gripper.jaw_width_range`.")
+    warnings.warn(
+      "`min_gripper_width` is deprecated, use `gripper.jaw_width_range`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.gripper.jaw_width_range[0]
 
   @min_gripper_width.setter
   def min_gripper_width(self, value: float) -> None:
-    _warn_deprecated("`min_gripper_width` is deprecated, use `gripper.jaw_width_range`.")
+    warnings.warn(
+      "`min_gripper_width` is deprecated, use `gripper.jaw_width_range`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.gripper.jaw_width_range = (value, self.gripper.jaw_width_range[1])
 
   @property
   def max_gripper_width(self) -> float:
     """Deprecated: use ``gripper.jaw_width_range``."""
-    _warn_deprecated("`max_gripper_width` is deprecated, use `gripper.jaw_width_range`.")
+    warnings.warn(
+      "`max_gripper_width` is deprecated, use `gripper.jaw_width_range`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.gripper.jaw_width_range[1]
 
   @max_gripper_width.setter
   def max_gripper_width(self, value: float) -> None:
-    _warn_deprecated("`max_gripper_width` is deprecated, use `gripper.jaw_width_range`.")
+    warnings.warn(
+      "`max_gripper_width` is deprecated, use `gripper.jaw_width_range`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.gripper.jaw_width_range = (self.gripper.jaw_width_range[0], value)
 
   @property
   def closed_gripper_position(self) -> float:
     """Deprecated: use ``gripper.closed_gripper_position``."""
-    _warn_deprecated(
-      "`closed_gripper_position` is deprecated, use `gripper.closed_gripper_position`."
+    warnings.warn(
+      "`closed_gripper_position` is deprecated, use `gripper.closed_gripper_position`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return self.gripper.closed_gripper_position
 
   @closed_gripper_position.setter
   def closed_gripper_position(self, value: float) -> None:
-    _warn_deprecated(
-      "`closed_gripper_position` is deprecated, use `gripper.closed_gripper_position`."
+    warnings.warn(
+      "`closed_gripper_position` is deprecated, use `gripper.closed_gripper_position`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     self.gripper.closed_gripper_position = value
 
   async def request_monitor_speed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_monitor_speed``."""
-    _warn_deprecated("`request_monitor_speed` is deprecated, use `arm.request_monitor_speed`.")
+    warnings.warn(
+      "`request_monitor_speed` is deprecated, use `arm.request_monitor_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_monitor_speed(*args, **kwargs)
 
   async def set_monitor_speed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_monitor_speed``."""
-    _warn_deprecated("`set_monitor_speed` is deprecated, use `arm.set_monitor_speed`.")
+    warnings.warn(
+      "`set_monitor_speed` is deprecated, use `arm.set_monitor_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "speed_pct" in kwargs:
       kwargs["speed_percent"] = kwargs.pop("speed_pct")
     return await self.arm.set_monitor_speed(*args, **kwargs)
 
   async def request_payload(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_payload``."""
-    _warn_deprecated("`request_payload` is deprecated, use `arm.request_payload`.")
+    warnings.warn(
+      "`request_payload` is deprecated, use `arm.request_payload`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_payload(*args, **kwargs)
 
   async def set_payload(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_payload``."""
-    _warn_deprecated("`set_payload` is deprecated, use `arm.set_payload`.")
+    warnings.warn(
+      "`set_payload` is deprecated, use `arm.set_payload`.", DeprecationWarning, stacklevel=2
+    )
     if "payload_pct" in kwargs:
       kwargs["payload_percent"] = kwargs.pop("payload_pct")
     return await self.arm.set_payload(*args, **kwargs)
 
   async def request_profile_speed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_speed``."""
-    _warn_deprecated("`request_profile_speed` is deprecated, use `arm.request_profile_speed`.")
+    warnings.warn(
+      "`request_profile_speed` is deprecated, use `arm.request_profile_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_profile_speed(*args, **kwargs)
 
   async def set_profile_speed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_speed``."""
-    _warn_deprecated("`set_profile_speed` is deprecated, use `arm.set_profile_speed`.")
+    warnings.warn(
+      "`set_profile_speed` is deprecated, use `arm.set_profile_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "speed_pct" in kwargs:
       kwargs["speed_percent"] = kwargs.pop("speed_pct")
     return await self.arm.set_profile_speed(*args, **kwargs)
 
   async def request_profile_speed2(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_speed2``."""
-    _warn_deprecated("`request_profile_speed2` is deprecated, use `arm.request_profile_speed2`.")
+    warnings.warn(
+      "`request_profile_speed2` is deprecated, use `arm.request_profile_speed2`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_profile_speed2(*args, **kwargs)
 
   async def set_profile_speed2(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_speed2``."""
-    _warn_deprecated("`set_profile_speed2` is deprecated, use `arm.set_profile_speed2`.")
+    warnings.warn(
+      "`set_profile_speed2` is deprecated, use `arm.set_profile_speed2`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "speed2_pct" in kwargs:
       kwargs["speed2_percent"] = kwargs.pop("speed2_pct")
     return await self.arm.set_profile_speed2(*args, **kwargs)
 
   async def request_profile_acceleration(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_acceleration``."""
-    _warn_deprecated(
-      "`request_profile_acceleration` is deprecated, use `arm.request_profile_acceleration`."
+    warnings.warn(
+      "`request_profile_acceleration` is deprecated, use `arm.request_profile_acceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_profile_acceleration(*args, **kwargs)
 
   async def set_profile_acceleration(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_acceleration``."""
-    _warn_deprecated(
-      "`set_profile_acceleration` is deprecated, use `arm.set_profile_acceleration`."
+    warnings.warn(
+      "`set_profile_acceleration` is deprecated, use `arm.set_profile_acceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "acceleration_pct" in kwargs:
       kwargs["acceleration_percent"] = kwargs.pop("acceleration_pct")
@@ -1559,30 +1662,38 @@ class PreciseFlexDriver:
 
   async def request_profile_acceleration_ramp(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_acceleration_ramp``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_profile_acceleration_ramp` is deprecated, use "
-      "`arm.request_profile_acceleration_ramp`."
+      "`arm.request_profile_acceleration_ramp`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_profile_acceleration_ramp(*args, **kwargs)
 
   async def set_profile_acceleration_ramp(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_acceleration_ramp``."""
-    _warn_deprecated(
-      "`set_profile_acceleration_ramp` is deprecated, use `arm.set_profile_acceleration_ramp`."
+    warnings.warn(
+      "`set_profile_acceleration_ramp` is deprecated, use `arm.set_profile_acceleration_ramp`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.set_profile_acceleration_ramp(*args, **kwargs)
 
   async def request_profile_deceleration(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_deceleration``."""
-    _warn_deprecated(
-      "`request_profile_deceleration` is deprecated, use `arm.request_profile_deceleration`."
+    warnings.warn(
+      "`request_profile_deceleration` is deprecated, use `arm.request_profile_deceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_profile_deceleration(*args, **kwargs)
 
   async def set_profile_deceleration(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_deceleration``."""
-    _warn_deprecated(
-      "`set_profile_deceleration` is deprecated, use `arm.set_profile_deceleration`."
+    warnings.warn(
+      "`set_profile_deceleration` is deprecated, use `arm.set_profile_deceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "deceleration_pct" in kwargs:
       kwargs["deceleration_percent"] = kwargs.pop("deceleration_pct")
@@ -1590,54 +1701,74 @@ class PreciseFlexDriver:
 
   async def request_profile_deceleration_ramp(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_deceleration_ramp``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_profile_deceleration_ramp` is deprecated, use "
-      "`arm.request_profile_deceleration_ramp`."
+      "`arm.request_profile_deceleration_ramp`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_profile_deceleration_ramp(*args, **kwargs)
 
   async def set_profile_deceleration_ramp(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_deceleration_ramp``."""
-    _warn_deprecated(
-      "`set_profile_deceleration_ramp` is deprecated, use `arm.set_profile_deceleration_ramp`."
+    warnings.warn(
+      "`set_profile_deceleration_ramp` is deprecated, use `arm.set_profile_deceleration_ramp`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.set_profile_deceleration_ramp(*args, **kwargs)
 
   async def request_profile_in_range(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_in_range``."""
-    _warn_deprecated(
-      "`request_profile_in_range` is deprecated, use `arm.request_profile_in_range`."
+    warnings.warn(
+      "`request_profile_in_range` is deprecated, use `arm.request_profile_in_range`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_profile_in_range(*args, **kwargs)
 
   async def set_profile_in_range(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_in_range``."""
-    _warn_deprecated("`set_profile_in_range` is deprecated, use `arm.set_profile_in_range`.")
+    warnings.warn(
+      "`set_profile_in_range` is deprecated, use `arm.set_profile_in_range`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.set_profile_in_range(*args, **kwargs)
 
   async def request_profile_straight(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_profile_straight``."""
-    _warn_deprecated(
-      "`request_profile_straight` is deprecated, use `arm.request_profile_straight`."
+    warnings.warn(
+      "`request_profile_straight` is deprecated, use `arm.request_profile_straight`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_profile_straight(*args, **kwargs)
 
   async def set_profile_straight(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_profile_straight``."""
-    _warn_deprecated("`set_profile_straight` is deprecated, use `arm.set_profile_straight`.")
+    warnings.warn(
+      "`set_profile_straight` is deprecated, use `arm.set_profile_straight`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.set_profile_straight(*args, **kwargs)
 
   async def request_motion_profile_values(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_motion_profile_values``."""
-    _warn_deprecated(
-      "`request_motion_profile_values` is deprecated, use `arm.request_motion_profile_values`."
+    warnings.warn(
+      "`request_motion_profile_values` is deprecated, use `arm.request_motion_profile_values`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_motion_profile_values(*args, **kwargs)
 
   async def set_motion_profile_values(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_motion_profile_values``."""
-    _warn_deprecated(
-      "`set_motion_profile_values` is deprecated, use `arm.set_motion_profile_values`."
+    warnings.warn(
+      "`set_motion_profile_values` is deprecated, use `arm.set_motion_profile_values`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if "speed_pct" in kwargs:
       kwargs["speed_percent"] = kwargs.pop("speed_pct")
@@ -1652,28 +1783,38 @@ class PreciseFlexDriver:
   @property
   def profile_index(self) -> int:
     """Deprecated: use ``arm.profile_index``."""
-    _warn_deprecated("`profile_index` is deprecated, use `arm.profile_index`.")
+    warnings.warn(
+      "`profile_index` is deprecated, use `arm.profile_index`.", DeprecationWarning, stacklevel=2
+    )
     return self.arm.profile_index
 
   @profile_index.setter
   def profile_index(self, value: int) -> None:
-    _warn_deprecated("`profile_index` is deprecated, use `arm.profile_index`.")
+    warnings.warn(
+      "`profile_index` is deprecated, use `arm.profile_index`.", DeprecationWarning, stacklevel=2
+    )
     self.arm.profile_index = value
 
   async def release_brake(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.release_brake``."""
-    _warn_deprecated("`release_brake` is deprecated, use `arm.release_brake`.")
+    warnings.warn(
+      "`release_brake` is deprecated, use `arm.release_brake`.", DeprecationWarning, stacklevel=2
+    )
     return await self.arm.release_brake(*args, **kwargs)
 
   async def set_brake(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.reengage_brake``."""
-    _warn_deprecated("`set_brake` is deprecated, use `arm.reengage_brake`.")
+    warnings.warn(
+      "`set_brake` is deprecated, use `arm.reengage_brake`.", DeprecationWarning, stacklevel=2
+    )
     return await self.arm.reengage_brake(*args, **kwargs)
 
   async def zero_torque(self, enable: bool, axis_mask: int = 1) -> None:
     """Deprecated: use ``arm.start_zero_torque`` or ``arm.stop_zero_torque``."""
-    _warn_deprecated(
-      "`zero_torque` is deprecated, use `arm.start_zero_torque` or `arm.stop_zero_torque`."
+    warnings.warn(
+      "`zero_torque` is deprecated, use `arm.start_zero_torque` or `arm.stop_zero_torque`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     if enable:
       await self.arm.start_zero_torque(axis_mask)
@@ -1682,125 +1823,177 @@ class PreciseFlexDriver:
 
   async def start_freedrive_mode(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.start_freedrive_mode``."""
-    _warn_deprecated("`start_freedrive_mode` is deprecated, use `arm.start_freedrive_mode`.")
+    warnings.warn(
+      "`start_freedrive_mode` is deprecated, use `arm.start_freedrive_mode`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.start_freedrive_mode(*args, **kwargs)
 
   async def stop_freedrive_mode(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.stop_freedrive_mode``."""
-    _warn_deprecated("`stop_freedrive_mode` is deprecated, use `arm.stop_freedrive_mode`.")
+    warnings.warn(
+      "`stop_freedrive_mode` is deprecated, use `arm.stop_freedrive_mode`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.stop_freedrive_mode(*args, **kwargs)
 
   async def halt(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.halt``."""
-    _warn_deprecated("`halt` is deprecated, use `arm.halt`.")
+    warnings.warn("`halt` is deprecated, use `arm.halt`.", DeprecationWarning, stacklevel=2)
     return await self.arm.halt(*args, **kwargs)
 
   async def change_config(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.change_elbow_orientation``."""
-    _warn_deprecated("`change_config` is deprecated, use `arm.change_elbow_orientation`.")
+    warnings.warn(
+      "`change_config` is deprecated, use `arm.change_elbow_orientation`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.change_elbow_orientation(*args, **kwargs)
 
   async def change_config2(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.change_elbow_orientation_by_algorithm``."""
-    _warn_deprecated(
-      "`change_config2` is deprecated, use `arm.change_elbow_orientation_by_algorithm`."
+    warnings.warn(
+      "`change_config2` is deprecated, use `arm.change_elbow_orientation_by_algorithm`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.change_elbow_orientation_by_algorithm(*args, **kwargs)
 
   async def request_joint_limits(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_joint_limits``."""
-    _warn_deprecated("`request_joint_limits` is deprecated, use `arm.request_joint_limits`.")
+    warnings.warn(
+      "`request_joint_limits` is deprecated, use `arm.request_joint_limits`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_joint_limits(*args, **kwargs)
 
   async def request_reference_speed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_reference_speed``."""
-    _warn_deprecated("`request_reference_speed` is deprecated, use `arm.request_reference_speed`.")
+    warnings.warn(
+      "`request_reference_speed` is deprecated, use `arm.request_reference_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_reference_speed(*args, **kwargs)
 
   async def request_reference_acceleration(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_reference_acceleration``."""
-    _warn_deprecated(
-      "`request_reference_acceleration` is deprecated, use `arm.request_reference_acceleration`."
+    warnings.warn(
+      "`request_reference_acceleration` is deprecated, use `arm.request_reference_acceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_reference_acceleration(*args, **kwargs)
 
   async def request_link_lengths(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_link_lengths``."""
-    _warn_deprecated("`request_link_lengths` is deprecated, use `arm.request_link_lengths`.")
+    warnings.warn(
+      "`request_link_lengths` is deprecated, use `arm.request_link_lengths`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_link_lengths(*args, **kwargs)
 
   async def request_tool_length(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_tool_length``."""
-    _warn_deprecated("`request_tool_length` is deprecated, use `arm.request_tool_length`.")
+    warnings.warn(
+      "`request_tool_length` is deprecated, use `arm.request_tool_length`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.request_tool_length(*args, **kwargs)
 
   async def request_kinematic_parameters(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_kinematic_parameters``."""
-    _warn_deprecated(
-      "`request_kinematic_parameters` is deprecated, use `arm.request_kinematic_parameters`."
+    warnings.warn(
+      "`request_kinematic_parameters` is deprecated, use `arm.request_kinematic_parameters`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_kinematic_parameters(*args, **kwargs)
 
   async def request_reference_cartesian_speed(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_reference_cartesian_speed``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_reference_cartesian_speed` is deprecated, use "
-      "`arm.request_reference_cartesian_speed`."
+      "`arm.request_reference_cartesian_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_reference_cartesian_speed(*args, **kwargs)
 
   async def request_reference_cartesian_acceleration(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_reference_cartesian_acceleration``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_reference_cartesian_acceleration` is deprecated, use "
-      "`arm.request_reference_cartesian_acceleration`."
+      "`arm.request_reference_cartesian_acceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_reference_cartesian_acceleration(*args, **kwargs)
 
   async def request_max_speed_percent(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_max_speed_percent``."""
-    _warn_deprecated(
-      "`request_max_speed_percent` is deprecated, use `arm.request_max_speed_percent`."
+    warnings.warn(
+      "`request_max_speed_percent` is deprecated, use `arm.request_max_speed_percent`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_max_speed_percent(*args, **kwargs)
 
   async def request_max_acceleration_percent(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_max_acceleration_percent``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_max_acceleration_percent` is deprecated, use "
-      "`arm.request_max_acceleration_percent`."
+      "`arm.request_max_acceleration_percent`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_max_acceleration_percent(*args, **kwargs)
 
   async def request_max_deceleration_percent(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_max_deceleration_percent``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_max_deceleration_percent` is deprecated, use "
-      "`arm.request_max_deceleration_percent`."
+      "`arm.request_max_deceleration_percent`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_max_deceleration_percent(*args, **kwargs)
 
   async def request_base(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_base``."""
-    _warn_deprecated("`request_base` is deprecated, use `arm.request_base`.")
+    warnings.warn(
+      "`request_base` is deprecated, use `arm.request_base`.", DeprecationWarning, stacklevel=2
+    )
     return await self.arm.request_base(*args, **kwargs)
 
   async def set_base(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.set_base``."""
-    _warn_deprecated("`set_base` is deprecated, use `arm.set_base`.")
+    warnings.warn("`set_base` is deprecated, use `arm.set_base`.", DeprecationWarning, stacklevel=2)
     return await self.arm.set_base(*args, **kwargs)
 
   async def request_tool_transformation_values(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.request_tool_transformation_values``."""
-    _warn_deprecated(
+    warnings.warn(
       "`request_tool_transformation_values` is deprecated, use "
-      "`arm.request_tool_transformation_values`."
+      "`arm.request_tool_transformation_values`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return await self.arm.request_tool_transformation_values(*args, **kwargs)
 
   async def pick_up_at_joint_position(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.pick_up_at_joint_state``."""
-    _warn_deprecated("`pick_up_at_joint_position` is deprecated, use `arm.pick_up_at_joint_state`.")
+    warnings.warn(
+      "`pick_up_at_joint_position` is deprecated, use `arm.pick_up_at_joint_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "position" in kwargs:
       kwargs["joint_state"] = kwargs.pop("position")
     if "finger_speed_pct" in kwargs:
@@ -1809,73 +2002,109 @@ class PreciseFlexDriver:
 
   async def drop_at_joint_position(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.drop_at_joint_state``."""
-    _warn_deprecated("`drop_at_joint_position` is deprecated, use `arm.drop_at_joint_state`.")
+    warnings.warn(
+      "`drop_at_joint_position` is deprecated, use `arm.drop_at_joint_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "position" in kwargs:
       kwargs["joint_state"] = kwargs.pop("position")
     return await self.arm.drop_at_joint_state(*args, **kwargs)
 
   async def pick_up_at_location(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.pick_up_at_location``."""
-    _warn_deprecated("`pick_up_at_location` is deprecated, use `arm.pick_up_at_location`.")
+    warnings.warn(
+      "`pick_up_at_location` is deprecated, use `arm.pick_up_at_location`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     if "finger_speed_pct" in kwargs:
       kwargs["finger_speed_percent"] = kwargs.pop("finger_speed_pct")
     return await self.arm.pick_up_at_location(*args, **kwargs)
 
   async def drop_at_location(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.drop_at_location``."""
-    _warn_deprecated("`drop_at_location` is deprecated, use `arm.drop_at_location`.")
+    warnings.warn(
+      "`drop_at_location` is deprecated, use `arm.drop_at_location`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return await self.arm.drop_at_location(*args, **kwargs)
 
   async def park(self, *args: Any, **kwargs: Any) -> Any:
     """Deprecated: use ``arm.park``."""
-    _warn_deprecated("`park` is deprecated, use `arm.park`.")
+    warnings.warn("`park` is deprecated, use `arm.park`.", DeprecationWarning, stacklevel=2)
     return await self.arm.park(*args, **kwargs)
 
   @property
   def parking_position(self) -> Optional[JointState]:
     """Deprecated: use ``arm.parking_position``."""
-    _warn_deprecated("`parking_position` is deprecated, use `arm.parking_position`.")
+    warnings.warn(
+      "`parking_position` is deprecated, use `arm.parking_position`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.arm.parking_position
 
   @parking_position.setter
   def parking_position(self, value: Optional[JointState]) -> None:
-    _warn_deprecated("`parking_position` is deprecated, use `arm.parking_position`.")
+    warnings.warn(
+      "`parking_position` is deprecated, use `arm.parking_position`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.arm.parking_position = value
 
   @property
   def location_index(self) -> int:
     """Deprecated: use ``arm.station_index``."""
-    _warn_deprecated("`location_index` is deprecated, use `arm.station_index`.")
+    warnings.warn(
+      "`location_index` is deprecated, use `arm.station_index`.", DeprecationWarning, stacklevel=2
+    )
     return self.arm.station_index
 
   @location_index.setter
   def location_index(self, value: int) -> None:
-    _warn_deprecated("`location_index` is deprecated, use `arm.station_index`.")
+    warnings.warn(
+      "`location_index` is deprecated, use `arm.station_index`.", DeprecationWarning, stacklevel=2
+    )
     self.arm.station_index = value
 
   @property
   def horizontal_compliance(self) -> bool:
     """Deprecated: use ``arm.horizontal_compliance``."""
-    _warn_deprecated("`horizontal_compliance` is deprecated, use `arm.horizontal_compliance`.")
+    warnings.warn(
+      "`horizontal_compliance` is deprecated, use `arm.horizontal_compliance`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.arm.horizontal_compliance
 
   @horizontal_compliance.setter
   def horizontal_compliance(self, value: bool) -> None:
-    _warn_deprecated("`horizontal_compliance` is deprecated, use `arm.horizontal_compliance`.")
+    warnings.warn(
+      "`horizontal_compliance` is deprecated, use `arm.horizontal_compliance`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.arm.horizontal_compliance = value
 
   @property
   def horizontal_compliance_torque(self) -> int:
     """Deprecated: use ``arm.horizontal_compliance_torque``."""
-    _warn_deprecated(
-      "`horizontal_compliance_torque` is deprecated, use `arm.horizontal_compliance_torque`."
+    warnings.warn(
+      "`horizontal_compliance_torque` is deprecated, use `arm.horizontal_compliance_torque`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return self.arm.horizontal_compliance_torque
 
   @horizontal_compliance_torque.setter
   def horizontal_compliance_torque(self, value: int) -> None:
-    _warn_deprecated(
-      "`horizontal_compliance_torque` is deprecated, use `arm.horizontal_compliance_torque`."
+    warnings.warn(
+      "`horizontal_compliance_torque` is deprecated, use `arm.horizontal_compliance_torque`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     self.arm.horizontal_compliance_torque = value
 
@@ -1889,5 +2118,7 @@ class PreciseFlex(PreciseFlexDriver):
   """Deprecated: use ``PreciseFlexDriver``."""
 
   def __init__(self, *args: Any, **kwargs: Any) -> None:
-    _warn_deprecated("`PreciseFlex` is deprecated, use `PreciseFlexDriver`.")
+    warnings.warn(
+      "`PreciseFlex` is deprecated, use `PreciseFlexDriver`.", DeprecationWarning, stacklevel=2
+    )
     super().__init__(*args, **kwargs)

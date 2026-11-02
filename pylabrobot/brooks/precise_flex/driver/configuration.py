@@ -20,12 +20,6 @@ from .features.arm import PreciseFlexArmConfiguration
 from .features.gripper import PreciseFlexGripperConfiguration
 from .features.rail import PreciseFlexRailConfiguration
 
-
-def _warn_deprecated(message: str) -> None:
-  """Warn that the caller's caller uses a deprecated name."""
-  warnings.warn(message, DeprecationWarning, stacklevel=3)
-
-
 # ---------------------------------------------------------------------------
 # Configuration - resolved once at setup
 # ---------------------------------------------------------------------------
@@ -91,9 +85,11 @@ class PreciseFlexConfiguration:
   @property
   def soft_limits(self) -> Dict[PreciseFlexAxis, tuple]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
-    _warn_deprecated(
+    warnings.warn(
       "`soft_limits` is deprecated, use `arm.soft_limits`, and `soft_limit_range` on "
-      "`gripper` and `rail`."
+      "`gripper` and `rail`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     merged = {**self.arm.soft_limits, PreciseFlexAxis.GRIPPER: self.gripper.soft_limit_range}
     if self.rail is not None:
@@ -103,9 +99,11 @@ class PreciseFlexConfiguration:
   @property
   def hard_limits(self) -> Dict[PreciseFlexAxis, tuple]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
-    _warn_deprecated(
+    warnings.warn(
       "`hard_limits` is deprecated, use `arm.hard_limits`, and `hard_limit_range` on "
-      "`gripper` and `rail`."
+      "`gripper` and `rail`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     merged = {**self.arm.hard_limits, PreciseFlexAxis.GRIPPER: self.gripper.hard_limit_range}
     if self.rail is not None and self.rail.hard_limit_range is not None:
@@ -115,9 +113,11 @@ class PreciseFlexConfiguration:
   @property
   def max_joint_speed(self) -> Dict[PreciseFlexAxis, float]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
-    _warn_deprecated(
+    warnings.warn(
       "`max_joint_speed` is deprecated, use `arm.max_joint_speed`, and `max_speed` on "
-      "`gripper` and `rail`."
+      "`gripper` and `rail`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     merged = {**self.arm.max_joint_speed, PreciseFlexAxis.GRIPPER: self.gripper.max_speed}
     if self.rail is not None and self.rail.max_speed is not None:
@@ -127,9 +127,11 @@ class PreciseFlexConfiguration:
   @property
   def max_joint_acceleration(self) -> Dict[PreciseFlexAxis, float]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
-    _warn_deprecated(
+    warnings.warn(
       "`max_joint_acceleration` is deprecated, use `arm.max_joint_acceleration`, "
-      "and `max_acceleration` on `gripper` and `rail`."
+      "and `max_acceleration` on `gripper` and `rail`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     merged = {
       **self.arm.max_joint_acceleration,
@@ -142,9 +144,11 @@ class PreciseFlexConfiguration:
   @property
   def max_joint_deceleration(self) -> Dict[PreciseFlexAxis, float]:
     """Deprecated: merged from the arm, gripper and rail configurations."""
-    _warn_deprecated(
+    warnings.warn(
       "`max_joint_deceleration` is deprecated, use `arm.max_joint_deceleration`, "
-      "and `max_deceleration` on `gripper` and `rail`."
+      "and `max_deceleration` on `gripper` and `rail`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     merged = {
       **self.arm.max_joint_deceleration,
@@ -157,69 +161,101 @@ class PreciseFlexConfiguration:
   @property
   def max_cartesian_speed(self) -> float:
     """Deprecated: use ``arm.max_cartesian_speed``."""
-    _warn_deprecated("`max_cartesian_speed` is deprecated, use `arm.max_cartesian_speed`.")
+    warnings.warn(
+      "`max_cartesian_speed` is deprecated, use `arm.max_cartesian_speed`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.arm.max_cartesian_speed
 
   @property
   def max_cartesian_acceleration(self) -> float:
     """Deprecated: use ``arm.max_cartesian_acceleration``."""
-    _warn_deprecated(
-      "`max_cartesian_acceleration` is deprecated, use `arm.max_cartesian_acceleration`."
+    warnings.warn(
+      "`max_cartesian_acceleration` is deprecated, use `arm.max_cartesian_acceleration`.",
+      DeprecationWarning,
+      stacklevel=2,
     )
     return self.arm.max_cartesian_acceleration
 
   @property
   def kinematics(self) -> "kinematics.PF400Params":
     """Deprecated: use ``arm.kinematics``."""
-    _warn_deprecated("`kinematics` is deprecated, use `arm.kinematics`.")
+    warnings.warn(
+      "`kinematics` is deprecated, use `arm.kinematics`.", DeprecationWarning, stacklevel=2
+    )
     return self.arm.kinematics
 
   @property
   def kinematics_source(self) -> str:
     """Deprecated: use ``arm.kinematics_source``."""
-    _warn_deprecated("`kinematics_source` is deprecated, use `arm.kinematics_source`.")
+    warnings.warn(
+      "`kinematics_source` is deprecated, use `arm.kinematics_source`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.arm.kinematics_source
 
   @property
   def reach_class(self) -> str:
     """Deprecated: use ``arm.reach_class``."""
-    _warn_deprecated("`reach_class` is deprecated, use `arm.reach_class`.")
+    warnings.warn(
+      "`reach_class` is deprecated, use `arm.reach_class`.", DeprecationWarning, stacklevel=2
+    )
     return self.arm.reach_class
 
   @property
   def z_range(self) -> tuple:
     """Deprecated: use ``arm.z_range``."""
-    _warn_deprecated("`z_range` is deprecated, use `arm.z_range`.")
+    warnings.warn("`z_range` is deprecated, use `arm.z_range`.", DeprecationWarning, stacklevel=2)
     return self.arm.z_range
 
   @property
   def work_envelope(self) -> WorkEnvelope:
     """Deprecated: use ``arm.work_envelope``."""
-    _warn_deprecated("`work_envelope` is deprecated, use `arm.work_envelope`.")
+    warnings.warn(
+      "`work_envelope` is deprecated, use `arm.work_envelope`.", DeprecationWarning, stacklevel=2
+    )
     return self.arm.work_envelope
 
   @property
   def gripper_width_range(self) -> tuple:
     """Deprecated: use ``gripper.soft_limit_range``."""
-    _warn_deprecated("`gripper_width_range` is deprecated, use `gripper.soft_limit_range`.")
+    warnings.warn(
+      "`gripper_width_range` is deprecated, use `gripper.soft_limit_range`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.gripper.soft_limit_range
 
   @property
   def is_dual_gripper(self) -> bool:
     """Deprecated: use ``gripper.is_dual_gripper``."""
-    _warn_deprecated("`is_dual_gripper` is deprecated, use `gripper.is_dual_gripper`.")
+    warnings.warn(
+      "`is_dual_gripper` is deprecated, use `gripper.is_dual_gripper`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.gripper.is_dual_gripper
 
   @property
   def power_state(self) -> Optional[int]:
     """Deprecated: use ``PreciseFlexDriver.request_system_state``."""
-    _warn_deprecated("`power_state` is deprecated, use `PreciseFlexDriver.request_system_state`.")
+    warnings.warn(
+      "`power_state` is deprecated, use `PreciseFlexDriver.request_system_state`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self._power_state
 
   @property
   def is_vision_gripper(self) -> bool:
     """Deprecated: use ``has_vision_gripper``."""
-    _warn_deprecated("`is_vision_gripper` is deprecated, use `has_vision_gripper`.")
+    warnings.warn(
+      "`is_vision_gripper` is deprecated, use `has_vision_gripper`.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.has_vision_gripper
 
 
