@@ -49,8 +49,7 @@ class MeasurementSettings:
     reading_direction: row_major reads row by row (the reader's default); column_major column by
       column.
     bidirectional: read every other row or column backwards (meander, the default); False reads all
-      in one direction.  Results are in plate order; reading orders other than the default have not
-      been tested on a reader yet.
+      in one direction.  Results are in plate order whatever the reading order.
     settling_time: seconds to settle before each well, 0.02-1.0 in 20 ms steps (the reader refuses
       others, quit code 43); None for the read's default.
     well_scan: read each well at its centre (point), or average along a circle (orbital) or a spiral

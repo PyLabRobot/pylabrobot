@@ -284,6 +284,16 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(run_measurement.call_args.args[0], expected)
 
+  async def test_at_most_five_channels(self):
+    """Six channels in one read, or none, are refused before anything is sent (the reader refuses a
+    sixth, quit code 60)."""
+    device = make_device([])
+    channel = FluorescenceChannel(excitation_wavelength=365, emission_wavelength=400)
+    for channels in ([channel] * 6, []):
+      with self.subTest(count=len(channels)), self.assertRaises(ValueError):
+        await device.fluorescence.measure(channels, focal_height=5.0, gain=500)
+    self.assertEqual(device.driver.io.commands, [])  # type: ignore[attr-defined]
+
   async def test_gains_must_match_the_channels(self):
     """One gain for two channels in a list is refused before anything is sent."""
     device = make_device([])

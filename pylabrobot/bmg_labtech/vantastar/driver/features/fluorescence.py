@@ -40,6 +40,8 @@ MAXIMUM_BANDWIDTH = 100.0
 MINIMUM_EXCITATION = 320.0
 MINIMUM_EXCITATION_EDGE = 310.0
 MAXIMUM_WAVELENGTH = 840.0
+# Fluorescence channels in one read: the reader refuses a sixth (quit code 60).
+MAXIMUM_FLUORESCENCE_CHANNELS = 5
 # Flashes and settling time when the measurement settings give none.
 _DEFAULT_FLASHES = 20
 _DEFAULT_SETTLING_TIME = 0.5
@@ -323,8 +325,10 @@ class Fluorescence(Measurement):
       if isinstance(fluorescence_channels, FluorescenceChannel)
       else list(fluorescence_channels)
     )
-    if not channels:
-      raise ValueError("at least one fluorescence channel")
+    if not 1 <= len(channels) <= MAXIMUM_FLUORESCENCE_CHANNELS:
+      raise ValueError(
+        f"give 1 to {MAXIMUM_FLUORESCENCE_CHANNELS} fluorescence channels, got {len(channels)}"
+      )
     optics = [self._get_optics(channel) for channel in channels]
     gains = self._get_list(gain, len(channels), "gains")
     monochromators = self._get_list(monochromator, len(channels), "monochromators")
@@ -386,12 +390,12 @@ class Fluorescence(Measurement):
     and slit; narrow bands differ most (excitation 365/8 and emission 400/10: Voyager 362.9-367.1
     and 397.8-402.2 nm, nominal 361-369 and 395-405 nm), bands of 20 nm and more by a few tenths of
     a nm.  Readings at narrow bandwidths are therefore not directly comparable with Voyager's.  To
-    read with Voyager's edges, pass them as ``monochromator``.  Several channels in one read are not
-    tested on a reader yet.
+    read with Voyager's edges, pass them as ``monochromator``.  Several channels are read in one pass,
+    each well through every channel in turn.
 
     Args:
-      fluorescence_channels: one ``FluorescenceChannel``, or a sequence of them: excitation and
-        emission wavelength each, the bandwidths (8-100 nm; ``default_excitation_bandwidth`` and
+      fluorescence_channels: one ``FluorescenceChannel``, or a sequence of up to 5 (the reader
+        refuses a sixth, quit code 60): excitation and emission wavelength each, the bandwidths (8-100 nm; ``default_excitation_bandwidth`` and
         ``default_emission_bandwidth`` when None) and the dichroic split (None sets it as Voyager
         does automatically, midway between the excitation's upper and the emission's lower edge;
         the tested reader refuses a dichroic above 760 nm, quit code 67).  No filters.
