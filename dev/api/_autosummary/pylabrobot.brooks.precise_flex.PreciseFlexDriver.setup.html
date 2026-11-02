@@ -595,6 +595,9 @@
 modelled, before homing so the jaws’ opening is checked, axes outside their limits are dealt
 with, and, when the controller has an IntelliGuide vision module, the vision feature is built
 as <code class="docutils literal notranslate"><span class="pre">self.vision</span></code>.</p>
+<p>A setup that fails or is interrupted hands the arm back and closes its links, as <code class="docutils literal notranslate"><span class="pre">disconnect</span></code>
+does, each step on its own: the controller takes one connection and refuses the next while one
+is open. The setup’s own error is the one raised.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
