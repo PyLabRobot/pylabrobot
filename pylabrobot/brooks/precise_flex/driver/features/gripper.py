@@ -316,14 +316,14 @@ class PreciseFlexGripper:
       For standard gripper: True if the gripper is within 2mm of fully closed, otherwise False.
     """
     if self._is_dual_gripper:
-      raise ValueError("IsGripperClosed command is only valid for single gripper robots.")
+      raise ValueError("sense_fully_closed is only valid for single gripper robots.")
     response = await self._driver.send_command("IsFullyClosed")
     return int(response) == -1
 
   async def sense_each_fully_closed(self) -> tuple[bool, bool]:
     """(Dual gripper only) Whether each gripper's end-of-travel sensor reads it fully closed."""
     if not self._is_dual_gripper:
-      raise ValueError("AreGrippersClosed command is only valid for dual gripper robots.")
+      raise ValueError("sense_each_fully_closed is only valid for dual gripper robots.")
     response = await self._driver.send_command("IsFullyClosed")
     ret_int = int(response)
     gripper_1_closed = (ret_int & 1) != 0
