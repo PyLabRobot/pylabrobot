@@ -1049,6 +1049,24 @@ class PreciseFlexArm:
       raise PreciseFlexError(-1, "Unexpected response format from tool command.")
     return self._parse_xyz_response(parts)
 
+  async def _set_tool_transformation_values(
+    self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float
+  ) -> None:
+    """Set the tool transformation. The robot must be attached; motion in progress pauses.
+
+    Private: the kinematics read the tool once at setup, so changing it leaves
+    `request_gripper_pose` out of step with the controller until the configuration is read again.
+
+    Args:
+      x: Tool X coordinate.
+      y: Tool Y coordinate.
+      z: Tool Z coordinate.
+      yaw: Tool yaw rotation.
+      pitch: Tool pitch rotation.
+      roll: Tool roll rotation.
+    """
+    await self._driver.send_command(f"tool {x} {y} {z} {yaw} {pitch} {roll}")
+
   # -- range checks and recovery -------------------------------------------------------------------
 
   def _get_soft_limits(self) -> Dict[PreciseFlexAxis, tuple]:
