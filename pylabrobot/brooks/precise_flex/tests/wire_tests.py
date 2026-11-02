@@ -474,6 +474,12 @@ _CASES: List[_Case] = [
     None,
   ),
   (
+    "request_gripper_pose",
+    lambda arm: arm.arm.request_gripper_pose(),
+    ["state", "state", "wherej"],
+    None,
+  ),
+  (
     "move_to_location",
     lambda arm: arm.arm.move_to_location(_LOC, direction=0.0),
     [
@@ -1117,7 +1123,7 @@ class TestRefusals(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(fake.sent, [])
 
 
-_DEPRECATED_KEYWORDS: List[
+_DEPRECATED_DRIVER_MEMBERS: List[
   Tuple[str, Callable[[PreciseFlexDriver], Awaitable[Any]], Callable[..., Any]]
 ] = [
   (
@@ -1218,81 +1224,8 @@ _DEPRECATED_KEYWORDS: List[
       _LOC, direction=0.0, resource_width=85.0, finger_speed_percent=30
     ),
   ),
-  ("release_brake", lambda a: a.release_brake(2), lambda a: a.arm.release_brake(2)),
-  ("set_brake", lambda a: a.set_brake(2), lambda a: a.arm.reengage_brake(2)),
   ("zero_torque_on", lambda a: a.zero_torque(True, 3), lambda a: a.arm.start_zero_torque(3)),
   ("zero_torque_off", lambda a: a.zero_torque(False), lambda a: a.arm.stop_zero_torque()),
-  (
-    "start_freedrive_mode",
-    lambda a: a.start_freedrive_mode([1, 2]),
-    lambda a: a.arm.start_freedrive_mode([1, 2]),
-  ),
-  ("stop_freedrive_mode", lambda a: a.stop_freedrive_mode(), lambda a: a.arm.stop_freedrive_mode()),
-  ("halt", lambda a: a.halt(), lambda a: a.arm.halt()),
-  ("change_config", lambda a: a.change_config(1), lambda a: a.arm.change_elbow_orientation(1)),
-  (
-    "change_config2",
-    lambda a: a.change_config2(1),
-    lambda a: a.arm.change_elbow_orientation_by_algorithm(1),
-  ),
-  (
-    "request_joint_limits",
-    lambda a: a.request_joint_limits(),
-    lambda a: a.arm.request_joint_limits(),
-  ),
-  (
-    "request_reference_speed",
-    lambda a: a.request_reference_speed(),
-    lambda a: a.arm.request_reference_speed(),
-  ),
-  (
-    "request_reference_acceleration",
-    lambda a: a.request_reference_acceleration(),
-    lambda a: a.arm.request_reference_acceleration(),
-  ),
-  (
-    "request_link_lengths",
-    lambda a: a.request_link_lengths(),
-    lambda a: a.arm.request_link_lengths(),
-  ),
-  ("request_tool_length", lambda a: a.request_tool_length(), lambda a: a.arm.request_tool_length()),
-  (
-    "request_kinematic_parameters",
-    lambda a: a.request_kinematic_parameters(),
-    lambda a: a.arm.request_kinematic_parameters(),
-  ),
-  (
-    "request_reference_cartesian_speed",
-    lambda a: a.request_reference_cartesian_speed(),
-    lambda a: a.arm.request_reference_cartesian_speed(),
-  ),
-  (
-    "request_reference_cartesian_acceleration",
-    lambda a: a.request_reference_cartesian_acceleration(),
-    lambda a: a.arm.request_reference_cartesian_acceleration(),
-  ),
-  (
-    "request_max_speed_percent",
-    lambda a: a.request_max_speed_percent(),
-    lambda a: a.arm.request_max_speed_percent(),
-  ),
-  (
-    "request_max_acceleration_percent",
-    lambda a: a.request_max_acceleration_percent(),
-    lambda a: a.arm.request_max_acceleration_percent(),
-  ),
-  (
-    "request_max_deceleration_percent",
-    lambda a: a.request_max_deceleration_percent(),
-    lambda a: a.arm.request_max_deceleration_percent(),
-  ),
-  ("request_base", lambda a: a.request_base(), lambda a: a.arm.request_base()),
-  ("set_base", lambda a: a.set_base(1, 2, 3, 4), lambda a: a.arm.set_base(1, 2, 3, 4)),
-  (
-    "request_tool_transformation_values",
-    lambda a: a.request_tool_transformation_values(),
-    lambda a: a.arm.request_tool_transformation_values(),
-  ),
   (
     "pick_up_at_joint_position",
     lambda a: a.pick_up_at_joint_position(_J, resource_width=85.0),
@@ -1309,89 +1242,6 @@ _DEPRECATED_KEYWORDS: List[
     lambda a: a.arm.pick_up_at_location(_LOC, direction=0.0, resource_width=85.0),
   ),
   (
-    "drop_at_location",
-    lambda a: a.drop_at_location(_LOC, direction=0.0, resource_width=85.0),
-    lambda a: a.arm.drop_at_location(_LOC, direction=0.0, resource_width=85.0),
-  ),
-  ("park", lambda a: a.park(), lambda a: a.arm.park()),
-]
-
-
-class TestDeprecatedPercentKeywords(unittest.IsolatedAsyncioTestCase):
-  """A `*_pct` keyword still works, warns, and sends what its `*_percent` successor sends."""
-
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
-    )
-    sleep.start()
-    self.addCleanup(sleep.stop)
-
-  async def _sent(
-    self, call: Callable[[PreciseFlexDriver], Awaitable[Any]], out_of_range: bool
-  ) -> List[str]:
-    fake = _FakeController({"Speed 1": "0 1 60"})
-    arm = _make_arm(fake)
-    await arm.setup()
-    fake.sent.clear()
-    if out_of_range:  # so recovery sets its speed
-      fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
-    await call(arm)
-    return fake.sent
-
-  async def test_each_deprecated_keyword(self):
-    for name, old, new in _DEPRECATED_KEYWORDS:
-      with self.subTest(name):
-        out_of_range = name == "recover_axes_within_limits"
-        expected = await self._sent(new, out_of_range)
-        with self.assertWarns(DeprecationWarning):
-          sent = await self._sent(old, out_of_range)
-        self.assertEqual(sent, expected)
-
-
-_MOVED_TO_FEATURES: List[
-  Tuple[str, Callable[[PreciseFlexDriver], Awaitable[Any]], Callable[..., Any]]
-] = [
-  (
-    "request_joint_position",
-    lambda a: a.request_joint_position(),
-    lambda a: a.arm.request_joint_state(),
-  ),
-  ("request_state", lambda a: a.request_state(), lambda a: a.arm.request_state()),
-  (
-    "request_gripper_pose",
-    lambda a: a.request_gripper_pose(),
-    lambda a: a.arm.request_gripper_pose(),
-  ),
-  (
-    "move_to_joint_position",
-    lambda a: a.move_to_joint_position(_J, speed_pct=30),
-    lambda a: a.arm.move_to_joint_state(_J, speed_percent=30),
-  ),
-  (
-    "move_to_location",
-    lambda a: a.move_to_location(_LOC, 0.0),
-    lambda a: a.arm.move_to_location(_LOC, 0.0),
-  ),
-  (
-    "move_through_cartesian_poses",
-    lambda a: a.move_through_cartesian_poses(_POSES),
-    lambda a: a.arm.move_through_cartesian_poses(_POSES),
-  ),
-  (
-    "recover_axes_within_limits",
-    lambda a: a.recover_axes_within_limits(),
-    lambda a: a.arm.recover_axes_within_limits(),
-  ),
-  ("dest_c", lambda a: a.dest_c(), lambda a: a.arm._unchecked_fw_request_cartesian_destination()),
-  ("dest_j", lambda a: a.dest_j(), lambda a: a.arm.request_destination_joint_state()),
-  ("here_j", lambda a: a.here_j(2), lambda a: a.arm.set_station_to_current_joint_state(2)),
-  (
-    "here_c",
-    lambda a: a.here_c(2),
-    lambda a: a.arm._unchecked_fw_set_station_to_current_cartesian_location(2),
-  ),
-  (
     "move_gripper",
     lambda a: a.move_gripper(110.0),
     lambda a: a.gripper.move_to_jaw_position(110.0),
@@ -1401,110 +1251,72 @@ _MOVED_TO_FEATURES: List[
     lambda a: a.move_gripper_joint_position(90.0, force_sensing=True),
     lambda a: a.gripper.move_to_jaw_position_firmware_units(90.0, force_sensing=True),
   ),
-  ("is_gripper_closed", lambda a: a.is_gripper_closed(), lambda a: a.gripper.sense_fully_closed()),
+]
+
+_DEPRECATED_FORWARDS: List[Tuple[Callable[..., Any], Callable[..., Any]]] = [
+  (lambda a: a.request_joint_position, lambda a: a.arm.request_joint_state),
+  (lambda a: a.request_state, lambda a: a.arm.request_state),
+  (lambda a: a.request_gripper_pose, lambda a: a.arm.request_gripper_pose),
+  (lambda a: a.is_gripper_closed, lambda a: a.gripper.sense_fully_closed),
+  (lambda a: a.are_grippers_closed, lambda a: a.gripper.sense_each_fully_closed),
+  (lambda a: a.request_monitor_speed, lambda a: a.arm.request_monitor_speed),
+  (lambda a: a.request_payload, lambda a: a.arm.request_payload),
+  (lambda a: a.request_profile_speed, lambda a: a.arm.request_profile_speed),
+  (lambda a: a.request_profile_speed2, lambda a: a.arm.request_profile_speed2),
+  (lambda a: a.request_profile_acceleration, lambda a: a.arm.request_profile_acceleration),
   (
-    "request_monitor_speed",
-    lambda a: a.request_monitor_speed(),
-    lambda a: a.arm.request_monitor_speed(),
+    lambda a: a.request_profile_acceleration_ramp,
+    lambda a: a.arm.request_profile_acceleration_ramp,
   ),
-  ("set_monitor_speed", lambda a: a.set_monitor_speed(50), lambda a: a.arm.set_monitor_speed(50)),
-  ("request_payload", lambda a: a.request_payload(), lambda a: a.arm.request_payload()),
-  ("set_payload", lambda a: a.set_payload(25), lambda a: a.arm.set_payload(25)),
+  (lambda a: a.set_profile_acceleration_ramp, lambda a: a.arm.set_profile_acceleration_ramp),
+  (lambda a: a.request_profile_deceleration, lambda a: a.arm.request_profile_deceleration),
   (
-    "request_profile_speed",
-    lambda a: a.request_profile_speed(1),
-    lambda a: a.arm.request_profile_speed(1),
+    lambda a: a.request_profile_deceleration_ramp,
+    lambda a: a.arm.request_profile_deceleration_ramp,
   ),
+  (lambda a: a.set_profile_deceleration_ramp, lambda a: a.arm.set_profile_deceleration_ramp),
+  (lambda a: a.request_profile_in_range, lambda a: a.arm.request_profile_in_range),
+  (lambda a: a.set_profile_in_range, lambda a: a.arm.set_profile_in_range),
+  (lambda a: a.request_profile_straight, lambda a: a.arm.request_profile_straight),
+  (lambda a: a.set_profile_straight, lambda a: a.arm.set_profile_straight),
+  (lambda a: a.request_motion_profile_values, lambda a: a.arm.request_motion_profile_values),
+  (lambda a: a.release_brake, lambda a: a.arm.release_brake),
+  (lambda a: a.set_brake, lambda a: a.arm.reengage_brake),
+  (lambda a: a.start_freedrive_mode, lambda a: a.arm.start_freedrive_mode),
+  (lambda a: a.stop_freedrive_mode, lambda a: a.arm.stop_freedrive_mode),
+  (lambda a: a.halt, lambda a: a.arm.halt),
+  (lambda a: a.change_config, lambda a: a.arm.change_elbow_orientation),
+  (lambda a: a.change_config2, lambda a: a.arm.change_elbow_orientation_by_algorithm),
+  (lambda a: a.request_joint_limits, lambda a: a.arm.request_joint_limits),
+  (lambda a: a.request_reference_speed, lambda a: a.arm.request_reference_speed),
+  (lambda a: a.request_reference_acceleration, lambda a: a.arm.request_reference_acceleration),
+  (lambda a: a.request_link_lengths, lambda a: a.arm.request_link_lengths),
+  (lambda a: a.request_tool_length, lambda a: a.arm.request_tool_length),
+  (lambda a: a.request_kinematic_parameters, lambda a: a.arm.request_kinematic_parameters),
   (
-    "set_profile_speed",
-    lambda a: a.set_profile_speed(1, 40),
-    lambda a: a.arm.set_profile_speed(1, 40),
-  ),
-  (
-    "request_profile_speed2",
-    lambda a: a.request_profile_speed2(1),
-    lambda a: a.arm.request_profile_speed2(1),
-  ),
-  (
-    "set_profile_speed2",
-    lambda a: a.set_profile_speed2(1, 30),
-    lambda a: a.arm.set_profile_speed2(1, 30),
-  ),
-  (
-    "request_profile_acceleration",
-    lambda a: a.request_profile_acceleration(1),
-    lambda a: a.arm.request_profile_acceleration(1),
-  ),
-  (
-    "set_profile_acceleration",
-    lambda a: a.set_profile_acceleration(1, 60),
-    lambda a: a.arm.set_profile_acceleration(1, 60),
-  ),
-  (
-    "request_profile_acceleration_ramp",
-    lambda a: a.request_profile_acceleration_ramp(1),
-    lambda a: a.arm.request_profile_acceleration_ramp(1),
-  ),
-  (
-    "set_profile_acceleration_ramp",
-    lambda a: a.set_profile_acceleration_ramp(1, 0.2),
-    lambda a: a.arm.set_profile_acceleration_ramp(1, 0.2),
+    lambda a: a.request_reference_cartesian_speed,
+    lambda a: a.arm.request_reference_cartesian_speed,
   ),
   (
-    "request_profile_deceleration",
-    lambda a: a.request_profile_deceleration(1),
-    lambda a: a.arm.request_profile_deceleration(1),
+    lambda a: a.request_reference_cartesian_acceleration,
+    lambda a: a.arm.request_reference_cartesian_acceleration,
   ),
+  (lambda a: a.request_max_speed_percent, lambda a: a.arm.request_max_speed_percent),
+  (lambda a: a.request_max_acceleration_percent, lambda a: a.arm.request_max_acceleration_percent),
+  (lambda a: a.request_max_deceleration_percent, lambda a: a.arm.request_max_deceleration_percent),
+  (lambda a: a.request_base, lambda a: a.arm.request_base),
+  (lambda a: a.set_base, lambda a: a.arm.set_base),
   (
-    "set_profile_deceleration",
-    lambda a: a.set_profile_deceleration(1, 70),
-    lambda a: a.arm.set_profile_deceleration(1, 70),
+    lambda a: a.request_tool_transformation_values,
+    lambda a: a.arm.request_tool_transformation_values,
   ),
-  (
-    "request_profile_deceleration_ramp",
-    lambda a: a.request_profile_deceleration_ramp(1),
-    lambda a: a.arm.request_profile_deceleration_ramp(1),
-  ),
-  (
-    "set_profile_deceleration_ramp",
-    lambda a: a.set_profile_deceleration_ramp(1, 0.3),
-    lambda a: a.arm.set_profile_deceleration_ramp(1, 0.3),
-  ),
-  (
-    "request_profile_in_range",
-    lambda a: a.request_profile_in_range(1),
-    lambda a: a.arm.request_profile_in_range(1),
-  ),
-  (
-    "set_profile_in_range",
-    lambda a: a.set_profile_in_range(1, 10),
-    lambda a: a.arm.set_profile_in_range(1, 10),
-  ),
-  (
-    "request_profile_straight",
-    lambda a: a.request_profile_straight(1),
-    lambda a: a.arm.request_profile_straight(1),
-  ),
-  (
-    "set_profile_straight",
-    lambda a: a.set_profile_straight(1, True),
-    lambda a: a.arm.set_profile_straight(1, True),
-  ),
-  (
-    "request_motion_profile_values",
-    lambda a: a.request_motion_profile_values(1),
-    lambda a: a.arm.request_motion_profile_values(1),
-  ),
-  (
-    "set_motion_profile_values",
-    lambda a: a.set_motion_profile_values(1, 40, 30, 60, 70, 0.2, 0.3, 10, True),
-    lambda a: a.arm.set_motion_profile_values(1, 40, 30, 60, 70, 0.2, 0.3, 10, True),
-  ),
+  (lambda a: a.drop_at_location, lambda a: a.arm.drop_at_location),
+  (lambda a: a.park, lambda a: a.arm.park),
 ]
 
 
 class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
-  """A driver member that moved to a feature still works, warns, and sends what its successor sends."""
+  """A deprecated member or keyword still works, warns, and matches what its successor does."""
 
   def setUp(self) -> None:
     sleep = patch(
@@ -1514,22 +1326,43 @@ class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(sleep.stop)
 
   async def _sent(
-    self, call: Callable[[PreciseFlexDriver], Awaitable[Any]], has_rail: bool = False
+    self,
+    call: Callable[[PreciseFlexDriver], Awaitable[Any]],
+    has_rail: bool = False,
+    out_of_range: bool = False,
   ):
-    fake = _FakeController(_RAIL_REPLIES if has_rail else None)
+    fake = _FakeController(_RAIL_REPLIES if has_rail else {"Speed 1": "0 1 60"})
     arm = _make_arm(fake, has_rail=has_rail)
     await arm.setup()
     fake.sent.clear()
+    if out_of_range:  # so recovery sets its speed
+      fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
     result = await call(arm)
     return fake.sent, repr(result)  # a pose compares by its fields only through its repr
 
-  async def test_each_moved_method(self):
-    for name, old, new in _MOVED_TO_FEATURES:
+  async def test_each_deprecated_member(self):
+    for name, old, new in _DEPRECATED_DRIVER_MEMBERS:
       with self.subTest(name):
-        expected = await self._sent(new)
+        out_of_range = name == "recover_axes_within_limits"
+        expected = await self._sent(new, out_of_range=out_of_range)
         with self.assertWarns(DeprecationWarning):
-          got = await self._sent(old)
+          got = await self._sent(old, out_of_range=out_of_range)
         self.assertEqual(got, expected)
+
+  async def test_each_deprecated_forward(self):
+    arm = _make_arm(_FakeController())
+    for old, new in _DEPRECATED_FORWARDS:
+      old_method, new_method = old(arm), new(arm)
+      with (
+        self.subTest(old_method.__name__),
+        patch.object(
+          new_method.__self__, new_method.__name__, AsyncMock(return_value="result")
+        ) as successor,
+      ):
+        with self.assertWarns(DeprecationWarning):
+          result = await old_method(1, key="value")
+        successor.assert_awaited_once_with(1, key="value")
+        self.assertEqual(result, "result")
 
   async def test_move_rail(self):
     expected = await self._sent(lambda a: _rail(a).move_rail(250.0), has_rail=True)
