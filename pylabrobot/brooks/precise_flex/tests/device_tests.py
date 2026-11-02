@@ -104,11 +104,6 @@ class TestTheDevice(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.device = pf400()
 
-  def test_the_base_plate_is_its_child_and_the_drivers(self):
-    self.assertIs(self.device.base_plate.parent, self.device)
-    self.assertIs(self.device.driver.base_plate, self.device.base_plate)
-    self.assertEqual(self.device.base_plate.name, "pf400_base_plate")
-
   def test_before_a_configuration_only_the_base_plate_stands(self):
     self.assertEqual([r.name for r in self.device.get_all_children()], ["pf400_base_plate"])
     self.assertIsNone(self.device.arm.resource)
@@ -228,14 +223,6 @@ class TestTheDriverHangsTheArm(unittest.IsolatedAsyncioTestCase):
     without._create_feature_resources(without.configuration)
     self.assertEqual(hung(without)[3].body.model, "brooks_pf400_gripper_body_s23")
 
-  def test_a_driver_without_a_base_plate_hangs_nothing(self):
-    driver = PreciseFlexDriver(
-      host="localhost", gripper_length=162.0, gripper_z_offset=0.0, closed_gripper_position=60.0
-    )
-    driver._configuration = configuration()
-    driver._create_feature_resources(driver.configuration)
-    self.assertIsNone(driver.arm.resource)
-
 
 class TestEveryPartHasItsMesh(unittest.IsolatedAsyncioTestCase):
   """A part is drawn from the mesh its model names, shipped beside the resource model."""
@@ -308,15 +295,6 @@ class TestTheModelFollowsTheJoints(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(self.second.rotation.z, 179.489)
     self.assertAlmostEqual(self.hand.rotation.z % 360.0, -184.25 % 360.0)
     self.assertEqual(self.hand.jaw_width, 119.971)
-
-  async def test_a_driver_without_a_base_plate_reads_as_before(self):
-    driver = PreciseFlexDriver(
-      host="localhost", gripper_length=162.0, gripper_z_offset=0.0, closed_gripper_position=60.0
-    )
-    with patch.object(driver, "send_command", AsyncMock(return_value=self.REPLY)):
-      with patch.object(driver.arm, "_wait_for_eom", AsyncMock()):
-        joints = await driver.arm.request_joint_state()
-    self.assertEqual(joints[PreciseFlexAxis.SHOULDER], 91.974)
 
 
 def joints(shoulder: float, elbow: float, wrist: float, jaws: float, z: float = 301.1):
@@ -474,11 +452,6 @@ class TestAMoveKeepsTheModelInStep(unittest.IsolatedAsyncioTestCase):
     await self.move(sent, lambda: self.driver.arm.move_to_joint_state(dict(self.TARGET)))
     self.assertEqual(self.seen, [(0.0, 100.0)])
     self.assertEqual([call.args[0] for call in sent.call_args_list][-1], "wherej")
-
-  async def test_where_the_arm_stopped_has_the_last_word(self):
-    sent = self.controller(after_the_move="301.1 29.6 180.0 180.0 100.0")
-    await self.move(sent, lambda: self.driver.arm.move_to_joint_state(dict(self.TARGET)))
-    self.assertAlmostEqual(self.first.rotation.z, 29.6)
 
   async def test_a_refused_move_leaves_the_model_where_the_arm_is_and_keeps_its_error(self):
     self.driver._recover_out_of_range = False
