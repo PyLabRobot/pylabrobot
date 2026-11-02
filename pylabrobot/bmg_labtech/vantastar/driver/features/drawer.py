@@ -47,7 +47,8 @@ class Drawer:
     return self.drawer_open
 
   async def sense_plate_present(self) -> bool:
-    """Sense whether the reader detects a plate."""
+    """Sense whether the reader detects a plate.  It detects one only with the drawer in: with the
+    drawer out it reports none, also with a plate on the drawer."""
     return (await self._driver.request_status()).plate_detected
 
   async def _move(self, open_drawer: bool) -> None:
