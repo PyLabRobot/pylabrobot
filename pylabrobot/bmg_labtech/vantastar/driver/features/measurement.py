@@ -545,15 +545,6 @@ class Measurement:
       raise RuntimeError(f"the reader measured {data.wells} wells, {len(measured)} were asked for")
 
   @staticmethod
-  def _check_cycles(cycles: int, cycle_time: int) -> None:
-    """Raise unless a kinetic read has 2-1000 cycles (the reader refuses more, quit code 60) and a
-    cycle time of 1-65535 whole s."""
-    if not 2 <= cycles <= 1000:
-      raise ValueError(f"cycles must be 2-1000, got {cycles}")
-    if not 1 <= cycle_time <= 0xFFFF:
-      raise ValueError(f"cycle_time must be 1-65535 s, got {cycle_time}")
-
-  @staticmethod
   def _get_scan_wavelengths(
     start_wavelength: int, end_wavelength: int, step_size: int
   ) -> List[int]:

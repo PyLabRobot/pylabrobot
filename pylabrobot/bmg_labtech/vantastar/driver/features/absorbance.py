@@ -1,6 +1,6 @@
-"""Absorbance: endpoint, kinetic and spectrum reads through the reader's spectrometer."""
+"""Absorbance: endpoint and spectrum reads through the reader's spectrometer."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional, Sequence, Tuple
 
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
@@ -125,67 +125,6 @@ class Absorbance(Measurement):
     data = await self._driver.run_measurement(parameters, timeout=timeout)
     end = datetime.now()
     return self._get_results(data, measured, wavelengths, start, end)
-
-  async def measure_kinetic(
-    self,
-    wavelengths: Sequence[int],
-    *,
-    cycles: int,
-    cycle_time: int,
-    plate: Optional[Plate] = None,
-    wells: Optional[Sequence[Well]] = None,
-    measurement_settings: Optional[MeasurementSettings] = None,
-    shake_settings: Optional[ShakeSettings] = None,
-    timeout: Optional[float] = None,
-  ) -> List[List[AbsorbanceResult]]:
-    """Measure the absorbance of the plate at each wavelength ``cycles`` times, the reader starting
-    a cycle every ``cycle_time`` seconds (plate-mode kinetic, as ``measure``).
-
-    Args:
-      wavelengths: 1 to 8 wavelengths in nm (220-1000).
-      cycles: reads of the plate (2-1000).
-      cycle_time: whole seconds from one cycle's start to the next (1-65535); the reader refuses a
-        cycle time shorter than one cycle takes (``CommandRefusedError``, quit code 60).
-      plate: the plate to measure; None uses the plate on the plate holder.
-      wells: the wells to measure; None measures every well.
-      measurement_settings: how to read; None reads with the defaults.
-      shake_settings: shake the plate before the first cycle; None does not shake.
-      timeout: seconds the run may take; None allows the cycles plus 300 s.
-
-    Returns:
-      Per cycle, one ``AbsorbanceResult`` per wavelength in the order given; a cycle's
-      ``start_timestamp`` is when the reader started it, its ``end_timestamp`` when the run's data
-      was in.
-
-    Raises:
-      RuntimeError: if no plate is on the plate holder or the run ends without its data.
-      ValueError: if an argument is out of range.
-    """
-    self._check_wavelengths(wavelengths)
-    self._check_cycles(cycles, cycle_time)
-    plate = self._get_plate(plate)
-    settings = self._get_absorbance_settings(measurement_settings, plate)
-    measured = _get_measured_wells(plate, wells)
-    parameters = self._driver.build_absorbance_run(
-      wavelengths,
-      geometry=get_plate_geometry(plate),
-      well_mask=self._get_well_mask(plate, wells),
-      cycles=cycles,
-      cycle_time=cycle_time,
-      **self._get_run_fields(settings),
-    )
-    await self._prepare(settings, shake_settings)
-    start = datetime.now()
-    blocks = await self._driver.run_blocks(
-      parameters, timeout=cycles * cycle_time + 300.0 if timeout is None else timeout
-    )
-    end = datetime.now()
-    return [
-      self._get_results(
-        block, measured, wavelengths, start + timedelta(seconds=block.start_time), end
-      )
-      for block in blocks
-    ]
 
   async def measure_spectrum(
     self,

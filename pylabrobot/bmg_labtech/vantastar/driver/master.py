@@ -650,23 +650,15 @@ class VANTAstarDriver:
     )
 
   @staticmethod
-  def _encode_run_tail(per_value: int, cycles: int = 1, cycle_time: int = 0) -> bytes:
-    """RUN bytes ending every mode: Pause(4) + IdleMove(6) + one kinetic window (start 0,
-    ``cycles`` values, ``per_value``, ``cycle_time`` s between cycle starts) + no volume groups.
-    ``per_value`` is the flashes per well, or luminescence's integration time in 10 ms steps.
-
-    Raises:
-      ValueError: if ``cycles`` is not 1-65535 or ``cycle_time`` not 0-65535 s.
-    """
-    if not 1 <= cycles <= 0xFFFF:
-      raise ValueError(f"cycles must be 1-65535, got {cycles}")
-    if not 0 <= cycle_time <= 0xFFFF:
-      raise ValueError(f"cycle_time must be 0-65535 s, got {cycle_time}")
+  def _encode_run_tail(per_value: int) -> bytes:
+    """RUN bytes ending every mode: Pause(4) + IdleMove(6) + one kinetic window (start 0, one value,
+    ``per_value``, cycle time 0: one read of the plate) + no volume groups.  ``per_value`` is the
+    flashes per well, or luminescence's integration time in 10 ms steps."""
     window = (
       (0).to_bytes(2, "big")
-      + cycles.to_bytes(2, "big")
+      + (1).to_bytes(2, "big")
       + per_value.to_bytes(2, "big")
-      + cycle_time.to_bytes(2, "big")
+      + (0).to_bytes(2, "big")
     )
     return bytes(4) + bytes(6) + b"\x01" + window + b"\x00"
 
@@ -694,11 +686,8 @@ class VANTAstarDriver:
     corner: Corner = "top_left",
     reading_direction: ReadingDirection = "row_major",
     bidirectional: bool = True,
-    cycles: int = 1,
-    cycle_time: int = 0,
   ) -> bytes:
-    """RUN fields for an absorbance endpoint read (MeasurementMode 2), or a kinetic one with
-    ``cycles`` reads ``cycle_time`` s apart.
+    """RUN fields for an absorbance endpoint read (MeasurementMode 2).
 
     Besides the wavelengths the reader reads two reference wavelengths, 900 and 993 nm (Voyager's
     pathlength-correction pair), and a reference channel.
@@ -711,8 +700,6 @@ class VANTAstarDriver:
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
       well_scan: point, orbital or spiral (``encode_well_scan``); scan_diameter: its diameter, mm.
       corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
-      cycles: reads of the plate (kinetic cycles).
-      cycle_time: whole seconds from one cycle's start to the next.
     """
     optics = (
       bytes([len(wavelengths)])
@@ -734,7 +721,7 @@ class VANTAstarDriver:
         bidirectional=bidirectional,
       )
       + optics
-      + self._encode_run_tail(flashes, cycles, cycle_time)
+      + self._encode_run_tail(flashes)
     )
 
   def build_absorbance_spectrum_run(
@@ -807,11 +794,8 @@ class VANTAstarDriver:
     corner: Corner = "top_left",
     reading_direction: ReadingDirection = "row_major",
     bidirectional: bool = True,
-    cycles: int = 1,
-    cycle_time: int = 0,
   ) -> bytes:
-    """RUN fields for a top fluorescence-intensity endpoint read (MeasurementMode 0), or a kinetic
-    one with ``cycles`` reads ``cycle_time`` s apart.
+    """RUN fields for a top fluorescence-intensity endpoint read (MeasurementMode 0).
 
     Args:
       monochromators: one ``MonochromatorSettings`` per chromatic.
@@ -824,8 +808,6 @@ class VANTAstarDriver:
       well_mask: the wells to read (``encode_well_mask``); None reads every well.
       well_scan: point, orbital or spiral (``encode_well_scan``); scan_diameter: its diameter, mm.
       corner, reading_direction, bidirectional: the reading order (``encode_reading_mode``).
-      cycles: reads of the plate (kinetic cycles).
-      cycle_time: whole seconds from one cycle's start to the next.
     """
     if len(gains) != len(monochromators):
       raise ValueError(f"{len(monochromators)} chromatics but {len(gains)} gains")
@@ -856,7 +838,7 @@ class VANTAstarDriver:
         bidirectional=bidirectional,
       )
       + optics
-      + self._encode_run_tail(flashes, cycles, cycle_time)
+      + self._encode_run_tail(flashes)
     )
 
   def build_fluorescence_scan_run(

@@ -1,4 +1,4 @@
-"""Top fluorescence intensity: endpoint, kinetic and spectrum reads through the monochromators, and
+"""Top fluorescence intensity: endpoint and spectrum reads through the monochromators, and
 the automatic gain and focus.
 
 A read goes through one or more fluorescence channels (``FluorescenceChannel``,
@@ -6,7 +6,7 @@ A read goes through one or more fluorescence channels (``FluorescenceChannel``,
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple, Union, overload
 
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
@@ -238,8 +238,6 @@ class Fluorescence(Measurement):
     plate: Plate,
     wells: Optional[Sequence[Well]],
     settings: MeasurementSettings,
-    cycles: int = 1,
-    cycle_time: int = 0,
   ) -> bytes:
     """The RUN fields of a fluorescence intensity read through the channels' ``optics``.
 
@@ -269,8 +267,6 @@ class Fluorescence(Measurement):
       enhanced_dynamic_range=enhanced_dynamic_range,
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
-      cycles=cycles,
-      cycle_time=cycle_time,
       **self._get_run_fields(settings),
     )
 
@@ -441,117 +437,6 @@ class Fluorescence(Measurement):
     end = datetime.now()
     results = self._get_results(data, measured, optics, start, end)
     return results[0] if isinstance(fluorescence_channels, FluorescenceChannel) else results
-
-  @overload
-  async def measure_kinetic(
-    self,
-    fluorescence_channels: FluorescenceChannel,
-    *,
-    cycles: int,
-    cycle_time: int,
-    gain: Optional[int] = ...,
-    wells: Optional[Sequence[Well]] = ...,
-    focal_height: Optional[float] = ...,
-    enhanced_dynamic_range: bool = ...,
-    monochromator: Optional[MonochromatorSettings] = ...,
-    plate: Optional[Plate] = ...,
-    measurement_settings: Optional[MeasurementSettings] = ...,
-    shake_settings: Optional[ShakeSettings] = ...,
-    timeout: Optional[float] = ...,
-  ) -> List[FluorescenceResult]: ...
-
-  @overload
-  async def measure_kinetic(
-    self,
-    fluorescence_channels: Sequence[FluorescenceChannel],
-    *,
-    cycles: int,
-    cycle_time: int,
-    gain: Union[int, Sequence[int], None] = ...,
-    wells: Optional[Sequence[Well]] = ...,
-    focal_height: Optional[float] = ...,
-    enhanced_dynamic_range: bool = ...,
-    monochromator: Optional[Sequence[MonochromatorSettings]] = ...,
-    plate: Optional[Plate] = ...,
-    measurement_settings: Optional[MeasurementSettings] = ...,
-    shake_settings: Optional[ShakeSettings] = ...,
-    timeout: Optional[float] = ...,
-  ) -> List[List[FluorescenceResult]]: ...
-
-  async def measure_kinetic(
-    self,
-    fluorescence_channels: Union[FluorescenceChannel, Sequence[FluorescenceChannel]],
-    *,
-    cycles: int,
-    cycle_time: int,
-    gain: Union[int, Sequence[int], None] = None,
-    wells: Optional[Sequence[Well]] = None,
-    focal_height: Optional[float] = None,
-    enhanced_dynamic_range: bool = False,
-    monochromator: Union[MonochromatorSettings, Sequence[MonochromatorSettings], None] = None,
-    plate: Optional[Plate] = None,
-    measurement_settings: Optional[MeasurementSettings] = None,
-    shake_settings: Optional[ShakeSettings] = None,
-    timeout: Optional[float] = None,
-  ) -> Union[List[FluorescenceResult], List[List[FluorescenceResult]]]:
-    """Measure the fluorescence intensity of the plate ``cycles`` times, the reader starting a
-    cycle every ``cycle_time`` seconds (plate-mode kinetic, as ``measure``).
-
-    Args:
-      fluorescence_channels: one ``FluorescenceChannel`` or a sequence of them, as in ``measure``.
-      cycles: reads of the plate (2-1000).
-      cycle_time: whole seconds from one cycle's start to the next (1-65535); the reader refuses a
-        cycle time shorter than one cycle takes (``CommandRefusedError``, quit code 60).
-      gain: the detector gain, one for every channel or one per channel; required unless
-        ``enhanced_dynamic_range``.
-      wells: the wells to measure; None measures every well.
-      focal_height: mm above the plate's base, as in ``measure``.
-      enhanced_dynamic_range: read with enhanced dynamic range; no gain is sent.
-      monochromator: band edges, dichroic and slits instead of the computed ones, one per channel.
-      plate: the plate to measure; None uses the plate on the plate holder.
-      measurement_settings: how to read; None reads with the defaults (20 flashes, 0.5 s).
-      shake_settings: shake the plate before the first cycle; None does not shake.
-      timeout: seconds the run may take; None allows the cycles plus 300 s.
-
-    Returns:
-      Per cycle, the result for one channel, or a list of results (one per channel) for a
-      sequence; a result's ``start_timestamp`` is when the reader started the cycle, its
-      ``end_timestamp`` when the run's data was in.
-
-    Raises:
-      RuntimeError: if no plate is on the plate holder or the run ends without its data.
-      ValueError: if an argument is out of range.
-    """
-    self._check_cycles(cycles, cycle_time)
-    optics, gains, monochromators = self._prepare_read(fluorescence_channels, gain, monochromator)
-    plate = self._get_plate(plate)
-    settings = self._get_fluorescence_settings(measurement_settings, plate)
-    measured = _get_measured_wells(plate, wells)
-    parameters = self._build_run(
-      optics,
-      gains=gains,
-      monochromators=monochromators,
-      focal_height=self._get_focal_height(focal_height, plate, wells),
-      enhanced_dynamic_range=enhanced_dynamic_range,
-      plate=plate,
-      wells=wells,
-      settings=settings,
-      cycles=cycles,
-      cycle_time=cycle_time,
-    )
-    await self._prepare(settings, shake_settings)
-    start = datetime.now()
-    blocks = await self._driver.run_blocks(
-      parameters, timeout=cycles * cycle_time + 300.0 if timeout is None else timeout
-    )
-    end = datetime.now()
-    per_cycle = [
-      self._get_results(block, measured, optics, start + timedelta(seconds=block.start_time), end)
-      for block in blocks
-    ]
-    if isinstance(fluorescence_channels, FluorescenceChannel):
-      return [results[0] for results in per_cycle]
-    return per_cycle
 
   async def measure_spectrum(
     self,

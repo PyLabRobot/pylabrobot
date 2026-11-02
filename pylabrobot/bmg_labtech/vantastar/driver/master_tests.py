@@ -121,9 +121,9 @@ MW_BLOCK_LAST_PAGE = bytes.fromhex(
 # 380-425 nm with spiral averaging, gain 667 at 6.2 mm, 10 flashes, 0.2 s, A1, A6, A12); emission
 # scans (excitation 450/16, H1, H6, H12, 5 flashes, 0.1 s: emission 480-700 nm in 2 nm steps at
 # 10 nm, gain 1365 at 6.8 mm; and 500-700 nm in 1 nm steps at 30 nm with the dichroic at 471.5 nm,
-# gain 800 at 6.6 mm); absorbance at 300, 450 and 600 nm, every well; kinetic absorbance at 450 nm,
-# 6 cycles 10 s apart, A1, A6, A12; and fluorescence 380/8, 475/10 with Voyager's band edges, gain
-# 600 at 4.5 mm, 10 flashes, 0.2 s, A1, A6, A12.  The scans carry Voyager's band edges.
+# gain 800 at 6.6 mm); absorbance at 300, 450 and 600 nm, every well; and fluorescence 380/8,
+# 475/10 with Voyager's band edges, gain 600 at 4.5 mm, 10 flashes, 0.2 s, A1, A6, A12.  The scans
+# carry Voyager's band edges.
 RUN_ABSORBANCE_SPECTRUM = bytes.fromhex(
   "0431e82164059e04642c4a1d000c08029200008410000000000000000008410000000000000000000000000000000000"
   "000000000000000000000000000000000000000242000000000000000000000000000000000000000000000000000027"
@@ -162,11 +162,6 @@ RUN_ABSORBANCE_THREE_WAVELENGTHS = bytes.fromhex(
   "0431e82164059e04642c4a1d000c0802920000ffffffffffffffffffffffff0000000000000000000000000000000000"
   "000000000000000000000000000000000000000242000000000000000000000000000000000000000000000000000027"
   "0f270f0019030bb8119417700064232826ca000000640000000000000000000001000000010016000000"
-)
-RUN_ABSORBANCE_KINETIC = bytes.fromhex(
-  "0431e82164059e04642c4a1d000c08029200008410000000000000000000000000000000000000000000000000000000"
-  "000000000000000000000000000000000000000242000000000000000000000000000000000000000000000000000027"
-  "0f270f00190111940064232826ca000000640000000000000000000001000000060016000a00"
 )
 RUN_FLUORESCENCE_VOYAGER_EDGES = bytes.fromhex(
   "0431e82164059e04642c4a1d000c08029200008410000000000000000000000000000000000000000000000000000000"
@@ -381,8 +376,8 @@ class CommandTests(unittest.TestCase):
     self.assertEqual(compute_monochromator_settings(483, 14, 530, 30).dichroic, 502.5)
 
 
-class ScanKineticAndGainCommandTests(unittest.TestCase):
-  """The commands of reads with spectra, well scans, kinetics and gain adjustments, as Voyager sent
+class ScanAndGainCommandTests(unittest.TestCase):
+  """The commands of reads with spectra, well scans and gain adjustments, as Voyager sent
   them (``RUN_ABSORBANCE_SPECTRUM`` and the constants after it)."""
 
   def setUp(self):
@@ -491,13 +486,6 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
     run = self.driver.build_absorbance_run([300, 450, 600], flashes=22, settling_time=0.5)
     self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_THREE_WAVELENGTHS)
 
-  def test_absorbance_kinetic(self):
-    """Kinetic absorbance at 450 nm, 6 cycles 10 s apart on A1, A6 and A12, builds Voyager's RUN."""
-    run = self.driver.build_absorbance_run(
-      [450], flashes=22, settling_time=0.5, well_mask=self.ir, cycles=6, cycle_time=10
-    )
-    self.assertEqual(bytes([0x04]) + run, RUN_ABSORBANCE_KINETIC)
-
   def test_fluorescence_with_voyager_edges(self):
     """A fluorescence read with Voyager's band edges for 380/8 and 475/10, gain 600 at 4.5 mm,
     builds Voyager's RUN."""
@@ -545,11 +533,6 @@ class ScanKineticAndGainCommandTests(unittest.TestCase):
       well_mask=a1,
     )
     self.assertEqual(bytes([0x0C]) + gain, GAIN_PLATE_GAIN)
-
-  def test_kinetic_cycles_out_of_range(self):
-    """A kinetic read of 0 cycles is refused."""
-    with self.assertRaises(ValueError):
-      self.driver.build_absorbance_run([450], flashes=22, settling_time=0.5, cycles=0)
 
   def test_well_scan_diameter_out_of_range(self):
     """A well scan of 0 mm diameter is refused."""
