@@ -988,6 +988,28 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       arm.arm.default_ztouch_search_speed_percent = 4
 
+  async def test_the_approach_and_the_rest_run_at_the_default_or_the_argument_speed(self):
+    # The profile speed was 20 before: the approach once ran at whatever it was.
+    for arguments, sent in (
+      ({}, "Speed 1 10.0"),
+      ({"approach_speed_percent": 30.0}, "Speed 1 30.0"),
+    ):
+      with self.subTest(arguments):
+        arm, fake = await self._arm()
+        await arm.arm.probe_z_using_ztouch(
+          search_start_position=57.889, search_end_position=29.889, **arguments
+        )
+        speeds = [c for c in fake.sent if c.startswith(("Speed 1 ", "moveJ"))]
+        self.assertEqual(speeds[0::3], [sent] * 2)  # before the approach, before the rest
+        self.assertEqual([c[:5] for c in speeds[1::3]], ["moveJ"] * 2)
+        self.assertEqual(speeds[2::3], ["Speed 1 20.0"] * 2)
+
+  async def test_a_default_approach_speed_out_of_range_is_refused_on_assignment(self):
+    arm, _ = await self._arm()
+    for speed_percent in (0.0, 101.0):
+      with self.subTest(speed_percent), self.assertRaises(ValueError):
+        arm.arm.default_ztouch_approach_speed_percent = speed_percent
+
   async def test_no_licence_or_a_bad_argument_sends_no_search(self):
     # The licence word with bit 14 cleared.
     arm, fake = await self._arm(**{"pd 112 0 0 1": f"0 {189117 & ~(1 << 14)}"})
@@ -997,6 +1019,7 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     for arguments in (
       {"search_end_position": 29.889, "detection_force": 0.0},
       {"search_end_position": 29.889, "search_speed_percent": 4},
+      {"search_end_position": 29.889, "approach_speed_percent": 0.0},
       {"search_end_position": 29.889, "post_detection_distance": -1.0},
       {"search_end_position": 29.0},  # under the Z joint's soft limit
       {"search_end_position": 53.15},  # under 10 mm of search

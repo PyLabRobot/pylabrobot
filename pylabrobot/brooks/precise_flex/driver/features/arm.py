@@ -214,6 +214,7 @@ class PreciseFlexArm:
   # instance, or every arm by assigning on the class.
   default_recovery_speed_percent: float = 20.0
   _default_ztouch_search_speed_percent: int = 20
+  _default_ztouch_approach_speed_percent: float = 10.0
 
   # Parked orientations: planar folds, named for the way the gripper points. Z, gripper and rail are
   # left out: ``park()`` fills Z from the travel, and a held plate or a rail is not disturbed.
@@ -2319,6 +2320,13 @@ class PreciseFlexArm:
         f"is {speed_percent}"
       )
 
+  def _check_ztouch_approach_speed(self, speed_percent: float) -> None:
+    """Raise unless the moves down to a ZTouch search and to its rest may run at this speed."""
+    if not 0 < speed_percent <= 100:
+      raise ValueError(
+        f"approach speed must be above 0 and at most 100 percent, is {speed_percent}"
+      )
+
   @property
   def default_ztouch_search_speed_percent(self) -> int:
     """System speed of a ZTouch search whose `search_speed_percent` is None."""
@@ -2328,6 +2336,17 @@ class PreciseFlexArm:
   def default_ztouch_search_speed_percent(self, speed_percent: int) -> None:
     self._check_ztouch_search_speed(speed_percent)
     self._default_ztouch_search_speed_percent = speed_percent
+
+  @property
+  def default_ztouch_approach_speed_percent(self) -> float:
+    """Profile speed down to a ZTouch search and to its rest, when `approach_speed_percent` is
+    None."""
+    return self._default_ztouch_approach_speed_percent
+
+  @default_ztouch_approach_speed_percent.setter
+  def default_ztouch_approach_speed_percent(self, speed_percent: float) -> None:
+    self._check_ztouch_approach_speed(speed_percent)
+    self._default_ztouch_approach_speed_percent = speed_percent
 
   async def _require_ztouch_licence(self) -> None:
     """Raise unless the controller is licensed for Z height detection."""
@@ -2416,7 +2435,8 @@ class PreciseFlexArm:
       search_start_position: back flat height the search starts from, in mm; reached by a checked
         move. Where the arm stands when None.
       search_end_position: lowest back flat height, in mm. The Z joint's soft limit when None.
-      approach_speed_percent: profile speed down to the start. The current one when None.
+      approach_speed_percent: profile speed down to the start and to the rest after.
+        ``default_ztouch_approach_speed_percent`` when None.
       search_speed_percent: system speed during the search, put back after.
         ``default_ztouch_search_speed_percent`` when None. The search has no speed of its own.
       detection_force: the force at which the search stops, in N.
@@ -2443,6 +2463,9 @@ class PreciseFlexArm:
       raise ValueError(
         f"post_detection_distance must not be negative, is {post_detection_distance}"
       )
+    if approach_speed_percent is None:
+      approach_speed_percent = self.default_ztouch_approach_speed_percent
+    self._check_ztouch_approach_speed(approach_speed_percent)
     if search_speed_percent is None:
       search_speed_percent = self.default_ztouch_search_speed_percent
     self._check_ztouch_search_speed(search_speed_percent)
@@ -2500,9 +2523,10 @@ class PreciseFlexArm:
     if move_to_parking_position_after:
       await self.park()
     elif pressed is not None and post_detection_distance > 0:
-      await self.move_to_joint_state(
-        {PreciseFlexAxis.BASE: round(pressed + post_detection_distance - offset, 2)}
-      )
+      async with self.at_speed(approach_speed_percent):
+        await self.move_to_joint_state(
+          {PreciseFlexAxis.BASE: round(pressed + post_detection_distance - offset, 2)}
+        )
     return pressed
 
   @evented_operation(
