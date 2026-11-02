@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.MeasurementSettings.settling\_time
+====================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: MeasurementSettings.settling_time

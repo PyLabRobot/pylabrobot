@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.measurement.PlateGeometry
+===========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.measurement
+
+.. autoclass:: PlateGeometry
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateGeometry.well_shape
+      ~PlateGeometry.length
+      ~PlateGeometry.width
+      ~PlateGeometry.first_x
+      ~PlateGeometry.first_y
+      ~PlateGeometry.last_x
+      ~PlateGeometry.last_y
+      ~PlateGeometry.columns
+      ~PlateGeometry.rows
+      ~PlateGeometry.well_size
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateGeometry.__init__
+   
+   

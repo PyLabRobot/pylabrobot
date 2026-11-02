@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.fluorescence.Fluorescence.default\_emission\_bandwidth
+========================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.fluorescence
+
+.. autoproperty:: Fluorescence.default_emission_bandwidth

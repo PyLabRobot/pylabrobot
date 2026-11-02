@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.responses.GainFocus.well
+=================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.responses
+
+.. autoattribute:: GainFocus.well

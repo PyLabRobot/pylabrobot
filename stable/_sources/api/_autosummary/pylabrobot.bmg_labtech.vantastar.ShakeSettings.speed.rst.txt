@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.ShakeSettings.speed
+=====================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: ShakeSettings.speed

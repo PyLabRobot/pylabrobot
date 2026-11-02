@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarZProfileResult.gain
+==============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: VANTAstarZProfileResult.gain

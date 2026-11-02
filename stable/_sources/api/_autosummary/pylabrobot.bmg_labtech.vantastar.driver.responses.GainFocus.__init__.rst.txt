@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.responses.GainFocus.\_\_init\_\_
+=========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.responses
+
+.. automethod:: GainFocus.__init__

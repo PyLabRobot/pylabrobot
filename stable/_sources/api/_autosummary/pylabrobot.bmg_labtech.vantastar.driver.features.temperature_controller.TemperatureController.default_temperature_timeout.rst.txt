@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.temperature\_controller.TemperatureController.default\_temperature\_timeout
+=============================================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.temperature_controller
+
+.. autoattribute:: TemperatureController.default_temperature_timeout

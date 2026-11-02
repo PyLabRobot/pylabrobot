@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.master.VANTAstarStatus.curr\_state\_meas\_data\_ready
+==============================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.master
+
+.. autoattribute:: VANTAstarStatus.curr_state_meas_data_ready

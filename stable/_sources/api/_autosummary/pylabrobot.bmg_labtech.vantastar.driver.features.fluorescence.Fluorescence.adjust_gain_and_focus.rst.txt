@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.fluorescence.Fluorescence.adjust\_gain\_and\_focus
+====================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.fluorescence
+
+.. automethod:: Fluorescence.adjust_gain_and_focus

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.absorbance.Absorbance.measure\_spectrum
+=========================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.absorbance
+
+.. automethod:: Absorbance.measure_spectrum

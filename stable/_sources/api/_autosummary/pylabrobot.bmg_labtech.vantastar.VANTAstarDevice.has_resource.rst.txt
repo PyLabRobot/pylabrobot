@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice.has\_resource
+===============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. automethod:: VANTAstarDevice.has_resource

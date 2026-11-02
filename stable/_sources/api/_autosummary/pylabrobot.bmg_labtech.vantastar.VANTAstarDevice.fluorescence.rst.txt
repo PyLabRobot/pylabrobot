@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice.fluorescence
+==============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoproperty:: VANTAstarDevice.fluorescence

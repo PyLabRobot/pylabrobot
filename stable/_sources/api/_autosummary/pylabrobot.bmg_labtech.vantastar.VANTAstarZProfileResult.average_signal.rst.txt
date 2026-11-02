@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarZProfileResult.average\_signal
+=========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: VANTAstarZProfileResult.average_signal

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration.serial\_number
+============================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.configuration
+
+.. autoattribute:: VANTAstarConfiguration.serial_number

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice.is\_in\_subtree\_of
+=====================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. automethod:: VANTAstarDevice.is_in_subtree_of

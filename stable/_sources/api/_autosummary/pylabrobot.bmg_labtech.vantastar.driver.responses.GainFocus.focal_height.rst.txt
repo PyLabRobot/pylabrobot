@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.responses.GainFocus.focal\_height
+==========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.responses
+
+.. autoattribute:: GainFocus.focal_height

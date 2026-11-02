@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.MeasurementSettings.well\_scan
+================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: MeasurementSettings.well_scan

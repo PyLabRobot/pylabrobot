@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.MeasurementSettings.scan\_diameter
+====================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: MeasurementSettings.scan_diameter

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration.\_\_init\_\_
+==========================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.configuration
+
+.. automethod:: VANTAstarConfiguration.__init__

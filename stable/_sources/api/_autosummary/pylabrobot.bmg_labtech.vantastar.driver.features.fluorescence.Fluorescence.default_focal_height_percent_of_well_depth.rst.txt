@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.fluorescence.Fluorescence.default\_focal\_height\_percent\_of\_well\_depth
+============================================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.fluorescence
+
+.. autoproperty:: Fluorescence.default_focal_height_percent_of_well_depth

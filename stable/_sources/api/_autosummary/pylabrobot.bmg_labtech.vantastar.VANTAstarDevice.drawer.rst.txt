@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice.drawer
+========================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoproperty:: VANTAstarDevice.drawer

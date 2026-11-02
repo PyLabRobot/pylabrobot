@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice.assign\_child\_by\_anchor
+===========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. automethod:: VANTAstarDevice.assign_child_by_anchor

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.drawer.Drawer.\_\_init\_\_
+============================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.drawer
+
+.. automethod:: Drawer.__init__

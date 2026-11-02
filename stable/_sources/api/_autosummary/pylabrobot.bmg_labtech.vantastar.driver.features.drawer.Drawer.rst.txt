@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.drawer.Drawer
+===============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.drawer
+
+.. autoclass:: Drawer
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Drawer.default_move_timeout
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Drawer.__init__
+      ~Drawer.close
+      ~Drawer.open
+      ~Drawer.sense_drawer_open
+      ~Drawer.sense_plate_present
+   
+   

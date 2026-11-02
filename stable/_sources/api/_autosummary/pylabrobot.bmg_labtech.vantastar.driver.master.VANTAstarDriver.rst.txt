@@ -1,0 +1,59 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.master.VANTAstarDriver
+===============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.master
+
+.. autoclass:: VANTAstarDriver
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarDriver.PROTOCOL_VERSION
+      ~VANTAstarDriver.default_poll_interval
+      ~VANTAstarDriver.default_read_timeout
+      ~VANTAstarDriver.estimating
+      ~VANTAstarDriver.measurement_poll_interval
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarDriver.__init__
+      ~VANTAstarDriver.adjust_gain_and_focus
+      ~VANTAstarDriver.build_absorbance_run
+      ~VANTAstarDriver.build_absorbance_spectrum_run
+      ~VANTAstarDriver.build_fluorescence_run
+      ~VANTAstarDriver.build_fluorescence_scan_run
+      ~VANTAstarDriver.build_gain_focus
+      ~VANTAstarDriver.build_incubator
+      ~VANTAstarDriver.build_luminescence_run
+      ~VANTAstarDriver.discover
+      ~VANTAstarDriver.estimate_duration
+      ~VANTAstarDriver.estimate_run_time
+      ~VANTAstarDriver.exchange
+      ~VANTAstarDriver.format_setup_summary
+      ~VANTAstarDriver.get_temperatures
+      ~VANTAstarDriver.initialize
+      ~VANTAstarDriver.measure_z_profile
+      ~VANTAstarDriver.request_status
+      ~VANTAstarDriver.run_absorbance_spectrum
+      ~VANTAstarDriver.run_blocks
+      ~VANTAstarDriver.run_measurement
+      ~VANTAstarDriver.send_command
+      ~VANTAstarDriver.setup
+      ~VANTAstarDriver.stop
+      ~VANTAstarDriver.stop_run
+   
+   

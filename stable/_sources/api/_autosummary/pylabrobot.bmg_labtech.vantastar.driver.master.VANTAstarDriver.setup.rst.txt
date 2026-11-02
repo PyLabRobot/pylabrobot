@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.master.VANTAstarDriver.setup
+=====================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.master
+
+.. automethod:: VANTAstarDriver.setup

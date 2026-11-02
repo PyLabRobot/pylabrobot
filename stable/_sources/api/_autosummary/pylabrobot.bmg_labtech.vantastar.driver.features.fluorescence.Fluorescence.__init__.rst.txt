@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.fluorescence.Fluorescence.\_\_init\_\_
+========================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.fluorescence
+
+.. automethod:: Fluorescence.__init__

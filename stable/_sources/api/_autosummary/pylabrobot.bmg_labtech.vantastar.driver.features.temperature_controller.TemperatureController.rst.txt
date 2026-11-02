@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.temperature\_controller.TemperatureController
+===============================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.temperature_controller
+
+.. autoclass:: TemperatureController
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureController.default_sensor_timeout
+      ~TemperatureController.default_temperature_timeout
+      ~TemperatureController.default_temperature_tolerance
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureController.__init__
+      ~TemperatureController.measure_temperature
+      ~TemperatureController.start_temperature_control
+      ~TemperatureController.stop_temperature_control
+      ~TemperatureController.wait_for_temperature
+   
+   

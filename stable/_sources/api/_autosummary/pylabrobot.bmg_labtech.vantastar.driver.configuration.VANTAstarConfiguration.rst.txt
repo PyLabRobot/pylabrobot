@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration
+=============================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.configuration
+
+.. autoclass:: VANTAstarConfiguration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarConfiguration.cpu_board_version
+      ~VANTAstarConfiguration.firmware_build
+      ~VANTAstarConfiguration.firmware_package
+      ~VANTAstarConfiguration.firmware_version
+      ~VANTAstarConfiguration.mainboard_version
+      ~VANTAstarConfiguration.modules
+      ~VANTAstarConfiguration.protocol_version
+      ~VANTAstarConfiguration.serial_number
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarConfiguration.__init__
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.master.VANTAstarDriver.adjust\_gain\_and\_focus
+========================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.master
+
+.. automethod:: VANTAstarDriver.adjust_gain_and_focus

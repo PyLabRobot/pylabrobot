@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.temperature\_controller.TemperatureController.\_\_init\_\_
+============================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.temperature_controller
+
+.. automethod:: TemperatureController.__init__

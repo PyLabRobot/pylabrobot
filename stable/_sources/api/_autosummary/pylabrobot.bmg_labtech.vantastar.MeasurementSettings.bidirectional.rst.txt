@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.MeasurementSettings.bidirectional
+===================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: MeasurementSettings.bidirectional

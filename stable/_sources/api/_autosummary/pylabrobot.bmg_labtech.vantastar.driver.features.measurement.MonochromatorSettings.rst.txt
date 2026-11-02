@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.measurement.MonochromatorSettings
+===================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.measurement
+
+.. autoclass:: MonochromatorSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MonochromatorSettings.emission_slit
+      ~MonochromatorSettings.excitation_slit
+      ~MonochromatorSettings.excitation_lower
+      ~MonochromatorSettings.excitation_upper
+      ~MonochromatorSettings.dichroic
+      ~MonochromatorSettings.emission_lower
+      ~MonochromatorSettings.emission_upper
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MonochromatorSettings.__init__
+   
+   

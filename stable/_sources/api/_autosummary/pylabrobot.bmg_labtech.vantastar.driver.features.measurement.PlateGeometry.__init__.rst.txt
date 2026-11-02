@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.measurement.PlateGeometry.\_\_init\_\_
+========================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.measurement
+
+.. automethod:: PlateGeometry.__init__

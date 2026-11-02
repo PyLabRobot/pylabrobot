@@ -1,0 +1,39 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.VANTAstarZProfileResult
+=========================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoclass:: VANTAstarZProfileResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarZProfileResult.well
+      ~VANTAstarZProfileResult.gain
+      ~VANTAstarZProfileResult.z_profile
+      ~VANTAstarZProfileResult.average_signal
+      ~VANTAstarZProfileResult.peak_counts
+      ~VANTAstarZProfileResult.peak_detector_percent
+      ~VANTAstarZProfileResult.peak_focal_height
+      ~VANTAstarZProfileResult.start_timestamp
+      ~VANTAstarZProfileResult.end_timestamp
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarZProfileResult.__init__
+   
+   

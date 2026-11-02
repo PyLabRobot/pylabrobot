@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.fluorescence.Fluorescence.measure\_z\_profile
+===============================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.fluorescence
+
+.. automethod:: Fluorescence.measure_z_profile

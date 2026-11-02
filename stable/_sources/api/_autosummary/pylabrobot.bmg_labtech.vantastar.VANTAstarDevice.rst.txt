@@ -1,0 +1,92 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice
+=================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoclass:: VANTAstarDevice
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarDevice.absorbance
+      ~VANTAstarDevice.drawer
+      ~VANTAstarDevice.fluorescence
+      ~VANTAstarDevice.location
+      ~VANTAstarDevice.luminescence
+      ~VANTAstarDevice.name
+      ~VANTAstarDevice.shaker
+      ~VANTAstarDevice.temperature_controller
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarDevice.__init__
+      ~VANTAstarDevice.assign_child_by_anchor
+      ~VANTAstarDevice.assign_child_resource
+      ~VANTAstarDevice.at
+      ~VANTAstarDevice.center
+      ~VANTAstarDevice.centers
+      ~VANTAstarDevice.check_can_drop_resource_here
+      ~VANTAstarDevice.copy
+      ~VANTAstarDevice.deregister_did_assign_resource_callback
+      ~VANTAstarDevice.deregister_did_unassign_resource_callback
+      ~VANTAstarDevice.deregister_state_update_callback
+      ~VANTAstarDevice.deregister_will_assign_resource_callback
+      ~VANTAstarDevice.deregister_will_unassign_resource_callback
+      ~VANTAstarDevice.deserialize
+      ~VANTAstarDevice.estimate_duration
+      ~VANTAstarDevice.find_resource
+      ~VANTAstarDevice.find_resources
+      ~VANTAstarDevice.get_absolute_location
+      ~VANTAstarDevice.get_absolute_rotation
+      ~VANTAstarDevice.get_absolute_size_x
+      ~VANTAstarDevice.get_absolute_size_y
+      ~VANTAstarDevice.get_absolute_size_z
+      ~VANTAstarDevice.get_all_children
+      ~VANTAstarDevice.get_anchor
+      ~VANTAstarDevice.get_highest_known_point
+      ~VANTAstarDevice.get_location_wrt
+      ~VANTAstarDevice.get_resource
+      ~VANTAstarDevice.get_root
+      ~VANTAstarDevice.get_size_x
+      ~VANTAstarDevice.get_size_y
+      ~VANTAstarDevice.get_size_z
+      ~VANTAstarDevice.has_resource
+      ~VANTAstarDevice.is_in_subtree_of
+      ~VANTAstarDevice.load_all_state
+      ~VANTAstarDevice.load_from_json_file
+      ~VANTAstarDevice.load_state
+      ~VANTAstarDevice.load_state_from_file
+      ~VANTAstarDevice.named
+      ~VANTAstarDevice.register_did_assign_resource_callback
+      ~VANTAstarDevice.register_did_unassign_resource_callback
+      ~VANTAstarDevice.register_state_update_callback
+      ~VANTAstarDevice.register_will_assign_resource_callback
+      ~VANTAstarDevice.register_will_unassign_resource_callback
+      ~VANTAstarDevice.rotate
+      ~VANTAstarDevice.rotate_to
+      ~VANTAstarDevice.rotated
+      ~VANTAstarDevice.save
+      ~VANTAstarDevice.save_state_to_file
+      ~VANTAstarDevice.serialize
+      ~VANTAstarDevice.serialize_all_state
+      ~VANTAstarDevice.serialize_state
+      ~VANTAstarDevice.setup
+      ~VANTAstarDevice.stop
+      ~VANTAstarDevice.unassign
+      ~VANTAstarDevice.unassign_child_resource
+   
+   
