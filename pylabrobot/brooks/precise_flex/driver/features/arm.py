@@ -2360,7 +2360,7 @@ class PreciseFlexArm:
     return SHOULDER_AXIS.z - GRIPPER_BACK_FLAT_BELOW_FLANGE_PLANE[intelliguide]
 
   async def _unchecked_fw_probe_z_using_ztouch(
-    self, quick_mode: int, search_limit: float, maximum_force: float
+    self, quick_mode: int, search_limit: float, maximum_force: float, read_timeout: float
   ) -> float:
     """Send ``HeightDetect``, which holds the connection until it ends. Nothing is guarded.
 
@@ -2368,13 +2368,19 @@ class PreciseFlexArm:
       quick_mode: 1 measures on the way down; 2 measures again on the way up.
       search_limit: how far it may travel from where it stands, in mm; negative.
       maximum_force: the force at which it stops, in N; negative.
+      read_timeout: how long to wait for the reply, in seconds; the connection's own after.
 
     Returns:
       The Z joint where it worked out the contact was, in mm.
     """
-    return float(
-      await self._driver.send_command(f"HeightDetect {quick_mode} {search_limit} {maximum_force}")
-    )
+    io = self._driver.io
+    usual_timeout, io._read_timeout = io._read_timeout, read_timeout
+    try:
+      return float(
+        await self._driver.send_command(f"HeightDetect {quick_mode} {search_limit} {maximum_force}")
+      )
+    finally:
+      io._read_timeout = usual_timeout
 
   async def _stop_ztouch_search(self) -> None:
     """Stop an interrupted search and discard its reply, so the next command gets its own.
@@ -2405,7 +2411,7 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.probe_z_using_ztouch",
-    lambda self, *, search_start_position=None, search_end_position=None, approach_speed_percent=None, search_speed_percent=None, detection_force=15.0, perform_second_measurement_on_lift_off=False, post_detection_distance=2.0, move_to_parking_position_after=False: {
+    lambda self, *, search_start_position=None, search_end_position=None, approach_speed_percent=None, search_speed_percent=None, detection_force=15.0, perform_second_measurement_on_lift_off=False, post_detection_distance=2.0, move_to_parking_position_after=False, read_timeout=120.0: {
       "device": self._driver._controller_reference(),
       "search_start_position": search_start_position,
       "search_end_position": search_end_position,
@@ -2424,6 +2430,7 @@ class PreciseFlexArm:
     perform_second_measurement_on_lift_off: bool = False,
     post_detection_distance: float = 2.0,
     move_to_parking_position_after: bool = False,
+    read_timeout: float = 120.0,
   ) -> Optional[float]:
     """Lower the arm until the gripper presses on something, and read the height.
 
@@ -2444,6 +2451,8 @@ class PreciseFlexArm:
       post_detection_distance: where to rest above what it met, in mm. Not moved when 0, or when the
         search met nothing.
       move_to_parking_position_after: whether to park afterwards, instead of resting.
+      read_timeout: how long to wait for the search to end, in seconds. A second measurement on
+        lift-off doubles the time: a 90 mm search at 20 percent takes 13 s, 27 s with it.
 
     Returns:
       The back flat height where it pressed, in mm, or None if it reached the end. A halt from
@@ -2454,7 +2463,7 @@ class PreciseFlexArm:
       ValueError: If an argument is out of range, or the way down would hit the column or the base
         plate.
       OperationInterrupted: On a user interrupt; the arm is halted and rises by itself.
-      TimeoutError: If the search outlasts the connection's read timeout. It is then stopped.
+      TimeoutError: If the search outlasts `read_timeout`. It is then stopped.
     """
     offset = self._get_back_flat_above_z_joint()
     if detection_force <= 0:
@@ -2463,6 +2472,8 @@ class PreciseFlexArm:
       raise ValueError(
         f"post_detection_distance must not be negative, is {post_detection_distance}"
       )
+    if read_timeout <= 0:
+      raise ValueError(f"read_timeout must be above 0 s, is {read_timeout}")
     if approach_speed_percent is None:
       approach_speed_percent = self.default_ztouch_approach_speed_percent
     self._check_ztouch_approach_speed(approach_speed_percent)
@@ -2504,7 +2515,10 @@ class PreciseFlexArm:
       async with halt_on_interrupt(self._stop_ztouch_search):
         try:
           contact[0] = await self._unchecked_fw_probe_z_using_ztouch(
-            quick_mode, limit, -float(detection_force)
+            quick_mode=quick_mode,
+            search_limit=limit,
+            maximum_force=-float(detection_force),
+            read_timeout=read_timeout,
           )
         except TimeoutError:
           await self._stop_ztouch_search()

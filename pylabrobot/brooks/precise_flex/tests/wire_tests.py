@@ -1010,6 +1010,22 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
       with self.subTest(speed_percent), self.assertRaises(ValueError):
         arm.arm.default_ztouch_approach_speed_percent = speed_percent
 
+  async def test_the_search_waits_for_its_read_timeout_and_puts_the_connections_back(self):
+    for arguments, waited in (({}, 120.0), ({"read_timeout": 45.0}, 45.0)):
+      with self.subTest(arguments):
+        arm, fake = await self._arm()
+        arm.io._read_timeout = 30.0
+        timeouts = []
+
+        async def readline():
+          timeouts.append((fake._last, arm.io._read_timeout))
+          return await fake.readline()
+
+        arm.io.readline = AsyncMock(side_effect=readline)
+        await arm.arm.probe_z_using_ztouch(search_end_position=29.889, **arguments)
+        self.assertIn(("HeightDetect 1 -28.0 -15.0", waited), timeouts)
+        self.assertEqual({t for c, t in timeouts if not c.startswith("HeightDetect")}, {30.0})
+
   async def test_no_licence_or_a_bad_argument_sends_no_search(self):
     # The licence word with bit 14 cleared.
     arm, fake = await self._arm(**{"pd 112 0 0 1": f"0 {189117 & ~(1 << 14)}"})
@@ -1021,6 +1037,7 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
       {"search_end_position": 29.889, "search_speed_percent": 4},
       {"search_end_position": 29.889, "approach_speed_percent": 0.0},
       {"search_end_position": 29.889, "post_detection_distance": -1.0},
+      {"search_end_position": 29.889, "read_timeout": 0.0},
       {"search_end_position": 29.0},  # under the Z joint's soft limit
       {"search_end_position": 53.15},  # under 10 mm of search
     ):
