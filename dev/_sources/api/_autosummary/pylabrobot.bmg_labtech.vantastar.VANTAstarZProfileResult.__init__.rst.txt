@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarZProfileResult.\_\_init\_\_
+======================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. automethod:: VANTAstarZProfileResult.__init__

@@ -1,0 +1,26 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.absorbance.Absorbance
+=======================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.absorbance
+
+.. autoclass:: Absorbance
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Absorbance.__init__
+      ~Absorbance.measure
+      ~Absorbance.measure_spectrum
+   
+   

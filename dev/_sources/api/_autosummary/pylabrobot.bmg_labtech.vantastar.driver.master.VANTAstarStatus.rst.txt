@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.master.VANTAstarStatus
+===============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.master
+
+.. autoclass:: VANTAstarStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarStatus.absorb_data_ready
+      ~VANTAstarStatus.busy_command
+      ~VANTAstarStatus.curr_state_meas_data_ready
+      ~VANTAstarStatus.device_stopped
+      ~VANTAstarStatus.meas_data_ready
+      ~VANTAstarStatus.new_data_ready
+      ~VANTAstarStatus.reader_cover_open
+      ~VANTAstarStatus.temperatures
+      ~VANTAstarStatus.busy
+      ~VANTAstarStatus.plate_detected
+      ~VANTAstarStatus.drawer_open
+      ~VANTAstarStatus.motors_enabled
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarStatus.__init__
+   
+   

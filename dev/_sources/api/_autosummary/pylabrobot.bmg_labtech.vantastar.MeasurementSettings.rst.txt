@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.MeasurementSettings
+=====================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoclass:: MeasurementSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MeasurementSettings.bidirectional
+      ~MeasurementSettings.corner
+      ~MeasurementSettings.flashes
+      ~MeasurementSettings.matrix_size
+      ~MeasurementSettings.pause_before_reading
+      ~MeasurementSettings.reading_direction
+      ~MeasurementSettings.scan_diameter
+      ~MeasurementSettings.settling_time
+      ~MeasurementSettings.well_scan
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MeasurementSettings.__init__
+      ~MeasurementSettings.check
+   
+   

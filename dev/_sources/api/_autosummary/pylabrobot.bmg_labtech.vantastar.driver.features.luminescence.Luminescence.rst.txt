@@ -1,0 +1,25 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.luminescence.Luminescence
+===========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.luminescence
+
+.. autoclass:: Luminescence
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Luminescence.__init__
+      ~Luminescence.measure
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.measurement.MonochromatorSettings.excitation\_slit
+====================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.measurement
+
+.. autoattribute:: MonochromatorSettings.excitation_slit

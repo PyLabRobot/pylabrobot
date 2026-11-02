@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.VANTAstarDevice.deregister\_did\_unassign\_resource\_callback
+===============================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. automethod:: VANTAstarDevice.deregister_did_unassign_resource_callback

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.measurement.MonochromatorSettings.emission\_upper
+===================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.measurement
+
+.. autoattribute:: MonochromatorSettings.emission_upper

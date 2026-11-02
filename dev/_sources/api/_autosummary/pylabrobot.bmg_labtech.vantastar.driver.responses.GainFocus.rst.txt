@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.responses.GainFocus
+============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.responses
+
+.. autoclass:: GainFocus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GainFocus.gain
+      ~GainFocus.focal_height
+      ~GainFocus.well
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~GainFocus.__init__
+   
+   

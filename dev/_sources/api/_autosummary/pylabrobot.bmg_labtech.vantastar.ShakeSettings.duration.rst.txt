@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.ShakeSettings.duration
+========================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoattribute:: ShakeSettings.duration

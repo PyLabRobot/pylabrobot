@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.features.fluorescence.Fluorescence
+===========================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.fluorescence
+
+.. autoclass:: Fluorescence
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Fluorescence.default_emission_bandwidth
+      ~Fluorescence.default_excitation_bandwidth
+      ~Fluorescence.default_focal_height_percent_of_well_depth
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Fluorescence.__init__
+      ~Fluorescence.adjust_gain_and_focus
+      ~Fluorescence.measure
+      ~Fluorescence.measure_spectrum
+      ~Fluorescence.measure_z_profile
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.measurement.MonochromatorSettings.\_\_init\_\_
+================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.measurement
+
+.. automethod:: MonochromatorSettings.__init__

@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.ShakeSettings
+===============================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autoclass:: ShakeSettings
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ShakeSettings.pattern
+      ~ShakeSettings.speed
+      ~ShakeSettings.duration
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ShakeSettings.__init__
+   
+   

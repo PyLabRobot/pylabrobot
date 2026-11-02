@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.ShakeSettings.\_\_init\_\_
+============================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. automethod:: ShakeSettings.__init__

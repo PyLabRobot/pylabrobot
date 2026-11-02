@@ -1,0 +1,6 @@
+﻿pylabrobot.bmg\_labtech.vantastar.driver.errors.DeviceError
+===========================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.errors
+
+.. autoexception:: DeviceError

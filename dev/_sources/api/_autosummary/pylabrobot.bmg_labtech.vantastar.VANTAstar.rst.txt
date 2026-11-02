@@ -1,0 +1,6 @@
+﻿pylabrobot.bmg\_labtech.vantastar.VANTAstar
+===========================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar
+
+.. autofunction:: VANTAstar

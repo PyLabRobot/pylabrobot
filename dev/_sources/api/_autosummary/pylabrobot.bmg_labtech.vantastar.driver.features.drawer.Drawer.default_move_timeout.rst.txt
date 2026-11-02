@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.features.drawer.Drawer.default\_move\_timeout
+======================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.features.drawer
+
+.. autoattribute:: Drawer.default_move_timeout
