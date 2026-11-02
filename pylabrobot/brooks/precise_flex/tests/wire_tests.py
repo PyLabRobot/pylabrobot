@@ -1190,6 +1190,17 @@ class TestPickAndPlaceStation(unittest.IsolatedAsyncioTestCase):
       await arm.arm._unchecked_fw_set_station_cartesian(1, dict(_J))
     self.assertEqual(fake.sent, [])
 
+  async def test_joint_angles_are_written_with_the_rail_first(self):
+    for has_rail, joints, sent in (
+      (False, _J, "locAngles 1 200.0 10.0 170.0 20.0 100.0"),
+      (True, _JR, "locAngles 1 500.0 200.0 10.0 170.0 20.0 100.0"),
+    ):
+      with self.subTest(has_rail=has_rail):
+        fake = _FakeController()
+        arm = _make_arm(fake, has_rail=has_rail)
+        await arm.arm._unchecked_fw_set_joint_angles(station_index=1, joint_position=dict(joints))
+        self.assertEqual(fake.sent, [sent])
+
 
 class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
   """Only the jaws' own moves close them, limiting the force; anything else closing them is asked."""

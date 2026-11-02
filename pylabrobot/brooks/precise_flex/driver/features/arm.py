@@ -407,6 +407,18 @@ class PreciseFlexArm:
     """
     await self._driver.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
 
+  async def _unchecked_fw_set_joint_angles(
+    self,
+    station_index: int,
+    joint_position: JointState,
+  ) -> None:
+    """Set joint angles for a station, handling rail configuration."""
+    angles_str = " ".join(str(joint_position[axis]) for axis in self._WIRE_ORDER)
+    if self._driver._has_rail:
+      # Here the rail's value goes first.
+      angles_str = f"{joint_position[PreciseFlexAxis.RAIL]} {angles_str}"
+    await self._driver.send_command(f"locAngles {station_index} {angles_str}")
+
   async def _unchecked_fw_set_station_cartesian(
     self, station_index: int, joint_position: JointState
   ) -> None:
