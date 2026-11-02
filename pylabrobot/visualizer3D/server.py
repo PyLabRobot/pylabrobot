@@ -368,9 +368,13 @@ class Viewer3D:
   # -- state channel -----------------------------------------------------------
 
   def _placed_as_kept(self, name: str, location: Dict[str, Any]) -> bool:
-    """Whether `location` is where the kept scene already places `name`: published, but no move."""
+    """Whether `location` is where the kept scene already places `name`: published, but no move.
+
+    A resource moved since the scene was built is placed elsewhere by the clients, so its return
+    to the kept place is a move too.
+    """
     index = self._index_of.get(name)
-    if self._scene is None or index is None:
+    if self._scene is None or index is None or name in self._moved:
       return False
     return _xyz(location) == self._scene.transforms[6 * index : 6 * index + 3]
 

@@ -550,8 +550,7 @@ class PreciseFlexDriver:
   async def initialize(self) -> "PreciseFlexConfiguration":
     """Raise high power, take control, end any freedrive, and read the configuration (`discover`).
 
-    Moves nothing. Homing is ``home()``, deliberately separate: it sweeps the arm through its
-    whole envelope, which is not something to do just to bring it up.
+    Moves nothing. Homing is ``home()``, deliberately separate: it moves the jaws.
 
     Returns:
       The configuration ``discover`` read.
@@ -809,19 +808,14 @@ class PreciseFlexDriver:
   )
   async def power_on_robot(self):
     """Power on the robot."""
-    error: Optional[PreciseFlexError] = None
-    for _ in range(3):
+    for attempt in range(1, 4):
       try:
         await self.set_power(True, self.timeout)
-      except PreciseFlexError as e:
-        logger.warning(f"Error powering on robot, retrying... Attempt {_ + 1}/3. Error: {e}")
-        error = e
-      else:
         return
-
-    if error:
-      raise error
-    raise RuntimeError("Failed to power on robot after 3 attempts for unknown reasons.")
+      except PreciseFlexError as e:
+        logger.warning(f"Error powering on robot, retrying... Attempt {attempt}/3. Error: {e}")
+        if attempt == 3:
+          raise
 
   @evented_operation(
     "precise_flex.power_off",
