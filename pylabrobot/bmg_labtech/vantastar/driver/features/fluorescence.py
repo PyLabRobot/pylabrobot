@@ -627,8 +627,8 @@ class Fluorescence(Measurement):
       timeout: seconds the adjustment may take.
 
     Returns:
-      The gain found (0 when not adjusted) and the focal height found (None when not adjusted);
-      pass them to ``measure``.
+      The gain found (0 when not adjusted), the focal height found (None when not adjusted) and
+      the well the reader fitted the gain on; pass the gain and the focal height to ``measure``.
 
     Raises:
       RuntimeError: if no plate is on the plate holder.

@@ -414,6 +414,14 @@ class GainDataTests(unittest.TestCase):
     self.assertEqual(result.gain, 2904)
     self.assertEqual(result.focal_height, 3.0)
 
+  def test_well(self):
+    """The reply names the well the reader fitted the gain on: H1 of the reference wells A1-H1, A1
+    when it is the only one; with the focus alone on the six wells, A12."""
+    self.assertEqual(parse_gain_data(GAIN_DATA).well, "H1")
+    self.assertEqual(parse_gain_data(GAIN_DATA_GAIN).well, "A1")
+    self.assertEqual(parse_gain_data(GAIN_DATA_GAIN_AND_FOCUS).well, "A1")
+    self.assertEqual(parse_gain_data(GAIN_DATA_FOCUS).well, "A12")
+
   def test_gain_alone_has_no_focal_height(self):
     """A gain adjustment's reply gives the gain and no focal height."""
     result = parse_gain_data(GAIN_DATA_GAIN)

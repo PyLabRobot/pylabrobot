@@ -416,17 +416,20 @@ class GainFocus:
   Attributes:
     gain: the gain the adjustment found; 0 when only the focus was adjusted.
     focal_height: the focal height it found, in mm; None when the focus was not adjusted.
+    well: the identifier of the well the reader names (``"H1"``): the reference well it fitted the
+      gain on; with the focus alone, the well on one well, one of them on several.
   """
 
   gain: int
   focal_height: Optional[float]
+  well: str
 
 
 def parse_gain_data(reply: bytes) -> GainFocus:
-  """Parse the gain and focal height of a GainDataResponse.
+  """Parse the gain, focal height and well of a GainDataResponse.
 
   Raises:
-    ValueError: if ``reply`` is not a GainDataResponse or is truncated.
+    ValueError: if ``reply`` is not a GainDataResponse, is truncated, or names no well.
   """
   if not reply or reply[0] != GAIN_DATA_ID:
     raise ValueError(f"not a GainDataResponse: {reply[:16].hex()}")
@@ -436,11 +439,15 @@ def parse_gain_data(reply: bytes) -> GainFocus:
   curve = int.from_bytes(p[_GD_FOCUS_CURVE_LENGTH : _GD_FOCUS_CURVE_LENGTH + 2], "big")
   if curve and len(p) < _GD_FOCAL_HEIGHT + 2:
     raise ValueError(f"GainDataResponse too short: {reply.hex()}")
+  column, row = p[_GD_COLUMN], p[_GD_ROW]
+  if column < 1 or row < 1:
+    raise ValueError(f"GainDataResponse names no well: column {column}, row {row}")
   return GainFocus(
     gain=int.from_bytes(p[_GD_GAIN : _GD_GAIN + 2], "big"),
     focal_height=(
       int.from_bytes(p[_GD_FOCAL_HEIGHT : _GD_FOCAL_HEIGHT + 2], "big") / 100 if curve else None
     ),
+    well=f"{chr(ord('A') + row - 1)}{column}",
   )
 
 

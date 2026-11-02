@@ -817,7 +817,7 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
 
     driver = make_driver(respond)
     result = await driver.adjust_gain_and_focus(GAIN_PLATE[1:])
-    self.assertEqual((result.gain, result.focal_height), (2904, 3.0))
+    self.assertEqual((result.gain, result.focal_height, result.well), (2904, 3.0, "H1"))
 
   async def test_z_profile(self):
     """A z-profile sends the gain and focus adjustment and returns the focus curve of the reply;
