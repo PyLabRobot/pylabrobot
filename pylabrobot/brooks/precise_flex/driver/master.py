@@ -456,16 +456,17 @@ class PreciseFlexDriver:
     with, and, when the controller has an IntelliGuide vision module, the vision feature is built
     as ``self.vision``.
 
+    A setup that fails or is interrupted hands the arm back and closes its links, as ``disconnect``
+    does, each step on its own: the controller takes one connection and refuses the next while one
+    is open. The setup's own error is the one raised.
+
     Args:
       skip_home: If True, skip the homing step during setup.
       skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
         Mirrors STAR's ``skip_*`` setup flags.
-
-    A setup that fails closes the links it opened: the controller takes one connection, and refuses
-    the next one while this one stays open.
     """
-    await self.connect()
     try:
+      await self.connect()
       configuration = await self.initialize()
       self._create_feature_resources(configuration)
       if not skip_home:
@@ -475,12 +476,25 @@ class PreciseFlexDriver:
         await self._setup_vision(self._vision_host)
     except BaseException:
       try:
-        await self._close_vision_server()
-        await self.io.stop()
-      except Exception:  # the setup's own error is the one to raise
-        logger.warning(
-          "[PreciseFlex %s] could not close the links after a failed setup", self.io._host
-        )
+        for release in (self.detach, self.power_off_robot, self._exit, self._close_vision_server):
+          try:
+            await release()
+          except Exception as error:
+            logger.warning(
+              "[PreciseFlex %s] after a failed setup, %s failed: %s",
+              self.io._host,
+              release.__name__,
+              error,
+            )
+      finally:
+        try:
+          await self.io.stop()
+        except Exception as error:
+          logger.warning(
+            "[PreciseFlex %s] could not close the link after a failed setup: %s",
+            self.io._host,
+            error,
+          )
       raise
 
   async def connect(self) -> None:
