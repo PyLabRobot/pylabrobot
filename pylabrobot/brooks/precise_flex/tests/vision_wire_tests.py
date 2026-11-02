@@ -19,6 +19,7 @@ from pylabrobot.brooks.precise_flex.driver.features.vision import (
 from pylabrobot.io.socket import Socket
 
 from .wire_tests import _REPLIES
+from .wire_tests import _SETUP as _CONTROLLER_SETUP
 
 try:
   from PIL import Image as _PILImage
@@ -444,49 +445,8 @@ _DISCOVERY: List[str] = [
   "vision: property get system.listprocesses",
 ]
 
-_SETUP_WITHOUT_VISION: List[str] = [
-  "controller: <open>",
-  "controller: mode 0",
-  "controller: hp 1 20",
-  "controller: attach 1",
-  "controller: freemode -1",
-  "controller: pd 16078",
-  "controller: pd 16077",
-  "controller: pd 2003",
-  "controller: pd 2002",
-  "controller: version",
-  "controller: VToolProperty System CameraCount",
-  "controller: pd 2700",
-  "controller: pd 2702",
-  "controller: pd 2704",
-  "controller: pd 2705",
-  "controller: pd 2706",
-  "controller: pd 16050",
-  "controller: pd 16051",
-  "controller: pd 100",
-  "controller: pd 101",
-  "controller: pd 102",
-  "controller: pd 103",
-  "controller: pd 110",
-  "controller: pd 116",
-  "controller: pd 2000",
-  "controller: pd 2004",
-  "controller: pd 16076",
-  "controller: pd 16075",
-  "controller: pd 2701",
-  "controller: pd 2703",
-  "controller: sysState",
-  "controller: state",
-  "controller: state",
-  "controller: wherej",
-  "controller: home",
-  "controller: state",
-  "controller: state",
-  "controller: wherej",
-  "controller: pd 2800",
-  "controller: state",
-  "controller: state",
-  "controller: wherej",
+_SETUP_WITHOUT_VISION: List[str] = ["controller: <open>"] + [
+  f"controller: {command}" for command in _CONTROLLER_SETUP
 ]
 
 _SETUP: List[str] = _SETUP_WITHOUT_VISION + ["vision: <open>", "image: <open>"] + _DISCOVERY
