@@ -47,7 +47,10 @@ from ...kinematics import (
   WorkEnvelope,
   Wrist,
 )
-from ...resource_model.pf400_end_effector import GRIPPER_BODY_OUTLINE
+from ...resource_model.pf400_end_effector import (
+  GRIPPER_BACK_FLAT_BELOW_FLANGE_PLANE,
+  GRIPPER_BODY_OUTLINE,
+)
 from ...resource_model.pf400_manipulator import (
   BASE_PLATE_SIZE,
   SHOULDER_AXIS,
@@ -2347,6 +2350,11 @@ class PreciseFlexArm:
     if not licences >> _ZTOUCH_LICENCE_BIT & 1:
       raise RuntimeError("this controller has no licence for Z height detection")
 
+  def _get_back_flat_above_z_joint(self) -> float:
+    """How far the gripper's back flat stands above the Z joint's reading, in mm."""
+    intelliguide = "v23" if self._driver.configuration.has_vision_gripper else "s23"
+    return SHOULDER_AXIS.z - GRIPPER_BACK_FLAT_BELOW_FLANGE_PLANE[intelliguide]
+
   async def _unchecked_fw_probe_z_using_ztouch(
     self, quick_mode: int, search_limit: float, maximum_force: float
   ) -> float:
@@ -2415,14 +2423,14 @@ class PreciseFlexArm:
   ) -> Optional[float]:
     """Lower the arm until the gripper presses on something, and read the height.
 
-    Stand the wrist joint over the target, not the fingers: the gripper's underside presses on it,
-    and the tool point stands `gripper_length` further along the heading. Whatever touched, the
-    height is the tool point's, and the controller does not know which part it was.
+    Stand the wrist joint over the target, not the fingers: the gripper's back flat presses on it.
+    Heights are the back flat's, above the surface the base plate stands on. The controller does not
+    know what touched, so a target under another part reads wrong by the difference.
 
     Args:
-      search_start_position: tool point z the search starts from, in mm; reached by a checked
+      search_start_position: back flat height the search starts from, in mm; reached by a checked
         move. Where the arm stands when None.
-      search_end_position: lowest tool point z, in mm. The Z joint's soft limit when None.
+      search_end_position: lowest back flat height, in mm. The Z joint's soft limit when None.
       approach_speed_percent: profile speed down to the start. The current one when None.
       search_speed_percent: system speed during the search, put back after.
         ``default_ztouch_search_speed_percent`` when None. The search has no speed of its own.
@@ -2433,7 +2441,7 @@ class PreciseFlexArm:
       move_to_parking_position_after: whether to park afterwards, instead of resting.
 
     Returns:
-      The tool point z where it pressed, in mm, or None if it reached the end. A halt from
+      The back flat height where it pressed, in mm, or None if it reached the end. A halt from
       elsewhere also returns a height, with nothing met: the reply looks the same.
 
     Raises:
@@ -2443,6 +2451,7 @@ class PreciseFlexArm:
       OperationInterrupted: On a user interrupt; the arm is halted and rises by itself.
       TimeoutError: If the search outlasts the connection's read timeout. It is then stopped.
     """
+    offset = self._get_back_flat_above_z_joint()
     if detection_force <= 0:
       raise ValueError(f"detection_force must be above 0 N, is {detection_force}")
     if post_detection_distance < 0:
@@ -2455,7 +2464,6 @@ class PreciseFlexArm:
     await self._require_ztouch_licence()
     usual_speed = await self.request_monitor_speed()
 
-    offset = self._driver._kinematics_params.gripper_z_offset
     current = await self.request_joint_state()
     lowest, highest = self._get_soft_limits()[PreciseFlexAxis.BASE]
     floor = lowest + offset

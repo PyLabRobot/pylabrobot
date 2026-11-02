@@ -930,8 +930,8 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
 
 
 class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
-  """`HeightDetect`'s replies are the arm's: `0 4.15` on contact, -2101 at the limit. Its tool point
-  stands 51.25 mm below the Z joint."""
+  """`HeightDetect`'s replies are the arm's: `0 4.15` on contact, -2101 at the limit. The v23's back
+  flat stands 27.90 mm above the Z joint."""
 
   async def _arm(self, reply: str = "0 4.15", **overrides: str) -> Tuple[Any, _FakeController]:
     fake = _FakeController(
@@ -948,37 +948,37 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     fake.sent.clear()
     return arm, fake
 
-  async def test_contact_returns_the_tool_point_and_reads_where_the_arm_stopped(self):
+  async def test_contact_returns_the_back_flat_and_reads_where_the_arm_stopped(self):
     arm, fake = await self._arm()
-    self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=-49.261), -47.10)
+    self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=29.889), 32.05)
     index = fake.sent.index("HeightDetect 1 -28.0 -15.0")
     self.assertEqual(fake.sent[index + 1 : index + 5], ["state", "state", "wherej", "mspeed 50"])
     self.assertIn("moveJ 1 6.15 -31.304 102.074 -72.846 125.979", fake.sent[index + 5 :])
 
   async def test_reaching_the_end_returns_none_and_does_not_move_after(self):
     arm, fake = await self._arm("-2101")
-    result = await arm.arm.probe_z_using_ztouch(search_end_position=-49.261)
+    result = await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
     self.assertIsNone(result)
     self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
 
   async def test_a_post_detection_distance_of_0_does_not_move_after(self):
     arm, fake = await self._arm()
-    await arm.arm.probe_z_using_ztouch(search_end_position=-49.261, post_detection_distance=0)
+    await arm.arm.probe_z_using_ztouch(search_end_position=29.889, post_detection_distance=0)
     self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
 
   async def test_a_second_measurement_sends_mode_2(self):
     arm, fake = await self._arm()
     result = await arm.arm.probe_z_using_ztouch(
-      search_end_position=-49.261, perform_second_measurement_on_lift_off=True
+      search_end_position=29.889, perform_second_measurement_on_lift_off=True
     )
-    self.assertEqual(result, -46.89)
+    self.assertEqual(result, 32.26)
     self.assertIn("HeightDetect 2 -28.0 -15.0", fake.sent)
 
   async def test_the_search_speed_is_the_default_or_the_argument_and_is_put_back(self):
     for arguments, sent in (({}, "mspeed 20"), ({"search_speed_percent": 30}, "mspeed 30")):
       with self.subTest(arguments):
         arm, fake = await self._arm()
-        await arm.arm.probe_z_using_ztouch(search_end_position=-49.261, **arguments)
+        await arm.arm.probe_z_using_ztouch(search_end_position=29.889, **arguments)
         search = fake.sent.index("HeightDetect 1 -28.0 -15.0")
         self.assertLess(fake.sent.index(sent), search)
         self.assertGreater(fake.sent.index("mspeed 50"), search)
@@ -992,18 +992,23 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     # The licence word with bit 14 cleared.
     arm, fake = await self._arm(**{"pd 112 0 0 1": f"0 {189117 & ~(1 << 14)}"})
     with self.assertRaises(RuntimeError):
-      await arm.arm.probe_z_using_ztouch(search_end_position=-49.261)
+      await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
     arm, fake = await self._arm()
     for arguments in (
-      {"search_end_position": -49.261, "detection_force": 0.0},
-      {"search_end_position": -49.261, "search_speed_percent": 4},
-      {"search_end_position": -49.261, "post_detection_distance": -1.0},
-      {"search_end_position": -50.0},  # under the Z joint's soft limit
-      {"search_end_position": -26.0},  # under 10 mm of search
+      {"search_end_position": 29.889, "detection_force": 0.0},
+      {"search_end_position": 29.889, "search_speed_percent": 4},
+      {"search_end_position": 29.889, "post_detection_distance": -1.0},
+      {"search_end_position": 29.0},  # under the Z joint's soft limit
+      {"search_end_position": 53.15},  # under 10 mm of search
     ):
       with self.subTest(arguments), self.assertRaises(ValueError):
         await arm.arm.probe_z_using_ztouch(**arguments)
     self.assertFalse([c for c in fake.sent if c.startswith("HeightDetect")])
+
+  async def test_an_s23_returns_its_own_back_flat(self):
+    # The s23's back flat stands 37.53 mm above the Z joint.
+    arm, fake = await self._arm(**{"VToolProperty System CameraCount": "0"})
+    self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=39.519), 41.68)
 
   async def test_an_interrupt_halts_on_the_second_port_and_discards_the_false_height(self):
     # The search's reply arrives once it ends: the false height a halted search gave on the arm.
@@ -1023,7 +1028,7 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
     arm.io.readline = AsyncMock(side_effect=readline)
     status = MagicMock(setup=AsyncMock(), write=AsyncMock(), stop=AsyncMock())
     with patch("pylabrobot.brooks.precise_flex.driver.features.arm.Socket", return_value=status):
-      task = asyncio.create_task(arm.arm.probe_z_using_ztouch(search_end_position=-49.261))
+      task = asyncio.create_task(arm.arm.probe_z_using_ztouch(search_end_position=29.889))
       await blocked.wait()
       task.cancel()
       with self.assertRaises(asyncio.CancelledError):
