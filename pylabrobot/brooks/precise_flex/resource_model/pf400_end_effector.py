@@ -59,6 +59,10 @@ GRIPPER_FINGER_LOCATION = {"s23": Coordinate(2.0, 32.2, -16.6), "v23": Coordinat
 # How far below the flange plane the fingers grip: at the middle of their height.
 GRIPPER_TOOL_CENTER_POINT_Z = {"s23": -46.0, "v23": -51.25}
 
+# How far below the flange plane the back flat stands, the underside a Z search presses with.
+# v23 from searches on a stack of known height; s23 = v23's flange plane to body top + 36.5 caliper.
+GRIPPER_BACK_FLAT_BELOW_FLANGE_PLANE = {"s23": 40.04, "v23": 49.67}
+
 
 def gripper(
   name: str,
