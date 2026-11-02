@@ -32,6 +32,7 @@ generic/index
 agilent/index
 azenta/index
 big_bear/index
+bmg_labtech/index
 brooks/index
 byonoy/index
 cole_parmer/index
