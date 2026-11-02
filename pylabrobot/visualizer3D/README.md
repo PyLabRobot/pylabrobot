@@ -352,6 +352,104 @@ leaves the committed state as the last one sent. A tracker's `thing` is its reso
 it is dropped before signing: a rack of empty tips is one state, not ninety-six. The panel prints
 the rest under "Tracker state".
 
+### Device models
+
+Most devices PyLabRobot drives ship a model in a `resource_model/` directory beside their code:
+one `.glb` each, metres, Z up, at rest with its doors closed, one mesh per material. A resource is
+drawn from one when its `model` names the file and it has a size: a model under `MODEL_MIN_PX`
+(`appearance.js`) across is drawn as its box, so a resource of size 0 shows nothing.
+
+These are named by the resource that stands for the device, and drawn in its frame, standing on
+its floor. A body PLR leaves at size 0 needs its size passed in, the drawn size below
+(`SCILA(..., size_x=250, size_y=410, size_z=287)`), and is drawn corner to its origin.
+
+| model | device | drawn size (mm) | named by | frame |
+|---|---|---|---|---|
+| `AmbiStore` | HighRes Biosolutions AmbiStore | 737 × 838.1 × 1041 | `high_res.sample_storage.AmbiStore` | size 0 |
+| `SteriStore` | HighRes Biosolutions SteriStore | 864 × 914 × 1397 | `high_res.sample_storage.SteriStore` | size 0 |
+| `TundraStore` | HighRes Biosolutions TundraStore | 864 × 914 × 1397 | `high_res.sample_storage.TundraStore` | size 0 |
+| `Inheco SCILA` | Inheco SCILA incubator | 250 × 410 × 287 | `inheco.scila.SCILA` | size 0 |
+| `Agilent BenchCel 4R` | Agilent BenchCel 4R | 864 × 203 × 1112 | `agilent.benchcel.BenchCel4R` | size 0 |
+| `Agilent Access2` | Agilent Access2 with its VSpin | 327 × 711 × 251 | `agilent.vspin.Access2` | size 0 |
+| `HighRes Biosolutions MicroSpin` | HighRes Biosolutions MicroSpin | 406 × 406.2 × 381 | `legacy.centrifuge.MicroSpin` | centred on its 381 × 406.4 |
+| `BioShake3000Elm` | QInstruments BioShake 3000 elm | 142 × 99.1 × 55.4 | `qinstruments.BioShake3000Elm` | plate site under its plate |
+| `inheco_thermoshake` | Inheco ThermoShake 7100146 | 147 × 104 × 118 | `inheco.inheco_thermoshake`, and its legacy twin | plate site under its plate |
+| `HamiltonTiltModule` | Hamilton Tilt Module | 140 × 100.1 × 80 | `legacy.tilting.HamiltonTiltModule` | plate site under its plate |
+| `temperatureModuleV2` | Opentrons Temperature Module GEN2 | 194 × 90 × 84 | `legacy.temperature_controlling.OpentronsTemperatureModuleV2` | plate site under its plate |
+| `thermocyclerModuleV2` | Opentrons Thermocycler GEN2 | 172 × 245 × 170.2 | `legacy.thermocycling.OpentronsThermocyclerModuleV2` | corner to its origin |
+| `pioreactor_20ml` | Pioreactor 20 mL, without its vial | 90 × 60.1 × 78.5 | `pioreactor.pioreactor_20ml` | vial bore at its vessel, 21 mm up for the holder |
+
+"Plate site under its plate" is in X and Y: the site's height is the model's, so a plate can sit a
+few millimetres above or into it (8.8 mm above on the tilt module). The rest are named after the
+device and drawn by any resource that names one, at the drawn size, corner to its origin: a legacy
+front end such as `PlateReader(..., model="biotek_cytation_5")`, or a plain
+`Resource("cytation", size_x=416, size_y=514.5, size_z=445, model="biotek_cytation_5")`.
+
+| model | device | drawn size (mm) |
+|---|---|---|
+| `agilent_plateloc` | Agilent PlateLoc | 216 × 300 × 584 |
+| `agilent_vspin` | Agilent VSpin | 327 × 458 × 200 |
+| `agrowtek_agrowpump_array` | Agrowtek AgrowPump array | 304.8 × 114.6 × 111.3 |
+| `azenta_a4s` | Azenta a4S | 230 × 507 × 276 |
+| `azenta_intellixcap96` | Azenta FluidX IntelliXcap 96 | 256 × 464.4 × 340 |
+| `azenta_xpeel` | Azenta XPeel | 373.9 × 637.7 × 373.4 |
+| `big_bear_orbital_shaker` | Big Bear orbital shaker | 92.7 × 134.7 × 30.9 |
+| `biotek_cytation_1` | Agilent BioTek Cytation 1 | 416 × 514.5 × 445 |
+| `biotek_cytation_5` | Agilent BioTek Cytation 5 | 416 × 514.5 × 445 |
+| `biotek_cytation_microscope_module` | Agilent BioTek Cytation microscope module | 180 × 160 × 160 |
+| `biotek_el406` | Agilent BioTek EL406 | 420 × 460 × 320 |
+| `biotek_synergy_h1` | Agilent BioTek Synergy H1 | 375 × 464.5 × 330 |
+| `bmg_clariostar` | BMG Labtech CLARIOstar | 450 × 510.3 × 400 |
+| `brooks_preciseflex400` | Brooks PreciseFlex 400 | 456.5 × 569.8 × 1439 |
+| `brooks_preciseflex3400` | Brooks PreciseFlex 3400 | 301.8 × 789.2 × 712 |
+| `btx_gemini_x2` | BTX Gemini X2 | 279.4 × 317.6 × 203.2 |
+| `btx_ht200` | BTX HT200 plate handler | 230 × 215.3 × 140 |
+| `byonoy_luminescence_96` | Byonoy Luminescence 96, base and reader | 98 × 140 × 42 |
+| `cole_parmer_genogrinder` | Cole-Parmer GenoGrinder | 381 × 520 × 641 |
+| `cole_parmer_masterflex` | Cole-Parmer Masterflex L/S | 212 × 330 × 216 |
+| `curiox_ht2000` | Curiox HT2000 | 262 × 302 × 310 |
+| `generic_scara_arm` | SCARA arm | 640 × 360 × 500 |
+| `generic_serial_barcode_scanner` | serial line barcode scanner | 65 × 40.3 × 35 |
+| `hamilton_heater_shaker` | Hamilton Heater Shaker | 150 × 105 × 90 |
+| `hamilton_hepa_fan` | Hamilton HEPA fan | 1124 × 795 × 321 |
+| `hamilton_nimbus` | Hamilton Microlab Nimbus | 1046 × 709 × 831 |
+| `hamilton_vantage_13` | Hamilton Microlab Vantage 1.3 m | 1330 × 980 × 1820 |
+| `heraeus_cytomat` | Heraeus Cytomat 2 C | 491 × 710 × 1101 |
+| `highres_lidvalet` | HighRes Biosolutions LidValet | 190 × 255 × 290 |
+| `inheco_cpac` | Inheco CPAC Microplate | 89 × 129.1 × 113 |
+| `inheco_incubator_shaker_stack` | Inheco Incubator Shaker stack of three MP units | 149 × 268.5 × 265.5 |
+| `inheco_odtc` | Inheco ODTC | 156.5 × 249.3 × 124.3 |
+| `inheco_tec_control_box` | Inheco TEC Control Box | 185 × 255.3 × 260 |
+| `kbioscience_kube` | KBioscience KUBE | 310 × 313 × 313 |
+| `kbiosystems_ultraseal_epro` | KBiosystems UltraSeal ePRO | 234.3 × 510 × 525 |
+| `kbiosystems_ultraseal_pro` | KBiosystems UltraSeal PRO | 195 × 630 × 450 |
+| `kbiosystems_ultraseal_xt_pro` | KBiosystems UltraSeal XT Pro | 175 × 625 × 440 |
+| `keyence_barcode_scanner` | Keyence BL-1300 barcode scanner | 21 × 31 × 40 |
+| `liconic_incubator` | LiCONiC StoreX STX44 | 485 × 684.5 × 1223 |
+| `mettler_wxs205sdu` | Mettler Toledo WXS205SDU | 127 × 213.1 × 70 |
+| `micronic_tube_code_reader` | Micronic tube code reader | 230 × 309.1 × 87 |
+| `molecular_devices_gemini_em` | Molecular Devices SpectraMax Gemini EM | 580 × 380.2 × 220 |
+| `molecular_devices_imagexpress_pico` | Molecular Devices ImageXpress Pico | 551 × 425 × 453 |
+| `molecular_devices_spectramax_m5` | Molecular Devices SpectraMax M5 | 580 × 390.2 × 220.2 |
+| `molecular_devices_spectramax_plus_384` | Molecular Devices SpectraMax 384 Plus | 580 × 380.2 × 220.2 |
+| `opentrons_ot2` | Opentrons OT-2 | 630 × 570 × 660 |
+| `revvity_celigo` | Revvity Celigo | 508 × 635 × 435 |
+| `sartorius_entris_ii` | Sartorius Entris II | 219 × 317.2 × 345 |
+| `tecan_freedom_evo_150` | Tecan Freedom EVO 150 | 1450 × 780 × 980 |
+| `tecan_infinite_200_pro` | Tecan Infinite 200 PRO | 425 × 457 × 253 |
+| `tecan_spark_20m` | Tecan Spark 20M | 494 × 557.4 × 395 |
+| `thermo_alps300` | Thermo Fisher ALPS 300 | 279.4 × 635 × 406.4 |
+| `thermo_alps3000` | Thermo Fisher ALPS 3000 | 185 × 414 × 350 |
+| `thermo_alps5000` | Thermo Fisher ALPS 5000 | 232 × 506 × 518 |
+| `thermo_atc` | Thermo Fisher ATC | 179.6 × 317.6 × 133.6 |
+| `thermo_cytomat` | Thermo Fisher Cytomat 2 C450-LiN | 572 × 687 × 905 |
+| `thermo_proflex` | Thermo Fisher ProFlex | 240 × 460.2 × 210 |
+| `ufactory_xarm6` | UFACTORY xArm 6, parked | 552.2 × 205.2 × 651.9 |
+
+The models are visual: shells, panels, decks and access openings sized to published envelopes
+where there are any, not manufacturing CAD, and not a collision model. The xArm 6 is UFACTORY's
+own meshes, under the BSD license beside them.
+
 ### Categories
 
 The sets in `constants.js`, and `GROUND` in `drawn.js`:
