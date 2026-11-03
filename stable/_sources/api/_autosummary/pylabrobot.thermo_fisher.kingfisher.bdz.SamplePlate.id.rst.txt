@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.SamplePlate.id
+=======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: SamplePlate.id

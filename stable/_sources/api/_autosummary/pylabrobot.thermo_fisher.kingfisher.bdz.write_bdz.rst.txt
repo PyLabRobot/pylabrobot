@@ -1,0 +1,6 @@
+﻿pylabrobot.thermo\_fisher.kingfisher.bdz.write\_bdz
+===================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autofunction:: write_bdz

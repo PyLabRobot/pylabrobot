@@ -1,0 +1,40 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.bdz.BdzProtocol
+====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoclass:: BdzProtocol
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BdzProtocol.creator
+      ~BdzProtocol.description
+      ~BdzProtocol.is_executable
+      ~BdzProtocol.kit_name
+      ~BdzProtocol.timestamp
+      ~BdzProtocol.variant
+      ~BdzProtocol.name
+      ~BdzProtocol.tips
+      ~BdzProtocol.protocol_id
+      ~BdzProtocol.run_id
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~BdzProtocol.__init__
+   
+   

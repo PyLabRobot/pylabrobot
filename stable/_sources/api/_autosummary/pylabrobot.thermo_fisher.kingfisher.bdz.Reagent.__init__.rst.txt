@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.Reagent.\_\_init\_\_
+=============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. automethod:: Reagent.__init__

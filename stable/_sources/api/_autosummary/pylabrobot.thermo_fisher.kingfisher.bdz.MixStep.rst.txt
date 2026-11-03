@@ -1,0 +1,53 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.bdz.MixStep
+================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoclass:: MixStep
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MixStep.collect_beads_enabled
+      ~MixStep.collect_count
+      ~MixStep.collect_time
+      ~MixStep.heating_enabled
+      ~MixStep.loop_count
+      ~MixStep.pause_enabled
+      ~MixStep.pause_message
+      ~MixStep.pause_tip_position
+      ~MixStep.post_temperature
+      ~MixStep.post_temperature_enabled
+      ~MixStep.postmix_duration
+      ~MixStep.postmix_enabled
+      ~MixStep.postmix_speed
+      ~MixStep.preheat
+      ~MixStep.release_beads_duration
+      ~MixStep.release_beads_enabled
+      ~MixStep.release_beads_speed
+      ~MixStep.sample_plate_index
+      ~MixStep.shake_duration
+      ~MixStep.shake_speed
+      ~MixStep.temperature
+      ~MixStep.well_group_name
+      ~MixStep.name
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MixStep.__init__
+   
+   

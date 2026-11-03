@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.presto.ProtocolTimeLeft
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoclass:: ProtocolTimeLeft
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ProtocolTimeLeft.time_left
+      ~ProtocolTimeLeft.time_to_pause
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ProtocolTimeLeft.__init__
+   
+   

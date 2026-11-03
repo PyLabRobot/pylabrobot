@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.WellGroup.reagent
+==========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: WellGroup.reagent

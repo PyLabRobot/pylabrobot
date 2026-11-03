@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.bdz.WellGroup
+==================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoclass:: WellGroup
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WellGroup.reagent
+      ~WellGroup.id
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~WellGroup.__init__
+   
+   

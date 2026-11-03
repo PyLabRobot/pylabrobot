@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.MixStep.preheat
+========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: MixStep.preheat

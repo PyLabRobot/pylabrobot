@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.MixStep.shake\_speed
+=============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: MixStep.shake_speed

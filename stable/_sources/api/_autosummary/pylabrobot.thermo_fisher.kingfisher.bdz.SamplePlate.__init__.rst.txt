@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.SamplePlate.\_\_init\_\_
+=================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. automethod:: SamplePlate.__init__

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.KingFisherPresto.acknowledge
+========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. automethod:: KingFisherPresto.acknowledge

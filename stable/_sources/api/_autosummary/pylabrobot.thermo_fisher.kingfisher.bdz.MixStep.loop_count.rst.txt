@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.MixStep.loop\_count
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: MixStep.loop_count

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.KingFisherPresto.load\_plate
+========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. automethod:: KingFisherPresto.load_plate

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.SamplePlate.groups
+===========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: SamplePlate.groups

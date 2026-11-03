@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.MixStep.temperature
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: MixStep.temperature

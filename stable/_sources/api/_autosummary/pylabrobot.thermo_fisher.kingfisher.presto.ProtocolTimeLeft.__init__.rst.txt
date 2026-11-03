@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.ProtocolTimeLeft.\_\_init\_\_
+=========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. automethod:: ProtocolTimeLeft.__init__

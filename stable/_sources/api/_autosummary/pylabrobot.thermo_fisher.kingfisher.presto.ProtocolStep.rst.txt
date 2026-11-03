@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.presto.ProtocolStep
+========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoclass:: ProtocolStep
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ProtocolStep.tip
+      ~ProtocolStep.name
+      ~ProtocolStep.duration
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ProtocolStep.__init__
+   
+   

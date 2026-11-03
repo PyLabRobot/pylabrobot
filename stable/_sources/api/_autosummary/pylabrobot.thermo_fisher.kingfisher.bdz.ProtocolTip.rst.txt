@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.bdz.ProtocolTip
+====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoclass:: ProtocolTip
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ProtocolTip.plate_type_id
+      ~ProtocolTip.tip_id
+      ~ProtocolTip.name
+      ~ProtocolTip.steps
+      ~ProtocolTip.sample_plates
+      ~ProtocolTip.tip_plate_id
+      ~ProtocolTip.tip_groups
+      ~ProtocolTip.tip_persistent_id
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ProtocolTip.__init__
+   
+   

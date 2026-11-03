@@ -1,0 +1,6 @@
+﻿pylabrobot.thermo\_fisher.kingfisher.bdz.bdz\_variant
+=====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autofunction:: bdz_variant

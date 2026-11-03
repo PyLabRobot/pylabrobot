@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.KingFisherPresto.get\_protocol\_duration
+====================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. automethod:: KingFisherPresto.get_protocol_duration

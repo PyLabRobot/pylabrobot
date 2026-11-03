@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.ProtocolDuration.name
+=================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoattribute:: ProtocolDuration.name

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.SamplePlate.reagent
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoproperty:: SamplePlate.reagent

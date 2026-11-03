@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.bdz.SamplePlate
+====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoclass:: SamplePlate
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SamplePlate.reagent
+      ~SamplePlate.name
+      ~SamplePlate.plate_type_id
+      ~SamplePlate.id
+      ~SamplePlate.groups
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~SamplePlate.__init__
+   
+   

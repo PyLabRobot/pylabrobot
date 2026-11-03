@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.presto.PrestoEvent
+=======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoclass:: PrestoEvent
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PrestoEvent.requires_acknowledgement
+      ~PrestoEvent.name
+      ~PrestoEvent.details
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PrestoEvent.__init__
+   
+   
