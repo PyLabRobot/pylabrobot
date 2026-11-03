@@ -9,7 +9,7 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning(
+  raise NotImplementedError(
     "This function is deprecated. Please use the equivalent function in "
     "src/pylabrobot/pylabrobot/resources/height_volume_functions.py"
   )
@@ -22,7 +22,7 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning(
+  raise NotImplementedError(
     "This function is deprecated. Please use the equivalent function in "
     "src/pylabrobot/pylabrobot/resources/height_volume_functions.py"
   )
@@ -35,7 +35,7 @@ def calculate_liquid_volume_container_2segments_round_vbottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning(
+  raise NotImplementedError(
     "This function is deprecated. Please use the equivalent function in "
     "src/pylabrobot/pylabrobot/resources/height_volume_functions.py"
   )
@@ -48,7 +48,7 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning(
+  raise NotImplementedError(
     "This function is deprecated. Please use the equivalent function in "
     "src/pylabrobot/pylabrobot/resources/height_volume_functions.py"
   )
@@ -61,7 +61,7 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning(
+  raise NotImplementedError(
     "This function is deprecated. Please use the equivalent function in "
     "src/pylabrobot/pylabrobot/resources/height_volume_functions.py"
   )

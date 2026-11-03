@@ -1,6 +1,6 @@
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.hamilton_decks import (
-  _RAILS_WIDTH,
+  _TRACK_WIDTH,
   HamiltonDeck,
 )
 from pylabrobot.resources.trash import Trash
@@ -31,7 +31,7 @@ class VantageDeck(HamiltonDeck):
       # the HxConfigEditor.
       size_x = 1237.5
       super().__init__(
-        num_rails=54,
+        num_tracks=54,
         size_x=size_x,
         size_y=653.5,
         size_z=900.0,
@@ -54,12 +54,12 @@ class VantageDeck(HamiltonDeck):
     else:
       raise ValueError(f"Invalid deck size: {size}")
 
-  def rails_to_location(self, rails: int) -> Coordinate:
-    x = 32.5 + (rails - 1) * _RAILS_WIDTH
+  def track_to_location(self, track: int) -> Coordinate:
+    x = 32.5 + (track - 1) * _TRACK_WIDTH
     return Coordinate(x=x, y=63, z=100)
 
   def serialize(self) -> dict:
     super_serialized = super().serialize()
     for key in ["size_x", "size_y", "size_z", "num_rails"]:
-      super_serialized.pop(key)
+      super_serialized.pop(key, None)
     return {"size": self.size, **super_serialized}

@@ -22,6 +22,18 @@ Barcode1DSymbology = Literal[
   "ANY 1D",  # wildcard for any 1D symbology available, depends on scanner capabilities
 ]
 
+Barcode2DSymbology = Literal[
+  "Data Matrix",
+  "QR Code",
+  "Maxi Code",
+  "Aztec",
+  "PDF 417",
+  "Micro PDF 417",
+  "GS1 DataBar",
+  "EAN/UCC Comp",
+  "ANY 2D",  # wildcard for any 2D symbology available, depends on reader capabilities
+]
+
 
 @dataclass
 class Barcode(SerializableMixin):
@@ -35,14 +47,6 @@ class Barcode(SerializableMixin):
       "symbology": self.symbology,
       "position_on_resource": self.position_on_resource,
     }
-
-  @staticmethod
-  def deserialize(data: dict) -> "Barcode":
-    return Barcode(
-      data=data["data"],
-      symbology=data["symbology"],
-      position_on_resource=data["position_on_resource"],
-    )
 
   def __str__(self) -> str:
     return f'Barcode(data="{self.data}", symbology="{self.symbology}", position_on_resource="{self.position_on_resource}")'

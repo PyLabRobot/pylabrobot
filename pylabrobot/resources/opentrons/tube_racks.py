@@ -34,6 +34,7 @@ def opentrons_24_tuberack_generic_1point5ml_snapcap_short(name: str) -> TubeRack
       size_x=well_size_x,
       size_y=well_size_y,
       size_z=WELL_DEPTH,
+      name_prefix=name,
     ),
   )
 

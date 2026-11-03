@@ -20,6 +20,7 @@ class PetriDish(Container):
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     height_volume_data: Optional[Dict[float, float]] = None,
+    no_go_zones=None,
   ):
     super().__init__(
       name=name,
@@ -33,6 +34,7 @@ class PetriDish(Container):
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
       height_volume_data=height_volume_data,
+      no_go_zones=no_go_zones,
     )
     self.diameter = diameter
     self.height = height
@@ -40,7 +42,7 @@ class PetriDish(Container):
   def serialize(self):
     super_serialized = super().serialize()
     for key in ["size_x", "size_y", "size_z"]:
-      del super_serialized[key]
+      super_serialized.pop(key, None)
 
     return {
       **super_serialized,

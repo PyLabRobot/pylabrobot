@@ -1,12 +1,17 @@
 import asyncio
+import contextlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import IOBase
-from typing import Optional, cast
+from typing import Collection, Iterator, Optional, cast
 
+from pylabrobot.events import emit_event
+from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
+_SERIAL_IMPORT_ERROR: Optional[ImportError] = None
 try:
   import serial
   import serial.tools.list_ports
@@ -16,10 +21,30 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
-from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
-
 logger = logging.getLogger(__name__)
+
+
+def find_serial_ports(vid_pid_pairs: Collection[tuple[int, int]]) -> list[str]:
+  """Return serial ports matching any of the supplied USB VID/PID pairs.
+
+  Args:
+    vid_pid_pairs: USB vendor/product identifier pairs to match.
+
+  Raises:
+    RuntimeError: If pyserial is not installed.
+  """
+  if not HAS_SERIAL:
+    raise RuntimeError(
+      "pyserial is not installed. Install with: pip install pylabrobot[serial]. "
+      f"Import error: {_SERIAL_IMPORT_ERROR}"
+    )
+
+  identifiers = set(vid_pid_pairs)
+  return [
+    str(port.device)
+    for port in serial.tools.list_ports.comports()
+    if (port.vid, port.pid) in identifiers
+  ]
 
 
 @dataclass
@@ -48,8 +73,9 @@ class Serial(IOBase):
     timeout=1,
     rtscts: bool = False,
     dsrdtr: bool = False,
+    xonxoff: bool = False,
   ):
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self._port = port
     self._vid = vid
     self._pid = pid
@@ -63,6 +89,7 @@ class Serial(IOBase):
     self.timeout = timeout
     self.rtscts = rtscts
     self.dsrdtr = dsrdtr
+    self.xonxoff = xonxoff
 
     # Instant parameter validation at init time
     if not self._port and not (self._vid and self._pid):
@@ -75,6 +102,26 @@ class Serial(IOBase):
   def port(self) -> str:
     assert self._port is not None, "Port not set. Did you call setup()?"
     return self._port
+
+  def get_read_timeout(self) -> float:
+    """Get the current read timeout in seconds."""
+    assert self._ser is not None, "Serial port not open. Did you call setup()?"
+    return float(self._ser.timeout)
+
+  def set_read_timeout(self, timeout: float) -> None:
+    """Set the read timeout in seconds."""
+    assert self._ser is not None, "Serial port not open. Did you call setup()?"
+    self._ser.timeout = timeout
+
+  @contextlib.contextmanager
+  def temporary_timeout(self, timeout: float) -> Iterator[None]:
+    """Context manager that temporarily changes the read timeout, then restores it."""
+    original = self.get_read_timeout()
+    self.set_read_timeout(timeout)
+    try:
+      yield
+    finally:
+      self.set_read_timeout(original)
 
   async def setup(self):
     """
@@ -124,6 +171,39 @@ class Serial(IOBase):
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)
 
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    try:
+      resolved_port = await asyncio.shield(setup_future)
+      self._port = resolved_port
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self._ser is not None:
+        try:
+          await loop.run_in_executor(self._executor, self._ser.close)
+        except Exception:
+          logger.warning("Failed to close serial port after setup failure", exc_info=True)
+        self._ser = None
+      self._shutdown_executor()
+      raise
+
+    assert self._ser is not None
+
+  def _shutdown_executor(self) -> None:
+    if self._executor is not None:
+      # the worker is idle here, so this does not block the event loop
+      self._executor.shutdown(wait=False, cancel_futures=True)
+      self._executor = None
+
+  def _setup_sync(self) -> str:
+    """Resolve the port and open the connection. Runs on the executor that owns all device calls.
+
+    Returns the resolved port.
+    """
+
     # 1. VID:PID specified - port maybe
     if self._vid is not None and self._pid is not None:
       matching_ports = [
@@ -160,8 +240,8 @@ class Serial(IOBase):
         "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
       )
 
-    def _open_serial() -> serial.Serial:
-      return serial.Serial(
+    try:
+      self._ser = serial.Serial(
         port=candidate_port,
         baudrate=self.baudrate,
         bytesize=self.bytesize,
@@ -171,23 +251,15 @@ class Serial(IOBase):
         timeout=self.timeout,
         rtscts=self.rtscts,
         dsrdtr=self.dsrdtr,
+        xonxoff=self.xonxoff,
       )
-
-    try:
-      self._ser = await loop.run_in_executor(self._executor, _open_serial)
-
-    except serial.SerialException as e:
+    except serial.SerialException:
       logger.error(
-        f"Could not connect to device '{self._human_readable_device_name}', is it in use by a different notebook/process?"
+        f"Could not connect to device '{self.human_readable_device_name}', is it in use by a different notebook/process?"
       )
-      if self._executor is not None:
-        self._executor.shutdown(wait=True)
-        self._executor = None
-      raise e
+      raise
 
-    assert self._ser is not None
-
-    self._port = candidate_port
+    return candidate_port
 
   async def stop(self):
     """Close the serial device."""
@@ -196,19 +268,17 @@ class Serial(IOBase):
       loop = asyncio.get_running_loop()
 
       if self._executor is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       await loop.run_in_executor(self._executor, self._ser.close)
 
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    self._shutdown_executor()
 
   async def write(self, data: bytes):
     """Write data to the serial device."""
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     await loop.run_in_executor(self._executor, self._ser.write, data)
 
@@ -216,13 +286,20 @@ class Serial(IOBase):
     capturer.record(
       SerialCommand(device_id=self.port, action="write", data=data.decode("unicode_escape"))
     )
+    emit_event(
+      "io.write",
+      transport="serial",
+      device=self.human_readable_device_name,
+      device_id=self.port,
+      data=data.decode("utf-8", errors="backslashreplace"),
+    )
 
   async def read(self, num_bytes: int = 1) -> bytes:
     """Read data from the serial device."""
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     data = await loop.run_in_executor(self._executor, self._ser.read, num_bytes)
 
@@ -230,6 +307,13 @@ class Serial(IOBase):
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
       capturer.record(
         SerialCommand(device_id=self.port, action="read", data=data.decode("unicode_escape"))
+      )
+      emit_event(
+        "io.read",
+        transport="serial",
+        device=self.human_readable_device_name,
+        device_id=self.port,
+        data=data.decode("utf-8", errors="backslashreplace"),
       )
 
     return cast(bytes, data)
@@ -239,7 +323,7 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     data = await loop.run_in_executor(self._executor, self._ser.readline)
 
@@ -247,6 +331,13 @@ class Serial(IOBase):
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
       capturer.record(
         SerialCommand(device_id=self.port, action="readline", data=data.decode("unicode_escape"))
+      )
+      emit_event(
+        "io.read",
+        transport="serial",
+        device=self.human_readable_device_name,
+        device_id=self.port,
+        data=data.decode("utf-8", errors="backslashreplace"),
       )
 
     return cast(bytes, data)
@@ -256,7 +347,7 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
     def _send_break(ser, duration: float) -> None:
       """Send a break condition for the specified duration."""
@@ -270,7 +361,7 @@ class Serial(IOBase):
   async def reset_input_buffer(self):
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_input_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_input_buffer", self._port)
     capturer.record(SerialCommand(device_id=self.port, action="reset_input_buffer", data=""))
@@ -278,7 +369,7 @@ class Serial(IOBase):
   async def reset_output_buffer(self):
     loop = asyncio.get_running_loop()
     if self._executor is None or self._ser is None:
-      raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
     await loop.run_in_executor(self._executor, self._ser.reset_output_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] reset_output_buffer", self._port)
     capturer.record(SerialCommand(device_id=self.port, action="reset_output_buffer", data=""))
@@ -317,7 +408,7 @@ class Serial(IOBase):
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "port": self._port,
       "baudrate": self.baudrate,
       "bytesize": self.bytesize,
@@ -328,21 +419,6 @@ class Serial(IOBase):
       "rtscts": self.rtscts,
       "dsrdtr": self.dsrdtr,
     }
-
-  @classmethod
-  def deserialize(cls, data: dict) -> "Serial":
-    return cls(
-      human_readable_device_name=data["human_readable_device_name"],
-      port=data["port"],
-      baudrate=data["baudrate"],
-      bytesize=data["bytesize"],
-      parity=data["parity"],
-      stopbits=data["stopbits"],
-      write_timeout=data["write_timeout"],
-      timeout=data["timeout"],
-      rtscts=data["rtscts"],
-      dsrdtr=data["dsrdtr"],
-    )
 
 
 class SerialValidator(Serial):
