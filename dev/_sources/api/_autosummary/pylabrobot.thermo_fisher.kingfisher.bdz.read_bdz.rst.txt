@@ -1,0 +1,6 @@
+﻿pylabrobot.thermo\_fisher.kingfisher.bdz.read\_bdz
+==================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autofunction:: read_bdz

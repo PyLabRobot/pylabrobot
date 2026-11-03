@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.ProtocolTimeLeft.time\_to\_pause
+============================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoattribute:: ProtocolTimeLeft.time_to_pause

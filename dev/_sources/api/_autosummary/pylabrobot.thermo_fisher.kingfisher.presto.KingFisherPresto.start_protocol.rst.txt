@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.KingFisherPresto.start\_protocol
+============================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. automethod:: KingFisherPresto.start_protocol

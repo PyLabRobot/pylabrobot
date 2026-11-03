@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.Reagent.name
+=====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: Reagent.name

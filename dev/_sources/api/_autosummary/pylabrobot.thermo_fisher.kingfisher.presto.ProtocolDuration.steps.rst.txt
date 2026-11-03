@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.ProtocolDuration.steps
+==================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoattribute:: ProtocolDuration.steps

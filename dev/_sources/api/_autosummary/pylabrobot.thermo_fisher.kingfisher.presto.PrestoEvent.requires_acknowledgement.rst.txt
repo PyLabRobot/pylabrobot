@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.PrestoEvent.requires\_acknowledgement
+=================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoproperty:: PrestoEvent.requires_acknowledgement

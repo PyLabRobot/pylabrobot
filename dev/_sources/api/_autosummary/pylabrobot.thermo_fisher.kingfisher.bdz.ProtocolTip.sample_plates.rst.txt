@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.ProtocolTip.sample\_plates
+===================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: ProtocolTip.sample_plates

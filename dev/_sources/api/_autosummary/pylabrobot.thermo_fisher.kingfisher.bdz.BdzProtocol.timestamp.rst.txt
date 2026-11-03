@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.BdzProtocol.timestamp
+==============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: BdzProtocol.timestamp

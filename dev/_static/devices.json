@@ -2124,5 +2124,22 @@
     "code_slug": "li_cor/odyssey",
     "doc_slug": "li_cor/odyssey/hello-world",
     "notes": "HTTP scan control and TIFF retrieval; port pending hardware verification."
+  },
+  {
+    "id": "thermo-fisher-kingfisher-presto",
+    "vendor": "Thermo Fisher",
+    "name": "KingFisher Presto",
+    "kind": "magnetic particle processor",
+    "capabilities": [
+      "magnetic bead processing",
+      "heating"
+    ],
+    "status": "wip",
+    "needs_hardware_testing": true,
+    "api": "pylabrobot.thermo_fisher.kingfisher.presto.KingFisherPresto",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/kingfisher/presto",
+    "doc_slug": "thermo_fisher/kingfisher/presto/hello-world",
+    "notes": "USB HID protocol control; pending hardware and manufacturer-file verification."
   }
 ]

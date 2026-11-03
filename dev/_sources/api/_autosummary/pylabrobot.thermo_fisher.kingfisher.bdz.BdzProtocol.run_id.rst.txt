@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.BdzProtocol.run\_id
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: BdzProtocol.run_id

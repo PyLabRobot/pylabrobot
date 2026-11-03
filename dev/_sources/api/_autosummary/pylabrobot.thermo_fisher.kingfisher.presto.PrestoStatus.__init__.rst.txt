@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.PrestoStatus.\_\_init\_\_
+=====================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. automethod:: PrestoStatus.__init__

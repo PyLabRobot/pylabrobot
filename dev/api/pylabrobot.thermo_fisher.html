@@ -679,6 +679,70 @@
 </table>
 </div>
 </section>
+<section id="kingfisher-presto">
+<h2>KingFisher Presto<a class="headerlink" href="#kingfisher-presto" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.KingFisherPresto.html#pylabrobot.thermo_fisher.kingfisher.presto.KingFisherPresto" title="pylabrobot.thermo_fisher.kingfisher.presto.KingFisherPresto"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KingFisherPresto</span></code></a></p></td>
+<td><p>Control a Presto directly through its XML command/event protocol.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.PrestoError.html#pylabrobot.thermo_fisher.kingfisher.presto.PrestoError" title="pylabrobot.thermo_fisher.kingfisher.presto.PrestoError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrestoError</span></code></a></p></td>
+<td><p>Instrument or connection failure, with the reported code and command name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.PrestoEvent.html#pylabrobot.thermo_fisher.kingfisher.presto.PrestoEvent" title="pylabrobot.thermo_fisher.kingfisher.presto.PrestoEvent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrestoEvent</span></code></a></p></td>
+<td><p>Instrument event with its full XML details preserved.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.PrestoStatus.html#pylabrobot.thermo_fisher.kingfisher.presto.PrestoStatus" title="pylabrobot.thermo_fisher.kingfisher.presto.PrestoStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PrestoStatus</span></code></a></p></td>
+<td><p>Current instrument status and any reported fault.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.ProtocolDuration.html#pylabrobot.thermo_fisher.kingfisher.presto.ProtocolDuration" title="pylabrobot.thermo_fisher.kingfisher.presto.ProtocolDuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProtocolDuration</span></code></a></p></td>
+<td><p>Protocol timing reported by the instrument, in seconds.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.ProtocolStep.html#pylabrobot.thermo_fisher.kingfisher.presto.ProtocolStep" title="pylabrobot.thermo_fisher.kingfisher.presto.ProtocolStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProtocolStep</span></code></a></p></td>
+<td><p>Named step under a tip, with its reported duration in seconds.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.presto.ProtocolTimeLeft.html#pylabrobot.thermo_fisher.kingfisher.presto.ProtocolTimeLeft" title="pylabrobot.thermo_fisher.kingfisher.presto.ProtocolTimeLeft"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProtocolTimeLeft</span></code></a></p></td>
+<td><p>Remaining run time and time until the next pause, in seconds.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="bindit-protocol-files">
+<h2>BindIt protocol files<a class="headerlink" href="#bindit-protocol-files" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.BdzProtocol.html#pylabrobot.thermo_fisher.kingfisher.bdz.BdzProtocol" title="pylabrobot.thermo_fisher.kingfisher.bdz.BdzProtocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BdzProtocol</span></code></a></p></td>
+<td><p>A complete KingFisher protocol, readable/writable as .bdz.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.ProtocolTip.html#pylabrobot.thermo_fisher.kingfisher.bdz.ProtocolTip" title="pylabrobot.thermo_fisher.kingfisher.bdz.ProtocolTip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProtocolTip</span></code></a></p></td>
+<td><p>One tip position (Tip1, Tip2, ...) in the protocol.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.MixStep.html#pylabrobot.thermo_fisher.kingfisher.bdz.MixStep" title="pylabrobot.thermo_fisher.kingfisher.bdz.MixStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MixStep</span></code></a></p></td>
+<td><p>A Mix step — the primary step type in KingFisher protocols.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.SamplePlate.html#pylabrobot.thermo_fisher.kingfisher.bdz.SamplePlate" title="pylabrobot.thermo_fisher.kingfisher.bdz.SamplePlate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SamplePlate</span></code></a></p></td>
+<td><p>One sample plate position referenced by a protocol tip.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.Reagent.html#pylabrobot.thermo_fisher.kingfisher.bdz.Reagent" title="pylabrobot.thermo_fisher.kingfisher.bdz.Reagent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Reagent</span></code></a></p></td>
+<td><p>A reagent assigned to a plate group (whole-plate for Presto, per-row for Duo).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.WellGroup.html#pylabrobot.thermo_fisher.kingfisher.bdz.WellGroup" title="pylabrobot.thermo_fisher.kingfisher.bdz.WellGroup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WellGroup</span></code></a></p></td>
+<td><p>One <code class="docutils literal notranslate"><span class="pre">&lt;Group&gt;</span></code> in a plate's <code class="docutils literal notranslate"><span class="pre">&lt;Wells&gt;</span></code> — co-locates the group UUID with its reagent.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.read_bdz.html#pylabrobot.thermo_fisher.kingfisher.bdz.read_bdz" title="pylabrobot.thermo_fisher.kingfisher.bdz.read_bdz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_bdz</span></code></a></p></td>
+<td><p>Read the modeled Mix-step subset of a Presto or Duo BDZ.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.write_bdz.html#pylabrobot.thermo_fisher.kingfisher.bdz.write_bdz" title="pylabrobot.thermo_fisher.kingfisher.bdz.write_bdz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_bdz</span></code></a></p></td>
+<td><p>Serialize <em>protocol</em> to .bdz binary format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.bdz.bdz_variant.html#pylabrobot.thermo_fisher.kingfisher.bdz.bdz_variant" title="pylabrobot.thermo_fisher.kingfisher.bdz.bdz_variant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bdz_variant</span></code></a></p></td>
+<td><p>Validate the BDZ container and return its instrument, without editing its XML.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -734,6 +798,8 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#btx-gemini-x2">BTX Gemini X2</a><ul class="nav section-nav flex-column">
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#kingfisher-presto">KingFisher Presto</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bindit-protocol-files">BindIt protocol files</a></li>
 </ul>
   </nav></div>
 

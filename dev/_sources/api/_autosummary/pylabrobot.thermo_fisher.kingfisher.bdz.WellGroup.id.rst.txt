@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.WellGroup.id
+=====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: WellGroup.id

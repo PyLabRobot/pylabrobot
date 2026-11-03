@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.BdzProtocol.description
+================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: BdzProtocol.description

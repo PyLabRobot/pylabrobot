@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.ProtocolTip.plate\_type\_id
+====================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: ProtocolTip.plate_type_id

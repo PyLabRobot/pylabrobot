@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.ProtocolTip.tip\_persistent\_id
+========================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autoattribute:: ProtocolTip.tip_persistent_id

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.PrestoStatus.error\_text
+====================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoattribute:: PrestoStatus.error_text

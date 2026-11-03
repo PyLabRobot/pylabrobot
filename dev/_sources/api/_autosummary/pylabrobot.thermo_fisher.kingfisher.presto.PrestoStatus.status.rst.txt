@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.presto.PrestoStatus.status
+===============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoattribute:: PrestoStatus.status

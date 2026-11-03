@@ -1,0 +1,43 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.presto.KingFisherPresto
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autoclass:: KingFisherPresto
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KingFisherPresto.__init__
+      ~KingFisherPresto.abort
+      ~KingFisherPresto.acknowledge
+      ~KingFisherPresto.download_protocol
+      ~KingFisherPresto.error_acknowledge
+      ~KingFisherPresto.events
+      ~KingFisherPresto.get_protocol_duration
+      ~KingFisherPresto.get_protocol_time_left
+      ~KingFisherPresto.get_status
+      ~KingFisherPresto.get_turntable_state
+      ~KingFisherPresto.list_protocols
+      ~KingFisherPresto.load_plate
+      ~KingFisherPresto.next_event
+      ~KingFisherPresto.remove_protocol
+      ~KingFisherPresto.rotate
+      ~KingFisherPresto.setup
+      ~KingFisherPresto.start_protocol
+      ~KingFisherPresto.stop
+      ~KingFisherPresto.stop_protocol
+      ~KingFisherPresto.upload_protocol
+   
+   

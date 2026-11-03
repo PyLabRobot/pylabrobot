@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.ProtocolTip.\_\_init\_\_
+=================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. automethod:: ProtocolTip.__init__

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.bdz.BdzProtocol.\_\_init\_\_
+=================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. automethod:: BdzProtocol.__init__
