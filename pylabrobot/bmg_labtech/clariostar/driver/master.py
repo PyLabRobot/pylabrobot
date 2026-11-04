@@ -13,6 +13,17 @@ from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, cast
 import anyio
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
+  USB_ACK,
+  USB_CONTINUATION,
+  USB_FIRST,
+  USB_HEADER_SIZE,
+  USB_PACKET_SIZE,
+  USB_SINGLE,
+  usb_packet_type,
+  usb_total_length,
+  usb_wrap_payload,
+)
 from pylabrobot.bmg_labtech.transport.ftdi_interface import BMGFTDIInterface
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.ftdi import FTDI
@@ -38,19 +49,7 @@ from .features.drawer import Drawer
 from .features.fluorescence import Fluorescence
 from .features.luminescence import Luminescence
 from .features.temperature_controller import TemperatureController
-from .framing import (
-  FTDI_HEADER,
-  USB_ACK,
-  USB_CONTINUATION,
-  USB_FIRST,
-  USB_HEADER_SIZE,
-  USB_HOST_ACK,
-  USB_PACKET_SIZE,
-  USB_SINGLE,
-  usb_packet_type,
-  usb_total_length,
-  usb_wrap_payload,
-)
+from .framing import FTDI_HEADER, USB_HOST_ACK
 from .parameter_table import (
   PARAMETER_TABLE,
   REPLY_OFFSET,
@@ -298,10 +297,9 @@ class CLARIOstarDriver(HasLifespan):
   async def _enter_usb_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the USB device, then send the two vendor requests it needs before bulk traffic."""
     await stack.enter_async_context(self._usb.lifespan())
-    # USB.ctrl_transfer types its data as int (a read length); pyusb also takes bytes to send.
-    await self._usb.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x01")  # type: ignore[arg-type]  # bulk protocol on
+    await self._usb.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x01")  # bulk protocol on
     now = int(time.time()).to_bytes(4, "big")
-    await self._usb.ctrl_transfer(0x22, 0x88, 0, 0, b"\x00\x00\x00\x00" + now)  # type: ignore[arg-type]
+    await self._usb.ctrl_transfer(0x22, 0x88, 0, 0, b"\x00\x00\x00\x00" + now)
 
   async def _usb_read_packet(self) -> bytes:
     """Read one USB packet; raise FrameError if none arrives in time."""
@@ -316,17 +314,17 @@ class CLARIOstarDriver(HasLifespan):
     A message longer than one packet waits for the reader's acknowledgement before its
     continuation packets; a long reply is acknowledged by the host before its continuations.
     """
-    packets = usb_wrap_payload(payload)
+    packets = usb_wrap_payload(payload, header=FTDI_HEADER)
     await self._usb.write(packets[0])
     if len(packets) > 1:
       ack = await self._usb_read_packet()
-      if usb_packet_type(ack) != USB_ACK:
+      if usb_packet_type(ack, header=FTDI_HEADER) != USB_ACK:
         raise FrameError(f"Expected a USB acknowledgement, got {ack.hex()}")
       for packet in packets[1:]:
         await self._usb.write(packet)
 
     first = await self._usb_read_packet()
-    packet_type = usb_packet_type(first)
+    packet_type = usb_packet_type(first, header=FTDI_HEADER)
     if packet_type == USB_SINGLE:
       return bytes(first[USB_HEADER_SIZE:])
     if packet_type != USB_FIRST:
@@ -337,7 +335,7 @@ class CLARIOstarDriver(HasLifespan):
     await self._usb.write(USB_HOST_ACK)
     while len(reply) < total:
       packet = await self._usb_read_packet()
-      if usb_packet_type(packet) != USB_CONTINUATION:
+      if usb_packet_type(packet, header=FTDI_HEADER) != USB_CONTINUATION:
         raise FrameError(f"Expected a USB continuation packet, got {packet.hex()}")
       reply += packet[USB_HEADER_SIZE:]
     return bytes(reply[:total])

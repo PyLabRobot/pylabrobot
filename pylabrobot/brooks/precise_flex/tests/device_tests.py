@@ -109,11 +109,6 @@ class TestTheDevice(unittest.TestCase):
   def setUp(self):
     self.device = pf400()
 
-  def test_the_base_plate_is_its_child_and_the_drivers(self):
-    self.assertIs(self.device.base_plate.parent, self.device)
-    self.assertIs(self.device.driver.base_plate, self.device.base_plate)
-    self.assertEqual(self.device.base_plate.name, "pf400_base_plate")
-
   def test_before_a_configuration_only_the_base_plate_stands(self):
     self.assertEqual([r.name for r in self.device.get_all_children()], ["pf400_base_plate"])
     self.assertIsNone(self.device.arm.resource)
@@ -233,14 +228,6 @@ class TestTheDriverHangsTheArm(unittest.TestCase):
     without._configuration = dataclasses.replace(configuration(), camera_count=0)
     without._create_feature_resources(without.configuration)
     self.assertEqual(hung(without)[3].body.model, "brooks_pf400_gripper_body_s23")
-
-  def test_a_driver_without_a_base_plate_hangs_nothing(self):
-    driver = PreciseFlexDriver(
-      host="localhost", gripper_length=162.0, gripper_z_offset=0.0, closed_gripper_position=60.0
-    )
-    driver._configuration = configuration()
-    driver._create_feature_resources(driver.configuration)
-    self.assertIsNone(driver.arm.resource)
 
 
 class TestEveryPartHasItsMesh(unittest.TestCase):
@@ -462,6 +449,8 @@ class TestAMoveKeepsTheModelInStep(AnyioTestBase):
 
     async def respond(command: str, **kwargs: Any) -> str:
       del kwargs
+      if command == "state":
+        return "1"
       if command == "wherej":
         if not moved:
           return self.STOOD

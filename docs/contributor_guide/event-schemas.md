@@ -365,7 +365,7 @@ emit separate resource-transfer operations when it knows the moved PLR resource.
 
 | Operation | Fields |
 | --- | --- |
-| `precise_flex.setup` | `device`, `skip_home` |
+| `precise_flex.setup` | `device`, `skip_home`, `skip_vision_setup` |
 | `precise_flex.stop` | `device` |
 | `precise_flex.power_on` | `device` |
 | `precise_flex.power_off` | `device` |
@@ -386,6 +386,7 @@ emit separate resource-transfer operations when it knows the moved PLR resource.
 | `precise_flex.move_gripper` | `device`, `width`, `force_sensing` |
 | `precise_flex.move_gripper_joint_position` | `device`, `gripper_joint_position`, `force_sensing` |
 | `precise_flex.move_rail` | `device`, `rail_position` |
+| `precise_flex.probe_z_using_ztouch` | `device`, `search_start_position`, `search_end_position`, `detection_force`, `perform_second_measurement_on_lift_off` |
 | `precise_flex.pick_up_at_joint_position` | `device`, `target_joint_position`, `resource_width`, `finger_speed_percent`, `grasp_force` |
 | `precise_flex.drop_at_joint_position` | `device`, `target_joint_position`, `resource_width` |
 | `precise_flex.pick_up_at_location` | `device`, `target`, `resource_width`, `finger_speed_percent`, `grasp_force` |

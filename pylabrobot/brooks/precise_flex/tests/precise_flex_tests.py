@@ -14,6 +14,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexError,
 )
 from pylabrobot.brooks.precise_flex.driver.features.arm import MotionProfile
+from pylabrobot.brooks.precise_flex.driver.features.vision import PreciseFlexVision
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
 from pylabrobot.io.socket import Socket
@@ -299,6 +300,7 @@ class TestPreciseFlex400Gripper(AnyioTestBase):
   async def test_closed_gripper_position_shifts_units(self) -> None:
     # Different anchor ⇒ same width yields a different firmware-unit target.
     arm = _make_arm(closed_gripper_position=1000.0)
+    arm.arm._wait_for_eom = AsyncMock()  # type: ignore[method-assign]
     await arm.gripper.move_to_jaw_position(width=80.0, force_sensing=False)
     commands = [c.args[0] for c in mocked(arm.send_command).call_args_list]
     # 80 mm ⇒ 1000 + (80 - 60) = 1020 units.
@@ -1197,6 +1199,15 @@ class TestSendCommandSerialization(AnyioTestBase):
     async with anyio.create_task_group() as tg:
       tg.start_soon(arm.send_command, "A")
       tg.start_soon(arm.send_command, "B")
+    assert [kind for kind, _ in events] == ["w", "r", "w", "r"]
+
+  async def test_bare_vision_read_shares_the_lock_with_send_command(self) -> None:
+    """The bare VToolProperty read goes through the same _locked_exchange, so it serializes too."""
+    events: list = []
+    arm = _recording_arm(events)
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(arm.send_command, "A")
+      tg.start_soon(PreciseFlexVision(arm).request_vision_tool_property, "led", "Brightness")
     assert [kind for kind, _ in events] == ["w", "r", "w", "r"]
 
   async def test_lock_released_after_an_error(self) -> None:

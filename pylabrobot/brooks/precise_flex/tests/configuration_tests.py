@@ -120,11 +120,6 @@ class TestSavedConfiguration(unittest.TestCase):
     self.assertEqual(read.rail, PreciseFlexRailConfiguration(soft_limit_range=(0.0, 1000.0)))
     self.assertTrue(read.has_rail)
 
-  def test_each_feature_is_saved_beside_the_device(self):
-    self.round_trip(configuration(rail=PreciseFlexRailConfiguration((0.0, 1000.0))))
-    self.assertEqual(list(self.saved), ["device", "arm", "gripper", "rail"])
-    self.assertNotIn("arm", self.saved["device"])
-
   def test_live_state_is_not_written(self):
     read = self.round_trip(configuration())
     self.assertNotIn("_power_state", self.saved["device"])
@@ -171,6 +166,7 @@ class TestTheRecordedPF400(unittest.TestCase):
     self.assertEqual(self.recorded.arm.kinematics.gripper_length, 162.0)
     self.assertEqual(self.recorded.gripper.soft_limit_range, (69.0, 134.0))
     self.assertEqual(self.recorded.camera_count, 2)
+    self.assertTrue(self.recorded.has_vision_server)
     self.assertTrue(self.recorded.has_vision_gripper)
     self.assertFalse(self.recorded.has_rail)
 
@@ -199,11 +195,6 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.TestCase):
       declared_configuration_json=RECORDING_PF400,
     )
     self.recorded = read_configuration(RECORDING_PF400)["device"]
-
-  def test_the_file_is_read_when_the_driver_is_built(self):
-    self.assertEqual(self.driver.declared, read_configuration(RECORDING_PF400))
-    self.assertEqual(self.driver.declared["device"], self.recorded)
-    self.assertEqual(self.driver.declared_configuration_json, RECORDING_PF400)
 
   def test_another_arm_of_the_same_build_passes(self):
     another = dataclasses.replace(

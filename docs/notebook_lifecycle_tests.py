@@ -100,6 +100,9 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
   "docs/user_guide/big_bear/orbital-shaker/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("shaker",), ("shaker",)
   ),
+  "docs/user_guide/bmg_labtech/vantastar/hello-world.ipynb": NotebookPolicy(
+    "structural-only", True, ("reader",), ("reader",)
+  ),
   "docs/user_guide/byonoy/absorbance_96/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("reader",), ("reader",)
   ),
@@ -217,6 +220,9 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
   "docs/user_guide/thermo_fisher/btx/gemini/X2/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("gemini",), ("gemini",)
   ),
+  "docs/user_guide/thermo_fisher/kingfisher/presto/hello-world.ipynb": NotebookPolicy(
+    "structural-only", True, ("presto", "presto"), ("presto", "presto")
+  ),
   "docs/user_guide/thermo_fisher/nanodrop_1000/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("nanodrop",), ("nanodrop",)
   ),
@@ -243,6 +249,7 @@ EXPECTED_RUNTIME_CLASSIFICATIONS: dict[str, RuntimeClass] = {
   "docs/user_guide/agilent/vspin/hello-world.ipynb": "structural-only",
   "docs/user_guide/azenta/fluidx/intellixcap96/hello-world.ipynb": "structural-only",
   "docs/user_guide/big_bear/orbital-shaker/hello-world.ipynb": "structural-only",
+  "docs/user_guide/bmg_labtech/vantastar/hello-world.ipynb": "structural-only",
   "docs/user_guide/byonoy/absorbance_96/hello-world.ipynb": "structural-only",
   "docs/user_guide/byonoy/luminescence_96/hello-world.ipynb": "structural-only",
   "docs/user_guide/byonoy/luminescence_96/led_bar.ipynb": "structural-only",
@@ -285,6 +292,7 @@ EXPECTED_RUNTIME_CLASSIFICATIONS: dict[str, RuntimeClass] = {
   "docs/user_guide/thermo_fisher/alps/alps3000/hello-world.ipynb": "structural-only",
   "docs/user_guide/thermo_fisher/alps/alps5000/hello-world.ipynb": "structural-only",
   "docs/user_guide/thermo_fisher/btx/gemini/X2/hello-world.ipynb": "structural-only",
+  "docs/user_guide/thermo_fisher/kingfisher/presto/hello-world.ipynb": "structural-only",
   "docs/user_guide/thermo_fisher/nanodrop_1000/hello-world.ipynb": "structural-only",
   "docs/user_guide/ufactory/xarm6/hello-world.ipynb": "structural-only",
 }
@@ -335,6 +343,7 @@ TASK2_LIFECYCLE_CELL_IDS: dict[str, tuple[str, ...]] = {
     "bigbear-connect-code",
     "bigbear-teardown-code",
   ),
+  "docs/user_guide/bmg_labtech/vantastar/hello-world.ipynb": ("setup", "teardown"),
   "docs/user_guide/byonoy/absorbance_96/hello-world.ipynb": ("w1m3gjaser", "2bhu26jg5gt"),
   "docs/user_guide/byonoy/luminescence_96/hello-world.ipynb": ("s1-code", "s11-code"),
   "docs/user_guide/byonoy/luminescence_96/led_bar.ipynb": ("connect-code", "teardown-code"),
@@ -443,6 +452,11 @@ TASK2_LIFECYCLE_CELL_IDS: dict[str, tuple[str, ...]] = {
     "setup-code",
     "teardown-code",
   ),
+  "docs/user_guide/thermo_fisher/kingfisher/presto/hello-world.ipynb": (
+    "604471ee",
+    "f7a97954",
+    "2f490e37",
+  ),
   "docs/user_guide/thermo_fisher/nanodrop_1000/hello-world.ipynb": (
     "nanodrop-connect",
     "nanodrop-stop",
@@ -535,6 +549,7 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
   "docs/user_guide/big_bear/orbital-shaker/hello-world.ipynb": (
     ("bigbear-connect-code", ("shaker",)),
   ),
+  "docs/user_guide/bmg_labtech/vantastar/hello-world.ipynb": (("setup", ("reader",)),),
   "docs/user_guide/byonoy/absorbance_96/hello-world.ipynb": (("w1m3gjaser", ("reader",)),),
   "docs/user_guide/byonoy/luminescence_96/hello-world.ipynb": (("s1-code", ("reader",)),),
   "docs/user_guide/byonoy/luminescence_96/led_bar.ipynb": (("connect-code", ("reader",)),),
@@ -604,6 +619,10 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
     ("alps5000-connect-code", ("sealer",)),
   ),
   "docs/user_guide/thermo_fisher/btx/gemini/X2/hello-world.ipynb": (("setup-code", ("gemini",)),),
+  "docs/user_guide/thermo_fisher/kingfisher/presto/hello-world.ipynb": (
+    ("604471ee", ("presto",)),
+    ("f7a97954", ("presto",)),
+  ),
   "docs/user_guide/thermo_fisher/nanodrop_1000/hello-world.ipynb": (
     ("nanodrop-connect", ("nanodrop",)),
   ),
@@ -883,7 +902,7 @@ def _definition_names(tree: ast.AST) -> set[str]:
 
 
 def test_lifecycle_notebook_inventory_has_55_explicit_paths() -> None:
-  assert len(LIFECYCLE_NOTEBOOKS) == 55
+  assert len(LIFECYCLE_NOTEBOOKS) == 57
   tracked = set(_tracked_notebooks())
   assert all(path.endswith(".ipynb") for path in LIFECYCLE_NOTEBOOKS)
   assert set(LIFECYCLE_NOTEBOOKS) <= tracked
@@ -1184,7 +1203,7 @@ def test_notebooks_pin_expected_backend_source_and_constructor(
 
 
 def test_runtime_classifications_match_closed_inventory() -> None:
-  assert len(EXPECTED_RUNTIME_CLASSIFICATIONS) == 55
+  assert len(EXPECTED_RUNTIME_CLASSIFICATIONS) == 57
   assert {
     path: policy.runtime for path, policy in LIFECYCLE_NOTEBOOKS.items()
   } == EXPECTED_RUNTIME_CLASSIFICATIONS

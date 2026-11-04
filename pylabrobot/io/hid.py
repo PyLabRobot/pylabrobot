@@ -363,6 +363,41 @@ class HID(ContinuousConnectionIO):
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=write_data.hex()))
     return r
 
+  async def send_feature_report(self, data: bytes, report_id: bytes = b"\x00") -> int:
+    """Send a feature report, prepending its one-byte HID report ID.
+
+    Pass only the report payload in ``data``. Unnumbered reports use ID zero,
+    just like :meth:`write`. Device calls run on the transport's owning thread.
+    """
+    if len(report_id) != 1:
+      raise ValueError("report_id must contain exactly one byte")
+    self._require_connection_usable()
+    report = report_id + data
+
+    def send() -> int:
+      """Write the complete report on the HID worker."""
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
+      return int(self.device.send_feature_report(report))
+
+    async with self._write_lock:
+      self._require_connection_usable()
+      await anyio.lowlevel.checkpoint()
+      try:
+        with anyio.CancelScope(shield=True):
+          written = await self._run_on_worker(send)
+      except (HIDException, OSError):
+        self._connection_lost = True
+        raise
+      if written != len(report):
+        self._connection_lost = True
+        raise OSError(f"Short HID feature report write: {written} of {len(report)} bytes")
+    logger.log(LOG_LEVEL_IO, "[%s] feature report %s", self._unique_id, report.hex())
+    capturer.record(
+      HIDCommand(device_id=self._unique_id, action="send_feature_report", data=report.hex())
+    )
+    return written
+
   async def read(
     self, size: int, timeout: Union[int, None, _UnsetTimeout] = _UNSET_TIMEOUT
   ) -> bytes:
@@ -581,6 +616,28 @@ class HIDValidator(HID):
     if not next_command.data == write_data.hex():
       align_sequences(expected=next_command.data, actual=write_data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
+    return len(write_data)
+
+  async def send_feature_report(self, data: bytes, report_id: bytes = b"\x00") -> int:
+    """Validate the payload and report ID without opening hardware."""
+    if len(report_id) != 1:
+      raise ValueError("report_id must contain exactly one byte")
+    if not self.is_active:
+      raise RuntimeError("HID transport is not active")
+    await anyio.lowlevel.checkpoint()
+    next_command = HIDCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "hid"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "send_feature_report"
+    ):
+      raise ValidationError(
+        f"Next line is {next_command}, expected HID send_feature_report {self._unique_id}"
+      )
+    report = report_id + data
+    if next_command.data != report.hex():
+      raise ValidationError(f"Expected feature report {next_command.data}, got {report.hex()}")
+    return len(report)
 
   async def read(
     self, size: int, timeout: Union[int, None, _UnsetTimeout] = _UNSET_TIMEOUT

@@ -105,45 +105,77 @@ async def _run_until_confirmed_cancellation(
 
 
 class TestWaitForEom(AnyioTestBase):
-  """The non-blocking motion wait polls until the arm stops moving."""
+  """The non-blocking motion-wait: polls state and returns once the arm stops moving."""
 
-  async def test_returns_when_motion_stops(self) -> None:
-    """Returns once three samples in a row agree."""
-    wherej = iter(["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9"] + ["10 10 10 10 10"] * 3)
-    arm = _make_arm()
-    arm.send_command = AsyncMock(  # type: ignore[method-assign]
-      side_effect=lambda command, **kwargs: next(wherej)
-    )
+  async def _wait_through(self, states: list[str]) -> AsyncMock:
+    d = _make_arm()
+    d.send_command = AsyncMock(side_effect=states)  # type: ignore[method-assign]
+    await d.arm._wait_for_eom(poll_interval=0)
+    return mocked(d.send_command)
 
-    await arm.arm._wait_for_eom(poll_interval=0)
+  async def test_waits_through_a_move_at_every_phase(self) -> None:
+    """The phases a move read on the arm: accelerating, constant, decelerating, nulling, idle."""
+    send = await self._wait_through(["2", "3", "5", "15", "1", "1"])
+    assert send.await_count == 6
+    assert [c.args[0] for c in send.await_args_list] == ["state"] * 6
 
-  async def test_a_move_creeping_off_does_not_count_as_stopped(self) -> None:
-    """Right after moveJ the arm creeps under the settle threshold (as logged), then moves."""
-    # The arm's first four reads after a logged moveJ, then the three it settled on.
-    replies = [
-      "301.022 33.703 242.82 141.894 74.8",
-      "301.022 33.694 242.807 141.909 74.8",
-      "301.022 33.667 242.74 141.942 74.8",
-      "301.038 33.586 242.595 142.024 74.8",
-      "301.123 0.002 179.998 179.996 74.777",
-      "301.124 0.002 179.999 180 74.777",
-      "301.125 0.001 179.999 180.002 74.777",
-    ]
-    replies_iter = iter(replies)
-    arm = _make_arm()
-    arm.send_command = AsyncMock(  # type: ignore[method-assign]
-      side_effect=lambda command, **kwargs: next(replies_iter)
-    )
-    await arm.arm._wait_for_eom(poll_interval=0)
-    assert mocked(arm.send_command).await_count == len(replies)
-
-  async def test_returns_immediately_when_already_stationary(self) -> None:
+  async def test_returns_at_once_when_already_stopped(self) -> None:
     """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
-    arm = _make_arm()
-    idle = "269.908 81.507 218.952 113.977 70.685"  # as the arm answered, poll after poll
-    arm.send_command = AsyncMock(return_value=idle)  # type: ignore[method-assign]
+    send = await self._wait_through(["1", "1"])
+    assert send.await_count == 2
 
-    await arm.arm._wait_for_eom(poll_interval=0)
+  async def test_freedrive_counts_as_stopped(self) -> None:
+    """Freedrive read 10 on the arm: a read during it must not wait for the hand to let go."""
+    send = await self._wait_through(["10", "10"])
+    assert send.await_count == 2
+
+  async def test_a_stale_reply_does_not_end_the_wait(self) -> None:
+    """After an interrupted `moveJ`, its late empty reply answers `state`: the arm is still moving."""
+    send = await self._wait_through(["", "3", "5", "15", "1", "1"])
+    assert send.await_count == 6
+
+  async def test_keyboard_interrupt_halts_and_raises_operation_interrupted(self) -> None:
+    """A user interrupt mid-wait sends halt on the connection and surfaces OperationInterrupted."""
+    d = _make_arm()
+    d.send_command = AsyncMock(side_effect=["2", KeyboardInterrupt()])  # type: ignore[method-assign]
+    with pytest.raises(OperationInterrupted):
+      await d.arm._wait_for_eom(poll_interval=0)
+    assert any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list)
+
+  async def test_cancelled_error_halts_and_reraises(self) -> None:
+    """Cancellation is re-raised (not converted) but still sends halt first."""
+    d = _make_arm()
+    calls = 0
+    scopes: list[anyio.CancelScope] = []
+
+    async def send_command(command: str, **kwargs: Any) -> str:
+      nonlocal calls
+      del command, kwargs
+      calls += 1
+      if calls == 1:
+        return "2"
+      scopes[0].cancel()
+      await anyio.lowlevel.checkpoint()
+      return "2"
+
+    d.send_command = AsyncMock(side_effect=send_command)  # type: ignore[method-assign]
+    cancelled = False
+    with anyio.CancelScope() as scope:
+      scopes.append(scope)
+      try:
+        await d.arm._wait_for_eom(poll_interval=0)
+      except anyio.get_cancelled_exc_class():
+        cancelled = True
+        raise
+    assert cancelled
+    assert any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list)
+
+  async def test_timeout_when_never_stops(self) -> None:
+    """An arm that never stops moving raises TimeoutError rather than spinning forever."""
+    d = _make_arm()
+    d.send_command = AsyncMock(return_value="3")  # type: ignore[method-assign]
+    with pytest.raises(TimeoutError):
+      await d.arm._wait_for_eom(poll_interval=0, timeout=0)
 
   async def test_cancelled_wait_halts_resyncs_and_reraises(self) -> None:
     arm = _make_arm()
@@ -155,11 +187,11 @@ class TestWaitForEom(AnyioTestBase):
       del command, read_deadline
       if not first_sample_read.is_set():
         first_sample_read.set()
-        return "0 0 0 0 0"
+        return "2"
       await anyio.sleep_forever()
       raise AssertionError("unreachable")
 
-    arm.send_command = wait_for_sample  # type: ignore[method-assign]
+    arm.send_command = wait_for_sample  # type: ignore[method-assign,assignment]
 
     async def wait_for_eom() -> None:
       with anyio.CancelScope() as scope:
@@ -180,16 +212,6 @@ class TestWaitForEom(AnyioTestBase):
     assert mocked(arm.io.write).await_args_list == [call(b"\nhalt\n")]
     mocked(arm.io.readline).assert_awaited_once_with(timeout=0.5)
 
-  async def test_timeout_when_never_settles(self) -> None:
-    samples = iter(range(1000))
-    arm = _make_arm()
-    arm.send_command = AsyncMock(  # type: ignore[method-assign]
-      side_effect=lambda command, **kwargs: f"{next(samples)} 0 0 0 0"
-    )
-
-    with pytest.raises(TimeoutError):
-      await arm.arm._wait_for_eom(poll_interval=0, timeout=0)
-
   @pytest.mark.parametrize("stalled_sample", [1, 2])
   async def test_zero_timeout_bounds_stalled_sample(self, stalled_sample: int) -> None:
     arm = _make_arm()
@@ -198,23 +220,21 @@ class TestWaitForEom(AnyioTestBase):
     async def sample(command: str, *, read_deadline: float | None = None) -> str:
       nonlocal samples
       del read_deadline
-      assert command == "wherej"
+      assert command == "state"
       samples += 1
       if samples == stalled_sample:
         await anyio.sleep_forever()
         raise AssertionError("unreachable")
-      return "7 0 0 0 0"
+      return "1"
 
-    arm.send_command = sample  # type: ignore[method-assign]
+    arm.send_command = sample  # type: ignore[method-assign,assignment]
     with anyio.fail_after(2):
-      with pytest.raises(
-        TimeoutError, match=r"motion did not settle within 0s \(current="
-      ) as error:
+      with pytest.raises(TimeoutError, match=r"motion did not stop within 0s \(state=") as error:
         await arm.arm._wait_for_eom(poll_interval=0, timeout=0)
 
     assert samples == stalled_sample
-    expected_current = "[]" if stalled_sample == 1 else "[7.0, 0.0, 0.0, 0.0, 0.0]"
-    assert str(error.value) == f"motion did not settle within 0s (current={expected_current})"
+    expected_state = "" if stalled_sample == 1 else "1"
+    assert str(error.value) == f"motion did not stop within 0s (state={expected_state})"
 
   async def test_zero_timeout_returns_after_stationary_samples(self) -> None:
     arm = _make_arm()
@@ -223,13 +243,13 @@ class TestWaitForEom(AnyioTestBase):
     async def sample(command: str, *, read_deadline: float | None = None) -> str:
       nonlocal samples
       del read_deadline
-      assert command == "wherej"
+      assert command == "state"
       samples += 1
-      return "7 0 0 0 0"
+      return "1"
 
-    arm.send_command = sample  # type: ignore[method-assign]
+    arm.send_command = sample  # type: ignore[method-assign,assignment]
     await arm.arm._wait_for_eom(poll_interval=0.01, timeout=0)
-    assert samples == 3
+    assert samples == 2
 
   @pytest.mark.parametrize("stalled_sample", [1, 2])
   async def test_zero_timeout_shielded_reply_cannot_contaminate_next_command(
@@ -244,7 +264,7 @@ class TestWaitForEom(AnyioTestBase):
         self.lost = False
         self.writes: list[bytes] = []
         self.reads = 0
-        self.late_reply = b"0 99 0 0 0 0\n"
+        self.late_reply = b"0 99\n"
 
       def _mark_connection_lost(self) -> None:
         self.lost = True
@@ -260,21 +280,21 @@ class TestWaitForEom(AnyioTestBase):
         self.reads += 1
         if self.reads == stalled_sample:
           await anyio.sleep(1.25)  # A late reply must not become the next command's reply.
-        return b"0 7 0 0 0 0\n" if self.reads == 1 else self.late_reply
+        return b"0 1\n" if self.reads == 1 else self.late_reply
 
     io = PendingReplyIO()
     arm.io = cast(Any, io)
 
     with anyio.fail_after(2):
-      with pytest.raises(TimeoutError, match="motion did not settle within 0s") as error:
+      with pytest.raises(TimeoutError, match="motion did not stop within 0s") as error:
         await arm.arm._wait_for_eom(poll_interval=0, timeout=0)
 
-    expected_current = "[]" if stalled_sample == 1 else "[7.0, 0.0, 0.0, 0.0, 0.0]"
-    assert f"current={expected_current}" in str(error.value)
+    expected_state = "" if stalled_sample == 1 else "1"
+    assert f"state={expected_state}" in str(error.value)
     assert io.lost
     with pytest.raises(ConnectionError, match="connection lost"):
       await arm.send_command("state")
-    assert io.writes == [b"wherej\n"] * stalled_sample
+    assert io.writes == [b"state\n"] * stalled_sample
 
   @pytest.mark.parametrize("stalled_sample", [1, 2])
   @pytest.mark.parametrize(("timeout", "delay"), [(0, 1.25), (0.2, 0.3)])
@@ -307,21 +327,21 @@ class TestWaitForEom(AnyioTestBase):
 
       async def readline(self) -> bytes:
         self.reads += 1
-        return b"0 7 0 0 0 0\n" if self.reads == 1 else b"0 99 0 0 0 0\n"
+        return b"0 1\n" if self.reads == 1 else b"0 99\n"
 
     io = SlowWriteIO()
     arm.io = cast(Any, io)
     with anyio.fail_after(2):
-      with pytest.raises(TimeoutError, match="motion did not settle within") as error:
+      with pytest.raises(TimeoutError, match="motion did not stop within") as error:
         await arm.arm._wait_for_eom(poll_interval=0, timeout=timeout)
 
-    expected_current = "[]" if stalled_sample == 1 else "[7.0, 0.0, 0.0, 0.0, 0.0]"
-    assert f"current={expected_current}" in str(error.value)
+    expected_state = "" if stalled_sample == 1 else "1"
+    assert f"state={expected_state}" in str(error.value)
     assert io.lost
     assert io.reads == stalled_sample - 1
     with pytest.raises(ConnectionError, match="connection lost"):
       await arm.send_command("state")
-    assert io.writes == [b"wherej\n"] * stalled_sample
+    assert io.writes == [b"state\n"] * stalled_sample
 
   async def test_poll_exchange_uses_one_budget_for_write_and_read(self) -> None:
     arm = _make_arm()
@@ -343,16 +363,16 @@ class TestWaitForEom(AnyioTestBase):
 
       async def readline(self) -> bytes:
         await anyio.sleep(0.15)
-        return b"0 7 0 0 0 0\n"
+        return b"0 1\n"
 
     io = SlowExchangeIO()
     arm.io = cast(Any, io)
     with anyio.fail_after(1):
-      with pytest.raises(TimeoutError, match="motion did not settle within 0s"):
+      with pytest.raises(TimeoutError, match="motion did not stop within 0s"):
         await arm.arm._wait_for_eom(poll_interval=0, timeout=0.2)
 
     assert io.lost
-    assert io.writes == [b"wherej\n"]
+    assert io.writes == [b"state\n"]
 
   async def test_poll_budget_includes_command_lock_wait(self) -> None:
     arm = _make_arm()
@@ -374,13 +394,13 @@ class TestWaitForEom(AnyioTestBase):
 
       async def readline(self) -> bytes:
         await anyio.sleep(0.14)
-        return b"0 7 0 0 0 0\n"
+        return b"0 1\n"
 
     io = ContendedIO()
     arm.io = cast(Any, io)
 
     async def poll() -> None:
-      with pytest.raises(TimeoutError, match="motion did not settle within"):
+      with pytest.raises(TimeoutError, match="motion did not stop within"):
         await arm.arm._wait_for_eom(poll_interval=0, timeout=0.2)
 
     with anyio.fail_after(1):
@@ -389,7 +409,7 @@ class TestWaitForEom(AnyioTestBase):
           group.start_soon(poll)
           await anyio.sleep(0.1)
 
-    assert io.writes == [b"wherej\n"]
+    assert io.writes == [b"state\n"]
     assert io.lost  # The committed read timed out against the original polling deadline.
 
   async def test_write_lock_timeout_before_dispatch_keeps_socket_usable(self) -> None:
@@ -418,7 +438,7 @@ class TestWaitForEom(AnyioTestBase):
 
     async def poll() -> None:
       try:
-        with pytest.raises(TimeoutError, match="motion did not settle within"):
+        with pytest.raises(TimeoutError, match="motion did not stop within"):
           await arm.arm._wait_for_eom(poll_interval=0, timeout=0.05)
       finally:
         finished.set()
@@ -471,9 +491,9 @@ class TestWaitForEom(AnyioTestBase):
       await anyio.sleep_forever()
       raise AssertionError("unreachable")
 
-    arm.send_command = stalled_sample  # type: ignore[method-assign]
+    arm.send_command = stalled_sample  # type: ignore[method-assign,assignment]
     with anyio.fail_after(1):
-      with pytest.raises(TimeoutError, match="motion did not settle within 0s"):
+      with pytest.raises(TimeoutError, match="motion did not stop within 0s"):
         await arm.arm._wait_for_eom(timeout=0.01)
 
 
@@ -552,6 +572,8 @@ class TestInterruptHelpers(AnyioTestBase):
     assert isinstance(error_info.value.__cause__, KeyboardInterrupt)
 
   async def test_estop_error_does_not_invoke_software_halt(self) -> None:
+    """A normal error (e.g. an error-reply PreciseFlexError, as an E-stop produces) propagates
+    unchanged and does NOT trigger a halt."""
     stop = AsyncMock()
     error = PreciseFlexError(-1028, "hard E-stop")
 
@@ -705,11 +727,11 @@ class TestMultiStepOperationCancellation(AnyioTestBase):
       if timeout is not None:
         raise TimeoutError()
       io.consumed.append(io._current_command)
+      if io._current_command == "state" and any(cmd.startswith("moveJ") for cmd in io.commands):
+        post_move_reads += 1
+        polling_started.set()
+        return b"0 3\n"
       if io._current_command == "wherej":
-        if any(cmd.startswith("moveJ") for cmd in io.commands):
-          post_move_reads += 1
-          polling_started.set()
-          return f"0 100.0 {float(post_move_reads)} 180.0 180.0 70.0\n".encode("ascii")
         return b"0 100.0 0.0 180.0 180.0 70.0\n"
       return b"0 1\n"
 

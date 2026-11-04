@@ -120,6 +120,7 @@ class USB(ReconnectableConnectionIO):
     read_endpoint_address: Optional[int] = None,
     write_endpoint_address: Optional[int] = None,
     default_boundary: Literal["packet", "short_packet_end"] = "packet",
+    zero_length_packets: bool = True,
   ):
     """Initialize an io.USB object.
 
@@ -138,6 +139,8 @@ class USB(ReconnectableConnectionIO):
       configuration_callback: A callback that takes the device object as an argument and performs
         any necessary configuration. If `None`, `dev.set_configuration()` is called.
       max_workers: The maximum number of worker threads for USB I/O operations.
+      zero_length_packets: End a write whose length is a multiple of the write endpoint's packet
+        size with a zero-length packet. Some devices reject the extra packet.
     """
 
     super().__init__()
@@ -173,6 +176,7 @@ class USB(ReconnectableConnectionIO):
     if default_boundary not in ("packet", "short_packet_end"):
       raise ValueError("Unsupported USB boundary")
     self.default_boundary = default_boundary
+    self.zero_length_packets = zero_length_packets
 
     self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self._connection_lost = False
@@ -338,7 +342,7 @@ class USB(ReconnectableConnectionIO):
           if written != len(data):
             self._connection_lost = True
             raise OSError(f"USB short write: wrote {written} of {len(data)} bytes")
-          if len(data) % write_endpoint.wMaxPacketSize == 0:
+          if self.zero_length_packets and len(data) % write_endpoint.wMaxPacketSize == 0:
             # send a zero-length packet to indicate the end of the transfer
             zlp_written = await anyio.to_thread.run_sync(
               lambda: dev.write(write_endpoint, b"", timeout=int(timeout * 1000)),
@@ -686,7 +690,7 @@ class USB(ReconnectableConnectionIO):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
   ) -> str:
     return " ".join(map(str, [bmRequestType, bRequest, wValue, wIndex, data_or_wLength]))
 
@@ -696,10 +700,18 @@ class USB(ReconnectableConnectionIO):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
     timeout: Optional[int] = None,
   ) -> bytearray:
+    """Send a control transfer: a read of ``data_or_wLength`` bytes, or a write of the bytes given.
+
+    Returns:
+      The bytes read; empty for a write.
+    """
     self._require_connection_usable()
+    if self.dev is None:
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
+
     if timeout is None:
       timeout = self.read_timeout if self.read_timeout is not None else 30
 
@@ -726,6 +738,8 @@ class USB(ReconnectableConnectionIO):
       except (usb.core.USBError, OSError):
         self._connection_lost = True
         raise
+      # pyusb returns the data of a read, and the number of bytes sent for a write.
+      response = bytearray() if isinstance(res, int) else bytearray(res)
       logger.log(
         LOG_LEVEL_IO,
         "%s ctrl_transfer: %s",
@@ -748,11 +762,11 @@ class USB(ReconnectableConnectionIO):
         USBCommand(
           device_id=self._unique_id,
           action="ctrl_transfer_response",
-          data=" ".join(map(str, res)),
+          data=" ".join(map(str, response)),
         )
       )
     await anyio.lowlevel.checkpoint_if_cancelled()
-    return bytearray(res)
+    return response
 
   def _setup_sync(self, empty_buffer: bool) -> None:
     """Open the device, resolve the endpoints and drain stale packets. Runs off the event loop."""
@@ -903,6 +917,8 @@ class USB(ReconnectableConnectionIO):
       d["read_endpoint_address"] = self.read_endpoint_address
     if self.write_endpoint_address is not None:
       d["write_endpoint_address"] = self.write_endpoint_address
+    if not self.zero_length_packets:
+      d["zero_length_packets"] = False
     return d
 
 
@@ -925,6 +941,7 @@ class USBValidator(USB):
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
     max_workers: int = 1,
     legacy_boundary_profiles: dict[int, USBLegacyBoundaryProfile] | None = None,
+    zero_length_packets: bool = True,
   ):
     super().__init__(
       human_readable_device_name=human_readable_device_name,
@@ -939,6 +956,7 @@ class USBValidator(USB):
       write_endpoint_address=write_endpoint_address,
       configuration_callback=configuration_callback,
       max_workers=max_workers,
+      zero_length_packets=zero_length_packets,
     )
     self.cr = cr
     self.legacy_boundary_profiles = legacy_boundary_profiles or {}
@@ -1223,7 +1241,7 @@ class USBValidator(USB):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
     timeout: Optional[int] = None,
   ) -> bytearray:
     next_command = USBCommand(**self.cr.next_command())
@@ -1252,7 +1270,7 @@ class USBValidator(USB):
       and next_command.action == "ctrl_transfer_response"
     ):
       raise ValidationError("next command is not ctrl_transfer_response")
-    return bytearray(map(int, next_command.data.split(" ")))
+    return bytearray(map(int, next_command.data.split()))
 
   async def reconnect(self) -> None:
     """Accept connection replacement without touching the network or USB."""

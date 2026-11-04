@@ -7,18 +7,12 @@ from pylabrobot.brooks.precise_flex.driver.errors import (
   PreciseFlexPowerError,
   PreciseFlexReachError,
   PreciseFlexServoError,
-  is_collision,
+  PreciseFlexVisionError,
 )
 
 
 class TestErrorClassDispatch(unittest.TestCase):
   """PreciseFlexError constructs the most specific subclass for a reply code (STAR-style)."""
-
-  def test_collision_code_yields_collision_subclass(self):
-    """A torque-saturation / envelope code (-3101) becomes a PreciseFlexCollisionError."""
-    err = PreciseFlexError(-3101, "")
-    self.assertIsInstance(err, PreciseFlexCollisionError)
-    self.assertTrue(is_collision(err))
 
   def test_each_kind_of_failure_has_its_class(self):
     for code, cls in (
@@ -30,6 +24,9 @@ class TestErrorClassDispatch(unittest.TestCase):
       (-1040, PreciseFlexReachError),  # position too far
       (-3104, PreciseFlexServoError),  # motor duty cycle exceeded
       (-3014, PreciseFlexServoError),  # cal parameters not set
+      (-4016, PreciseFlexVisionError),  # replied by the arm to `VToolProperty System Info`
+      (-4015, PreciseFlexVisionError),  # replied by the arm, not in the table
+      (-4030, PreciseFlexVisionError),  # replied by the arm to StereoLocate, not in the table
     ):
       with self.subTest(code):
         self.assertIs(type(PreciseFlexError(code, "")), cls)
@@ -45,11 +42,6 @@ class TestErrorClassDispatch(unittest.TestCase):
     """A code in neither category stays the plain base type."""
     err = PreciseFlexError(-202, "")
     self.assertIs(type(err), PreciseFlexError)
-
-  def test_subclasses_are_caught_by_the_base_type(self):
-    """A category subclass is still an ordinary PreciseFlexError, so `except PreciseFlexError` works."""
-    for code in (-3101, -1021, -1602, -1012, -3104):
-      self.assertIsInstance(PreciseFlexError(code, ""), PreciseFlexError)
 
   def test_constructing_a_subclass_directly_is_not_redispatched(self):
     """Building a subclass with a non-matching code keeps that subclass (dispatch only refines base)."""

@@ -736,9 +736,7 @@ class TestBottomOptic(AnyioTestBase):
       optic_position="bottom",
       measurement_settings=TEN_FLASHES,
     )
-    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(
-      BOTTOM_RUN_FRAME, [BASELINE]
-    )
+    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
     assert result.data == keyed_by_well(ground_truth["expected"])
 
   async def test_the_default_optic_position_is_read_with_and_checked(self):
@@ -753,9 +751,7 @@ class TestBottomOptic(AnyioTestBase):
     await feature.measure(
       BASELINE, measurement_settings=TEN_FLASHES, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT
     )
-    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(
-      BOTTOM_RUN_FRAME, [BASELINE]
-    )
+    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
     feature._driver.configuration.bottom_measurement_available = False
     for refused in ("side", "bottom"):
       with pytest.raises(ValueError):
@@ -1567,6 +1563,19 @@ class TestZProfile(AnyioTestBase):
       assert ftdi_extract_payload(io.written[-1]) == bytes.fromhex("05050000000000")
       assert io.replies == []
 
+  async def test_a_bottom_z_scan_sets_the_optic_bit(self):
+    """The bottom optic's z-scan differs from the top's only in the optic's bit, `04` -> `44`."""
+    top, _, _ = await run_z_profile("z_profile_without_target", "A1", maximum_focal_height=9.0)
+    bottom, _, _ = await run_z_profile(
+      "z_profile_without_target", "A1", maximum_focal_height=9.0, optic_position="bottom"
+    )
+    top_request = ftdi_extract_payload(top.written[1])
+    bottom_request = ftdi_extract_payload(bottom.written[1])
+    differences = [i for i, (a, b) in enumerate(zip(top_request, bottom_request)) if a != b]
+    assert len(top_request) == len(bottom_request)
+    assert len(differences) == 1
+    assert (top_request[differences[0]], bottom_request[differences[0]]) == (0x04, 0x44)
+
   def test_a_height_below_0_is_decoded(self):
     """Not a reader's reply: the brightest-well search's result, last point and peak -0.60 mm."""
     reply = bytearray(
@@ -1620,6 +1629,8 @@ class TestZProfile(AnyioTestBase):
       (BASELINE, dict(gain_target_percent=0)),
       (BASELINE, dict(gain_target_percent=101)),
       (BASELINE, dict(timeout=0)),
+      (BASELINE, dict(optic_position="bottom")),  # no maximum_focal_height
+      (BASELINE, dict(optic_position="side", maximum_focal_height=8.0)),
       (replace(BASELINE, excitation_wavelength=None), {}),
       (
         FluorescenceChannel(excitation_filter=1, dichroic_filter=1, emission_wavelength=528),

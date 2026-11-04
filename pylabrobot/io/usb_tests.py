@@ -2,6 +2,7 @@ import contextlib
 import contextvars
 import json
 import threading
+from array import array
 from io import UnsupportedOperation
 from pathlib import Path
 from types import SimpleNamespace
@@ -1500,3 +1501,122 @@ class TestUSBValidator(AnyioTestBase):
 
     async with validator:
       assert await validator.ctrl_transfer(1, 2, 3, 4, 5) == bytearray([3, 1, 4])
+
+
+class TestUSBWriteZeroLengthPackets(AnyioTestBase):
+  """A packet-aligned write ends with a zero-length packet unless the device rejects them."""
+
+  def make_io(self, **kwargs: Any) -> tuple[USB, mock.Mock]:
+    """A USB on a mock device with 64-byte endpoints, built with ``kwargs``."""
+    device = mock.Mock()
+    device.write.side_effect = lambda endpoint, data, timeout: len(data)
+    io = USB(1, 2, "mock USB", **kwargs)
+    io.dev = device
+    io.read_endpoint = mock.Mock(wMaxPacketSize=64, bEndpointAddress=0x81)
+    io.write_endpoint = mock.Mock(wMaxPacketSize=64, bEndpointAddress=0x01)
+    return io, device
+
+  async def test_packet_aligned_write_ends_with_a_zero_length_packet(self) -> None:
+    """The default: a 64-byte write on a 64-byte endpoint is followed by an empty write."""
+    io, device = self.make_io()
+    with mock.patch.object(
+      usb_module,
+      "usb",
+      SimpleNamespace(
+        core=SimpleNamespace(USBError=_FakeUSBError, USBTimeoutError=_FakeUSBTimeoutError)
+      ),
+      create=True,
+    ):
+      await io.write(b"a" * 64)
+    assert [call.args[1] for call in device.write.call_args_list] == [b"a" * 64, b""]
+
+  async def test_short_write_has_no_zero_length_packet(self) -> None:
+    """A write shorter than a packet ends the transfer by itself."""
+    io, device = self.make_io()
+    with mock.patch.object(
+      usb_module,
+      "usb",
+      SimpleNamespace(
+        core=SimpleNamespace(USBError=_FakeUSBError, USBTimeoutError=_FakeUSBTimeoutError)
+      ),
+      create=True,
+    ):
+      await io.write(b"a" * 27)
+    assert [call.args[1] for call in device.write.call_args_list] == [b"a" * 27]
+
+  async def test_zero_length_packets_off(self) -> None:
+    """With zero_length_packets=False a packet-aligned write is sent alone."""
+    io, device = self.make_io(zero_length_packets=False)
+    with mock.patch.object(
+      usb_module,
+      "usb",
+      SimpleNamespace(
+        core=SimpleNamespace(USBError=_FakeUSBError, USBTimeoutError=_FakeUSBTimeoutError)
+      ),
+      create=True,
+    ):
+      await io.write(b"a" * 64)
+    assert [call.args[1] for call in device.write.call_args_list] == [b"a" * 64]
+
+  async def test_serialization_keeps_the_setting(self) -> None:
+    """Only a device that turns them off records it, so a validator is built the same way."""
+    io, _ = self.make_io()
+    assert "zero_length_packets" not in io.serialize()
+    io_off, _ = self.make_io(zero_length_packets=False)
+    serialized = io_off.serialize()
+    assert serialized["zero_length_packets"] is False
+    assert not USBValidator(cr=mock.Mock(), **serialized).zero_length_packets
+
+
+class TestUSBControlTransfer(AnyioTestBase):
+  """A control transfer reads data, or writes it."""
+
+  def make_io(self) -> tuple[USB, mock.Mock]:
+    io = USB(1, 2, "mock USB")
+    device = mock.Mock()
+    io.dev = device
+    return io, device
+
+  async def test_read_returns_the_data(self) -> None:
+    """pyusb returns the bytes a control read got."""
+    io, device = self.make_io()
+    device.ctrl_transfer.return_value = array("B", [1, 2])
+    with mock.patch.object(
+      usb_module,
+      "usb",
+      SimpleNamespace(
+        core=SimpleNamespace(USBError=_FakeUSBError, USBTimeoutError=_FakeUSBTimeoutError)
+      ),
+      create=True,
+    ):
+      assert await io.ctrl_transfer(0xC0, 1, 0, 0, 2) == bytearray([1, 2])
+
+  async def test_write_returns_no_data(self) -> None:
+    """pyusb returns the number of bytes a control write sent; the transfer returns no data."""
+    io, device = self.make_io()
+    device.ctrl_transfer.return_value = 1
+    with mock.patch.object(
+      usb_module,
+      "usb",
+      SimpleNamespace(
+        core=SimpleNamespace(USBError=_FakeUSBError, USBTimeoutError=_FakeUSBTimeoutError)
+      ),
+      create=True,
+    ):
+      assert await io.ctrl_transfer(0x40, 1, 0, 0, b"\x01") == bytearray()
+    device.ctrl_transfer.assert_called_once_with(
+      bmRequestType=0x40, bRequest=1, wValue=0, wIndex=0, data_or_wLength=b"\x01", timeout=30000
+    )
+
+  async def test_validator_replays_a_write(self) -> None:
+    """A recorded control write replays with no data."""
+    io, _ = self.make_io()
+    request = io._serialize_ctrl_transfer_request(0x40, 1, 0, 0, b"\x01")
+    capture = mock.Mock()
+    capture.next_command.side_effect = [
+      {"module": "usb", "device_id": io._unique_id, "action": action, "data": data}
+      for action, data in (("ctrl_transfer_request", request), ("ctrl_transfer_response", ""))
+    ]
+    validator = USBValidator(capture, "mock USB", 1, 2)
+    async with validator:
+      assert await validator.ctrl_transfer(0x40, 1, 0, 0, b"\x01") == bytearray()

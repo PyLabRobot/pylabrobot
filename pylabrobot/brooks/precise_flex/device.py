@@ -11,6 +11,7 @@ from typing import Optional
 from pylabrobot.brooks.precise_flex.driver.features.arm import PreciseFlexArm
 from pylabrobot.brooks.precise_flex.driver.features.gripper import PreciseFlexGripper
 from pylabrobot.brooks.precise_flex.driver.features.rail import PreciseFlexRail
+from pylabrobot.brooks.precise_flex.driver.features.vision import PreciseFlexVision
 from pylabrobot.brooks.precise_flex.driver.master import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.driver.simulator import PreciseFlexSimulationDriver
 from pylabrobot.brooks.precise_flex.resource_model.pf400_manipulator import (
@@ -90,20 +91,29 @@ class PreciseFlexDevice(Resource, HasLifespan):
     """The rail, if the arm stands on one."""
     return self.driver.rail
 
+  @property
+  def vision(self) -> Optional[PreciseFlexVision]:
+    """The vision feature, if setup found one."""
+    return self.driver.vision
+
   async def _enter_lifespan(
     self,
     stack: AsyncExitStackWithShielding,
     *,
     skip_home: bool = False,
+    skip_vision_setup: bool = False,
   ) -> None:
     """Open the underlying driver lifespan.
 
     Args:
       stack: exit stack managing lifespan resources.
       skip_home: as ``PreciseFlexDriver.lifespan`` takes it.
+      skip_vision_setup: as ``PreciseFlexDriver.lifespan`` takes it.
     """
     await super()._enter_lifespan(stack)
-    await stack.enter_async_context(self.driver.lifespan(skip_home=skip_home))
+    await stack.enter_async_context(
+      self.driver.lifespan(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
+    )
 
 
 def PreciseFlex400(

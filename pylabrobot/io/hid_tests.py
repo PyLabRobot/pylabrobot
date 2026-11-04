@@ -13,6 +13,7 @@ import pytest
 from pylabrobot.concurrency import HasLifespan
 from pylabrobot.io import hid as hid_module
 from pylabrobot.io.boundary import BoundaryDiscard, BoundaryRead, HIDReportTooLargeError
+from pylabrobot.io.capture import CaptureReader
 from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.hid import HID, HIDCommand, HIDValidator, maximum_input_report_size
 from pylabrobot.io.io import ContinuousConnectionIO
@@ -29,12 +30,22 @@ class _FakeDevice:
     self.reads = list(reads or [])
     self.closed = False
     self.write_error: Optional[BaseException] = None
+    self.feature_report_return: Optional[int] = None
 
   def write(self, data: bytes) -> int:
     assert not self.closed
     self.calls.append(("write", data, threading.get_ident()))
     if self.write_error is not None:
       raise self.write_error
+    return len(data)
+
+  def send_feature_report(self, data: bytes) -> int:
+    assert not self.closed
+    self.calls.append(("send_feature_report", data, threading.get_ident()))
+    if self.write_error is not None:
+      raise self.write_error
+    if self.feature_report_return is not None:
+      return self.feature_report_return
     return len(data)
 
   def read(self, size: int, timeout: int) -> bytes:
@@ -427,7 +438,11 @@ class TestHIDLifespan(AnyioTestBase):
         pass
 
       calls_after_exit = list(calls)
-      for operation in (lambda: io.write(b"late"), lambda: io.read(1, timeout=1)):
+      for operation in (
+        lambda: io.write(b"late"),
+        lambda: io.send_feature_report(b"late"),
+        lambda: io.read(1, timeout=1),
+      ):
         with pytest.raises(RuntimeError, match="not active"):
           await operation()
         assert calls == calls_after_exit
@@ -497,6 +512,96 @@ class TestHIDValidator(AnyioTestBase):
         pass
 
     assert reader.next_command.call_count == 1
+
+
+class TestHIDFeatureReports(AnyioTestBase):
+  async def test_feature_report_uses_worker_and_capture_can_replay(self, tmp_path: Path) -> None:
+    calls: list[Any] = []
+    device = _FakeDevice(calls, reads=[b"\x01\xff"])
+    io = _new_hid()
+    path = tmp_path / "hid.json"
+    with _fake_hid_api(device, calls):
+      hid_module.capturer.start(path)
+      try:
+        async with io:
+          assert await io.send_feature_report(b"\x01\x00") == 3
+          assert await io.send_feature_report(b"abc", report_id=b"\x02") == 4
+          await io.write(b"\x03\x00")
+          assert await io.read(64) == b"\x01\xff"
+      finally:
+        hid_module.capturer.stop()
+
+    feature_calls = [call for call in calls if call[0] == "send_feature_report"]
+    assert [call[1] for call in feature_calls] == [b"\x00\x01\x00", b"\x02abc"]
+    assert feature_calls[0][2] != threading.get_ident()
+    assert len({call[-1] for call in calls}) == 1
+
+    reader = CaptureReader(str(path))
+    validator = HIDValidator(reader, "fake HID", vid=0x1234, pid=0x5678, serial_number="serial")
+    async with validator:
+      assert await validator.send_feature_report(b"\x01\x00") == 3
+      assert await validator.send_feature_report(b"abc", report_id=b"\x02") == 4
+      await validator.write(b"\x03\x00")
+      assert await validator.read(64) == b"\x01\xff"
+    reader.done()
+
+  async def test_feature_report_requires_active_lifespan_and_valid_report_id(self) -> None:
+    io = _new_hid()
+    with pytest.raises(RuntimeError):
+      await io.send_feature_report(b"payload")
+    with pytest.raises(ValueError, match="one byte"):
+      await io.send_feature_report(b"payload", report_id=b"too long")
+
+  async def test_short_feature_write_is_not_recorded_as_success(self) -> None:
+    calls: list[Any] = []
+    device = _FakeDevice(calls)
+    device.feature_report_return = 1
+    io = _new_hid()
+    commands: list[HIDCommand] = []
+    with (
+      _fake_hid_api(device, calls),
+      mock.patch.object(hid_module.capturer, "record", commands.append),
+    ):
+      async with io:
+        commands.clear()
+        with pytest.raises(OSError, match="Short HID"):
+          await io.send_feature_report(b"\x01\x00")
+        assert commands == []
+        with pytest.raises(ConnectionError, match="connection lost"):
+          await io.send_feature_report(b"\x01\x00")
+
+  async def test_validator_rejects_wrong_device_action_or_payload(self, tmp_path: Path) -> None:
+    for index, change in enumerate(
+      (
+        {"device_id": "other"},
+        {"action": "write"},
+        {"module": "usb"},
+        {"data": "000200"},
+      )
+    ):
+      path = tmp_path / f"capture-{index}.json"
+      command = {
+        "module": "hid",
+        "device_id": "1:2:None",
+        "action": "send_feature_report",
+        "data": "000100",
+      }
+      command.update(change)
+      path.write_text(
+        json.dumps(
+          {
+            "commands": [
+              {"module": "hid", "device_id": "1:2:None", "action": "open", "data": ""},
+              command,
+              {"module": "hid", "device_id": "1:2:None", "action": "close", "data": ""},
+            ]
+          }
+        )
+      )
+      validator = HIDValidator(CaptureReader(str(path)), "test", vid=1, pid=2)
+      async with validator:
+        with pytest.raises(ValidationError):
+          await validator.send_feature_report(b"\x01\x00")
 
 
 def test_hid_command_accepts_serialized_module_and_data() -> None:
