@@ -42,10 +42,10 @@ def inheco_cpac_ultraflat(name: str, control_box: InhecoTECControlBox, index: in
 
   Example:
     >>> from pylabrobot.inheco import inheco_cpac_ultraflat
-    >>> await box.setup()
-    >>> cpac = inheco_cpac_ultraflat("cpac", control_box=box, index=1)
-    >>> await cpac.set_temperature(37.0)
-    >>> await cpac.request_current_temperature()
+    >>> async with box:
+    ...   cpac = inheco_cpac_ultraflat("cpac", control_box=box, index=1)
+    ...   await cpac.set_temperature(37.0)
+    ...   await cpac.request_current_temperature()
     37.0
   """
 

@@ -1,9 +1,10 @@
-import asyncio
 import datetime
 import os
 import tempfile
 import unittest
 from typing import Any, Dict, List, Sequence
+
+import pytest
 
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
 from pylabrobot.lib.fluorescence.results import FluorescenceResult, FluorescenceSpectrumResult
@@ -11,6 +12,7 @@ from pylabrobot.lib.luminescence.results import LuminescenceResult
 from pylabrobot.lib.results.directory import append_results, check_directory
 from pylabrobot.lib.results.reading import get_results, load_rows
 from pylabrobot.lib.results.table import get_table
+from pylabrobot.testing import AnyioTestBase
 from pylabrobot.utils.timing import run_cycles
 
 
@@ -34,15 +36,15 @@ class LoadRowsTests(unittest.TestCase):
       load_rows(self.directory)
 
 
-def write_results(results: Sequence[Any]) -> str:
+async def write_results(results: Sequence[Any]) -> str:
   """A results directory holding `results`, read 0 on."""
   directory = check_directory(tempfile.mkdtemp())
-  asyncio.run(append_results(directory, results))
+  await append_results(directory, results)
   return directory
 
 
-class GetResultsTests(unittest.TestCase):
-  def test_each_shared_result_comes_back_as_it_was(self):
+class TestGetResults(AnyioTestBase):
+  async def test_each_shared_result_comes_back_as_it_was(self):
     start = datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc)
     end = start + datetime.timedelta(seconds=30)
     times: Dict[str, Any] = {"start_timestamp": start, "end_timestamp": end}
@@ -84,10 +86,10 @@ class GetResultsTests(unittest.TestCase):
         **times,
       ),
     ]
-    self.assertEqual(get_results(load_rows(write_results(results))), results)  # from a directory
-    self.assertEqual(get_results(get_table(results)), results)  # from a table, no file
+    assert get_results(load_rows(await write_results(results))) == results  # from a directory
+    assert get_results(get_table(results)) == results  # from a table, no file
 
-  def test_a_read_in_a_cycle_comes_back_with_its_cycle(self):
+  async def test_a_read_in_a_cycle_comes_back_with_its_cycle(self):
     async def read(cycle: int) -> AbsorbanceResult:
       now = datetime.datetime.now(datetime.timezone.utc)
       return AbsorbanceResult(
@@ -98,17 +100,17 @@ class GetResultsTests(unittest.TestCase):
         end_timestamp=now,
       )
 
-    results = asyncio.run(run_cycles(read, cycle_time=0.01, cycles=2))
-    loaded = get_results(load_rows(write_results(results)))
-    self.assertEqual([result.current_cycle["cycle"] for result in loaded], [0, 1])
-    self.assertEqual(loaded, results)
+    results = await run_cycles(read, cycle_time=0.01, cycles=2)
+    loaded = get_results(load_rows(await write_results(results)))
+    assert [result.current_cycle["cycle"] for result in loaded] == [0, 1]
+    assert loaded == results
 
   def test_a_read_without_a_shared_result_type_raises_naming_it(self):
     now = datetime.datetime.now(datetime.timezone.utc)
     (row,) = get_table([AbsorbanceResult({"A1": 0.1}, 600, None, now, now)], first_read=1)
-    with self.assertRaisesRegex(ValueError, "read 1 holds reference_counts"):
+    with pytest.raises(ValueError, match="read 1 holds reference_counts"):
       get_results([dict(row, quantity="reference_counts")])
-    with self.assertRaisesRegex(ValueError, "read 1 is a fluorescence_grid read"):
+    with pytest.raises(ValueError, match="read 1 is a fluorescence_grid read"):
       get_results([dict(row, mode="fluorescence_grid")])
 
 

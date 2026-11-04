@@ -576,6 +576,7 @@ def error_code_to_exception(code: int) -> Type[STARModuleError]:
     31: AntiDropControlError,
     32: DecapperError,
     33: DecapperHandlingError,
+    36: StopError,
     99: SubsystemError,
     100: WrongCarrierError,
     101: NoCarrierBarcodeError,

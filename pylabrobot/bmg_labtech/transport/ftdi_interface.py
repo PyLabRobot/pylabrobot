@@ -1,14 +1,14 @@
 """A BMG reader's FTDI interface: it writes a frame and reads exactly one reply frame back.
 
 The reply ends where its size field says (CR also occurs inside payloads). Replies are read
-through bulk-in transfers kept pending from `setup` to `stop` (`ftdi_queued_reads`), or with
+through bulk-in transfers kept pending for the interface's lifespan (`ftdi_queued_reads`), or with
 libftdi when those cannot run.
 """
 
-import asyncio
 import logging
-import time
 from typing import Optional
+
+import anyio
 
 from pylabrobot.bmg_labtech.protocol.framing import (
   FTDI_CR,
@@ -17,6 +17,7 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   ftdi_validate_frame,
   ftdi_wrap_payload,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.capture import get_capture_or_validation_active
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
@@ -26,7 +27,7 @@ from .ftdi_queued_reads import LATENCY_TIMER, QueuedReads
 logger = logging.getLogger(__name__)
 
 
-class BMGFTDIInterface:
+class BMGFTDIInterface(HasLifespan):
   """Exchanges BMG frames with one reader over FTDI, one reply frame per frame written."""
 
   _FTDI_READ_CHUNK = 25  # bytes per read; a shorter read marks the end of a burst
@@ -50,48 +51,52 @@ class BMGFTDIInterface:
       frame_stall_timeout: seconds without new bytes before a started frame is abandoned.
       frame_hard_cap: seconds; ceiling on reading one frame.
     """
+    super().__init__()
     self.io = io
     self.header = header
     self.baudrate = baudrate
     self._packet_read_timeout = packet_read_timeout
     self._frame_stall_timeout = frame_stall_timeout
     self._frame_hard_cap = frame_hard_cap
-    # Bulk-in transfers kept pending from setup to stop; None reads through libftdi.
+    # Bulk-in transfers kept pending for the lifespan; None reads through libftdi.
     self._queued_reads: Optional[QueuedReads] = None
 
-  def _start_queued_reads(self) -> None:
-    """Keep bulk-in transfers pending on the open FTDI chip; if they cannot start, read with
-    libftdi (`_read_frame`).
+  def _stop_queued_reads(self) -> None:
+    """Stop reading through the pending bulk-in transfers, if any; libftdi reads from then on.
+
+    Their lifespan, which frees them, stays owned by this interface's lifespan.
+    """
+    reads, self._queued_reads = self._queued_reads, None
+    if reads is not None:
+      reads.request_stop()
+
+  async def _start_queued_reads(self, stack: AsyncExitStackWithShielding) -> None:
+    """Keep bulk-in transfers pending on the open FTDI chip for the lifespan; if they cannot
+    start, read with libftdi (`_read_frame`).
 
     Not while capture or validation is active: their replay needs every read to pass `FTDI.read`.
-    The queued reads belong to the event loop that ran setup.
     """
     if get_capture_or_validation_active():
       logger.info("capture or validation active: reading with libftdi")
       return
     try:
       reads = QueuedReads.from_device(self.io.dev)
-      reads.start()
+      await stack.enter_async_context(reads.lifespan())
     except Exception as e:  # no open pylibftdi device, no libusb handle, nothing submitted
       logger.warning("bulk-in transfers not kept pending (%s); reading with libftdi", e)
       return
     self._queued_reads = reads
+    stack.callback(self._stop_queued_reads)
 
-  def _stop_queued_reads(self) -> None:
-    """Cancel and free the pending bulk-in transfers, if any; libftdi reads from then on."""
-    reads, self._queued_reads = self._queued_reads, None
-    if reads is not None:
-      reads.stop()
-
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the FTDI port at the reader's baud rate, 8N1, latency 2 ms, and keep bulk-in
     transfers pending."""
-    self._stop_queued_reads()  # a second setup reopens the device under them
-    await self.io.setup()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
     await self.io.set_baudrate(self.baudrate)
     await self.io.set_line_property(8, 0, 0)  # 8N1
     await self.io.set_latency_timer(LATENCY_TIMER)
-    self._start_queued_reads()
+    await self._start_queued_reads(stack)
 
   async def _write(self, frame: bytes) -> None:
     """Write a whole frame; raise OSError on a short write."""
@@ -114,14 +119,14 @@ class BMGFTDIInterface:
     data = b""
     expected_size: Optional[int] = None
     end_byte_found = False
-    start = time.time()
+    start = anyio.current_time()
     last_data_time = start
 
     while True:
       chunk = await self.io.read(self._FTDI_READ_CHUNK)
       if chunk:
         data += chunk
-        last_data_time = time.time()
+        last_data_time = anyio.current_time()
 
         if expected_size is None and data[0] != FTDI_STX:
           index = data.find(FTDI_STX)
@@ -131,7 +136,7 @@ class BMGFTDIInterface:
 
         if expected_size is None and len(data) >= 3:
           expected_size = int.from_bytes(data[1:3], "big")
-          start = time.time()
+          start = anyio.current_time()
 
         if len(chunk) < self._FTDI_READ_CHUNK and end_byte_found:
           if expected_size is None or len(data) >= expected_size:
@@ -144,14 +149,14 @@ class BMGFTDIInterface:
           remainder = await self.io.read(expected_size - len(data))
           if remainder:
             data += remainder
-            last_data_time = time.time()
+            last_data_time = anyio.current_time()
             end_byte_found = data[-1] == FTDI_CR
             if len(data) >= expected_size:
               break
       else:
         if end_byte_found and (expected_size is None or len(data) >= expected_size):
           break
-        now = time.time()
+        now = anyio.current_time()
         if expected_size is None:
           timed_out = now - start > self._packet_read_timeout
         else:
@@ -162,7 +167,7 @@ class BMGFTDIInterface:
           if expected_size is not None and 0 < len(data) < expected_size:
             data += await self.io.read(expected_size - len(data))
           break
-        await asyncio.sleep(0.0001)
+        await anyio.sleep(0.0001)
 
     if expected_size is not None and len(data) >= expected_size:
       return data[:expected_size]
@@ -200,13 +205,13 @@ class BMGFTDIInterface:
     received = bytearray()
     expected_size: Optional[int] = None
     line_errors = 0
-    start = time.time()
+    start = anyio.current_time()
     last_data_time = start
     try:
       while True:
         chunk, errors = reads.take()
         line_errors += errors
-        now = time.time()
+        now = anyio.current_time()
         if chunk:
           received += chunk
           data += chunk
@@ -266,13 +271,13 @@ class BMGFTDIInterface:
     """
     reads = self._get_queued_reads()
     drained = bytearray()
-    start = last_data_time = time.monotonic()
+    start = last_data_time = anyio.current_time()
     while True:
       if reads is not None:
         data, _ = reads.take()
       else:
         data = await self.io.read(self._FTDI_READ_CHUNK)
-      now = time.monotonic()
+      now = anyio.current_time()
       if data:
         drained += data
         last_data_time = now
@@ -282,10 +287,6 @@ class BMGFTDIInterface:
       if reads is not None:
         await reads.wait(deadline - now)
       elif not data:
-        await asyncio.sleep(LATENCY_TIMER / 1000)  # the chip sends at least once per period
+        await anyio.sleep(LATENCY_TIMER / 1000)  # the chip sends at least once per period
     if reads is not None and drained:
       logger.log(LOG_LEVEL_IO, "[%s] discarded %s", self.io.device_id, bytes(drained))
-
-  def stop(self) -> None:
-    """Cancel the pending bulk-in transfers, before the FTDI device under them is closed."""
-    self._stop_queued_reads()

@@ -6,15 +6,29 @@ This backend targets the Infinite "M" series (e.g., Infinite 200 PRO).  The
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import re
 import time
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional, Sequence, Tuple, cast
+from functools import partial
+from typing import (
+  AsyncIterator,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  cast,
+)
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, attempt_in_order
 from pylabrobot.io.binary import Reader
 from pylabrobot.io.usb import USB
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
@@ -556,8 +570,9 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self.counts_per_mm_x = counts_per_mm_x
     self.counts_per_mm_y = counts_per_mm_y
     self.counts_per_mm_z = counts_per_mm_z
-    self._setup_lock = asyncio.Lock()
+    self._command_lock = anyio.Lock()
     self._ready = False
+    self._recovery_failed = False
     self._read_chunk_size = 512
     self._max_row_wait_s = 300.0
     self._mode_capabilities: Dict[str, Dict[str, str]] = {}
@@ -566,26 +581,29 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     self._run_active = False
     self._active_step_loss_commands: List[str] = []
 
-  async def setup(self) -> None:
-    async with self._setup_lock:
-      if self._ready:
-        return
-      await self.io.setup()
-      await self._initialize_device()
-      for mode in self._MODE_CAPABILITY_COMMANDS:
-        if mode not in self._mode_capabilities:
-          await self._query_mode_capabilities(mode)
-      self._ready = True
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the reusable USB transport and initialize the reader."""
+    await super()._enter_lifespan(stack)
 
-  async def stop(self) -> None:
-    async with self._setup_lock:
-      if not self._ready:
-        return
-      await self._cleanup_protocol()
-      await self.io.stop()
-      self._mode_capabilities.clear()
-      self._reset_stream_state()
-      self._ready = False
+    self._recovery_failed = False
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._clear_owned_state)
+    stack.push_shielded_async_callback(self._cleanup_protocol)
+
+    await self._initialize_device()
+    for mode in self._MODE_CAPABILITY_COMMANDS:
+      if mode not in self._mode_capabilities:
+        await self._query_mode_capabilities(mode)
+    self._ready = True
+
+  def _clear_owned_state(self) -> None:
+    """Discard protocol state before the USB transport closes."""
+    self._mode_capabilities.clear()
+    self._reset_stream_state()
+    self._run_active = False
+    self._active_step_loss_commands = []
+    self._ready = False
+    self._recovery_failed = False
 
   async def open(self) -> None:
     """Open the reader drawer."""
@@ -742,33 +760,34 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     await self._set_shaking_amplitude(raw_amplitude, amplitude)
     await self._set_shaking_duration(duration)
 
-    try:
-      responses = await self._send_command(
-        "SHAKING ON", wait_for_terminal=False, recover_on_timeout=False
-      )
-    except TimeoutError as error:
-      raise TecanInfiniteResponseError(
-        "SHAKING ON",
-        [],
-        "was not received. The shaking action may have started. The reader may still be shaking",
-      ) from error
-    self._require_busy_response("SHAKING ON", responses)
-    if len(responses) == 2:
-      return
-    try:
-      terminal = await self._read_command_response(
-        max_iterations=1, timeout=duration + 5, recover_on_timeout=False
-      )
-    except TimeoutError as error:
-      raise TecanInfiniteResponseError(
-        "SHAKING ON",
-        responses,
-        "started, but completion could not be confirmed; the reader may still be shaking",
-      ) from error
-    if terminal != ["ST"]:
-      raise TecanInfiniteResponseError(
-        "SHAKING ON", terminal, "did not finish with the standby response"
-      )
+    async with self._command_transaction():
+      try:
+        responses = await self._send_command_locked(
+          "SHAKING ON", wait_for_terminal=False, recover_on_timeout=False
+        )
+      except TimeoutError as error:
+        raise TecanInfiniteResponseError(
+          "SHAKING ON",
+          [],
+          "was not received. The shaking action may have started. The reader may still be shaking",
+        ) from error
+      self._require_busy_response("SHAKING ON", responses)
+      if len(responses) == 2:
+        return
+      try:
+        terminal = await self._read_command_response(
+          max_iterations=1, timeout=duration + 5, recover_on_timeout=False
+        )
+      except TimeoutError as error:
+        raise TecanInfiniteResponseError(
+          "SHAKING ON",
+          responses,
+          "started, but completion could not be confirmed; the reader may still be shaking",
+        ) from error
+      if terminal != ["ST"]:
+        raise TecanInfiniteResponseError(
+          "SHAKING ON", terminal, "did not finish with the standby response"
+        )
 
   async def request_instrument_status(self) -> TecanInfiniteInstrumentStatus:
     """Read the reader status. Return the interpreted state and the unmodified response."""
@@ -808,41 +827,53 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     """Move the plate transport. Confirm the final position that the reader reports."""
 
     command = f"ABSOLUTE MTP,{destination}"
-    try:
-      responses = await self._send_command(
-        command, wait_for_terminal=False, recover_on_timeout=False
-      )
-    except TimeoutError as error:
-      raise TecanInfiniteResponseError(
-        command,
-        [],
-        "was not received. The transport movement may have started. "
-        f"The transport may not be {destination}",
-      ) from error
-    self._require_busy_response(command, responses)
-    if len(responses) == 1:
+    async with self._command_transaction():
       try:
-        terminal = await self._read_command_response(
-          max_iterations=1, timeout=10, recover_on_timeout=False
+        responses = await self._send_command_locked(
+          command, wait_for_terminal=False, recover_on_timeout=False
         )
       except TimeoutError as error:
         raise TecanInfiniteResponseError(
           command,
-          responses,
-          f"started, but completion could not be confirmed; the transport may not be {destination}",
+          [],
+          "was not received. The transport movement may have started. "
+          f"The transport may not be {destination}",
         ) from error
-      if terminal != ["ST"]:
-        raise TecanInfiniteResponseError(
-          command, terminal, "did not finish with the standby response"
-        )
+      self._require_busy_response(command, responses)
+      if len(responses) == 1:
+        try:
+          terminal = await self._read_command_response(
+            max_iterations=1, timeout=10, recover_on_timeout=False
+          )
+        except TimeoutError as error:
+          raise TecanInfiniteResponseError(
+            command,
+            responses,
+            f"started, but completion could not be confirmed; the transport may not be {destination}",
+          ) from error
+        if terminal != ["ST"]:
+          raise TecanInfiniteResponseError(
+            command, terminal, "did not finish with the standby response"
+          )
 
-    applied_position = await self._request_state("?ABSOLUTE MTP,POS", recover_on_timeout=False)
-    if applied_position != destination:
-      raise TecanInfiniteResponseError(
-        "?ABSOLUTE MTP,POS",
-        [applied_position],
-        f"did not confirm the requested {destination} position",
-      )
+      position_command = "?ABSOLUTE MTP,POS"
+      try:
+        position_responses = await self._send_command_locked(
+          position_command, wait_for_terminal=False, recover_on_timeout=False
+        )
+      except TimeoutError as error:
+        raise TecanInfiniteResponseError(
+          position_command,
+          [],
+          "could not be read without reinitializing the device; its state is indeterminate",
+        ) from error
+      applied_position = self._parse_state_response(position_command, position_responses)
+      if applied_position != destination:
+        raise TecanInfiniteResponseError(
+          position_command,
+          [applied_position],
+          f"did not confirm the requested {destination} position",
+        )
 
   async def _request_temperature(
     self,
@@ -995,6 +1026,11 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         [],
         "could not be read without reinitializing the device; its state is indeterminate",
       ) from error
+    return self._parse_state_response(command, responses)
+
+  @staticmethod
+  def _parse_state_response(command: str, responses: List[str]) -> str:
+    """Validate and return one state-query response."""
     if len(responses) != 1:
       raise TecanInfiniteResponseError(command, responses, "did not contain exactly one frame")
     response = responses[0]
@@ -1033,20 +1069,29 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
       # can reintroduce the first-row edge-read problem.
       await self._send_command(f"ABSOLUTE MTP,X={start_x},Y={y_stage}")
       await self._send_command(f"SCAN DIRECTION={scan_direction}")
-      await self._send_command(
-        f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
-      )
-      logger.info(
-        "Queued %s scan row %s (%s wells): y=%s, x=%s..%s",
-        mode.lower(),
-        row_index,
-        count,
-        y_stage,
-        start_x,
-        end_x,
-      )
-      await self._await_measurements(decoder, count, mode)
-      await self._await_scan_terminal(decoder.pop_terminal())
+      try:
+        async with self._command_transaction():
+          await self._send_command_locked(
+            f"SCANX {start_x},{end_x},{count}", wait_for_terminal=False, read_response=False
+          )
+          logger.info(
+            "Queued %s scan row %s (%s wells): y=%s, x=%s..%s",
+            mode.lower(),
+            row_index,
+            count,
+            y_stage,
+            start_x,
+            end_x,
+          )
+          await self._await_measurements(decoder, count, mode)
+          await self._await_scan_terminal(decoder.pop_terminal())
+      except TimeoutError:
+        with anyio.CancelScope(shield=True):
+          try:
+            await self._recover_transport()
+          except Exception:
+            logger.warning("Transport recovery failed.", exc_info=True)
+        raise
 
   async def read_absorbance(
     self,
@@ -1070,8 +1115,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
     decoder = _AbsorbanceRunDecoder(len(scan_wells))
 
-    await self._begin_run()
-    try:
+    async with self._committed_run():
       await self._configure_absorbance(wavelength, flashes=flashes, bandwidth=bandwidth)
       await self._run_scan(
         ordered_wells=ordered_wells,
@@ -1102,8 +1146,6 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
           "data": matrix,
         }
       ]
-    finally:
-      await self._end_run()
 
   async def _clear_mode_settings(self, excitation: bool = False, emission: bool = False) -> None:
     """Clear the mode settings before a new scan. Confirm each change."""
@@ -1187,8 +1229,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     ordered_wells = wells if wells else plate.get_all_items()
     scan_wells = self._scan_visit_order(ordered_wells, serpentine=True)
 
-    await self._begin_run()
-    try:
+    async with self._committed_run():
       await self._configure_fluorescence(
         excitation_wavelength,
         emission_wavelength,
@@ -1228,8 +1269,6 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
           "data": matrix,
         }
       ]
-    finally:
-      await self._end_run()
 
   async def _configure_fluorescence(
     self,
@@ -1303,8 +1342,7 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     dark_integration = dark_integration_us
     meas_integration = meas_integration_us
 
-    await self._begin_run()
-    try:
+    async with self._committed_run():
       await self._configure_luminescence(
         dark_integration, meas_integration, focal_height, flashes=flashes
       )
@@ -1335,8 +1373,6 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
           "data": matrix,
         }
       ]
-    finally:
-      await self._end_run()
 
   async def _await_measurements(
     self, decoder: "_MeasurementDecoder", row_count: int, mode: str
@@ -1344,19 +1380,16 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     target = decoder.count + row_count
     start_count = decoder.count
     self._drain_pending_bin_events(decoder)
-    start = time.monotonic()
     reads = 0
-    while decoder.count < target and (time.monotonic() - start) < self._max_row_wait_s:
-      chunk = await self._read_packet(self._read_chunk_size)
-      if not chunk:
-        raise RuntimeError(f"{mode} read returned empty chunk; transport may not support reads.")
-      decoder.feed(chunk)
-      reads += 1
+    with anyio.move_on_after(self._max_row_wait_s):
+      while decoder.count < target:
+        decoder.feed(await self._read_packet(self._read_chunk_size))
+        reads += 1
     if decoder.count < target:
       got = decoder.count - start_count
       raise RuntimeError(
         f"Timed out while parsing {mode.lower()} results "
-        f"(decoded {got}/{row_count} measurements in {time.monotonic() - start:.1f}s, {reads} reads)."
+        f"(decoded {got}/{row_count} measurements in {self._max_row_wait_s:.1f}s, {reads} reads)."
       )
 
   def _drain_pending_bin_events(self, decoder: "_MeasurementDecoder") -> None:
@@ -1455,17 +1488,47 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
         matrix[r][c] = float(val)
     return matrix
 
-  async def _initialize_device(self) -> None:
+  async def _initialize_device(self, *, recover_on_timeout: bool = True) -> None:
     try:
-      await self._send_command("QQ")
+      await self._send_command("QQ", recover_on_timeout=recover_on_timeout)
     except TimeoutError:
       logger.warning("QQ produced no response; continuing with initialization.")
-    await self._send_command("INIT FORCE")
+    await self._send_command("INIT FORCE", recover_on_timeout=recover_on_timeout)
 
-  async def _begin_run(self) -> None:
+  @asynccontextmanager
+  async def _committed_run(self) -> AsyncIterator[None]:
+    """Own one scan run, ending it exactly when its commit reached the device.
+
+    A run that never committed owes the device nothing, so the end-of-run commands are
+    issued only once `_begin_run` has observed the commit.
+
+    Yields:
+      Once the device holds the run, ready to be configured and scanned.
+    """
+    run_committed = False
+
+    def publish_run_commit() -> None:
+      nonlocal run_committed
+      run_committed = True
+
+    async def end_committed_run() -> None:
+      """End the run unless its commit never reached the device."""
+      if run_committed:
+        await self._end_run()
+
+    async with AsyncExitStackWithShielding() as stack:
+      stack.push_async_callback(end_committed_run)
+      await self._begin_run(publish_run_commit)
+      yield
+
+  async def _begin_run(self, on_commit: Callable[[], None]) -> None:
     self._reset_stream_state()
-    await self._send_command("KEYLOCK ON")
-    self._run_active = True
+
+    def publish_run_ownership() -> None:
+      self._run_active = True
+      on_commit()
+
+    await self._send_command("KEYLOCK ON", _on_commit=publish_run_ownership)
 
   def _reset_stream_state(self) -> None:
     self._pending_bin_events.clear()
@@ -1474,41 +1537,52 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   async def _read_packet(
     self, size: int, timeout: Optional[int] = None, *, recover_on_timeout: bool = True
   ) -> bytes:
-    try:
-      if timeout is None:
-        data = await self.io.read(size=size)
-      else:
-        data = await self.io.read(timeout=timeout, size=size)
-    except TimeoutError:
-      if recover_on_timeout:
-        await self._recover_transport()
-      raise
-    return data
+    del recover_on_timeout
+    if timeout is None:
+      return await self.io.read(size=size)
+    with anyio.fail_after(timeout):
+      return await self.io.read(size=size)
 
   async def _recover_transport(self) -> None:
-    try:
-      await self.io.stop()
-      await asyncio.sleep(0.2)
-      await self.io.setup()
-    except Exception:
-      logger.warning("Transport recovery failed.", exc_info=True)
-      return
+    if not self.is_active or not self.io.is_active:
+      raise RuntimeError("Cannot recover Tecan Infinite transport outside an active lifespan")
+
+    self._ready = False
+    self._recovery_failed = True
     self._mode_capabilities.clear()
     self._reset_stream_state()
-    await self._initialize_device()
+    await anyio.sleep(0.2)
+    await self.io.reconnect()
+    await self._initialize_device(recover_on_timeout=False)
+    self._ready = True
+    self._recovery_failed = False
 
   async def _end_run(self) -> None:
-    try:
-      await self._send_command("TERMINATE", allow_timeout=True)
-      for cmd in self._active_step_loss_commands:
-        await self._send_command(cmd, allow_timeout=True)
-      await self._send_command("KEYLOCK OFF", allow_timeout=True)
-      await self._send_command("ABSOLUTE MTP,IN", allow_timeout=True)
-    finally:
+    if self._recovery_failed:
       self._run_active = False
       self._active_step_loss_commands = []
+      await anyio.lowlevel.checkpoint()
+      return
+    with anyio.CancelScope(shield=True):
+      # A failure here leaves the run flags set on purpose: `_cleanup_protocol` reissues
+      # these commands when the lifespan exits.
+      await attempt_in_order(
+        partial(self._send_command, "TERMINATE", allow_timeout=True),
+        *(
+          partial(self._send_command, command, allow_timeout=True)
+          for command in self._active_step_loss_commands
+        ),
+        partial(self._send_command, "KEYLOCK OFF", allow_timeout=True),
+        partial(self._send_command, "ABSOLUTE MTP,IN", allow_timeout=True),
+      )
+      self._run_active = False
+      self._active_step_loss_commands = []
+    await anyio.lowlevel.checkpoint()
 
   async def _cleanup_protocol(self) -> None:
+    if self._recovery_failed:
+      return
+
     async def send_cleanup_cmd(cmd: str) -> None:
       try:
         await self._send_command(cmd, allow_timeout=True, read_response=False)
@@ -1579,31 +1653,67 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     allow_timeout: bool = False,
     read_response: bool = True,
     recover_on_timeout: bool = True,
+    *,
+    _on_commit: Optional[Callable[[], None]] = None,
   ) -> List[str]:
-    logger.debug("[tecan] >> %s", command)
-    framed = self._frame_command(command)
-    await self.io.write(framed)
-    if not read_response:
-      return []
-    if command.startswith(("#", "?")):
-      try:
-        return await self._read_command_response(
-          require_terminal=False, recover_on_timeout=recover_on_timeout
-        )
-      except TimeoutError:
-        if allow_timeout:
-          logger.warning("Timeout waiting for response to %s", command)
-          return []
-        raise
+    if self._recovery_failed and recover_on_timeout:
+      raise ConnectionError("Tecan transport requires recovery before another command")
     try:
-      frames = await self._read_command_response(
-        require_terminal=wait_for_terminal, recover_on_timeout=recover_on_timeout
-      )
-    except TimeoutError:
+      async with self._command_transaction():
+        frames = await self._send_command_locked(
+          command,
+          wait_for_terminal=wait_for_terminal,
+          read_response=read_response,
+          recover_on_timeout=recover_on_timeout,
+          _on_commit=_on_commit,
+        )
+    except TimeoutError as timeout_error:
+      if recover_on_timeout:
+        with anyio.CancelScope(shield=True):
+          try:
+            await self._recover_transport()
+          except Exception:
+            logger.warning("Transport recovery failed.", exc_info=True)
       if allow_timeout:
         logger.warning("Timeout waiting for response to %s", command)
         return []
-      raise
+      raise timeout_error
+    return frames
+
+  @asynccontextmanager
+  async def _command_transaction(self) -> AsyncIterator[None]:
+    """Own one cancellable-before-commit, shielded complete protocol transaction."""
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        yield
+    await anyio.lowlevel.checkpoint()
+
+  async def _send_command_locked(
+    self,
+    command: str,
+    wait_for_terminal: bool = True,
+    read_response: bool = True,
+    recover_on_timeout: bool = True,
+    *,
+    _on_commit: Optional[Callable[[], None]] = None,
+  ) -> List[str]:
+    """Send and read one complete transaction while the caller owns the command lock."""
+    logger.debug("[tecan] >> %s", command)
+    framed = self._frame_command(command)
+    await self.io.write(framed)
+    if _on_commit is not None:
+      _on_commit()
+    if not read_response:
+      return []
+    if command.startswith(("#", "?")):
+      return await self._read_command_response(
+        require_terminal=False, recover_on_timeout=recover_on_timeout
+      )
+    frames = await self._read_command_response(
+      require_terminal=wait_for_terminal, recover_on_timeout=recover_on_timeout
+    )
     for pkt in frames:
       logger.debug("[tecan] << %s", pkt)
     return frames
@@ -1611,9 +1721,10 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
   async def _drain(self, attempts: int = 4) -> None:
     """Read and discard a few packets to clear the stream."""
     for _ in range(attempts):
-      data = await self._read_packet(128)
-      if not data:
-        break
+      with anyio.move_on_after(0.05) as scope:
+        await self._read_packet(128)
+      if scope.cancel_called:
+        return
 
   async def _read_command_response(
     self,
@@ -1630,27 +1741,23 @@ class ExperimentalTecanInfinite200ProBackend(PlateReaderBackend):
     frames: List[str] = []
     saw_terminal = False
     default_timeout = self._DEFAULT_READ_TIMEOUT_S if timeout is None else timeout
-    next_read_timeout = timeout
-    for _ in range(max_iterations):
-      chunk = await self._read_packet(
-        128, timeout=next_read_timeout, recover_on_timeout=recover_on_timeout
-      )
-      if not chunk:
-        break
-      for event in self._parser.feed(chunk):
-        if event.text is not None:
-          frames.append(event.text)
-          busy_timeout = self._timed_busy_timeout(event.text)
-          if busy_timeout is not None:
-            next_read_timeout = max(default_timeout, busy_timeout)
-          if self._is_terminal_frame(event.text):
-            saw_terminal = True
-        elif event.payload_len is not None and event.blob is not None:
-          self._pending_bin_events.append((event.payload_len, event.blob))
-      if not require_terminal and frames and not self._parser.has_pending_bin():
-        break
-      if require_terminal and saw_terminal and not self._parser.has_pending_bin():
-        break
+    with anyio.move_on_after(default_timeout) as scope:
+      for _ in range(max_iterations):
+        chunk = await self._read_packet(128, recover_on_timeout=recover_on_timeout)
+        for event in self._parser.feed(chunk):
+          if event.text is not None:
+            frames.append(event.text)
+            busy_timeout = self._timed_busy_timeout(event.text)
+            if busy_timeout is not None:
+              scope.deadline = anyio.current_time() + max(default_timeout, busy_timeout)
+            if self._is_terminal_frame(event.text):
+              saw_terminal = True
+          elif event.payload_len is not None and event.blob is not None:
+            self._pending_bin_events.append((event.payload_len, event.blob))
+        if not require_terminal and frames and not self._parser.has_pending_bin():
+          break
+        if require_terminal and saw_terminal and not self._parser.has_pending_bin():
+          break
     if require_terminal and not saw_terminal and recover_on_timeout:
       # best effort: drain once more so pending ST doesn't leak into next command
       await self._drain(1)

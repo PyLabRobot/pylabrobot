@@ -49,10 +49,10 @@ class TestWiring(unittest.IsolatedAsyncioTestCase):
 
   async def test_kept_across_a_second_setup(self):
     star = STAR(simulation=True)
-    await star.setup()
-    grippers = star.core_grippers
-    await star.setup()
-    self.assertIs(star.core_grippers, grippers)
+    async with star:
+      grippers = star.core_grippers
+    async with star:
+      self.assertIs(star.core_grippers, grippers)
 
   async def test_carried_by_the_arms_pipettes(self):
     star = STAR(simulation=True)

@@ -14,14 +14,28 @@ Features:
 - Protocol-conformant parsing for EEPROM, sensor, and status commands.
 """
 
-import asyncio
 import logging
 import sys
+from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Awaitable, Callable, Dict, List, Literal, Optional, TypeVar, cast
+from typing import (
+  AsyncContextManager,
+  AsyncIterator,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  TypeVar,
+  cast,
+)
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
-from pylabrobot.legacy.machines.machine import MachineBackend
+from pylabrobot.legacy.machines.backend import MachineBackend
 
 if sys.version_info < (3, 10):
   from typing_extensions import Concatenate, ParamSpec
@@ -38,6 +52,11 @@ except ImportError as e:
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+# One cleanup can queue behind one default command and then issue at most five commands of its
+# own (heater status/off, shaker status/off, and drawer close). This fixed total includes every
+# default write, delay, and read budget plus four seconds of scheduling margin.
+_CLEANUP_TIMEOUT = 95.2
 
 
 class InhecoError(RuntimeError):
@@ -187,7 +206,12 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       InhecoIncubatorUnitType
     ] = []  # e.g. ["incubator_mp", "incubator_shaker_dwp", ...]
 
-    self._send_command_lock = asyncio.Lock()
+    self._send_command_lock = anyio.Lock()
+    self._shaking_transition_lock = anyio.Lock()
+    self._shaking_active: Dict[int, bool] = {}
+    self._shaking_state_unknown: Dict[int, bool] = {}
+    self._shaking_scope_tokens: Dict[int, object] = {}
+    self._staged_unit_composition: List[InhecoIncubatorUnitType] = []
 
   @property
   def number_of_connected_units(self) -> int:
@@ -200,18 +224,25 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       + f"DIP={self.dip_switch_id}) at {self.io.port}>"
     )
 
-  async def setup(self, port: Optional[str] = None):
-    """
-    Detect and connect to the Inheco machine stack.
-    Discover Inheco device via VID:PID (0403:6001) and verify DIP switch ID.
-    """
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    port: Optional[str] = None,
+  ) -> None:
+    """Connect, verify, discover, and initialize every unit in the stack."""
+    await super()._enter_lifespan(stack)
+    if port is not None and not isinstance(port, str):
+      raise TypeError("port must be a string or None")
 
-    # --- Establish serial connection ---
-    await self.io.setup()
+    if port is None:
+      await stack.enter_async_context(self.io.lifespan())
+    else:
+      await stack.enter_async_context(self.io.lifespan(port=port))
     self.io.dtr = False
     self.io.rts = False
 
-    try:  # --- Verify DIP switch ID via RTS ---
+    try:
       probe = self._build_message("RTS", stack_index=0)
       await self.io.write(probe)
       resp = await self._read_full_response(timeout=5.0)
@@ -221,23 +252,11 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         raise ValueError("Unexpected header")
 
     except Exception as e:
-      # Capture current IO reference before marking disconnected
       msg = (
         f"Device on {self.io._port} failed DIP switch verification (expected ID="
         f"{self.dip_switch_id}). Please verify the DIP switch setting or wiring."
       )
       self.logger.error(msg, exc_info=e)
-
-      # --- Fail-safe teardown ---
-      try:
-        await self.io.stop()
-        self.logger.debug("Closed serial connection on %s", self.io.port)
-      except Exception as close_err:
-        self.logger.warning(
-          "Failed to close serial port cleanly on %s: %s",
-          self.io._port,
-          close_err,
-        )
       raise RuntimeError(msg) from e
 
     else:
@@ -247,17 +266,29 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
         f"Connected to Inheco machine at {self.io.port} (DIP={self.dip_switch_id})",
       )
 
-    # --- Cache stack-level state ---
     number_of_connected_units = await self.request_number_of_connected_machines(stack_index=0)
-
-    self.unit_composition = []
+    self._staged_unit_composition = []
+    stack.callback(self._staged_unit_composition.clear)
 
     for unit_index in range(number_of_connected_units):
       inc_type = await self.request_incubator_type(stack_index=unit_index)
-      self.unit_composition.append(inc_type)
+      self._staged_unit_composition.append(inc_type)
+      cleanup_registered = False
 
-      await self.initialize(stack_index=unit_index)
+      def register_unit_cleanup() -> None:
+        nonlocal cleanup_registered
+        if not cleanup_registered:
+          stack.push_shielded_async_callback(
+            self._stop_unit_for_exit,
+            unit_index,
+            shield_timeout=_CLEANUP_TIMEOUT,
+          )
+          cleanup_registered = True
 
+      await self._initialize(stack_index=unit_index, _on_dispatch=register_unit_cleanup)
+
+    self.unit_composition = list(self._staged_unit_composition)
+    self._staged_unit_composition.clear()
     self.setup_finished = True
 
     self.logger.info(
@@ -271,32 +302,51 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       self.unit_composition,
     )
 
-  async def stop(self):
-    """Close serial connection & stop all active units in the stack."""
+  async def _stop_unit_for_exit(self, stack_index: int) -> None:
+    """Attempt every unit safety action after invalidating shaker ownership."""
+    self._shaking_scope_tokens.pop(stack_index, None)
+    async with AsyncExitStackWithShielding() as cleanup:
+      cleanup.push_shielded_async_callback(self.close, stack_index, shield_timeout=_CLEANUP_TIMEOUT)
+      cleanup.push_shielded_async_callback(
+        self._stop_shaking_for_exit, stack_index, shield_timeout=_CLEANUP_TIMEOUT
+      )
+      cleanup.push_shielded_async_callback(
+        self._stop_temperature_for_exit, stack_index, shield_timeout=_CLEANUP_TIMEOUT
+      )
 
-    for unit_index in range(self.number_of_connected_units):
-      temp_status = await self.is_temperature_control_enabled(stack_index=unit_index)
+  async def _stop_temperature_for_exit(self, stack_index: int) -> None:
+    """Stop temperature control during parent cleanup when it is enabled."""
+    if await self.is_temperature_control_enabled(stack_index=stack_index):
+      await self.stop_temperature_control(stack_index=stack_index)
 
-      if temp_status:
-        print(f"Stopping temperature control on unit {unit_index}...")
-        await self.stop_temperature_control(stack_index=unit_index)
+  async def _stop_shaking_for_exit(self, stack_index: int) -> None:
+    """Stop a shaker during parent cleanup while retaining uncertain state."""
+    composition = self._staged_unit_composition or self.unit_composition
+    if "shaker" not in composition[stack_index]:
+      return
 
-      shake_status = await self.is_shaking_enabled(stack_index=unit_index)
+    try:
+      should_stop = (
+        self._shaking_active.get(stack_index, False)
+        or self._shaking_state_unknown.get(stack_index, False)
+        or await self.is_shaking_enabled(stack_index=stack_index)
+      )
+    except BaseException:
+      self._shaking_state_unknown[stack_index] = True
+      await self._force_stop_shaking(stack_index)
+      self._shaking_active.pop(stack_index, None)
+      self._shaking_state_unknown.pop(stack_index, None)
+      raise
 
-      if shake_status:
-        print(f"Stopping shaking on unit {unit_index}...")
-        await self.stop_shaking(stack_index=unit_index)
-
-      await self.close(stack_index=unit_index)
-
-    await self.io.stop()
+    if should_stop:
+      await self._force_stop_shaking(stack_index)
+      self._shaking_active.pop(stack_index, None)
+      self._shaking_state_unknown.pop(stack_index, None)
 
   # === Low-level I/O ===
 
-  async def _read_full_response(self, timeout: float) -> bytes:
+  async def _read_full_response(self, timeout: Optional[float]) -> bytes:
     """Read a complete Inheco response frame asynchronously."""
-    loop = asyncio.get_event_loop()
-    start = loop.time()
     buf = bytearray()
     expected_hdr = (0xB0 + self.dip_switch_id) & 0xFF
 
@@ -304,18 +354,18 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       # Valid frame ends with: [hdr][0x20-0x2F][0x60]
       return len(b) >= 3 and b[-1] == 0x60 and b[-3] == expected_hdr and 0x20 <= b[-2] <= 0x2F
 
-    while True:
-      chunk = await self.io.read(16)
-      if len(chunk) > 0:
-        buf.extend(chunk)
-        if has_complete_tail(buf):
-          self.logger.debug("RECV response: %s", buf.hex(" "))
-          return bytes(buf)
+    with anyio.move_on_after(timeout) as response_scope:
+      while True:
+        chunk = await self.io.read(16)
+        if len(chunk) > 0:
+          buf.extend(chunk)
+          if has_complete_tail(buf):
+            self.logger.debug("RECV response: %s", buf.hex(" "))
+            return bytes(buf)
+        await anyio.sleep(0.005)
 
-      if loop.time() - start > timeout:
-        raise TimeoutError(f"Timed out waiting for complete response (so far: {buf.hex(' ')})")
-
-      await asyncio.sleep(0.005)
+    assert response_scope.cancelled_caught
+    raise TimeoutError(f"Timed out waiting for complete response (so far: {buf.hex(' ')})")
 
   # === Encoding / Decoding ===
 
@@ -430,33 +480,75 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     stack_index: int = 0,
   ) -> str:
     """Send a framed command and return parsed response or raise InhecoError."""
+    return await self._send_command(
+      command,
+      delay=delay,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      stack_index=stack_index,
+    )
 
-    async with self._send_command_lock:
-      # Use global default if not overridden
-      w_timeout = write_timeout or self.write_timeout
-      msg = self._build_message(command, stack_index=stack_index)
-      self.logger.debug("SEND command: %s (write_timeout=%s)", msg.hex(" "), w_timeout)
+  async def _send_command(
+    self,
+    command: str,
+    *,
+    delay: float = 0.2,
+    write_timeout: Optional[float] = None,
+    read_timeout: Optional[float] = None,
+    stack_index: int = 0,
+    _on_dispatch: Optional[Callable[[], None]] = None,
+  ) -> str:
+    """Run one command transaction and publish operation-local dispatch ownership."""
+    w_timeout = write_timeout or self.write_timeout
+    r_timeout = read_timeout or self.read_timeout
+    exchange_timeout = w_timeout + delay + r_timeout
+    msg = self._build_message(command, stack_index=stack_index)
+    self.logger.debug("SEND command: %s (write_timeout=%s)", msg.hex(" "), w_timeout)
 
-      await asyncio.wait_for(self.io.write(msg), timeout=w_timeout)
-      await asyncio.sleep(delay)
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    await self._send_command_lock.acquire()
+    try:
+      # Keep this checkpoint even though the cancellable acquire covers the contended path.
+      # AnyIO's uncontended acquire ends with a shielded checkpoint, so this is the final stop
+      # before bytes can commit. That zero-await window cannot be pinned without hop counting.
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      response = b""
+      exchange_error: Optional[Exception] = None
+      with anyio.CancelScope(shield=True):
+        with anyio.move_on_after(exchange_timeout) as exchange_scope:
+          if _on_dispatch is not None:
+            _on_dispatch()
+          try:
+            await self.io.write(msg)
+            await anyio.sleep(delay)
+            response = await self._read_full_response(timeout=None)
+          except Exception as error:
+            exchange_error = error
+        exchange_timed_out = exchange_scope.cancelled_caught
+    finally:
+      self._send_command_lock.release()
+    await anyio.lowlevel.checkpoint()
 
-      response = await self._read_full_response(timeout=read_timeout or self.read_timeout)
-      if not response:
-        raise TimeoutError(f"No response from device for command: {command}")
+    if exchange_error is not None:
+      raise exchange_error
+    if exchange_timed_out:
+      raise TimeoutError(f"Timed out waiting for response to command: {command}")
+    if not response:
+      raise TimeoutError(f"No response from device for command: {command}")
 
-      if self._is_error_tail(response):
-        tail_err = response[-2] - 0x20
-        code = f"E{tail_err:02d}"
-        message = FIRMWARE_ERROR_MAP.get(tail_err, "Unknown firmware error")
-        raise InhecoError(command, code, message)
+    if self._is_error_tail(response):
+      tail_err = response[-2] - 0x20
+      code = f"E{tail_err:02d}"
+      message = FIRMWARE_ERROR_MAP.get(tail_err, "Unknown firmware error")
+      raise InhecoError(command, code, message)
 
-      parsed = self._parse_response_binary_safe(response)
-      if not parsed["ok"]:
-        code = f"E{parsed.get('error_code', 0):02d}"
-        message = FIRMWARE_ERROR_MAP.get(parsed.get("error_code", 0), "Unknown firmware error")
-        raise InhecoError(command, code, message)
+    parsed = self._parse_response_binary_safe(response)
+    if not parsed["ok"]:
+      code = f"E{parsed.get('error_code', 0):02d}"
+      message = FIRMWARE_ERROR_MAP.get(parsed.get("error_code", 0), "Unknown firmware error")
+      raise InhecoError(command, code, message)
 
-      return str(parsed["data"])
+    return str(parsed["data"])
 
   # === Public high-level API ===
 
@@ -649,8 +741,17 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     no Error will be generated!
     If AID is send during operating, the shaker and heater stop immediately!
     """
-    resp = await self.send_command("AID", stack_index=stack_index)
+    resp = await self._initialize(stack_index=stack_index)
     return resp
+
+  async def _initialize(
+    self,
+    stack_index: int,
+    *,
+    _on_dispatch: Optional[Callable[[], None]] = None,
+  ) -> str:
+    """Initialize one unit and optionally publish ownership at its write attempt."""
+    return await self._send_command("AID", stack_index=stack_index, _on_dispatch=_on_dispatch)
 
   # # # Loading Tray Features # # #
 
@@ -869,73 +970,75 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       TimeoutError: If target not reached within `timeout_s`.
       ValueError: If temperature control is not enabled or no valid target returned.
     """
-    target_temp = await self.request_target_temperature(stack_index=stack_index)
-    if target_temp is None:
-      raise ValueError("Device did not return a valid target temperature.")
+    target_temp = float("nan")
+    current_temp = float("nan")
+    start_time = anyio.current_time()
+    with anyio.move_on_after(timeout_s) as temperature_scope:
+      target_temp = await self.request_target_temperature(stack_index=stack_index)
+      if target_temp is None:
+        raise ValueError("Device did not return a valid target temperature.")
 
-    temperature_control_enabled = await self.is_temperature_control_enabled(stack_index=stack_index)
-    if not temperature_control_enabled:
-      raise ValueError(
-        f"Temperature control is not enabled on the machine ({stack_index}: {self.unit_composition[stack_index]})."
+      temperature_control_enabled = await self.is_temperature_control_enabled(
+        stack_index=stack_index
       )
+      if not temperature_control_enabled:
+        raise ValueError(
+          f"Temperature control is not enabled on the machine ({stack_index}: {self.unit_composition[stack_index]})."
+        )
 
-    start_time = asyncio.get_event_loop().time()
-    first_temp = await self.get_temperature(sensor=sensor, stack_index=stack_index)
-    initial_diff = abs(first_temp - target_temp)
-    bar_width = 40
-
-    if show_progress_bar:
-      print(f"Waiting for target temperature {target_temp:.2f} °C...\n")
-
-    while True:
-      current_temp = await self.get_temperature(sensor=sensor, stack_index=stack_index)
-      diff = abs(current_temp - target_temp)
-
-      # Compute normalized progress (1 = done)
-      progress = 1.0 - min(diff / max(initial_diff, 1e-6), 1.0)
-      filled = int(bar_width * progress)
-      bar = "█" * filled + "-" * (bar_width - filled)
+      first_temp = await self.get_temperature(sensor=sensor, stack_index=stack_index)
+      initial_diff = abs(first_temp - target_temp)
+      bar_width = 40
+      current_temp = first_temp
 
       if show_progress_bar:
-        # Compute slope (°C/sec) based on direction of travel
-        delta_done = abs(current_temp - first_temp)
+        print(f"Waiting for target temperature {target_temp:.2f} °C...\n")
 
-        elapsed = asyncio.get_event_loop().time() - start_time
+      while True:
+        current_temp = await self.get_temperature(sensor=sensor, stack_index=stack_index)
+        diff = abs(current_temp - target_temp)
 
-        slope = delta_done / max(elapsed, 1e-6)  # °C per second
+        progress = 1.0 - min(diff / max(initial_diff, 1e-6), 1.0)
+        filled = int(bar_width * progress)
+        bar = "█" * filled + "-" * (bar_width - filled)
 
-        if slope > 0.0001:
-          remaining = diff  # remaining °C
-          eta_s = remaining / slope
-          eta_str = f"{eta_s:6.1f}s"
-        else:
-          eta_str = "   --- "
-
-        sys.stdout.write(f"\r[{bar}] {current_temp:.2f} °C  (Δ={diff:.2f} °C | ETA: {eta_str})")
-        sys.stdout.flush()
-
-      if diff <= tolerance:
         if show_progress_bar:
-          sys.stdout.write("\n[OK] Target temperature reached.\n")
+          delta_done = abs(current_temp - first_temp)
+
+          elapsed = anyio.current_time() - start_time
+
+          slope = delta_done / max(elapsed, 1e-6)
+
+          if slope > 0.0001:
+            eta_s = diff / slope
+            eta_str = f"{eta_s:6.1f}s"
+          else:
+            eta_str = "   --- "
+
+          sys.stdout.write(f"\r[{bar}] {current_temp:.2f} °C  (Δ={diff:.2f} °C | ETA: {eta_str})")
           sys.stdout.flush()
 
-        self.logger.info("Target temperature reached (%.2f °C).", current_temp)
-        return current_temp
-
-      if timeout_s is not None:
-        elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed > timeout_s:
+        if diff <= tolerance:
           if show_progress_bar:
-            sys.stdout.write("\n[ERROR] Timeout waiting for temperature.\n")
+            sys.stdout.write("\n[OK] Target temperature reached.\n")
             sys.stdout.flush()
 
-          raise TimeoutError(
-            f"Timeout after {timeout_s:.1f}s: "
-            f"temperature {current_temp:.2f} °C "
-            f"did not reach target {target_temp:.2f} °C ±{tolerance:.2f} °C."
-          )
+          self.logger.info("Target temperature reached (%.2f °C).", current_temp)
+          return current_temp
 
-      await asyncio.sleep(interval_s)
+        await anyio.sleep(interval_s)
+
+    assert temperature_scope.cancelled_caught
+    if show_progress_bar:
+      sys.stdout.write("\n[ERROR] Timeout waiting for temperature.\n")
+      sys.stdout.flush()
+
+    assert timeout_s is not None
+    raise TimeoutError(
+      f"Timeout after {timeout_s:.1f}s: "
+      f"temperature {current_temp:.2f} °C "
+      f"did not reach target {target_temp:.2f} °C ±{tolerance:.2f} °C."
+    )
 
   # # # Shaking Features # # #
 
@@ -1008,7 +1111,8 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       True if the shaker is active or still moving (status 1 or 2), False if fully stopped (status 0).
     """
 
-    if "shaker" not in self.unit_composition[stack_index]:
+    composition = self._staged_unit_composition or self.unit_composition
+    if "shaker" not in composition[stack_index]:
       return False
 
     resp = await self.send_command("RSE", stack_index=stack_index)
@@ -1054,7 +1158,27 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       ValueError: If any parameter is outside its valid range.
       InhecoError: If the device reports an error or rejects the command.
     """
-    # --- Validation ---
+    async with self._shaking_transition_lock:
+      self._require_no_shaking_scope(stack_index, "set shaker parameters")
+      await self._set_shaker_parameters_transition(
+        amplitude_x,
+        amplitude_y,
+        frequency_x,
+        frequency_y,
+        phase_shift,
+        stack_index,
+      )
+
+  async def _set_shaker_parameters_transition(
+    self,
+    amplitude_x: float,
+    amplitude_y: float,
+    frequency_x: float,
+    frequency_y: float,
+    phase_shift: float,
+    stack_index: int,
+  ) -> None:
+    """Set raw shaker parameters while the caller owns transition serialization."""
     if not (0.0 <= amplitude_x <= 3.0):
       raise ValueError(f"Amplitude X must be between 0.0 and 3.0 mm, got {amplitude_x}")
     if not (0.0 <= amplitude_y <= 3.0):
@@ -1154,6 +1278,30 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
     - elliptical: elliptical motion (unequal amplitudes, 90° phase).
     - figure_eight: double-loop motion (any amplitudes, 180° phase).
     """
+    async with self._shaking_transition_lock:
+      self._require_no_shaking_scope(stack_index, "set shaker pattern")
+      await self._set_shaker_pattern_transition(
+        pattern=pattern,
+        stack_index=stack_index,
+        frequency_hz=frequency_hz,
+        rpm=rpm,
+        amplitude_x_mm=amplitude_x_mm,
+        amplitude_y_mm=amplitude_y_mm,
+        phase_deg=phase_deg,
+      )
+
+  async def _set_shaker_pattern_transition(
+    self,
+    *,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"],
+    stack_index: int,
+    frequency_hz: Optional[float] = None,
+    rpm: Optional[float] = None,
+    amplitude_x_mm: Optional[float] = None,
+    amplitude_y_mm: Optional[float] = None,
+    phase_deg: Optional[float] = None,
+  ) -> None:
+    """Set a shaker pattern while the caller owns transition serialization."""
     self._validate_hz_or_rpm(frequency_hz, rpm)
     fx, fy = self._fw_freq_pair(frequency_hz, rpm)
 
@@ -1213,7 +1361,20 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
   @requires_incubator_shaker
   async def set_shaker_status(self, enabled: bool, stack_index: int) -> None:
     """Enable or disable the shaker (ASEND always used when enabled)."""
-    await self.send_command("ASEND" if enabled else "ASE0", stack_index=stack_index)
+    async with self._shaking_transition_lock:
+      self._require_no_shaking_scope(stack_index, "set shaker status")
+      await self._set_shaker_status_transition(enabled, stack_index)
+
+  async def _set_shaker_status_transition(self, enabled: bool, stack_index: int) -> None:
+    """Set shaker status and retain retryable state if command outcome is unknown."""
+    try:
+      await self.send_command("ASEND" if enabled else "ASE0", stack_index=stack_index)
+    except BaseException:
+      self._shaking_active[stack_index] = True
+      self._shaking_state_unknown[stack_index] = True
+      raise
+    self._shaking_active[stack_index] = enabled
+    self._shaking_state_unknown[stack_index] = False
 
   @requires_incubator_shaker
   async def shake(
@@ -1253,12 +1414,45 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       InhecoError: If the device rejects the command or is not ready.
     """
 
-    is_shaking = await self.is_shaking_enabled(stack_index=stack_index)
-    if is_shaking:
-      await self.stop_shaking(stack_index=stack_index)
-      await asyncio.sleep(0.5)  # brief pause for firmware to settle
+    async with self._shaking_transition_lock:
+      self._require_no_shaking_scope(stack_index, "start shaking")
+      await self._shake_transition(
+        stack_index=stack_index,
+        pattern=pattern,
+        rpm=rpm,
+        frequency_hz=frequency_hz,
+        amplitude_x_mm=amplitude_x_mm,
+        amplitude_y_mm=amplitude_y_mm,
+        phase_deg=phase_deg,
+      )
 
-    await self.set_shaker_pattern(
+  async def _shake_transition(
+    self,
+    *,
+    stack_index: int,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"],
+    rpm: Optional[float],
+    frequency_hz: Optional[float],
+    amplitude_x_mm: float,
+    amplitude_y_mm: float,
+    phase_deg: Optional[float],
+    scoped: bool = False,
+    physical_state_preflighted: bool = False,
+  ) -> None:
+    """Configure and start one shaker while transition serialization is held."""
+    is_shaking = (
+      False
+      if physical_state_preflighted
+      else await self.is_shaking_enabled(stack_index=stack_index)
+    )
+    if scoped and is_shaking:
+      self._shaking_active[stack_index] = True
+      raise RuntimeError(f"Shaking on unit {stack_index} is already active")
+    if is_shaking:
+      await self._stop_shaking_transition(stack_index)
+      await anyio.sleep(0.5)
+
+    await self._set_shaker_pattern_transition(
       pattern=pattern,
       rpm=rpm,
       stack_index=stack_index,
@@ -1267,15 +1461,161 @@ class InhecoIncubatorShakerStackBackend(MachineBackend):
       amplitude_y_mm=amplitude_y_mm,
       phase_deg=phase_deg,
     )
-    await self.set_shaker_status(True, stack_index=stack_index)
+    try:
+      await self._set_shaker_status_transition(True, stack_index)
+    except BaseException:
+      if scoped:
+        with anyio.CancelScope(shield=True):
+          await self._stop_shaking_transition(stack_index)
+      raise
 
   # TODO: expose direction argument -> clockwise / counterclockwise for rotating shaking patterns
 
   @requires_incubator_shaker
   async def stop_shaking(self, stack_index: int) -> None:
     """Stop shaker (ASE0)."""
+    async with self._shaking_transition_lock:
+      self._require_no_shaking_scope(stack_index, "stop shaking")
+      await self._stop_shaking_transition(stack_index)
 
-    await self.set_shaker_status(False, stack_index=stack_index)
+  async def _stop_shaking_transition(self, stack_index: int) -> None:
+    """Stop one shaker while retaining state for a failed retry."""
+    await self._set_shaker_status_transition(False, stack_index)
+
+  def _require_no_shaking_scope(self, stack_index: int, action: str) -> None:
+    """Reject a public mutation while a scope owns the selected shaker."""
+    if stack_index in self._shaking_scope_tokens:
+      raise RuntimeError(f"Cannot {action} on unit {stack_index} while its shaking scope is active")
+
+  def _require_shaking_scope_available(self, stack_index: int) -> None:
+    """Reject scoped ownership of a reserved, durable, or unknown shaker."""
+    if stack_index in self._shaking_scope_tokens:
+      raise RuntimeError(f"Shaking on unit {stack_index} is already scoped")
+    if self._shaking_active.get(stack_index, False) or self._shaking_state_unknown.get(
+      stack_index, False
+    ):
+      raise RuntimeError(f"Shaking on unit {stack_index} is already active")
+
+  async def _reserve_shaking_scopes(self, stack_indices: List[int]) -> Dict[int, object]:
+    """Atomically preflight and reserve all selected units for a stack scope."""
+    async with self._shaking_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Shaking scopes require an active Inheco stack backend lifespan")
+      for stack_index in stack_indices:
+        self._require_shaking_scope_available(stack_index)
+      for stack_index in stack_indices:
+        if await self.is_shaking_enabled(stack_index=stack_index):
+          self._shaking_active[stack_index] = True
+          self._shaking_state_unknown[stack_index] = False
+          raise RuntimeError(f"Shaking on unit {stack_index} is already active")
+      tokens = {stack_index: object() for stack_index in stack_indices}
+      self._shaking_scope_tokens.update(tokens)
+      return tokens
+
+  async def _release_shaking_reservations(self, tokens: Dict[int, object]) -> None:
+    """Release reservations left by failed or completed stack-scope composition."""
+    with anyio.CancelScope(shield=True):
+      async with self._shaking_transition_lock:
+        for stack_index, token in tokens.items():
+          if self._shaking_scope_tokens.get(stack_index) is token:
+            self._shaking_scope_tokens.pop(stack_index, None)
+
+  @asynccontextmanager
+  async def _shaking_scope(
+    self,
+    *,
+    stack_index: int,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"] = "orbital",
+    rpm: Optional[float] = None,
+    frequency_hz: Optional[float] = None,
+    amplitude_x_mm: float = 3.0,
+    amplitude_y_mm: float = 3.0,
+    phase_deg: Optional[float] = None,
+    reserved_token: Optional[object] = None,
+  ) -> AsyncIterator[None]:
+    """Own temporary shaking for one stack index."""
+    token = reserved_token or object()
+    async with self._shaking_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Shaking scopes require an active Inheco stack backend lifespan")
+      unit_type = self.unit_composition[stack_index]
+      if "shaker" not in unit_type:
+        raise RuntimeError(f"shaking() requires a shaker-capable model (got {unit_type!r}).")
+      if reserved_token is None:
+        self._require_shaking_scope_available(stack_index)
+        self._shaking_scope_tokens[stack_index] = token
+      elif self._shaking_scope_tokens.get(stack_index) is not token:
+        raise RuntimeError(f"Shaking scope reservation for unit {stack_index} is no longer active")
+      try:
+        await anyio.lowlevel.checkpoint()
+        await self._shake_transition(
+          stack_index=stack_index,
+          pattern=pattern,
+          rpm=rpm,
+          frequency_hz=frequency_hz,
+          amplitude_x_mm=amplitude_x_mm,
+          amplitude_y_mm=amplitude_y_mm,
+          phase_deg=phase_deg,
+          scoped=True,
+          physical_state_preflighted=reserved_token is not None,
+        )
+      except BaseException:
+        self._shaking_scope_tokens.pop(stack_index, None)
+        raise
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._shaking_transition_lock:
+          if self._shaking_scope_tokens.get(stack_index) is token:
+            try:
+              await self._stop_shaking_transition(stack_index)
+            finally:
+              self._shaking_scope_tokens.pop(stack_index, None)
+
+  async def _shake_all(
+    self,
+    stack_indices: List[int],
+    *,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"] = "orbital",
+    rpm: Optional[float] = None,
+    frequency_hz: Optional[float] = None,
+    amplitude_x_mm: float = 3.0,
+    amplitude_y_mm: float = 3.0,
+    phase_deg: Optional[float] = None,
+  ) -> None:
+    """Preflight then durably start every selected shaker."""
+    async with self._shaking_transition_lock:
+      for stack_index in stack_indices:
+        self._require_shaking_scope_available(stack_index)
+      for stack_index in stack_indices:
+        await self._shake_transition(
+          stack_index=stack_index,
+          pattern=pattern,
+          rpm=rpm,
+          frequency_hz=frequency_hz,
+          amplitude_x_mm=amplitude_x_mm,
+          amplitude_y_mm=amplitude_y_mm,
+          phase_deg=phase_deg,
+        )
+
+  async def _stop_all_shaking(self, stack_indices: List[int]) -> None:
+    """Preflight scope conflicts then durably stop every selected shaker."""
+    async with self._shaking_transition_lock:
+      for stack_index in stack_indices:
+        self._require_no_shaking_scope(stack_index, "stop all shaking")
+      for stack_index in stack_indices:
+        await self._stop_shaking_transition(stack_index)
+
+  async def _force_stop_shaking(self, stack_index: int) -> None:
+    """Stop tracked shaking during parent cleanup and invalidate its token."""
+    async with self._shaking_transition_lock:
+      try:
+        await self._stop_shaking_transition(stack_index)
+      finally:
+        self._shaking_scope_tokens.pop(stack_index, None)
 
   @requires_incubator_shaker
   async def request_shaker_phase_shift(self, stack_index: int, selector: int = 0) -> float:
@@ -1782,6 +2122,52 @@ class InhecoIncubatorShakerUnit:
       amplitude_y_mm=amplitude_y_mm,
       phase_deg=phase_deg,
     )
+
+  def _shaking_with_token(
+    self,
+    token: object,
+    *,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"] = "orbital",
+    rpm: Optional[float] = None,
+    frequency_hz: Optional[float] = None,
+    amplitude_x_mm: float = 3.0,
+    amplitude_y_mm: float = 3.0,
+    phase_deg: Optional[float] = None,
+  ) -> AsyncContextManager[None]:
+    """Return the unit scope associated with a stack-wide reservation."""
+    return self.backend._shaking_scope(
+      stack_index=self.index,
+      pattern=pattern,
+      rpm=rpm,
+      frequency_hz=frequency_hz,
+      amplitude_x_mm=amplitude_x_mm,
+      amplitude_y_mm=amplitude_y_mm,
+      phase_deg=phase_deg,
+      reserved_token=token,
+    )
+
+  @asynccontextmanager
+  async def shaking(
+    self,
+    *,
+    pattern: Literal["linear_x", "linear_y", "orbital", "elliptical", "figure_eight"] = "orbital",
+    rpm: Optional[float] = None,
+    frequency_hz: Optional[float] = None,
+    amplitude_x_mm: float = 3.0,
+    amplitude_y_mm: float = 3.0,
+    phase_deg: Optional[float] = None,
+  ) -> AsyncIterator[None]:
+    """Temporarily shake this unit and stop it on every scope exit path."""
+    async with self.backend._shaking_scope(
+      stack_index=self.index,
+      pattern=pattern,
+      rpm=rpm,
+      frequency_hz=frequency_hz,
+      amplitude_x_mm=amplitude_x_mm,
+      amplitude_y_mm=amplitude_y_mm,
+      phase_deg=phase_deg,
+    ):
+      yield
 
   async def stop_shaking(self) -> None:
     """Stop shaker (ASE0)."""

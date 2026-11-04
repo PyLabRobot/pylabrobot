@@ -1,9 +1,10 @@
 """What every measurement feature (RUN) shares: the RUN parameters and their encoding, the plate and
 its wells."""
 
-import asyncio
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Tuple
+
+import anyio
 
 from pylabrobot.resources import CrossSectionType, Plate, Well
 
@@ -508,7 +509,7 @@ class Measurement:
         shake_settings.pattern, shake_settings.speed, shake_settings.duration
       )
     if settings.pause_before_reading:
-      await asyncio.sleep(settings.pause_before_reading)
+      await anyio.sleep(settings.pause_before_reading)
 
   @staticmethod
   def _compute_default_focal_height(wells: Sequence[Well], percent: float) -> float:

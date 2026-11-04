@@ -34,13 +34,10 @@ async def rpc_system(tmp_path, geometry=(64, 48, 16)):
   width, height, depth = geometry
   driver = make_driver(width, height, depth)
   server, _ = make_server(tmp_path / "data", config=make_config(width, height), driver=driver)
-  await server.start()
-  try:
-    async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
-      await initialize(client)
-      yield server, client, driver
-  finally:
-    await server.stop()
+  client = CeligoClient(server.endpoint, device_id="celigo-test")
+  async with server, client:
+    await initialize(client)
+    yield server, client, driver
 
 
 class RpcTests(unittest.IsolatedAsyncioTestCase):
@@ -56,35 +53,29 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
     )
     with TemporaryDirectory() as directory:
       server, _ = make_server(Path(directory), config=config)
-      await server.start()
-      try:
-        async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
-          geometry = (await client.get_configuration()).image_geometry_by_channel["brightfield"]
-          self.assertEqual((geometry.microns_per_pixel_x, geometry.microns_per_pixel_y), (12, 9))
-          self.assertAlmostEqual(geometry.nominal_overlap_x_mm, 0.024)
-          self.assertAlmostEqual(geometry.nominal_overlap_y_mm, 0.03)
-          await initialize(client)
-          job = await capture(client, "calibrated")
-          await job.start()
-          await job.wait()
-          image = await job.get_frame((await job.list_frames())[0].frame_id)
-          self.assertEqual(unpack_acquisition_metadata(image).image_geometry, geometry)
-      finally:
-        await server.stop()
+      client = CeligoClient(server.endpoint, device_id="celigo-test")
+      async with server, client:
+        geometry = (await client.get_configuration()).image_geometry_by_channel["brightfield"]
+        self.assertEqual((geometry.microns_per_pixel_x, geometry.microns_per_pixel_y), (12, 9))
+        self.assertAlmostEqual(geometry.nominal_overlap_x_mm, 0.024)
+        self.assertAlmostEqual(geometry.nominal_overlap_y_mm, 0.03)
+        await initialize(client)
+        job = await capture(client, "calibrated")
+        await job.start()
+        await job.wait()
+        image = await job.get_frame((await job.list_frames())[0].frame_id)
+        self.assertEqual(unpack_acquisition_metadata(image).image_geometry, geometry)
       config.calibration = replace(config.calibration, microns_per_pixel_x=20)
       server, hardware = make_server(Path(directory), config=config)
-      await server.start()
-      try:
-        async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
-          job = await client.recover_job("calibrated")
-          retained = unpack_acquisition_metadata(await job.get_frame(image.frame_id))
-          self.assertEqual(retained.image_geometry, geometry)
-          self.assertNotEqual(
-            (await client.get_configuration()).image_geometry_by_channel["brightfield"], geometry
-          )
-          hardware.setup.assert_not_called()
-      finally:
-        await server.stop()
+      client = CeligoClient(server.endpoint, device_id="celigo-test")
+      async with server, client:
+        job = await client.recover_job("calibrated")
+        retained = unpack_acquisition_metadata(await job.get_frame(image.frame_id))
+        self.assertEqual(retained.image_geometry, geometry)
+        self.assertNotEqual(
+          (await client.get_configuration()).image_geometry_by_channel["brightfield"], geometry
+        )
+        hardware.setup.assert_not_called()
 
   async def test_auto_exposure_preview_retains_actual_camera_settings(self) -> None:
     """Auto-exposure reaches the driver and reports the measured rather than requested value."""
@@ -141,18 +132,20 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
             assert [s.revision for s in seen] == sorted({s.revision for s in seen})
           first = (await job.list_frames(limit=1))[0]
           frame = await job.get_frame(first.frame_id)
-          await client.disconnect()
-          await server.session.jobs[job.identifier].task
-          await client.connect()
-          recovered = await client.recover_job("first")
-          assert recovered.identifier == job.identifier
-          assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
-          assert await recovered.get_frame(first.frame_id) == frame
-          assert await recovered.list_frames(after_sequence=1) == []
-          with self.assertRaises(grpc.aio.AioRpcError) as finished:
-            await recovered.start()
-          assert finished.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-          assert (await recovered.cancel()).outcome == job_pb.OUTCOME_SUCCEEDED
+          execution = server.session.jobs[job.identifier]
+          assert execution.finished is not None
+          await execution.finished.wait()
+          reconnected = CeligoClient(server.endpoint, device_id="celigo-test")
+          async with reconnected:
+            recovered = await reconnected.recover_job("first")
+            assert recovered.identifier == job.identifier
+            assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
+            assert await recovered.get_frame(first.frame_id) == frame
+            assert await recovered.list_frames(after_sequence=1) == []
+            with self.assertRaises(grpc.aio.AioRpcError) as finished:
+              await recovered.start()
+            assert finished.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
+            assert (await recovered.cancel()).outcome == job_pb.OUTCOME_SUCCEEDED
 
   async def test_cancel_ready_job_never_captures(self) -> None:
     with TemporaryDirectory() as temporary_directory:
@@ -278,31 +271,31 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
     with TemporaryDirectory() as temporary_directory:
       tmp_path = Path(temporary_directory)
       async with rpc_system(tmp_path) as system:
-        _, client, driver = system
+        server, _, driver = system
         second, other_driver = make_server(tmp_path / "second", device_id="celigo-test-02")
+        first = CeligoClient(server.endpoint, "celigo-test")
+        other = CeligoClient(second.endpoint, "celigo-test-02")
         with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
           with block_calls(other_driver.acquire_scan_position) as (other_entered, other_release):
-            await second.start()
             try:
-              async with CeligoClient(second.endpoint, "celigo-test-02") as other:
+              async with second, other:
                 await initialize(other)
-                one = await capture(client, "same-request")
-                two = await capture(other, "same-request")
-                await asyncio.gather(one.start(), two.start())
-                await asyncio.wait_for(
-                  asyncio.gather(capture_entered.wait(), other_entered.wait()), 5
-                )
-                assert one.identifier != two.identifier
-                with self.assertRaises(grpc.aio.AioRpcError) as wrong_device:
-                  await client.jobs.stub.GetJob(two.ref, timeout=2)
-                assert wrong_device.exception.code() == grpc.StatusCode.NOT_FOUND
-                await client.disconnect()
+                async with first:
+                  one = await capture(first, "same-request")
+                  two = await capture(other, "same-request")
+                  await asyncio.gather(one.start(), two.start())
+                  await asyncio.wait_for(
+                    asyncio.gather(capture_entered.wait(), other_entered.wait()), 5
+                  )
+                  assert one.identifier != two.identifier
+                  with self.assertRaises(grpc.aio.AioRpcError) as wrong_device:
+                    await first.jobs.stub.GetJob(two.ref, timeout=2)
+                  assert wrong_device.exception.code() == grpc.StatusCode.NOT_FOUND
                 other_release.set()
                 assert (await two.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
             finally:
               capture_release.set()
               other_release.set()
-              await second.stop()
 
   async def test_interrupted_response_retries_complete_retained_image(self) -> None:
     geometry = (2048, 2048, 16)
@@ -356,28 +349,25 @@ class RpcTests(unittest.IsolatedAsyncioTestCase):
         endpoint = f"127.0.0.1:{proxy_server.sockets[0].getsockname()[1]}"
         proxy_client = CeligoClient(endpoint, device_id=client.device_id, timeout=3)
         try:
-          await proxy_client.connect()
-          remote = await proxy_client.recover_job("interrupted")
-          cut_after = 100000
-          interrupted = asyncio.create_task(remote.get_frame(info.frame_id))
-          await asyncio.wait_for(cut.wait(), 5)
-          with self.assertRaises(grpc.aio.AioRpcError) as failure:
-            await interrupted
-          assert failure.exception.code() in (
-            grpc.StatusCode.UNAVAILABLE,
-            grpc.StatusCode.DEADLINE_EXCEEDED,
-          )
-          await proxy_client.disconnect()
+          async with proxy_client:
+            remote = await proxy_client.recover_job("interrupted")
+            cut_after = 100000
+            interrupted = asyncio.create_task(remote.get_frame(info.frame_id))
+            await asyncio.wait_for(cut.wait(), 5)
+            with self.assertRaises(grpc.aio.AioRpcError) as failure:
+              await interrupted
+            assert failure.exception.code() in (
+              grpc.StatusCode.UNAVAILABLE,
+              grpc.StatusCode.DEADLINE_EXCEEDED,
+            )
           cut_after = None
-          await proxy_client.connect()
-          recovered = await proxy_client.recover_job("interrupted")
-          frame = await recovered.get_frame(info.frame_id)
-          assert hashlib.sha256(frame.image).hexdigest() == info.sha256
-          assert len(frame.image) == info.byte_length
-          assert (await recovered.get_status()).completed == 1
+          async with proxy_client:
+            recovered = await proxy_client.recover_job("interrupted")
+            frame = await recovered.get_frame(info.frame_id)
+            assert hashlib.sha256(frame.image).hexdigest() == info.sha256
+            assert len(frame.image) == info.byte_length
+            assert (await recovered.get_status()).completed == 1
         finally:
-          with contextlib.suppress(ConnectionError):
-            await proxy_client.disconnect()
           proxy_server.close()
           await proxy_server.wait_closed()
           remaining = list(handlers)

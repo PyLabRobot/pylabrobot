@@ -1,19 +1,22 @@
 """Replies read through bulk-in transfers kept pending, over a model of the reader's FTDI chip."""
 
 import ast
-import asyncio
 import ctypes
 import gzip
 import json
+import logging
 import os
 import threading
 import time
 import types
 import unittest
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Deque, List, Optional, Tuple
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Callable, Deque, List, Optional, Tuple
 from unittest.mock import patch
+
+import anyio
+import pytest
 
 from pylabrobot.bmg_labtech.clariostar.driver.features.absorbance_tests import (
   RUN_REPLY,
@@ -37,6 +40,7 @@ from pylabrobot.bmg_labtech.transport import ftdi_interface as ftdi_interface_mo
 from pylabrobot.bmg_labtech.transport import ftdi_queued_reads
 from pylabrobot.bmg_labtech.transport.ftdi_queued_reads import QueuedReads
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 DATA_REQUEST = bytes.fromhex("05020000000000")
 DATA_REQUEST_FRAME = bytes.fromhex("02000f0c050200000000000000240d")
@@ -47,11 +51,9 @@ Packets = List[Tuple[float, bytes]]
 async def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> None:
   """Poll `condition` every millisecond; raise TimeoutError after `timeout` seconds."""
 
-  async def poll() -> None:
+  with anyio.fail_after(timeout):
     while not condition():
-      await asyncio.sleep(0.001)
-
-  await asyncio.wait_for(poll(), timeout)
+      await anyio.sleep(0.001)
 
 
 def load_spectrum_page_transfers() -> Tuple[bytes, Packets, Tuple[int, float]]:
@@ -163,14 +165,14 @@ class ChipModel:
 class LibftdiFTDI(FakeFTDI):
   """`FTDI.read` as libftdi reads the chip model: one transfer pending at a time, until
   `num_bytes` are in or a status-only packet ends the read; excess bytes kept for the next. As
-  `FTDI`, one executor thread reads, so a cancelled read finishes in it."""
+  `FTDI`, one worker thread reads, so a cancelled read finishes in it."""
 
   def __init__(self, chip: ChipModel) -> None:
     super().__init__()
     self._device_id = "test"
     self.chip = chip
     self._buffered = bytearray()
-    self._executor = ThreadPoolExecutor(max_workers=1)
+    self._limiter = anyio.CapacityLimiter(1)
 
   async def write(self, data: bytes) -> int:
     self.written.append(bytes(data))
@@ -178,8 +180,9 @@ class LibftdiFTDI(FakeFTDI):
     return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(self._executor, self._read_now, num_bytes)
+    return await anyio.to_thread.run_sync(
+      self._read_now, num_bytes, abandon_on_cancel=True, limiter=self._limiter
+    )
 
   def _read_now(self, num_bytes: int) -> bytes:
     data = self._buffered
@@ -303,101 +306,124 @@ class FakeLibusb:
     )
 
 
-def keep_reads_queued(
+@asynccontextmanager
+async def keep_reads_queued(
   driver: CLARIOstarDriver, libusb: FakeLibusb, transfers: int = ftdi_queued_reads._TRANSFERS
-) -> QueuedReads:
-  """Start `transfers` pending transfers on `libusb` for `driver` to read through."""
+) -> AsyncIterator[QueuedReads]:
+  """Keep `transfers` transfers pending on `libusb` for `driver` to read through, until exit."""
   driver._ftdi._packet_read_timeout, driver._ftdi._frame_stall_timeout = 1.0, 0.3
   reads = QueuedReads(libusb.functions, 1, 2, transfers=transfers)
-  reads.start()
-  driver._ftdi._queued_reads = reads
-  return reads
+  async with reads:
+    driver._ftdi._queued_reads = reads
+    try:
+      yield reads
+    finally:
+      driver._ftdi._stop_queued_reads()
 
 
-def make_queued_driver(
+@asynccontextmanager
+async def queued_driver(
   io: FakeFTDI, libusb: FakeLibusb, transfers: int = ftdi_queued_reads._TRANSFERS
-) -> CLARIOstarDriver:
+) -> AsyncIterator[CLARIOstarDriver]:
   """A driver writing to `io` and reading through `transfers` pending transfers on `libusb`."""
   driver = make_driver(io)
-  keep_reads_queued(driver, libusb, transfers)
-  return driver
+  async with keep_reads_queued(driver, libusb, transfers):
+    yield driver
 
 
-class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
-  async def test_a_stall_loses_bytes_with_libftdi_but_not_with_transfers_pending(self):
+class TestQueuedReads(AnyioTestBase):
+  async def test_a_stall_loses_bytes_with_libftdi_but_not_with_transfers_pending(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     page, packets, stall = load_spectrum_page_transfers()
 
     chip = ChipModel(packets, stall=stall)
     driver = make_driver(LibftdiFTDI(chip))
     driver._ftdi._packet_read_timeout = 1.0  # the driver's own: the page starts after 34 ms
-    with patch.object(ftdi_interface_module.time, "time", side_effect=lambda: chip.time):
-      with self.assertRaises(FrameError):
+    with patch.object(ftdi_interface_module.anyio, "current_time", side_effect=lambda: chip.time):
+      with pytest.raises(FrameError):
         await driver.exchange(DATA_REQUEST)
-    self.assertGreater(chip.dropped, 0)
+    assert chip.dropped > 0
 
     chip = ChipModel(packets, stall=stall)
     io, libusb = LibftdiFTDI(chip), FakeLibusb(chip)
-    driver = make_queued_driver(io, libusb)
-    # No sleep and no timeout ends a wait: the event thread's callbacks wake the read.
-    driver._ftdi._packet_read_timeout = driver._ftdi._frame_stall_timeout = 60.0
-    with patch.object(ftdi_interface_module.asyncio, "sleep", side_effect=AssertionError("polled")):
-      with self.assertNoLogs(ftdi_queued_reads.logger, "WARNING"):  # the stall used 6 of 125
-        reply = await asyncio.wait_for(driver.exchange(DATA_REQUEST), 10)
-    self.assertEqual(reply, ftdi_extract_payload(page))
-    self.assertEqual(chip.dropped, 0)
-    self.assertEqual(io.written, [DATA_REQUEST_FRAME])
-    driver._ftdi._stop_queued_reads()
-    self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
-    self.assertEqual(len(libusb.allocated), 125)  # 0.25 s of 2 ms latency periods
+    async with queued_driver(io, libusb) as driver:
+      # No sleep and no timeout ends a wait: the event worker's callbacks wake the read.
+      driver._ftdi._packet_read_timeout = driver._ftdi._frame_stall_timeout = 60.0
+      caplog.clear()
+      with patch.object(ftdi_interface_module.anyio, "sleep", side_effect=AssertionError("polled")):
+        with caplog.at_level(logging.WARNING, logger=ftdi_queued_reads.logger.name):
+          with anyio.fail_after(10):
+            reply = await driver.exchange(DATA_REQUEST)
+      assert [
+        r
+        for r in caplog.records
+        if r.name == ftdi_queued_reads.logger.name and r.levelno >= logging.WARNING
+      ] == []  # the stall used 6 of 125
+      assert reply == ftdi_extract_payload(page)
+      assert chip.dropped == 0
+      assert io.written == [DATA_REQUEST_FRAME]
+    assert sorted(libusb.freed) == sorted(libusb.allocated)
+    assert len(libusb.allocated) == 125  # 0.25 s of 2 ms latency periods
 
-  async def test_a_stall_longer_than_the_transfers_cover_is_warned(self):
+  async def test_a_stall_longer_than_the_transfers_cover_is_warned(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     # 4 transfers cover 8 of the stall's 12.14 ms.
     _, packets, stall = load_spectrum_page_transfers()
     chip = ChipModel(packets, stall=stall)
-    driver = make_queued_driver(LibftdiFTDI(chip), FakeLibusb(chip), transfers=4)
-    self.addCleanup(driver._ftdi._stop_queued_reads)
-    with self.assertLogs("pylabrobot", "WARNING") as logs:
-      with self.assertRaises(FrameError):
-        await driver.exchange(DATA_REQUEST)
-    self.assertGreater(chip.dropped, 0)
-    self.assertTrue(any("flagged a line error" in line for line in logs.output))
-    stalls = [line for line in logs.output if "host stall" in line]
-    self.assertEqual(len(stalls), 1)  # once for the stall, not per transfer
-    self.assertIn("left 0 of 4 bulk-in transfers pending", stalls[0])
+    async with queued_driver(LibftdiFTDI(chip), FakeLibusb(chip), transfers=4) as driver:
+      with caplog.at_level(logging.WARNING, logger="pylabrobot"):
+        with pytest.raises(FrameError):
+          await driver.exchange(DATA_REQUEST)
+      assert chip.dropped > 0
+      messages = [r.getMessage() for r in caplog.records]
+      assert any("flagged a line error" in line for line in messages)
+      stalls = [line for line in messages if "host stall" in line]
+      assert len(stalls) == 1  # once for the stall, not per transfer
+      assert "left 0 of 4 bulk-in transfers pending" in stalls[0]
 
   async def test_bytes_read_before_a_command_are_not_its_reply(self):
     # Not a reader's reply: the reader sends nothing unasked; a status reply read before the
     # write stands in for one left by a cancelled exchange.
     chip = ChipModel([(0.0, STATUS_BUSY)], [(0.004, STATUS_IDLE)])
     io = LibftdiFTDI(chip)
-    driver = make_queued_driver(io, FakeLibusb(chip))
-    self.addCleanup(driver._ftdi._stop_queued_reads)
-    chip.start()
-    await wait_until(lambda: not chip.streaming())
-    sent = chip.time
-    await wait_until(lambda: chip.time > sent + ChipModel._LATENCY)  # the callback has run
-    status = await driver.request_status()
-    self.assertFalse(status.busy)
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME])
+    async with queued_driver(io, FakeLibusb(chip)) as driver:
+      chip.start()
+      await wait_until(lambda: not chip.streaming())
+      sent = chip.time
+      await wait_until(lambda: chip.time > sent + ChipModel._LATENCY)  # the callback has run
+      status = await driver.request_status()
+      assert not status.busy
+      assert io.written == [STATUS_QUERY_FRAME]
 
-  async def test_transfers_that_failed_leave_reading_to_libftdi(self):
+  async def test_transfers_that_failed_leave_reading_to_libftdi(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     # Not a reader's reply: status 5 (no device) on every transfer, as libusb reports a removal.
     io, libusb = FakeFTDI(), FakeLibusb(ChipModel(), status=5)
     io.replies = [STATUS_IDLE]
-    driver = make_queued_driver(io, libusb)
-    reads = driver._ftdi._queued_reads
-    assert reads is not None
-    deadline = time.monotonic() + 5.0
-    while reads.running:
-      self.assertLess(time.monotonic(), deadline)
-      await reads.wait(1.0)  # the last transfer to fail wakes it
-    with self.assertLogs(ftdi_interface_module.logger, "WARNING"):
-      status = await driver.request_status()
-    self.assertFalse(status.busy)
-    self.assertIsNone(driver._ftdi._queued_reads)
-    self.assertEqual(sorted(libusb.freed), sorted(libusb.allocated))
+    async with queued_driver(io, libusb) as driver:
+      reads = driver._ftdi._queued_reads
+      assert reads is not None
+      deadline = time.monotonic() + 5.0
+      while reads.running:
+        assert time.monotonic() < deadline
+        await reads.wait(1.0)  # the last transfer to fail wakes it
+      with caplog.at_level(logging.WARNING, logger=ftdi_interface_module.logger.name):
+        status = await driver.request_status()
+      assert len(caplog.records) >= 1
+      assert not status.busy
+      assert driver._ftdi._queued_reads is None
+    assert sorted(libusb.freed) == sorted(libusb.allocated)
 
-  async def test_a_cancelled_spectrum_leaves_the_reads_running_and_the_link_clean(self):
+  async def test_a_cancelled_spectrum_leaves_the_reads_running_and_the_link_clean(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     # Page 3 at a quarter of its packet times answers the data request; the read is cancelled
     # early in it, the reader sends it to its end, and the drain takes the rest before the STOP.
     page, packets, _ = load_spectrum_page_transfers()
@@ -406,38 +432,41 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     io, libusb = LibftdiFTDI(chip), FakeLibusb(chip)
     absorbance = make_absorbance(io, ground_truth_96_well_plate())
     driver = absorbance._driver
-    reads = keep_reads_queued(driver, libusb)
-    self.addCleanup(driver._ftdi._stop_queued_reads)
-    with self.assertLogs("pylabrobot", LOG_LEVEL_IO) as logs:
-      task = asyncio.create_task(
-        absorbance.measure_spectrum(start_wavelength=220, end_wavelength=1000, step_size=1)
+    async with keep_reads_queued(driver, libusb) as reads:
+      with caplog.at_level(LOG_LEVEL_IO, logger="pylabrobot"):
+        async with anyio.create_task_group() as tg:
+          tg.start_soon(
+            lambda: absorbance.measure_spectrum(
+              start_wavelength=220, end_wavelength=1000, step_size=1
+            )
+          )
+          await wait_until(
+            lambda: DATA_REQUEST_FRAME in io.written and chip.remaining() <= 0.9 * len(packets)
+          )
+          assert chip.streaming()
+          tg.cancel_scope.cancel()
+        status = await driver.request_status()
+      assert not status.busy
+      assert io.written[3:] == [DATA_REQUEST_FRAME, STOP_FRAME, STATUS_QUERY_FRAME]
+      messages = [record.getMessage() for record in caplog.records]
+      first_discard = next(i for i, m in enumerate(messages) if " discarded " in m)
+      read = next(m for m in reversed(messages[:first_discard]) if " read " in m)
+      taken = ast.literal_eval(read.split(" read ")[1])  # logged although the read was cancelled
+      late = ast.literal_eval(messages[first_discard].split(" discarded ")[1])
+      assert taken + late == page  # the drained rest, before the STOP's write
+      assert len(late) > len(page) // 2
+      assert driver._ftdi._get_queued_reads() is reads
+      assert reads.running
+      assert reads.take() == (b"", 0)
+      assert chip.dropped == 0
+      assert not any(
+        "line error" in m or "not accepted" in m or "failed (attempt" in m for m in messages
       )
-      await wait_until(
-        lambda: DATA_REQUEST_FRAME in io.written and chip.remaining() <= 0.9 * len(packets)
-      )
-      self.assertTrue(chip.streaming())
-      task.cancel()
-      with self.assertRaises(asyncio.CancelledError):
-        await task
-      status = await driver.request_status()
-    self.assertFalse(status.busy)
-    self.assertEqual(io.written[3:], [DATA_REQUEST_FRAME, STOP_FRAME, STATUS_QUERY_FRAME])
-    messages = [record.getMessage() for record in logs.records]
-    first_discard = next(i for i, m in enumerate(messages) if " discarded " in m)
-    read = next(m for m in reversed(messages[:first_discard]) if " read " in m)
-    taken = ast.literal_eval(read.split(" read ")[1])  # logged although the read was cancelled
-    late = ast.literal_eval(messages[first_discard].split(" discarded ")[1])
-    self.assertEqual(taken + late, page)  # the drained rest, before the STOP's write
-    self.assertGreater(len(late), len(page) // 2)
-    self.assertIs(driver._ftdi._get_queued_reads(), reads)
-    self.assertTrue(reads.running)
-    self.assertEqual(reads.take(), (b"", 0))
-    self.assertEqual(chip.dropped, 0)
-    self.assertFalse(
-      any("line error" in m or "not accepted" in m or "failed (attempt" in m for m in messages)
-    )
 
-  async def test_a_cancelled_spectrum_through_libftdi_leaves_the_link_clean(self):
+  async def test_a_cancelled_spectrum_through_libftdi_leaves_the_link_clean(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     # As above with no reads queued: libftdi's reads drain the page's rest before the STOP.
     _, packets, _ = load_spectrum_page_transfers()
     before = ([(0.0, reply)] for reply in (STATUS_IDLE, RUN_REPLY, STATUS_MEASURED))
@@ -446,24 +475,25 @@ class QueuedReadsTests(unittest.IsolatedAsyncioTestCase):
     absorbance = make_absorbance(io, ground_truth_96_well_plate())
     driver = absorbance._driver
     driver._ftdi._packet_read_timeout, driver._ftdi._frame_stall_timeout = 1.0, 0.3
-    self.assertIsNone(driver._ftdi._queued_reads)
-    with self.assertLogs("pylabrobot", LOG_LEVEL_IO) as logs:
-      task = asyncio.create_task(
-        absorbance.measure_spectrum(start_wavelength=220, end_wavelength=1000, step_size=1)
-      )
-      await wait_until(
-        lambda: DATA_REQUEST_FRAME in io.written and chip.remaining() <= 0.9 * len(packets)
-      )
-      self.assertTrue(chip.streaming())
-      task.cancel()
-      with self.assertRaises(asyncio.CancelledError):
-        await task
+    assert driver._ftdi._queued_reads is None
+    with caplog.at_level(LOG_LEVEL_IO, logger="pylabrobot"):
+      async with anyio.create_task_group() as tg:
+        tg.start_soon(
+          lambda: absorbance.measure_spectrum(
+            start_wavelength=220, end_wavelength=1000, step_size=1
+          )
+        )
+        await wait_until(
+          lambda: DATA_REQUEST_FRAME in io.written and chip.remaining() <= 0.9 * len(packets)
+        )
+        assert chip.streaming()
+        tg.cancel_scope.cancel()
       status = await driver.request_status()
-    self.assertFalse(status.busy)
-    self.assertEqual(io.written[3:], [DATA_REQUEST_FRAME, STOP_FRAME, STATUS_QUERY_FRAME])
-    self.assertFalse(chip.streaming())
-    messages = [record.getMessage() for record in logs.records]
-    self.assertFalse(any("not accepted" in m or "failed (attempt" in m for m in messages))
+    assert not status.busy
+    assert io.written[3:] == [DATA_REQUEST_FRAME, STOP_FRAME, STATUS_QUERY_FRAME]
+    assert not chip.streaming()
+    messages = [record.getMessage() for record in caplog.records]
+    assert not any("not accepted" in m or "failed (attempt" in m for m in messages)
 
 
 if __name__ == "__main__":

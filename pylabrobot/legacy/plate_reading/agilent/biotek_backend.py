@@ -1,9 +1,12 @@
-import asyncio
 import enum
 import logging
 import time
-from typing import Dict, Iterable, List, Optional, Tuple
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well
@@ -28,7 +31,18 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
 
     self._plate: Optional[Plate] = None
     self._shaking = False
+    self._shaking_state_unknown = False
+    self._command_lock = anyio.Lock()
+    self._shaking_transition_lock = anyio.Lock()
+    self._shaking_scope_token: Optional[object] = None
+    self._task_group: Optional[anyio.abc.TaskGroup] = None
+    self._shaking_task: Optional[anyio.CancelScope] = None
+    self._shaking_started: Optional[anyio.Event] = None
+    self._shaking_stopped: Optional[anyio.Event] = None
+    self._shaking_worker_error: Optional[BaseException] = None
     self._slow_mode: Optional[bool] = None
+    # Preserve direct legacy command use until the backend has entered a native lifespan.
+    self._io_ready = True
 
   def _non_overlapping_rectangles(
     self,
@@ -78,10 +92,14 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     rects.sort()
     return rects
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own FTDI and all continuous-shaking work."""
+    await super()._enter_lifespan(stack)
     logger.info(f"{self.__class__.__name__} setting up")
 
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
+    self._io_ready = True
+    stack.callback(self._mark_io_closed)
     await self.io.usb_reset()
     await self.io.set_latency_timer(16)
     await self.io.set_baudrate(9600)  # 0x38 0x41
@@ -97,15 +115,36 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       await self.io.set_baudrate(38_461)  # 4e c0
       self._version = await self.get_firmware_version()
 
-    self._shaking = False
-    self._shaking_task: Optional[asyncio.Task] = None
+    self._shaking_scope_token = None
+    self._shaking_task = None
+    self._shaking_started = None
+    self._shaking_stopped = None
 
-  async def stop(self) -> None:
-    logger.info(f"{self.__class__.__name__} stopping")
-    await self.stop_shaking()
-    await self.io.stop()
+    stack.callback(self._clear_task_group)
+    self._task_group = await stack.enter_task_group()
+    stack.push_shielded_async_callback(self._shutdown_tasks)
 
+  def _mark_io_closed(self) -> None:
+    """Reject commands once cleanup reaches transport closure."""
+    self._io_ready = False
     self._slow_mode = None
+
+  def _clear_task_group(self) -> None:
+    """Clear lifespan-owned worker state after all children have joined."""
+    self._task_group = None
+    self._shaking_scope_token = None
+    self._shaking_task = None
+    self._shaking_started = None
+    self._shaking_stopped = None
+
+  async def _shutdown_tasks(self) -> None:
+    """Abort active shaking and cancel every lifespan-owned worker."""
+    task_group = self._task_group
+    try:
+      await self._force_stop_shaking()
+    finally:
+      if task_group is not None:
+        task_group.cancel_scope.cancel()
 
   @property
   def version(self) -> str:
@@ -157,22 +196,17 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     """If timeout is None, use self.timeout"""
     if timeout is None:
       timeout = self.timeout
-    x = None
-    res = b""
-    t0 = time.time()
-    while x != terminator:
-      x = await self.io.read(1)
-      res += x
-
-      if time.time() - t0 > timeout:
-        logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
-        raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response")
-
-      if x == b"":
-        await asyncio.sleep(0.01)
+    res = bytearray()
+    try:
+      with anyio.fail_after(timeout):
+        while not res.endswith(terminator):
+          res.extend(await self.io.read(1))
+    except TimeoutError:
+      logger.debug(f"{self.__class__.__name__} received incomplete %s", res)
+      raise TimeoutError(f"{self.__class__.__name__}: Timeout while waiting for response")
 
     logger.debug(f"{self.__class__.__name__} received %s", res)
-    return res
+    return bytes(res)
 
   async def send_command(
     self,
@@ -181,22 +215,29 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
     wait_for_response=True,
     timeout: Optional[float] = None,
   ) -> Optional[bytes]:
-    await self._purge_buffers()
-
-    await self.io.write(command.encode())
-    logger.debug(f"{self.__class__.__name__} sent %s", command)
+    if not self._io_ready:
+      raise RuntimeError(f"{self.__class__.__name__} is not active")
     response: Optional[bytes] = None
-    if wait_for_response or parameter is not None:
-      response = await self._read_until(
-        b"\x06" if parameter is not None else b"\x03", timeout=timeout
-      )
+    await self._command_lock.acquire()
+    try:
+      await self._purge_buffers()
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        await self.io.write(command.encode())
+        logger.debug(f"{self.__class__.__name__} sent %s", command)
+        if wait_for_response or parameter is not None:
+          response = await self._read_until(
+            b"\x06" if parameter is not None else b"\x03", timeout=timeout
+          )
 
-    if parameter is not None:
-      await self.io.write(parameter.encode())
-      logger.debug(f"{self.__class__.__name__} sent %s", parameter)
-      if wait_for_response:
-        response = await self._read_until(b"\x03", timeout=timeout)
-
+        if parameter is not None:
+          await self.io.write(parameter.encode())
+          logger.debug(f"{self.__class__.__name__} sent %s", parameter)
+          if wait_for_response:
+            response = await self._read_until(b"\x03", timeout=timeout)
+    finally:
+      self._command_lock.release()
+    await anyio.lowlevel.checkpoint()
     return response
 
   async def get_serial_number(self) -> str:
@@ -546,15 +587,33 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       frequency: speed, in mm. 360 CPM = 6mm; 410 CPM = 5mm; 493 CPM = 4mm; 567 CPM = 3mm; 731 CPM = 2mm; 1096 CPM = 1mm
     """
 
-    max_duration = 16 * 60  # 16 minutes
-    self._shaking_started = asyncio.Event()
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot shake while a shaking scope is active")
+      if self._shaking or self._shaking_state_unknown:
+        return
+      await self._start_shaking_transition(shake_type, frequency)
 
-    async def shake_maximal_duration():
+  async def _start_shaking_transition(self, shake_type: ShakeType, frequency: int) -> None:
+    """Start and confirm the repeating worker while holding the transition lock."""
+    task_group = self._task_group
+    if task_group is None or not self.is_active:
+      raise RuntimeError(f"{self.__class__.__name__} is not active")
+    assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
+    await anyio.lowlevel.checkpoint()
+
+    max_duration = 16 * 60
+    started = anyio.Event()
+    self._shaking_started = started
+    self._shaking_stopped = anyio.Event()
+    self._shaking_worker_error = None
+    self._shaking_state_unknown = True
+
+    async def shake_maximal_duration() -> None:
       """This method will start the shaking, but returns immediately after
       shaking has started."""
       shake_type_bit = str(shake_type.value)
       duration = str(max_duration).zfill(3)
-      assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
       checksum = str((sum(cmd.encode()) + 73) % 100).zfill(2)  # don't know why +73
       cmd = cmd + checksum + "\x03"
@@ -563,34 +622,132 @@ class BioTekPlateReaderBackend(PlateReaderBackend):
       resp = await self.send_command("O")
       assert resp == b"\x060000\x03"
 
-      if not self._shaking_started.is_set():
-        self._shaking_started.set()
+      if not started.is_set():
+        started.set()
 
-    async def shake_continuous():
-      while self._shaking:
-        await shake_maximal_duration()
+    async def shake_continuous(
+      *, task_status: anyio.abc.TaskStatus[anyio.CancelScope] = anyio.TASK_STATUS_IGNORED
+    ) -> None:
+      stopped = self._shaking_stopped
+      with anyio.CancelScope() as cancel_scope:
+        self._shaking_task = cancel_scope
+        task_status.started(cancel_scope)
+        try:
+          first_program = True
+          while first_program or self._shaking:
+            await shake_maximal_duration()
+            if first_program:
+              self._shaking = True
+              self._shaking_state_unknown = False
+              first_program = False
 
-        # short sleep allows = frequent checks for fast stopping
-        seconds_since_start: float = 0
-        loop_wait_time = 0.25
-        while seconds_since_start < max_duration and self._shaking:
-          seconds_since_start += loop_wait_time
-          await asyncio.sleep(loop_wait_time)
+            with anyio.move_on_after(max_duration):
+              while self._shaking:
+                await anyio.sleep(0.25)
+        except anyio.get_cancelled_exc_class():
+          raise
+        except BaseException as error:
+          self._shaking = True
+          self._shaking_state_unknown = True
+          self._shaking_worker_error = error
+          raise
+        finally:
+          if self._shaking_task is cancel_scope:
+            self._shaking_task = None
+          if stopped is not None:
+            stopped.set()
 
-    self._shaking = True
-    self._shaking_task = asyncio.create_task(shake_continuous())
-
-    await self._shaking_started.wait()
+    try:
+      await task_group.start(shake_continuous)
+      await started.wait()
+    except BaseException:
+      with anyio.CancelScope(shield=True):
+        await self._stop_shaking_transition()
+      raise
 
   async def stop_shaking(self) -> None:
-    if self._shaking:
+    """Stop durable shaking, retaining retry state if cleanup fails."""
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot stop shaking while a shaking scope is active")
+      await self._stop_shaking_transition()
+
+  async def _stop_shaking_transition(self) -> None:
+    """Abort and join the shaking worker while holding the transition lock."""
+    cancel_scope = self._shaking_task
+    stopped = self._shaking_stopped
+    if not (self._shaking or self._shaking_state_unknown or cancel_scope is not None):
+      return
+
+    abort_error: Optional[BaseException] = None
+    try:
       await self._abort()
-      self._shaking = False
-    if self._shaking_task is not None:
-      self._shaking_task.cancel()
+    except BaseException as error:
+      abort_error = error
+
+    try:
+      with anyio.CancelScope(shield=True):
+        if cancel_scope is not None:
+          cancel_scope.cancel()
+        if stopped is not None:
+          await stopped.wait()
+    except BaseException:
+      self._shaking = True
+      self._shaking_state_unknown = True
+      raise
+
+    if abort_error is not None:
+      self._shaking = True
+      self._shaking_state_unknown = True
+      worker_error = self._shaking_worker_error
+      self._shaking_worker_error = None
+      if worker_error is not None:
+        raise abort_error from worker_error
+      raise abort_error
+
+    worker_error = self._shaking_worker_error
+    self._shaking_worker_error = None
+    if worker_error is not None:
+      self._shaking = True
+      self._shaking_state_unknown = True
+      raise worker_error
+
+    self._shaking = False
+    self._shaking_state_unknown = False
+    self._shaking_task = None
+    self._shaking_started = None
+    self._shaking_stopped = None
+
+  @asynccontextmanager
+  async def shaking(self, shake_type: ShakeType, frequency: int) -> AsyncIterator[None]:
+    """Shake continuously for the lifetime of this context."""
+    token = object()
+    async with self._shaking_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Shaking scopes require an active BioTek plate reader lifespan")
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Shaking is already scoped")
+      if self._shaking or self._shaking_state_unknown:
+        raise RuntimeError("Shaking is already active")
+      await self._start_shaking_transition(shake_type, frequency)
+      self._shaking_scope_token = token
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._shaking_transition_lock:
+          if self._shaking_scope_token is token:
+            try:
+              await self._stop_shaking_transition()
+            finally:
+              self._shaking_scope_token = None
+
+  async def _force_stop_shaking(self) -> None:
+    """Stop tracked shaking during parent cleanup, bypassing the scope guard."""
+    async with self._shaking_transition_lock:
       try:
-        await self._shaking_task
-      except asyncio.CancelledError:
-        # Task cancellation is expected here; safe to ignore this exception.
-        pass
-      self._shaking_task = None
+        await self._stop_shaking_transition()
+      finally:
+        self._shaking_scope_token = None

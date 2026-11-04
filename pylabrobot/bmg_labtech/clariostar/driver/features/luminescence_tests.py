@@ -6,8 +6,9 @@ What every mode shares (plate block, scan and settling bytes, shaking, the run a
 tested with absorbance and fluorescence; only luminescence's own fields and reply are here.
 """
 
-import unittest
 from typing import Any, Dict, List
+
+import pytest
 
 from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
@@ -32,7 +33,9 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationLuminescence
 from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.resources import Plate, cor_96_wellplate_360uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # The ground truth: every well, 580-80 nm, gain 3500, focal height 8.5 mm, settling 0.0 s,
 # normalization 1.00 s, measurement interval 0.80 s.
@@ -119,20 +122,19 @@ async def read(io: FakeFTDI, **arguments):
   )
 
 
-# The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
-class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
+class TestLuminescence(AnyioTestBase):
   async def test_the_defaults_are_the_ground_truth(self):
     io = FakeFTDI()
     await read(io)
-    self.assertEqual(
-      ftdi_extract_payload(io.written[1]), with_fields(LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES)
+    assert ftdi_extract_payload(io.written[1]) == with_fields(
+      LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES
     )
 
   async def test_the_result_carries_the_focal_height_read_at(self):
-    self.assertEqual((await read(FakeFTDI())).focal_height, GROUND_TRUTH_FOCAL_HEIGHT)
+    assert (await read(FakeFTDI())).focal_height == GROUND_TRUTH_FOCAL_HEIGHT
     feature = make_luminescence(FakeFTDI(), plate())
     default = feature._get_default_focal_height(plate().get_all_items())
-    self.assertEqual((await read(FakeFTDI(), focal_height=None)).focal_height, default)
+    assert (await read(FakeFTDI(), focal_height=None)).focal_height == default
 
   async def test_each_field_is_sent_where_the_ground_truth_has_it(self):
     """Every luminescence field changed at once, to values a CLARIOstarPlus (firmware 1.35)
@@ -155,9 +157,7 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       NORMALIZATION_TIME: 200,
       MEASUREMENT_INTERVAL: 20,
     }
-    self.assertEqual(
-      ftdi_extract_payload(io.written[1]), with_fields(LUMINESCENCE_RUN_FRAME, fields)
-    )
+    assert ftdi_extract_payload(io.written[1]) == with_fields(LUMINESCENCE_RUN_FRAME, fields)
 
   async def test_none_reads_a_quarter_up_the_well(self):
     # Corning 96 360 uL: the well at 3.03 mm, its floor 0.50 mm, its depth 10.67 mm: 6.2 mm.
@@ -169,8 +169,8 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       feature = make_luminescence(io, cor_96_wellplate_360uL_Fb("plate"))
       await feature.measure(focal_height=focal_height)
       runs.append(io.written[1])
-    self.assertEqual(runs[0], runs[1])
-    with self.assertRaises(ValueError):
+    assert runs[0] == runs[1]
+    with pytest.raises(ValueError):
       feature.default_focal_height_percent_of_well_depth = 101
 
   async def test_counts_are_the_ground_truth(self):
@@ -180,9 +180,9 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       for row, values in enumerate(LUMINESCENCE_GROUND_TRUTH)
       for column, value in enumerate(values)
     }
-    self.assertEqual(result.data, expected)
-    self.assertIsNone(result.temperature)
-    with self.assertRaises(ValueError):  # fluorescence's layout
+    assert result.data == expected
+    assert result.temperature is None
+    with pytest.raises(ValueError):  # fluorescence's layout
       make_luminescence(FakeFTDI(), plate())._decode_data_reply(
         ftdi_extract_payload(TEMPERATURE_37_DATA_REPLY), 96
       )
@@ -196,20 +196,20 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       dict(measurement_interval=0.805),  # not in 0.01 s steps
     ]
     for arguments in refused:
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure(**arguments)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_without_a_monochromator_nothing_is_sent(self):
     """Not a reader's configuration: linear variable filters reported absent."""
     io = FakeFTDI()
     feature = make_luminescence(io, plate())
     feature._driver.configuration.linear_variable_filters = False
-    with self.assertRaisesRegex(ValueError, "no monochromator"):
+    with pytest.raises(ValueError, match="no monochromator"):
       await feature.measure(focal_height=GROUND_TRUTH_FOCAL_HEIGHT)
-    self.assertEqual(io.written, [])
+    assert io.written == []
     feature._driver.configuration.linear_variable_filters = None  # unknown: let through
-    self.assertEqual(feature._check_monochromator("luminescence"), [])
+    assert feature._check_monochromator("luminescence") == []
 
   def test_the_wavelength_limits_follow_the_photomultipliers(self):
     # (extended red, dual, crossed over): the highest emission wavelength.
@@ -219,18 +219,17 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       ((True, False, False), 840),
       ((False, False, False), 740),
     ):
-      with self.subTest(photomultipliers=photomultipliers):
-        driver = make_driver(FakeFTDI())
-        driver.configuration = decoded()
-        driver.configuration.luminescence_channels = 1
-        (
-          driver.configuration.extended_red_photomultiplier_tube,
-          driver.configuration.dual_photomultiplier_tubes,
-          driver.configuration.photomultiplier_tube_crossover,
-        ) = photomultipliers
-        driver._discover_features()
-        assert driver.luminescence is not None
-        self.assertEqual(driver.luminescence.configuration.wavelength_range[1], highest)
+      driver = make_driver(FakeFTDI())
+      driver.configuration = decoded()
+      driver.configuration.luminescence_channels = 1
+      (
+        driver.configuration.extended_red_photomultiplier_tube,
+        driver.configuration.dual_photomultiplier_tubes,
+        driver.configuration.photomultiplier_tube_crossover,
+      ) = photomultipliers
+      driver._discover_features()
+      assert driver.luminescence is not None
+      assert driver.luminescence.configuration.wavelength_range[1] == highest
 
   def test_luminescence_is_built_only_when_reported(self):
     for channels, built in ((1, True), (0, False)):
@@ -238,13 +237,14 @@ class LuminescenceTests(unittest.IsolatedAsyncioTestCase):
       driver.configuration = decoded()
       driver.configuration.luminescence_channels = channels
       driver._discover_features()
-      self.assertEqual(isinstance(driver.luminescence, Luminescence), built)
+      assert isinstance(driver.luminescence, Luminescence) == built
 
 
-class SimulatedLuminescenceTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class TestSimulatedLuminescence(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     reader = CLARIOstarPlus(simulation=True)
-    await reader.setup()
+    await stack.enter_async_context(reader.lifespan(accept_plate_left_in_device=True))
     self.plate = cor_96_wellplate_360uL_Fb("plate")
     await reader.drawer.open()
     reader.plate_holder.assign_child_resource(self.plate)
@@ -255,16 +255,16 @@ class SimulatedLuminescenceTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_read_is_checked_and_reads_within_the_detectors_range(self):
     result = await self.luminescence.measure(wells=self.plate.get_items("A1:H1"), gain=2000)
-    self.assertEqual(list(result.data), [f"{row}1" for row in "ABCDEFGH"])
-    self.assertTrue(all(0 <= value <= 210_000_000 for value in result.data.values()))
-    self.assertEqual((result.emission_wavelength, result.gain), (580, 2000))
-    with self.assertRaises(ValueError):  # `_check_arguments`
+    assert list(result.data) == [f"{row}1" for row in "ABCDEFGH"]
+    assert all(0 <= value <= 210_000_000 for value in result.data.values())
+    assert (result.emission_wavelength, result.gain) == (580, 2000)
+    with pytest.raises(ValueError):  # `_check_arguments`
       await self.luminescence.measure(measurement_interval=0.805)
 
   async def test_earlier_results_are_returned_again(self):
     earlier = await self.luminescence.measure()
     column_1 = self.plate.get_items("A1:H1")
     replayed = await self.luminescence.measure(wells=column_1, simulated_data=earlier)
-    self.assertEqual(replayed.data, {f"{row}1": earlier.data[f"{row}1"] for row in "ABCDEFGH"})
-    with self.assertRaises(ValueError):  # another emission band
+    assert replayed.data == {f"{row}1": earlier.data[f"{row}1"] for row in "ABCDEFGH"}
+    with pytest.raises(ValueError):  # another emission band
       await self.luminescence.measure(emission_wavelength=560, simulated_data=earlier)

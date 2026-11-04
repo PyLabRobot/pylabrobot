@@ -1,7 +1,8 @@
 """Mocked PLR driver and calibration for exercising the actual Celigo RPC service."""
 
 import asyncio
-from contextlib import contextmanager
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from unittest.mock import create_autospec
 
@@ -46,9 +47,24 @@ def make_config(width=64, height=48):
   return value
 
 
+@asynccontextmanager
+async def _probed_lifespan(driver) -> AsyncIterator[None]:
+  """Stand in for the driver's lifespan, recording entry and exit on its `setup` and `stop` mocks.
+
+  The session enters the lifespan and never calls the deprecated bridge; the two mocks are probes
+  that let tests observe, block, or fail lifespan entry and exit.
+  """
+  await driver.setup()
+  try:
+    yield
+  finally:
+    await driver.stop()
+
+
 def make_driver(width=64, height=48, depth=16):
   """Mock the existing asynchronous driver interface with a known camera response."""
   driver = create_autospec(Celigo, instance=True, spec_set=True)
+  driver.lifespan.side_effect = lambda: _probed_lifespan(driver)
   dtype = np.uint16 if depth == 16 else np.uint8
   pixels = np.random.default_rng(1).integers(0, 2**depth, size=(height, width), dtype=dtype)
   frame = CameraFrame(pixels.tobytes(), width, height, depth, 1.25, 1.1, 1700000000.125)

@@ -46,7 +46,8 @@ from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.opentrons.flex.errors import OpentronsCommandError, OpentronsError
 from pylabrobot.opentrons.flex.flex_wire import MOVABLE_TRASH_SLOTS
 from pylabrobot.opentrons.flex.pipette_defaults import FlowRates, flow_rates
-from pylabrobot.opentrons.operations import OperationLock, instrument_operation
+from pylabrobot.opentrons.operations import instrument_operation
+from pylabrobot.opentrons.run import RobotOperationLock
 from pylabrobot.opentrons.tracking import (
   track_liquid_transfer,
   validate_liquid_transfer,
@@ -107,7 +108,7 @@ class _FlexHead:
     self._current_labware_id: Optional[str] = None
 
   @property
-  def _operation_lock(self) -> OperationLock:
+  def _operation_lock(self) -> RobotOperationLock:
     """Share the device lock across heads, gripper, and lifecycle methods."""
     return self.flex._operation_lock
 

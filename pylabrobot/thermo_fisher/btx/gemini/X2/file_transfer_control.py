@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from datetime import datetime, timezone
 from math import isfinite
-from typing import Any, Dict, Mapping, Optional, Protocol, TypedDict
+from typing import Any, AsyncContextManager, Dict, Mapping, Optional, Protocol, TypedDict
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.binary import Reader, Writer
 from pylabrobot.io.serial import Serial, find_serial_ports
 
@@ -16,10 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class _SerialLike(Protocol):
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
+  def lifespan(self) -> AsyncContextManager[Any]:
     pass
 
   async def write(self, data: bytes) -> None:
@@ -38,7 +37,7 @@ class ProtocolDeletionPendingError(RuntimeError):
   """Raised when a protocol remains visible after the Gemini accepted its deletion."""
 
 
-class _FileTransferControl:
+class _FileTransferControl(HasLifespan):
   """Protocol Manager style USB-serial control for the BTX Gemini X2.
 
   This control owns the PM shell path only: stored user protocols, SD-card access,
@@ -69,6 +68,7 @@ class _FileTransferControl:
     supported_usb_ids: Optional[set[tuple[int, int]]] = None,
     serial_io: Optional[_SerialLike] = None,
   ) -> None:
+    super().__init__()
     self._serial: Optional[_SerialLike] = serial_io
     self._port = port
     self._baudrate = baudrate
@@ -80,16 +80,15 @@ class _FileTransferControl:
       else set(self.SUPPORTED_USB_IDS) | {(vid, pid)}
     )
     self._is_setup = False
-    self._command_lock = asyncio.Lock()
+    self._command_lock = anyio.Lock()
 
   @property
   def port(self) -> Optional[str]:
     return self._port
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the Gemini USB-serial port, autodiscovering it when needed."""
-    if self._is_setup:
-      return
+    await super()._enter_lifespan(stack)
     logger.info("Setting up Gemini X2 file-transfer control on port %s", self._port or "auto")
     if self._serial is None:
       if self._port is None:
@@ -103,29 +102,16 @@ class _FileTransferControl:
       )
 
     serial_dev = self._require_serial()
-    try:
-      await serial_dev.setup()
-    except Exception:
-      try:
-        await serial_dev.stop()
-      except Exception:
-        logger.debug("Failed to close Gemini serial after setup failure", exc_info=True)
-      raise
+    await stack.enter_async_context(serial_dev.lifespan())
+    stack.callback(self._mark_closed)
     self._is_setup = True
-    resolved_port = getattr(serial_dev, "port", None)
-    if isinstance(resolved_port, str):
-      self._port = resolved_port
+    if isinstance(serial_dev, Serial):
+      self._port = serial_dev.port
     logger.info("Gemini X2 file-transfer control ready on port %s", self._port)
 
-  async def stop(self) -> None:
-    """Close the Gemini USB-serial port."""
-    if not self._is_setup:
-      return
-    logger.info("Stopping Gemini X2 file-transfer control on port %s", self._port)
-    try:
-      await self._require_serial().stop()
-    finally:
-      self._is_setup = False
+  def _mark_closed(self) -> None:
+    """Forget the active PM session before closing its serial transport."""
+    self._is_setup = False
     logger.info("Gemini X2 file-transfer control stopped")
 
   async def list_protocols_with_size(self) -> list[_ProgramEntry]:
@@ -231,14 +217,16 @@ class _FileTransferControl:
     if exists_before and overwrite:
       await self.delete_protocol(name)
 
-    meth_command = f"meth {payload_hex}"
-    meth_response = await self._send_text_command(meth_command)
-    self._require_no_error(meth_response, meth_command)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      meth_command = f"meth {payload_hex}"
+      meth_response = await self._send_text_command(meth_command)
+      self._require_no_error(meth_response, meth_command)
 
-    mend_response = await self._send_text_command("mend")
-    self._require_no_error(mend_response, "mend")
+      mend_response = await self._send_text_command("mend")
+      self._require_no_error(mend_response, "mend")
 
-    exists_after = name in await self.list_protocols()
+      exists_after = name in await self.list_protocols()
     if not exists_after:
       raise RuntimeError(f'Protocol "{name}" was not visible after transfer.')
 
@@ -273,15 +261,17 @@ class _FileTransferControl:
         exists_after=False,
       )
 
-    command = f'delm "{name}"'
-    response = ""
-    for _ in range(8):
-      response = await self._send_text_command(command)
-      self._require_no_error(response, command)
-      if name not in await self.list_protocols():
-        break
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      command = f'delm "{name}"'
+      response = ""
+      for _ in range(8):
+        response = await self._send_text_command(command)
+        self._require_no_error(response, command)
+        if name not in await self.list_protocols():
+          break
 
-    exists_after = name in await self.list_protocols()
+      exists_after = name in await self.list_protocols()
     if exists_after:
       raise ProtocolDeletionPendingError(
         f'Protocol "{name}" still exists after repeated delete attempts.'
@@ -410,8 +400,10 @@ class _FileTransferControl:
     if not self._is_setup:
       raise RuntimeError("Gemini X2 file-transfer control is not set up.")
     async with self._command_lock:
-      await self._write_raw((command + "\r\n").encode("utf-8"))
-      response = await self._read_until_prompt()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self._write_raw((command + "\r\n").encode("utf-8"))
+        response = await self._read_until_prompt()
       return response.decode("utf-8", errors="replace")
 
   def _require_serial(self) -> _SerialLike:
@@ -456,13 +448,13 @@ class _FileTransferControl:
     for _ in range(max_reads):
       chunk = await self._read_raw(num_bytes=read_size)
       if len(chunk) == 0:
-        await asyncio.sleep(0.05)
+        await anyio.sleep(0.05)
         continue
       chunks.append(chunk)
       response = b"".join(chunks)
       if response.rstrip(b"\r\n").endswith(b":"):
         return response
-      await asyncio.sleep(0.03)
+      await anyio.sleep(0.03)
     response = b"".join(chunks)
     raise TimeoutError(
       "Timed out waiting for the Gemini command prompt; "

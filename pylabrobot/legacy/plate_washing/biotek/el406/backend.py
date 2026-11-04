@@ -13,11 +13,13 @@ Protocol Details:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.legacy.machines.backend import MachineBackend
 from pylabrobot.resources import Plate
@@ -47,10 +49,10 @@ class ExperimentalBioTekEL406Backend(
     timeout: Default timeout for operations in seconds.
 
   Example:
-    >>> backend = BioTekEL406Backend()
-    >>> await backend.setup()
-    >>> await backend.peristaltic_prime(plate, volume=300.0, flow_rate="High")
-    >>> await backend.manifold_wash(plate, cycles=3)
+    >>> backend = ExperimentalBioTekEL406Backend()
+    >>> async with backend:
+    ...   await backend.peristaltic_prime(plate, volume=300.0, flow_rate="High")
+    ...   await backend.manifold_wash(plate, cycles=3)
   """
 
   def __init__(
@@ -67,59 +69,61 @@ class ExperimentalBioTekEL406Backend(
     super().__init__()
     self.timeout = timeout
     self._device_id = device_id
-    self.io: FTDI | None = None
-    self._command_lock: asyncio.Lock | None = None
+    self.io = FTDI(human_readable_device_name="BioTek EL406", device_id=self._device_id)
+    self._command_lock: anyio.Lock | None = None
+    self._batch_lock: anyio.Lock | None = None
+    self._batch_owner: int | None = None
     self._in_batch: bool = False
 
-  async def setup(
-    self,
-    skip_reset: bool = False,
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, skip_reset: bool = False
   ) -> None:
-    """Set up communication with the EL406.
+    """Own FTDI and set up communication with the EL406.
 
     Configures the FTDI USB interface with the correct parameters:
     - 38400 baud
     - 8 data bits, 2 stop bits, no parity (8N2)
     - No flow control (disabled)
 
-    If ``self.io`` is already set (e.g. injected mock for testing),
-    it is used as-is and ``setup()`` is not called on it again.
-
     Note: This does NOT start a batch. Use ``batch()`` or call step commands
     directly (they auto-batch).
 
     Args:
-      skip_reset: If True, skip the instrument reset step.
+      stack: Exit stack that owns the FTDI lifespan.
+      skip_reset: Skip resetting the device after connecting.
 
     Raises:
       RuntimeError: If pylibftdi is not installed or communication fails.
     """
-    self._command_lock = asyncio.Lock()
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_reset, bool):
+      raise TypeError("skip_reset must be a bool")
+
+    io = self.io
+    assert io is not None
+    await stack.enter_async_context(io.lifespan())
+    self._command_lock = anyio.Lock()
+    self._batch_lock = anyio.Lock()
+    stack.callback(self._clear_command_lock)
 
     logger.info("BioTekEL406Backend setting up")
     logger.info("  Timeout: %.1f seconds", self.timeout)
 
-    if self.io is None:
-      self.io = FTDI(human_readable_device_name="BioTek EL406", device_id=self._device_id)
-      await self.io.setup()
-
     # Configure serial parameters
     logger.debug("Configuring serial parameters...")
     try:
-      await self.io.set_baudrate(38400)
-      await self.io.set_line_property(8, 2, 0)  # 8 data bits, 2 stop bits, no parity
+      await io.set_baudrate(38400)
+      await io.set_line_property(8, 2, 0)  # 8 data bits, 2 stop bits, no parity
       logger.info("  Serial: 38400 baud, 8N2")
 
       SIO_DISABLE_FLOW_CTRL = 0x0
-      await self.io.set_flowctrl(SIO_DISABLE_FLOW_CTRL)
+      await io.set_flowctrl(SIO_DISABLE_FLOW_CTRL)
       logger.info("  Flow control: NONE")
 
-      await self.io.set_rts(True)
-      await self.io.set_dtr(True)
+      await io.set_rts(True)
+      await io.set_dtr(True)
       logger.debug("  RTS and DTR enabled")
     except Exception as e:
-      await self.io.stop()
-      self.io = None
       raise EL406CommunicationError(
         f"Failed to configure FTDI device: {e}",
         operation="configure",
@@ -146,16 +150,12 @@ class ExperimentalBioTekEL406Backend(
 
     logger.info("BioTekEL406Backend setup complete")
 
-  async def stop(self) -> None:
-    """Stop communication with the EL406.
-
-    Closes the FTDI connection. Batch cleanup is handled by the ``batch()``
-    context manager, not by ``stop()``.
-    """
-    logger.info("BioTekEL406Backend stopping")
-    if self.io is not None:
-      await self.io.stop()
-      self.io = None
+  def _clear_command_lock(self) -> None:
+    """Clear transient command and batch state before FTDI closes."""
+    self._command_lock = None
+    self._batch_lock = None
+    self._batch_owner = None
+    self._in_batch = False
 
   @asynccontextmanager
   async def batch(self, plate: Plate) -> AsyncIterator[None]:
@@ -176,19 +176,39 @@ class ExperimentalBioTekEL406Backend(
       ...     await backend.manifold_wash(plate_96, cycles=3)
       ...     await backend.syringe_dispense(plate_96, volume=50)
     """
-    if self._in_batch:
+    task_id = anyio.get_current_task().id
+    if self._batch_owner == task_id:
       yield
       return
 
+    if self._batch_lock is None:
+      raise RuntimeError("Device not initialized")
+
+    batch_lock = self._batch_lock
+    await batch_lock.acquire()
+    self._batch_owner = task_id
     self._in_batch = True
+    started = False
+
+    def mark_started() -> None:
+      nonlocal started
+      started = True
+
     try:
-      await self.start_batch(plate_to_wire_byte(plate))
+      await anyio.lowlevel.checkpoint()
+      await self._start_batch(plate_to_wire_byte(plate), mark_started)
+      started = True
+      await anyio.lowlevel.checkpoint()
       yield
     finally:
       try:
-        await self.cleanup_after_protocol()
+        if started:
+          with anyio.CancelScope(shield=True):
+            await self.cleanup_after_protocol()
       finally:
+        self._batch_owner = None
         self._in_batch = False
+        batch_lock.release()
 
   def serialize(self) -> dict:
     """Serialize backend configuration."""

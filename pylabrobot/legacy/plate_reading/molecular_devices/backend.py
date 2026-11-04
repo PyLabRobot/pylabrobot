@@ -1,12 +1,14 @@
-import asyncio
 import logging
 import re
-import time
 from abc import ABCMeta
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import AsyncIterator, Dict, List, Literal, Optional, Tuple, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources.plate import Plate
@@ -250,7 +252,13 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
   """Backend for Molecular Devices plate readers."""
 
   def __init__(self, port: str) -> None:
+    super().__init__()
     self.port = port
+    self._transaction_lock = anyio.Lock()
+    self._shaking_active = False
+    self._shaking_state_unknown = False
+    self._shaking_scope_token: Optional[object] = None
+    self._shaking_transition_lock = anyio.Lock()
     self.io = Serial(
       human_readable_device_name="Molecular Devices Plate Reader",
       port=self.port,
@@ -258,12 +266,12 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
       timeout=0.2,
     )
 
-  async def setup(self) -> None:
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own Serial, tracked shaking cleanup, and the communication probe."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._force_stop_shaking)
     await self.send_command("!")
-
-  async def stop(self) -> None:
-    await self.io.stop()
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
@@ -274,26 +282,35 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     """Send a command and receive the response, automatically determining the number of
     response fields.
     """
-    base_command = command.split(" ")[0]
-    if num_res_fields is None:
-      num_res_fields = COMMAND_TERMINATORS.get(base_command, 1)
-    else:
-      num_res_fields = max(1, num_res_fields)
+    await self._transaction_lock.acquire()
+    try:
+      await anyio.lowlevel.checkpoint()
+      await self.io.write(command.encode() + b"\r")
+      with anyio.CancelScope(shield=True):
+        base_command = command.split(" ")[0]
+        if num_res_fields is None:
+          num_res_fields = COMMAND_TERMINATORS.get(base_command, 1)
+        else:
+          num_res_fields = max(1, num_res_fields)
 
-    await self.io.write(command.encode() + b"\r")
-    raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response += await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError(f"Timeout waiting for response to command: {command}")
-      if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
-        break
-    logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
-    response = raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
-    response = [r.strip() for r in response if r.strip() != ""]
-    self._parse_basic_errors(response, command)
+        raw_response = b""
+        with anyio.move_on_after(timeout) as timeout_scope:
+          while True:
+            raw_response += await self.io.readline()
+            await anyio.sleep(0.001)
+            if raw_response.count(RES_TERM_CHAR) >= num_res_fields:
+              break
+        if timeout_scope.cancel_called:
+          raise TimeoutError(f"Timeout waiting for response to command: {command}")
+        logger.debug("[plate reader] Command: %s, Response: %s", command, raw_response)
+        response = (
+          raw_response.decode("utf-8", errors="replace").strip().split(RES_TERM_CHAR.decode())
+        )
+        response = [r.strip() for r in response if r.strip() != ""]
+        self._parse_basic_errors(response, command)
+    finally:
+      self._transaction_lock.release()
+    await anyio.lowlevel.checkpoint()
     return response
 
   def _parse_basic_errors(self, response: List[str], command: str) -> None:
@@ -365,10 +382,95 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
     return res[1].split()
 
   async def start_shake(self) -> None:
-    await self.send_command("!SHAKE NOW")
+    """Start durable shaking."""
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot start shaking while a shaking scope is active")
+      if self._shaking_active or self._shaking_state_unknown:
+        return
+      await self._start_shaking_transition(rollback_on_failure=False)
 
   async def stop_shake(self) -> None:
-    await self.send_command("!SHAKE STOP")
+    """Stop durable shaking."""
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot stop shaking while a shaking scope is active")
+      await self._stop_shaking_transition()
+
+  async def _start_shaking_transition(self, *, rollback_on_failure: bool) -> None:
+    """Start shaking while the caller holds the transition lock."""
+    await anyio.lowlevel.checkpoint()
+    self._shaking_state_unknown = True
+    try:
+      with anyio.CancelScope(shield=True):
+        await self.send_command("!SHAKE NOW")
+        self._shaking_active = True
+        self._shaking_state_unknown = False
+      await anyio.lowlevel.checkpoint()
+    except anyio.get_cancelled_exc_class():
+      with anyio.CancelScope(shield=True):
+        await self._stop_shaking_transition()
+      raise
+    except BaseException:
+      self._shaking_active = True
+      self._shaking_state_unknown = True
+      if rollback_on_failure:
+        with anyio.CancelScope(shield=True):
+          await self._stop_shaking_transition()
+      raise
+
+  async def _stop_shaking_transition(self) -> None:
+    """Stop tracked shaking and retain retry state after failure."""
+    if not (self._shaking_active or self._shaking_state_unknown):
+      return
+    await anyio.lowlevel.checkpoint()
+    self._shaking_state_unknown = True
+    try:
+      with anyio.CancelScope(shield=True):
+        await self.send_command("!SHAKE STOP")
+        self._shaking_active = False
+        self._shaking_state_unknown = False
+      await anyio.lowlevel.checkpoint()
+    except anyio.get_cancelled_exc_class():
+      raise
+    except BaseException:
+      self._shaking_active = True
+      self._shaking_state_unknown = True
+      raise
+
+  @asynccontextmanager
+  async def shaking(self) -> AsyncIterator[None]:
+    """Shake for the lifetime of this context."""
+    token = object()
+    async with self._shaking_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Shaking scopes require an active Molecular Devices backend lifespan")
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Shaking is already scoped")
+      if self._shaking_active or self._shaking_state_unknown:
+        raise RuntimeError("Shaking is already active")
+      await self._start_shaking_transition(rollback_on_failure=True)
+      self._shaking_scope_token = token
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._shaking_transition_lock:
+          if self._shaking_scope_token is token:
+            try:
+              await self._stop_shaking_transition()
+            finally:
+              self._shaking_scope_token = None
+
+  async def _force_stop_shaking(self) -> None:
+    """Stop tracked shaking during parent cleanup and invalidate scope ownership."""
+    async with self._shaking_transition_lock:
+      try:
+        await self._stop_shaking_transition()
+      finally:
+        self._shaking_scope_token = None
 
   async def _read_now(self) -> None:
     await self.send_command("!READ")
@@ -682,14 +784,21 @@ class MolecularDevicesBackend(PlateReaderBackend, metaclass=ABCMeta):
 
   async def _wait_for_idle(self, timeout: int = 600):
     """Wait for the plate reader to become idle."""
-    start_time = time.time()
-    while True:
-      if time.time() - start_time > timeout:
-        raise TimeoutError("Timeout waiting for plate reader to become idle.")
+    if timeout <= 0:
       status = await self.get_status()
       if status and status[1] == "IDLE":
-        break
-      await asyncio.sleep(1)
+        return
+      raise TimeoutError("Timeout waiting for plate reader to become idle.")
+
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        status = await self.get_status()
+        await anyio.lowlevel.checkpoint_if_cancelled()
+        if status and status[1] == "IDLE":
+          return
+        await anyio.sleep(1)
+    if scope.cancel_called:
+      raise TimeoutError("Timeout waiting for plate reader to become idle.")
 
   async def read_absorbance(  # type: ignore[override]
     self,

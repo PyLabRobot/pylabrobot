@@ -1,12 +1,16 @@
-import asyncio
 import enum
 import logging
-import time
 from typing import Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
+
+_COMMAND_DELAY_SECONDS = 0.2
+_SETPOINT_SETTLE_SECONDS = 3.0
 
 
 class KUBEStatus(enum.IntFlag):
@@ -93,7 +97,7 @@ class KBioscienceError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class KBioscienceKUBE:
+class KBioscienceKUBE(HasLifespan):
   """KBioscience KUBE thermal plate sealer.
 
   Serial settings:
@@ -138,6 +142,8 @@ class KBioscienceKUBE:
     offline_temperature: int = 20,
     portrait: bool = False,
   ) -> None:
+    super().__init__()
+    self._command_lock = anyio.Lock()
     self.timeout = timeout
     self.settle_time = settle_time
     self.preheating_temperature = preheating_temperature
@@ -152,17 +158,19 @@ class KBioscienceKUBE:
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=0.2,
     )
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own Serial and initialize the KUBE for one managed lifespan."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "KBioscienceKUBE has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._set_offline_temperature_for_exit)
     # The device drops characters for a few seconds after the port opens.
-    await asyncio.sleep(self.settle_time)
+    await anyio.sleep(self.settle_time)
     await self.io.reset_input_buffer()
     # A unit that answers the empty-command probe with "ALPS300" speaks the
     # older ALPS protocol; pylabrobot.thermo_fisher.alps.ThermoScientificALPS300
@@ -191,30 +199,31 @@ class KBioscienceKUBE:
       self.firmware_version,
     )
 
-  async def stop(self) -> None:
+  async def _set_offline_temperature_for_exit(self) -> None:
+    """Return the heater to the configured offline temperature before Serial closes."""
     try:
       await self.set_temperature(self.offline_temperature)
     except (KBioscienceError, TimeoutError) as e:
       logger.warning("[KUBE %s] could not set offline temperature: %s", self.io.port, e)
-    await self.io.stop()
 
   # === Command layer ===
 
   async def _read_line(self) -> str:
     """Read bytes until a CR terminator, skipping stray LF."""
-    start = time.time()
     buf = bytearray()
-    while True:
-      b = await self.io.read(1)
-      if b == b"":
-        if time.time() - start > self.timeout:
-          raise TimeoutError("Timeout while waiting for response from sealer.")
-        continue
-      if b == b"\r":
-        break
-      if b == b"\n":
-        continue
-      buf += b
+    try:
+      with anyio.fail_after(self.timeout) as timeout_scope:
+        while True:
+          b = await self.io.read(1)
+          if b == b"\r":
+            break
+          if b == b"\n":
+            continue
+          buf += b
+    except TimeoutError:
+      if not timeout_scope.cancel_called:
+        raise
+      raise TimeoutError("Timeout while waiting for response from sealer.") from None
     return buf.decode("ascii", errors="replace")
 
   async def send_command(self, command: str) -> str:
@@ -223,10 +232,14 @@ class KBioscienceKUBE:
     Args:
       command: command string without the CR terminator, e.g. "A160", "?".
     """
-    await self.io.reset_input_buffer()
-    await self.io.write((command + "\r").encode("ascii"))
-    await asyncio.sleep(0.2)
-    text = await self._read_line()
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
+      await self.io.reset_input_buffer()
+      with anyio.CancelScope(shield=True):
+        await self.io.write((command + "\r").encode("ascii"))
+        await anyio.sleep(_COMMAND_DELAY_SECONDS)
+        text = await self._read_line()
+      await anyio.lowlevel.checkpoint()
     if "syntax" in text:
       return text
     # The device echoes the command; an empty command trims whitespace only.
@@ -273,7 +286,7 @@ class KBioscienceKUBE:
     status = await self.request_status()
     while status != KUBEStatus.Ready:
       if status & KUBEStatus.Sealing:
-        await asyncio.sleep(0.5)
+        await anyio.sleep(0.5)
         status = await self._wait_for_seal_cleared()
         continue
 
@@ -299,22 +312,28 @@ class KBioscienceKUBE:
     return status
 
   async def _wait_for_seal_cleared(self, timeout: float = 60.0) -> KUBEStatus:
-    start = time.time()
-    status = await self.request_status()
-    while status & KUBEStatus.Sealing:
-      if time.time() - start > timeout:
-        raise KBioscienceError(title="Timeout while waiting for the seal to complete")
-      await asyncio.sleep(0.5)
-      status = await self.request_status()
-    return status
+    try:
+      with anyio.fail_after(timeout) as timeout_scope:
+        status = await self.request_status()
+        while status & KUBEStatus.Sealing:
+          await anyio.sleep(0.5)
+          status = await self.request_status()
+        return status
+    except TimeoutError:
+      if not timeout_scope.cancel_called:
+        raise
+      raise KBioscienceError(title="Timeout while waiting for the seal to complete") from None
 
   async def wait_for_sealing_temperature(self, timeout: float = 300.0) -> None:
     """Block until the heater reaches the setpoint (NotAtSealTemperature clears)."""
-    start = time.time()
-    while await self.request_status() & KUBEStatus.NotAtSealTemperature:
-      if time.time() - start > timeout:
-        raise TimeoutError("Timeout while waiting for sealing temperature.")
-      await asyncio.sleep(5.0)
+    try:
+      with anyio.fail_after(timeout) as timeout_scope:
+        while await self.request_status() & KUBEStatus.NotAtSealTemperature:
+          await anyio.sleep(5.0)
+    except TimeoutError:
+      if not timeout_scope.cancel_called:
+        raise
+      raise TimeoutError("Timeout while waiting for sealing temperature.") from None
 
   # === Parameters ===
 
@@ -332,7 +351,7 @@ class KBioscienceKUBE:
         message=f"temperature {temperature} rejected with {reply!r}",
       )
     # The firmware needs a moment to accept the new setpoint.
-    await asyncio.sleep(3.0)
+    await anyio.sleep(_SETPOINT_SETTLE_SECONDS)
 
   async def set_sealing_time(self, seconds: float) -> None:
     """Set the sealing time in seconds (``B``, 0.5..9.9)."""
@@ -435,7 +454,7 @@ class KBioscienceKUBE:
       await self.set_temperature(temperature)
     else:
       await self.set_seal_preset(preset)
-      await asyncio.sleep(3.0)
+      await anyio.sleep(_SETPOINT_SETTLE_SECONDS)
 
     await self.wait_for_sealing_temperature()
     if self._check(await self.send_command("S"), {"ok", "err"}, "S") != "ok":

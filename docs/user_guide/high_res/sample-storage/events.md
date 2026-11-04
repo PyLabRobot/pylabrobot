@@ -16,7 +16,7 @@ The two records share `context.operation_id`. A failed record also contains `err
 
 ## Quickstart
 
-Subscribe after setting up the store, then wrap the operations that should be observed:
+Subscribe to the event bus, then wrap the active store operations that should be observed:
 
 ```python
 from pylabrobot.events import EventBus, use_event_bus
@@ -24,11 +24,10 @@ from pylabrobot.events import EventBus, use_event_bus
 event_bus = EventBus()
 event_bus.subscribe(lambda event: print(event.as_dict()))
 
-await store.setup()
-
-with use_event_bus(event_bus):
-  await store.fetch_plate_to_loading_tray("plate_1", tray_index=0)
-  await store.environment.set_temperature(37)
+async with store:
+  with use_event_bus(event_bus):
+    await store.fetch_plate_to_loading_tray("plate_1", tray_index=0)
+    await store.environment.set_temperature(37)
 ```
 
 Use `set_default_event_bus()` instead when one process-wide bus should observe every instrumented
@@ -123,10 +122,10 @@ control on a store without an installed controllable O2 channel emits
 ## Operations without semantic events
 
 Read-only status methods do not emit semantic operation events. This includes environmental
-reads, tank-pressure reads, version and status requests, and inventory queries. `setup()`,
-`stop()`, homing, recovery, door control, and clear-abort are also not currently
+reads, tank-pressure reads, version and status requests, and inventory queries. Lifespan entry/exit,
+homing, recovery, door control, and clear-abort are also not currently
 instrumented as semantic operations.
 
 Generic `resource.assigned` and `resource.unassigned` state events can still be emitted whenever
-PLR resource bookkeeping changes, including nest creation during initial setup when an EventBus is
-active.
+PLR resource bookkeeping changes, including nest creation during initial lifespan entry when an
+EventBus is active.

@@ -1,9 +1,9 @@
 """Absorbance tests over a fake io: what the driver sends, and the optical densities it computes,
 are pinned to the ground truth."""
 
-import asyncio
 import gzip
 import json
+import logging
 import math
 import os
 import tempfile
@@ -11,6 +11,9 @@ import unittest
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import patch
+
+import anyio
+import pytest
 
 from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
@@ -40,12 +43,14 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationAbsorbance
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.lib.absorbance.results import AbsorbanceResult
 from pylabrobot.lib.fluorescence import FluorescenceChannel
 from pylabrobot.lib.results import directory as directory_module
 from pylabrobot.lib.results.reading import load_rows
 from pylabrobot.resources import Plate, Well, cor_96_wellplate_360uL_Fb, create_ordered_items_2d
 from pylabrobot.resources.biorad.plates import biorad_96_wellplate_200uL_Vb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # The default read: 600 nm, every well of the plate.
 BASELINE_RUN_FRAME = bytes.fromhex(
@@ -275,7 +280,7 @@ class YieldingFTDI(FakeFTDI):
   def __init__(self) -> None:
     super().__init__()
     self.running = False
-    self.cancel_on_status: Optional["asyncio.Task[Any]"] = None
+    self.cancel_on_status: Optional[anyio.CancelScope] = None
 
   async def write(self, data: bytes) -> int:
     self.written.append(bytes(data))
@@ -294,7 +299,7 @@ class YieldingFTDI(FakeFTDI):
     return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    await asyncio.sleep(0)
+    await anyio.sleep(0)
     return await super().read(num_bytes)
 
 
@@ -548,7 +553,7 @@ VERIFICATION_SPECTRUM_SETTINGS = MeasurementSettings(
 VERIFICATION_SPECTRUM_SHAKE = ShakeSettings("double_orbital", 300, 10)
 
 
-class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
+class TestSpectrumRead(AnyioTestBase):
   async def read_verification_spectrum(self, report="optical_density"):
     pages, wavelengths, expected = load_verification_spectrum()
     io = FakeFTDI(chunk=4096)
@@ -566,21 +571,20 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_the_verification_read_matches_the_ground_truth(self):
     io, result, wavelengths, expected = await self.read_verification_spectrum()
-    self.assertEqual(
-      io.written,
-      [STATUS_QUERY_FRAME, SPECTRUM_VERIFICATION_RUN_FRAME, STATUS_QUERY_FRAME] + [DATA_FRAME] * 5,
+    assert io.written == (
+      [STATUS_QUERY_FRAME, SPECTRUM_VERIFICATION_RUN_FRAME, STATUS_QUERY_FRAME] + [DATA_FRAME] * 5
     )
-    self.assertEqual(len(result.data), 96)
-    self.assertEqual(list(result.data["A1"]), wavelengths)
+    assert len(result.data) == 96
+    assert list(result.data["A1"]) == wavelengths
     differences = [
       abs(result.data[well][wavelength] - value)
       for well, values in expected.items()
       for wavelength, value in zip(wavelengths, values)
     ]
-    self.assertEqual(len(differences), 74_976)
-    self.assertLess(max(differences), 0.0006)  # the ground truth rounds to 3 decimals
-    self.assertEqual(result.temperature, 24.1)
-    self.assertLessEqual(result.start_timestamp, result.end_timestamp)
+    assert len(differences) == 74_976
+    assert max(differences) < 0.0006  # the ground truth rounds to 3 decimals
+    assert result.temperature == 24.1
+    assert result.start_timestamp <= result.end_timestamp
 
   async def test_raw_counts_compute_the_optical_densities(self):
     _, raw, wavelengths, expected = await self.read_verification_spectrum(report="raw")
@@ -593,33 +597,34 @@ class SpectrumReadTests(unittest.IsolatedAsyncioTestCase):
           raw.reference_calibration[0] / raw.references[well]
         )
         expected_density = expected[well][wavelengths.index(wavelength)]
-        self.assertAlmostEqual(-math.log10(fraction), expected_density, delta=0.0006)
+        assert -math.log10(fraction) == pytest.approx(expected_density, abs=0.0006)
 
   def test_pages_out_of_order_or_missing_are_refused(self):
     pages = [ftdi_extract_payload(frame) for frame in load_verification_spectrum()[0]]
     for wrong in ([pages[1], pages[0], *pages[2:]], pages[:4], [*pages, pages[4]]):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         absorbance_feature()._decode_spectrum_pages(wrong, 781)
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       absorbance_feature()._decode_spectrum_pages(pages, 780)  # another read's wavelength count
 
   async def test_a_timeout_not_positive_is_refused(self):
     io = FakeFTDI()
     absorbance = make_absorbance(io, ground_truth_96_well_plate())
     for timeout in (0, -1):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], timeout=timeout)
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await absorbance.measure_spectrum(
           start_wavelength=300, end_wavelength=700, step_size=1, timeout=timeout
         )
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class TestSimulatedSpectrum(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     self.reader = CLARIOstarPlus(simulation=True)
-    await self.reader.setup()
+    await stack.enter_async_context(self.reader.lifespan(accept_plate_left_in_device=True))
     self.plate = ground_truth_96_well_plate()
     await self.reader.drawer.open()
     self.reader.plate_holder.assign_child_resource(self.plate)
@@ -632,10 +637,10 @@ class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
     result = await self.absorbance.measure_spectrum(
       wells=self.plate.get_items("A1:H1"), start_wavelength=400, end_wavelength=500, step_size=10
     )
-    self.assertEqual(list(result.data), COLUMN_1)
+    assert list(result.data) == COLUMN_1
     for spectrum in result.data.values():
-      self.assertEqual(list(spectrum), list(range(400, 501, 10)))
-      self.assertTrue(all(0.0 <= value <= 4.0 for value in spectrum.values()))
+      assert list(spectrum) == list(range(400, 501, 10))
+      assert all(0.0 <= value <= 4.0 for value in spectrum.values())
 
   async def test_an_earlier_spectrum_is_returned_again(self):
     earlier = await self.absorbance.measure_spectrum(
@@ -648,8 +653,8 @@ class SimulatedSpectrumTests(unittest.IsolatedAsyncioTestCase):
       step_size=10,
       simulated_data=earlier,
     )
-    self.assertEqual(replayed.data, {well: earlier.data[well] for well in COLUMN_1})
-    with self.assertRaises(ValueError):  # 405 nm was not read
+    assert replayed.data == {well: earlier.data[well] for well in COLUMN_1}
+    with pytest.raises(ValueError):  # 405 nm was not read
       await self.absorbance.measure_spectrum(
         start_wavelength=400, end_wavelength=500, step_size=5, simulated_data=earlier
       )
@@ -672,7 +677,7 @@ class OpticalDensityTests(unittest.TestCase):
       )
 
 
-class ReadTests(unittest.IsolatedAsyncioTestCase):
+class TestRead(AnyioTestBase):
   async def test_read_column_1(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STATUS_MEASURED, COLUMN_1_DATA_REPLY]
@@ -681,13 +686,13 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     results = await measure_with(
       make_absorbance(io, plate), [600], wells=column_1, bidirectional=False
     )
-    self.assertEqual(io.written[0], STATUS_QUERY_FRAME)
+    assert io.written[0] == STATUS_QUERY_FRAME
     run = ftdi_extract_payload(io.written[1])
-    self.assertEqual(run, without_pause_seconds(ftdi_extract_payload(COLUMN_1_RUN_FRAME)))
-    self.assertEqual(io.written[2:], [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME, DATA_FRAME])
+    assert run == without_pause_seconds(ftdi_extract_payload(COLUMN_1_RUN_FRAME))
+    assert io.written[2:] == [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME, DATA_FRAME]
     (result,) = results
-    self.assertEqual((result.wavelength, result.temperature), (600, None))
-    self.assertEqual(list(result.data), COLUMN_1)
+    assert (result.wavelength, result.temperature) == (600, None)
+    assert list(result.data) == COLUMN_1
 
   async def test_a_real_reader_ignores_simulated_data(self):
     io = FakeFTDI()
@@ -704,9 +709,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     (result,) = await measure_with(
       make_absorbance(io, plate), [600], wells=column_1, simulated_data=[given]
     )
-    self.assertEqual(io.written[2:], [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME, DATA_FRAME])
-    self.assertEqual(list(result.data), COLUMN_1)
-    self.assertNotIn(9.0, result.data.values())  # the plate's densities, not the given ones
+    assert io.written[2:] == [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME, DATA_FRAME]
+    assert list(result.data) == COLUMN_1
+    assert 9.0 not in result.data.values()  # the plate's densities, not the given ones
 
   async def test_the_first_poll_waits_after_the_run(self):
     # As the reader answered: a poll sent right after the RUN's reply went unanswered.
@@ -716,15 +721,15 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     absorbance = make_absorbance(io, plate)
     absorbance._driver.default_poll_interval = 0.25
     waits = []
-    real_sleep = asyncio.sleep
+    real_sleep = anyio.sleep
 
     async def sleep(seconds):
       waits.append((seconds, len(io.written)))
       await real_sleep(0)
 
-    with patch.object(measurement_module.asyncio, "sleep", sleep):
+    with patch.object(measurement_module.anyio, "sleep", sleep):
       await measure_with(absorbance, [600], wells=plate.get_items("A1:H1"))
-    self.assertEqual(waits[0], (0.25, 2))  # after the STATUS and the RUN, before any poll
+    assert waits[0] == (0.25, 2)  # after the STATUS and the RUN, before any poll
 
   async def test_a_well_given_twice_is_read_once(self):
     io = FakeFTDI()
@@ -733,53 +738,53 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
     column_1 = plate.get_items("A1:H1")
     (result,) = await measure_with(make_absorbance(io, plate), [600], wells=column_1 + column_1[:2])
     run = b"\x04" + run_parameters(plate, column_1, [600], 5)
-    self.assertEqual(ftdi_extract_payload(io.written[1]), run)
-    self.assertEqual(list(result.data), COLUMN_1)
+    assert ftdi_extract_payload(io.written[1]) == run
+    assert list(result.data) == COLUMN_1
 
   async def test_a_timeout_stops_the_run(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING, STOP_REPLY]
     plate = biorad_96_wellplate_200uL_Vb("plate")
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await measure_with(
         make_absorbance(io, plate), [600], wells=plate.get_items("A1:H1"), timeout=IMMEDIATE_TIMEOUT
       )
-    self.assertEqual(io.written[-1], STOP_FRAME)
+    assert io.written[-1] == STOP_FRAME
 
   async def test_a_cancel_between_a_write_and_its_reply_leaves_the_link_clean(self):
     io = YieldingFTDI()
     absorbance = make_absorbance(io, ground_truth_96_well_plate())
-    task = asyncio.create_task(absorbance.measure(wavelengths=[600], timeout=10))
-    io.cancel_on_status = task  # cancelled after the first STATUS of the run is written
-    with self.assertRaises(asyncio.CancelledError):
-      await task
-    self.assertIn(STOP_FRAME, io.written)
-    self.assertEqual(io._pending, b"")  # no reply left for the next command to read
+    async with anyio.create_task_group() as tg:
+      io.cancel_on_status = (
+        tg.cancel_scope
+      )  # cancelled after the first STATUS of the run is written
+      tg.start_soon(lambda: absorbance.measure(wavelengths=[600], timeout=10))
+    assert STOP_FRAME in io.written
+    assert io._pending == b""  # no reply left for the next command to read
 
   async def test_a_second_measurement_on_the_reader_is_refused_before_anything_is_sent(self):
     io = YieldingFTDI()
     absorbance = make_absorbance(io, ground_truth_96_well_plate())
     fluorescence = Fluorescence(absorbance._driver)
-    first = asyncio.create_task(absorbance.measure(wavelengths=[600], timeout=10))
-    while not io.running:
-      await asyncio.sleep(0)
-    written = len(io.written)
-    second = {
-      "absorbance": lambda: absorbance.measure(wavelengths=[600]),
-      "fluorescence": lambda: fluorescence.measure(
-        FluorescenceChannel(excitation_wavelength=485, emission_wavelength=528),
-        gain=1000,
-        focal_height=8.5,
-      ),
-    }
-    for name, read in second.items():
-      with self.subTest(name), self.assertRaisesRegex(RuntimeError, "already running"):
-        await read()
-    self.assertEqual(len(io.written), written)  # nothing sent
-    first.cancel()
-    with self.assertRaises(asyncio.CancelledError):
-      await first
-    self.assertFalse(absorbance._driver._measuring)
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(lambda: absorbance.measure(wavelengths=[600], timeout=10))
+      while not io.running:
+        await anyio.sleep(0)
+      written = len(io.written)
+      second = {
+        "absorbance": lambda: absorbance.measure(wavelengths=[600]),
+        "fluorescence": lambda: fluorescence.measure(
+          FluorescenceChannel(excitation_wavelength=485, emission_wavelength=528),
+          gain=1000,
+          focal_height=8.5,
+        ),
+      }
+      for name, read in second.items():
+        with pytest.raises(RuntimeError, match="already running"):
+          await read()
+      assert len(io.written) == written  # nothing sent
+      tg.cancel_scope.cancel()
+    assert not absorbance._driver._measuring
 
   async def test_out_of_range_reads_send_nothing(self):
     io = FakeFTDI()
@@ -795,9 +800,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       ([600], []),
       ([600], other.get_all_items()),
     ):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, wavelengths, wells=wells)  # type: ignore[arg-type]
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_the_wavelength_limits_are_the_configurations(self):
     io = FakeFTDI()
@@ -806,9 +811,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       wavelength_range=(400, 700), maximum_wavelengths=2
     )
     for wavelengths in ([450, 500, 600], [399], [701]):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, wavelengths)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_the_ranges_are_the_configurations(self):
     io = FakeFTDI()
@@ -820,9 +825,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       {"flashes": 11},
       {"shake_pattern": "orbital", "shake_speed": 400, "shake_duration": 5},
     ):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], **arguments)  # type: ignore[arg-type]
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_raw_counts_compute_the_ground_truth_optical_densities(self):
     readings = {}
@@ -833,7 +838,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
         make_absorbance(io, ground_truth_96_well_plate()), [600], report=report
       )  # type: ignore[arg-type]
     density, raw = readings["optical_density"], readings["raw"]
-    self.assertIs(type(density), AbsorbanceResult)
+    assert type(density) is AbsorbanceResult
     assert isinstance(raw, CLARIOstarAbsorbanceResult)
     assert raw.references is not None and raw.calibration and raw.reference_calibration
     expected = [value for row in VERIFICATION_GROUND_TRUTH for value in row]
@@ -841,30 +846,30 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       fraction = (raw.data[well] / raw.calibration[0]) * (
         raw.reference_calibration[0] / raw.references[well]
       )
-      self.assertAlmostEqual(-math.log10(fraction), value, delta=0.0006)
-      self.assertAlmostEqual(density.data[well], value, delta=0.0006)
-    self.assertLessEqual(density.start_timestamp, density.end_timestamp)
+      assert -math.log10(fraction) == pytest.approx(value, abs=0.0006)
+      assert density.data[well] == pytest.approx(value, abs=0.0006)
+    assert density.start_timestamp <= density.end_timestamp
 
   async def test_flashes_reach_the_wire(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING]
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await measure_with(
         make_absorbance(io, baseline_plate()), [600], flashes=200, timeout=IMMEDIATE_TIMEOUT
       )
-    self.assertEqual(io.written[1], FLASHES_200_RUN_FRAME)
+    assert io.written[1] == FLASHES_200_RUN_FRAME
 
   async def test_flashes_out_of_range_send_nothing(self):
     io = FakeFTDI()
     absorbance = make_absorbance(io, biorad_96_wellplate_200uL_Vb("plate"))
     for flashes in (0, 201, 2.5):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], flashes=flashes)  # type: ignore[arg-type]
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   def test_the_read_timeout_default_is_checked_when_set(self):
     absorbance = make_absorbance(FakeFTDI())
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       absorbance.default_read_timeout = 0
 
   async def test_scan_and_settling_bytes_are_the_ground_truth(self):
@@ -886,11 +891,11 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       io = FakeFTDI()
       io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING]
       plate = biorad_96_wellplate_200uL_Vb("plate")
-      with self.assertRaises(TimeoutError):
+      with pytest.raises(TimeoutError):
         absorbance = make_absorbance(io, plate)
         await measure_with(absorbance, [600], timeout=IMMEDIATE_TIMEOUT, **arguments)
       run = ftdi_extract_payload(io.written[1])
-      self.assertEqual((run[64], run[100]), (scan, settling), arguments)
+      assert (run[64], run[100]) == (scan, settling), arguments
 
   async def test_scan_and_settling_out_of_range_send_nothing(self):
     io = FakeFTDI()
@@ -902,9 +907,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       {"report": "absorbance"},
       {"report": "transmittance"},
     ):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], **arguments)  # type: ignore[arg-type]
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_every_read_defaults_to_five_flashes(self):
     for well_scan in ("point", "orbital", "spiral"):
@@ -913,7 +918,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
         io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING]
         absorbance = make_absorbance(io, ground_truth_96_well_plate())
         settings = MeasurementSettings(well_scan=well_scan)
-        with self.assertRaises(TimeoutError):
+        with pytest.raises(TimeoutError):
           if spectrum:
             await absorbance.measure_spectrum(
               start_wavelength=300,
@@ -927,7 +932,7 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
               wavelengths=[600], measurement_settings=settings, timeout=IMMEDIATE_TIMEOUT
             )
         run = ftdi_extract_payload(io.written[1])
-        self.assertEqual(run[-5:-3], (5).to_bytes(2, "big"), (well_scan, spectrum))  # flashes
+        assert run[-5:-3] == (5).to_bytes(2, "big"), (well_scan, spectrum)  # flashes
 
   async def test_well_scans_out_of_range_send_nothing(self):
     io = FakeFTDI()
@@ -938,9 +943,9 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       {"well_scan": "spiral", "scan_diameter": 7},  # wider than the 6.58 mm well
       {"well_scan": "spiral", "scan_diameter": 3.5},
     ):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], **arguments)  # type: ignore[arg-type]
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await absorbance.measure_spectrum(
         start_wavelength=300,
         end_wavelength=700,
@@ -971,8 +976,8 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       _, _, parameters = absorbance_384._get_run_parameters(
         [600], "optical_density", *settings_from(well_scan=well_scan, scan_diameter=3), None
       )
-      self.assertEqual(parameters[64], mode)
-    self.assertEqual(io.written, [])
+      assert parameters[64] == mode
+    assert io.written == []
 
   async def test_shaking_out_of_range_sends_nothing(self):
     io = FakeFTDI()
@@ -986,39 +991,38 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       {"shake_pattern": "orbital", "shake_speed": 300, "shake_duration": 0},
       {"shake_pattern": "orbital", "shake_speed": 300, "shake_duration": 256},
     ):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], **arguments)  # type: ignore[arg-type]
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_pause_before_reading_reaches_the_wire(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURING]
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await measure_with(
         make_absorbance(io, biorad_96_wellplate_200uL_Vb("plate")),
         [600],
         pause_before_reading=5,
         timeout=IMMEDIATE_TIMEOUT,
       )
-    self.assertEqual(io.written[1], PAUSE_RUN_FRAME)
+    assert io.written[1] == PAUSE_RUN_FRAME
 
   async def test_pause_out_of_range_sends_nothing(self):
     io = FakeFTDI()
     absorbance = make_absorbance(io, biorad_96_wellplate_200uL_Vb("plate"))
     for seconds in (0, 3601, 2.5):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(absorbance, [600], pause_before_reading=seconds)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_no_plate_sends_nothing(self):
     io = FakeFTDI()
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await measure_with(make_absorbance(io), [600])
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-# The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
-class SessionTests(unittest.IsolatedAsyncioTestCase):
+class TestSession(AnyioTestBase):
   """Column 1 of an empty plate, as the reader answered: what this driver sends is the RUN the
   reader ran, and the reads agree with each other."""
 
@@ -1039,7 +1043,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
       result = await absorbance.measure_spectrum(wells=wells, **arguments)
     else:
       result = await absorbance.measure(wells=wells, **arguments)
-    self.assertEqual(io.written[1], bytes.fromhex(session[f"{step}_run"]))
+    assert io.written[1] == bytes.fromhex(session[f"{step}_run"])
     return result
 
   async def test_one_eight_and_a_spectrum_of_wavelengths_agree(self):
@@ -1050,20 +1054,21 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     spectrum = await self.read(
       "absorbance_spectrum", start_wavelength=300, end_wavelength=700, step_size=1
     )
-    self.assertEqual([r.wavelength for r in eight], [260, 280, 350, 450, 530, 600, 700, 750])
+    assert [r.wavelength for r in eight] == [260, 280, 350, 450, 530, 600, 700, 750]
     at_600 = eight[5].data
-    self.assertLess(max(abs(at_600[well] - single.data[well]) for well in single.data), 0.002)
-    self.assertEqual(sorted(spectrum.data["A1"]), list(range(300, 701)))
+    assert max(abs(at_600[well] - single.data[well]) for well in single.data) < 0.002
+    assert sorted(spectrum.data["A1"]) == list(range(300, 701))
     for discrete, wavelength in ((single.data, 600), (eight[3].data, 450)):
       differences = [abs(spectrum.data[well][wavelength] - discrete[well]) for well in discrete]
-      self.assertLess(max(differences), 0.003, wavelength)
+      assert max(differences) < 0.003, wavelength
 
 
-class ShortPageTests(unittest.IsolatedAsyncioTestCase):
+class TestShortPage(AnyioTestBase):
   """A spectrum data page, as the reader answered: short on its first request (15,783 of 16,204
   bytes), whole on the next."""
 
-  def setUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     session = load_session_replies()
     self.short = b"".join(
       bytes.fromhex(data) for _, data in session["absorbance_spectrum_short_page_reads"]
@@ -1085,23 +1090,23 @@ class ShortPageTests(unittest.IsolatedAsyncioTestCase):
     run = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURED]
     io.replies = [*run, self.short, STOP_REPLY, *run, self.whole]
     result = await self.read(io)
-    self.assertEqual(len(result.data), 8)
-    self.assertEqual(sorted(result.data["A1"]), list(range(300, 701)))
-    self.assertEqual(self.count(io, 0x04), 2)  # two RUNs
-    self.assertEqual(io.written.count(DATA_FRAME), 2)  # one request per read: none repeated
-    self.assertEqual(io.written.count(STOP_FRAME), 1)
+    assert len(result.data) == 8
+    assert sorted(result.data["A1"]) == list(range(300, 701))
+    assert self.count(io, 0x04) == 2  # two RUNs
+    assert io.written.count(DATA_FRAME) == 2  # one request per read: none repeated
+    assert io.written.count(STOP_FRAME) == 1
 
   async def test_a_page_short_twice_raises(self):
     io = FakeFTDI(chunk=4096)
     run = [STATUS_IDLE, RUN_REPLY, STATUS_MEASURED]
     io.replies = [*run, self.short, STOP_REPLY, *run, self.short, STOP_REPLY]
-    with self.assertRaises(FrameError):
+    with pytest.raises(FrameError):
       await self.read(io)
-    self.assertEqual(self.count(io, 0x04), 2)
-    self.assertEqual(io.written.count(STOP_FRAME), 2)
+    assert self.count(io, 0x04) == 2
+    assert io.written.count(STOP_FRAME) == 2
 
 
-class GatingTests(unittest.IsolatedAsyncioTestCase):
+class TestGating(AnyioTestBase):
   def build_with(self, absorbance_available: bool):
     driver = make_driver(FakeFTDI())
     driver.configuration = decoded()
@@ -1110,37 +1115,38 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
     return driver
 
   def test_absorbance_is_built_when_reported(self):
-    self.assertIsInstance(self.build_with(True).absorbance, Absorbance)
+    assert isinstance(self.build_with(True).absorbance, Absorbance)
 
   def test_no_absorbance_is_not_built(self):
-    self.assertIsNone(self.build_with(False).absorbance)
+    assert self.build_with(False).absorbance is None
 
 
-class SimulatedAbsorbanceTests(unittest.IsolatedAsyncioTestCase):
+class TestSimulatedAbsorbance(AnyioTestBase):
   async def test_a_simulated_read_is_checked_and_reads_within_range(self):
     reader = CLARIOstarPlus(simulation=True)
-    await reader.setup()
-    absorbance = reader.absorbance
-    assert absorbance is not None
-    with self.assertRaises(RuntimeError):
-      await measure_with(absorbance, [600])
-    plate = biorad_96_wellplate_200uL_Vb("plate")
-    await reader.drawer.open()
-    reader.plate_holder.assign_child_resource(plate)
-    await reader.drawer.close()
-    with self.assertRaises(ValueError):
-      await measure_with(absorbance, [1001])
-    at_450, at_600 = await measure_with(absorbance, [450, 600], wells=plate.get_items("A1:H1"))
-    self.assertEqual((at_450.wavelength, at_600.wavelength), (450, 600))
-    for result in (at_450, at_600):
-      self.assertEqual(list(result.data), COLUMN_1)
-      self.assertTrue(all(0.0 <= value <= 4.0 for value in result.data.values()))
+    async with reader.lifespan(accept_plate_left_in_device=True):
+      absorbance = reader.absorbance
+      assert absorbance is not None
+      with pytest.raises(RuntimeError):
+        await measure_with(absorbance, [600])
+      plate = biorad_96_wellplate_200uL_Vb("plate")
+      await reader.drawer.open()
+      reader.plate_holder.assign_child_resource(plate)
+      await reader.drawer.close()
+      with pytest.raises(ValueError):
+        await measure_with(absorbance, [1001])
+      at_450, at_600 = await measure_with(absorbance, [450, 600], wells=plate.get_items("A1:H1"))
+      assert (at_450.wavelength, at_600.wavelength) == (450, 600)
+      for result in (at_450, at_600):
+        assert list(result.data) == COLUMN_1
+        assert all(0.0 <= value <= 4.0 for value in result.data.values())
 
 
-class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
+class TestSimulatedData(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     self.reader = CLARIOstarPlus(simulation=True)
-    await self.reader.setup()
+    await stack.enter_async_context(self.reader.lifespan(accept_plate_left_in_device=True))
     self.plate = biorad_96_wellplate_200uL_Vb("plate")
     await self.reader.drawer.open()
     self.reader.plate_holder.assign_child_resource(self.plate)
@@ -1152,7 +1158,7 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
   async def test_earlier_results_are_returned_again(self):
     earlier = await measure_with(self.absorbance, [450, 600])
     replayed = await measure_with(self.absorbance, [450, 600], simulated_data=earlier)
-    self.assertEqual([r.data for r in replayed], [r.data for r in earlier])
+    assert [r.data for r in replayed] == [r.data for r in earlier]
 
   async def test_a_subset_reads_its_wells_of_the_earlier_plate(self):
     (earlier,) = await measure_with(self.absorbance, [600])
@@ -1160,10 +1166,10 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
     (replayed,) = await measure_with(
       self.absorbance, [600], wells=column_1, simulated_data=[earlier]
     )
-    self.assertEqual(replayed.data, {well: earlier.data[well] for well in COLUMN_1})
+    assert replayed.data == {well: earlier.data[well] for well in COLUMN_1}
 
   async def test_raw_counts_need_simulated_data(self):
-    with self.assertRaises(NotImplementedError):
+    with pytest.raises(NotImplementedError):
       await measure_with(self.absorbance, [600], report="raw")
 
   async def test_earlier_raw_results_are_returned_again(self):
@@ -1185,11 +1191,18 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
       simulated_data=[earlier],
     )
     assert isinstance(replayed, CLARIOstarAbsorbanceResult)
-    self.assertEqual(
-      (replayed.data, replayed.references, replayed.calibration, replayed.reference_calibration),
-      (earlier.data, earlier.references, earlier.calibration, earlier.reference_calibration),
+    assert (
+      replayed.data,
+      replayed.references,
+      replayed.calibration,
+      replayed.reference_calibration,
+    ) == (
+      earlier.data,
+      earlier.references,
+      earlier.calibration,
+      earlier.reference_calibration,
     )
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await measure_with(self.absorbance, [600], simulated_data=[earlier])
 
   async def test_simulated_data_must_match_the_measurement(self):
@@ -1207,15 +1220,15 @@ class SimulatedDataTests(unittest.IsolatedAsyncioTestCase):
       ([600], [other_wells]),
       ([600], [column_1]),
     ):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await measure_with(self.absorbance, wavelengths, simulated_data=simulated_data)
 
 
-class ResultsDirectoryTests(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
-    temporary = tempfile.TemporaryDirectory()
-    self.addCleanup(temporary.cleanup)
-    self.directory = os.path.join(temporary.name, "run")
+class TestResultsDirectory(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    temporary = stack.enter_context(tempfile.TemporaryDirectory())
+    self.directory = os.path.join(temporary, "run")
 
   async def read_column_1(self, **arguments):
     io = FakeFTDI()
@@ -1229,36 +1242,40 @@ class ResultsDirectoryTests(unittest.IsolatedAsyncioTestCase):
     results = await self.read_column_1(results_directory=self.directory)
     await self.read_column_1(results_directory=self.directory)
     rows = load_rows(self.directory)
-    self.assertEqual([row["read"] for row in rows], [0] * 8 + [1] * 8)
-    self.assertEqual([row["value"] for row in rows[:8]], list(results[0].data.values()))
+    assert [row["read"] for row in rows] == [0] * 8 + [1] * 8
+    assert [row["value"] for row in rows[:8]] == list(results[0].data.values())
 
-  async def test_a_failed_write_still_returns_the_result_and_is_raised_by_the_next_read(self):
+  async def test_a_failed_write_still_returns_the_result_and_is_raised_by_the_next_read(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     with (
       patch.object(directory_module.os, "fsync", side_effect=OSError(28, "No space left")),
-      self.assertLogs(directory_module.logger, "ERROR"),
+      caplog.at_level(logging.ERROR, logger=directory_module.logger.name),
     ):
       results = await self.read_column_1(results_directory=self.directory)
-    self.assertEqual(list(results[0].data), COLUMN_1)
-    with self.assertRaisesRegex(RuntimeError, "not all written"):
+    assert len(caplog.records) >= 1
+    assert list(results[0].data) == COLUMN_1
+    with pytest.raises(RuntimeError, match="not all written"):
       await self.read_column_1(results_directory=self.directory)
 
 
-class DrawerOpenTests(unittest.IsolatedAsyncioTestCase):
+class TestDrawerOpen(AnyioTestBase):
   async def test_a_read_with_the_drawer_out_is_refused_before_the_run(self):
     io = FakeFTDI()
     io.replies = [STATUS_DRAWER_OPEN]
-    with self.assertRaisesRegex(RuntimeError, "the drawer is open"):
+    with pytest.raises(RuntimeError, match="the drawer is open"):
       await make_absorbance(io, ground_truth_96_well_plate()).measure(wavelengths=[600])
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME])
+    assert io.written == [STATUS_QUERY_FRAME]
 
   async def test_the_drawer_is_read_from_the_idle_status_the_run_waits_for(self):
     io = FakeFTDI()
     io.replies = [STATUS_BUSY, STATUS_DRAWER_OPEN]
     absorbance = make_absorbance(io, ground_truth_96_well_plate())
     absorbance._driver.default_poll_interval = 0
-    with self.assertRaisesRegex(RuntimeError, "the drawer is open"):
+    with pytest.raises(RuntimeError, match="the drawer is open"):
       await absorbance.measure(wavelengths=[600])
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME])
+    assert io.written == [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME]
 
 
 if __name__ == "__main__":

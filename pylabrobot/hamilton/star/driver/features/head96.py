@@ -1,6 +1,5 @@
 """The 96-head: the block of 96 pipettes that works a whole plate at once."""
 
-import asyncio
 import logging
 from dataclasses import dataclass, field, replace
 from typing import (
@@ -18,6 +17,8 @@ from typing import (
   Union,
   cast,
 )
+
+import anyio
 
 from pylabrobot.hamilton.liquid_class_resolver import (
   ASPIRATE_CLASS_ATTRIBUTES,
@@ -513,23 +514,25 @@ class Head96(Head):
     Args:
       command_error: the command's own failure, which a failed read-back does not hide.
     """
-    try:
-      if self.arm is not None:
-        await self.arm.request_position()
-      await self.request_y_position()
-      await self.request_z_position()
-    except Exception:
-      if command_error is None:
-        raise
-      logger.exception("could not read back where the 96-head stopped")
+    with anyio.CancelScope(shield=True):
+      try:
+        if self.arm is not None:
+          await self.arm.request_position()
+        await self.request_y_position()
+        await self.request_z_position()
+      except Exception:
+        if command_error is None:
+          raise
+        logger.exception("could not read back where the 96-head stopped")
 
   async def _request_tips_after_failure(self) -> Optional[bool]:
     """Whether the firmware holds that tips are mounted after a tip command failed; None unread."""
     try:
-      return await self.request_tip_presence()
+      with anyio.CancelScope(shield=True):
+        return await self.request_tip_presence()
     except Exception:
       logger.warning("could not request whether the 96-head carries tips after the failure")
-      return None
+    return None
 
   # -- tip pickup ----------------------------------------------------------------------------------
 
@@ -987,7 +990,8 @@ class Head96(Head):
         immersion_mode=1 if limit_immersion_to_search_end else None,
       )
     finally:
-      await self._record_where_it_stopped("z")
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("z")
 
   async def probe_z_using_clld(
     self,
@@ -1157,7 +1161,8 @@ class Head96(Head):
         for _ in range(n_replicates)
       ]
     except BaseException:
-      await self.move_to_safe_z()
+      with anyio.CancelScope(shield=True):
+        await self.move_to_safe_z()
       raise
     found = [surface for surface in rounds if surface is not None]
     if found and len(found) != len(rounds):
@@ -1341,13 +1346,15 @@ class Head96(Head):
         minimum_height=floor,
       )
     except BaseException:
-      await self._record_piston_position()
+      with anyio.CancelScope(shield=True):
+        await self._record_piston_position()
       raise
     else:
       drawn = c.dispensing_drive_increments_to_uL(increments)
       self.piston_position = round(self.piston_position + drawn, 2)
     finally:
-      await self._record_where_it_stopped("z")
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("z")
 
   async def _dispense_in_place(
     self,
@@ -1400,14 +1407,16 @@ class Head96(Head):
         minimum_height=floor,
       )
     except BaseException:
-      await self._record_piston_position()
+      with anyio.CancelScope(shield=True):
+        await self._record_piston_position()
       raise
     else:
       left = max(self.piston_position - c.dispensing_drive_increments_to_uL(increments), 0.0)
       drawn_back = c.dispensing_drive_increments_to_uL(back_increments)
       self.piston_position = round(left + drawn_back, 2)
     finally:
-      await self._record_where_it_stopped("z")
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("z")
 
   @staticmethod
   def _get_channel_pattern_hex(channel_pattern: List[bool]) -> str:
@@ -1678,11 +1687,12 @@ class Head96(Head):
       # A command that failed part way moved liquid: the piston's travel past the air is liquid.
       if tracking and len(moves) == len(pairs):
         travel = 0.0
-        try:
-          now = await self.dispensing_drive_request_uL_position()
-          travel = round(max(piston_sign * (now - piston_before) - air_before_liquid, 0.0), 1)
-        except Exception:
-          logger.warning("could not read the 96-head's piston; what it moved is not in the model")
+        with anyio.CancelScope(shield=True):
+          try:
+            now = await self.dispensing_drive_request_uL_position()
+            travel = round(max(piston_sign * (now - piston_before) - air_before_liquid, 0.0), 1)
+          except Exception:
+            logger.warning("could not read the 96-head's piston; what it moved is not in the model")
         if travel > 0:
           for (giver, taker), most in zip(pairs, moves):
             moved = min(travel, most, giver.get_used_volume())
@@ -2243,7 +2253,8 @@ class Head96(Head):
     except BaseException as error:
       # Under OFF a refused field is refused before anything moves.
       if searched or not isinstance(error, ValueError):
-        await self.move_to_safe_z()
+        with anyio.CancelScope(shield=True):
+          await self.move_to_safe_z()
       raise
 
   # -- dispensing ----------------------------------------------------------------------------------
@@ -2834,7 +2845,8 @@ class Head96(Head):
     except BaseException as error:
       # Under OFF a refused field is refused before anything moves.
       if searched or not isinstance(error, ValueError):
-        await self.move_to_safe_z()
+        with anyio.CancelScope(shield=True):
+          await self.move_to_safe_z()
       raise
 
   # -- mixing --------------------------------------------------------------------------------------
@@ -2944,7 +2956,7 @@ class Head96(Head):
           mix.volume, mix.flow_rate, surface_following_distance=following, minimum_height=bottom
         )
       if settling_time:
-        await asyncio.sleep(settling_time)
+        await anyio.sleep(settling_time)
 
     async def rise() -> None:
       if minimum_traverse_height_end is None:
@@ -2986,7 +2998,8 @@ class Head96(Head):
       await self.move_tool_bottom_to_z_position(start, speed=swap_speed)
       await strokes()
     except BaseException:
-      await self.move_to_safe_z()
+      with anyio.CancelScope(shield=True):
+        await self.move_to_safe_z()
       raise
     await rise()
     if blow_out_air_volume:

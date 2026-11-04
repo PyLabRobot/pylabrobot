@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.prep.driver.features.calibration import Calibration
 from pylabrobot.hamilton.prep.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.prep.driver.features.head8 import Head8
@@ -34,7 +35,7 @@ PREP_DECK_LOCATION = Coordinate(29.20, 88.02, 50.0)
 PREP_HEATER_SHAKER_MODEL = "Prep_heater_shaker"
 
 
-class PrepDevice(Resource):
+class PrepDevice(Resource, HasLifespan):
   """The complete modelling and control interface for a Hamilton Prep.
 
   The device is itself a resource and its deck is its child, so everything on the deck is a
@@ -75,6 +76,7 @@ class PrepDevice(Resource):
       category="device",
       model=model if model is not None else self.__class__.__name__,
     )
+    HasLifespan.__init__(self)
 
     self.deck = deck
     self.driver = driver
@@ -85,8 +87,10 @@ class PrepDevice(Resource):
       deck, location=deck_location if deck_location is not None else Coordinate(0, 0, 0)
     )
 
-  async def setup(
+  async def _enter_lifespan(
     self,
+    stack: AsyncExitStackWithShielding,
+    *,
     smart: bool = True,
     force_initialize: bool = False,
     skip_device_initialization: bool = False,
@@ -94,7 +98,8 @@ class PrepDevice(Resource):
     use_v1_aspirate_dispense: bool = False,
     enable_safe_speeds: bool = False,
     deck_components_offset: Optional[Coordinate] = None,
-  ):
+    skip_raise_to_z_safety: bool = False,
+  ) -> None:
     """Bring the device up.
 
     Args:
@@ -106,28 +111,24 @@ class PrepDevice(Resource):
       enable_safe_speeds: as `PrepDriver.setup` takes it.
       deck_components_offset: shift every labware spot by this, as `update_deck_components` does.
         None leaves them where they are.
+      skip_raise_to_z_safety: leave the channels where they stand when exiting the lifespan.
     """
-    await self.driver.setup(
-      smart=smart,
-      force_initialize=force_initialize,
-      skip_device_initialization=skip_device_initialization,
-      default_minimum_traverse_height=default_minimum_traverse_height,
-      use_v1_aspirate_dispense=use_v1_aspirate_dispense,
-      enable_safe_speeds=enable_safe_speeds,
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(
+      self.driver.lifespan(
+        smart=smart,
+        force_initialize=force_initialize,
+        skip_device_initialization=skip_device_initialization,
+        default_minimum_traverse_height=default_minimum_traverse_height,
+        use_v1_aspirate_dispense=use_v1_aspirate_dispense,
+        enable_safe_speeds=enable_safe_speeds,
+        skip_raise_to_z_safety=skip_raise_to_z_safety,
+      )
     )
     if self.driver.hs is not None:
       self.model = PREP_HEATER_SHAKER_MODEL
     if deck_components_offset is not None:
       self.update_deck_components(deck_components_offset)
-
-  async def stop(self, skip_raise_to_z_safety: bool = False):
-    """Put the device down.
-
-    Args:
-      skip_raise_to_z_safety: leave the channels where they stand, instead of raising them to Z safety first.
-        The next lateral move will crash a channel that is low.
-    """
-    await self.driver.stop(skip_raise_to_z_safety=skip_raise_to_z_safety)
 
   def update_deck_components(self, offset: Coordinate) -> None:
     """Shift every labware spot by `offset`, in software only: nothing is written to the device.
@@ -138,7 +139,6 @@ class PrepDevice(Resource):
     for spot in self.deck.spots:
       if spot.location is not None:
         spot.location = spot.location + offset
-
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.
 

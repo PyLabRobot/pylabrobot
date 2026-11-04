@@ -1,8 +1,9 @@
-import asyncio
 import logging
-import time
 from typing import Literal, Optional, Sequence, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class GenoGrinderError(Exception):
     return f"{self.title}: {self.message}" if self.message else self.title
 
 
-class GenoGrinder:
+class GenoGrinder(HasLifespan):
   """Cole-Parmer SPEX GenoGrinder plate shaker / homogenizer.
 
   A microplate clamp shaker: it locks a plate (or plate stack) into a clamp and
@@ -99,10 +100,12 @@ class GenoGrinder:
       mix_timeout_margin: grace added to the run duration before a wait for the
         run to complete is considered timed out, in seconds.
     """
+    super().__init__()
     self.use_clamp_commands = use_clamp_commands
     self.command_settle = command_settle
     self.status_poll_interval = status_poll_interval
     self.mix_timeout_margin = mix_timeout_margin
+    self.timeout = timeout
     self.io = Serial(
       human_readable_device_name="Cole-Parmer SPEX GenoGrinder",
       port=port,
@@ -110,24 +113,23 @@ class GenoGrinder:
       bytesize=8,
       parity="N",
       stopbits=1,
-      timeout=timeout,
     )
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and stop the machine when the lifespan exits."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "GenoGrinder has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self.io.setup()
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._stop_machine, shield_timeout=self.io.timeout)
     await self._initialize()
     logger.info("[GenoGrinder %s] connected", self.io.port)
 
-  async def stop(self) -> None:
-    """Stop any run in progress and close the serial connection."""
-    try:
-      await self.io.write((("*06*") + CR).encode("ascii"))
-    finally:
-      await self.io.stop()
+  async def _stop_machine(self) -> None:
+    """Send the raw shutdown frame while the serial transport remains open."""
+    await self.io.write((("*06*") + CR).encode("ascii"))
 
   # === Command layer ===
 
@@ -137,12 +139,10 @@ class GenoGrinder:
     Returns the trimmed reply, or "" if nothing arrives within the read timeout.
     """
 
-    async def _read() -> str:
-      buf = bytearray()
+    buf = bytearray()
+    with anyio.move_on_after(self.timeout if timeout is None else timeout):
       while True:
         char = await self.io.read(1)
-        if char == b"":  # read timed out
-          break
         if char == b"\r":
           if buf:
             break
@@ -150,13 +150,8 @@ class GenoGrinder:
         if char == b"\n":
           continue
         buf += char
-      return buf.decode("ascii", errors="replace").strip()
 
-    if timeout is None:
-      reply = await _read()
-    else:
-      with self.io.temporary_timeout(timeout):
-        reply = await _read()
+    reply = buf.decode("ascii", errors="replace").strip()
     logger.debug("[GenoGrinder] recv: %s", reply)
     return reply
 
@@ -253,12 +248,19 @@ class GenoGrinder:
     reply = await self._command(f"*02,{duration:03d},{speed:04d}*")
     await self._expect(reply, _PARAMETERS_SET, "Instrument did not set parameters")
 
-    await asyncio.sleep(self.command_settle)
+    await anyio.sleep(self.command_settle)
     reply = await self._command("*04*")
     await self._expect(reply, _RUNNING, "Instrument did not start the run")
 
-    await asyncio.sleep(self.command_settle)
-    await self._wait_for_run_complete(duration)
+    running = True
+    try:
+      await anyio.sleep(self.command_settle)
+      await self._wait_for_run_complete(duration)
+      running = False
+    finally:
+      if running:
+        with anyio.CancelScope(shield=True):
+          await self._stop_machine()
     logger.info("[GenoGrinder %s] mixed %ds at %drpm", self.io.port, duration, speed)
 
   async def stop_shaking(self) -> None:
@@ -268,19 +270,21 @@ class GenoGrinder:
   # === Wait helpers ===
 
   async def _wait_for_run_complete(self, duration: int) -> None:
-    deadline = time.monotonic() + duration + self.mix_timeout_margin
-    while True:
-      reply = await self._command("*01*")
-      if _STANDBY in reply or _RUN_COMPLETE in reply:
-        return
-      if not any(state in reply for state in _MIXING_STATES):
-        raise GenoGrinderError(
-          title="Invalid mixing state; check the device and retry",
-          message=f"received {reply!r}",
-        )
-      if time.monotonic() > deadline:
-        raise GenoGrinderError(
-          title="Timed out waiting for the run to complete",
-          message=f"duration {duration}s + {self.mix_timeout_margin:.0f}s margin",
-        )
-      await asyncio.sleep(self.status_poll_interval)
+    timeout = duration + self.mix_timeout_margin
+    with anyio.move_on_after(timeout if timeout > 0 else self.timeout):
+      while True:
+        reply = await self._command("*01*")
+        if _STANDBY in reply or _RUN_COMPLETE in reply:
+          return
+        if not any(state in reply for state in _MIXING_STATES):
+          raise GenoGrinderError(
+            title="Invalid mixing state; check the device and retry",
+            message=f"received {reply!r}",
+          )
+        if timeout <= 0:
+          break
+        await anyio.sleep(self.status_poll_interval)
+    raise GenoGrinderError(
+      title="Timed out waiting for the run to complete",
+      message=f"duration {duration}s + {self.mix_timeout_margin:.0f}s margin",
+    )

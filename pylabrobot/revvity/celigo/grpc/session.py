@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import fcntl
 import hashlib
 import json
@@ -14,14 +13,18 @@ from collections.abc import AsyncGenerator, Callable, Coroutine
 from dataclasses import asdict, replace
 from datetime import timedelta
 from pathlib import Path
-from typing import BinaryIO, TypeVar
+from typing import BinaryIO, Generic, TypeVar, cast
 from uuid import uuid4
 
+import anyio
+import anyio.abc
+
 from pylabrobot.__version__ import __version__
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.revvity.celigo.celigo import Celigo
 from pylabrobot.revvity.celigo.config import CeligoConfig
 from pylabrobot.revvity.celigo.coordinates import CoordinateSystems
-from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob, run_owned_operation
+from pylabrobot.revvity.celigo.grpc.acquisition_job import AcquisitionJob
 from pylabrobot.revvity.celigo.grpc.image_encoding import (
   build_public_image_frame,
   encode_frame,
@@ -56,7 +59,7 @@ from pylabrobot.revvity.celigo.scan import (
 )
 from pylabrobot.rpc import device, images, jobs
 from pylabrobot.rpc.errors import BusyError, CapacityError, StateError, StorageError
-from pylabrobot.rpc.transport import API_VERSION, Latest, copy_message
+from pylabrobot.rpc.transport import API_VERSION, Latest, copy_message, require_asyncio
 from pylabrobot.rpc.v1 import device_pb2 as device_pb
 from pylabrobot.rpc.v1 import images_pb2 as image_pb
 from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
@@ -69,8 +72,36 @@ class _ScanCancelled(Exception):
   """End the driver's scan at a frame boundary after cooperative cancellation."""
 
 
-class CeligoSession:
-  """Manage the driver and job lifecycle through ordinary Python methods."""
+class _DriverOwnership:
+  """Signals between the task holding a driver's lifespan and the session closing it."""
+
+  def __init__(self, driver: Celigo) -> None:
+    """Track one driver lifespan from entry to exit."""
+    self.driver = driver
+    self.release = anyio.Event()
+    self.closed = anyio.Event()
+    self.close_error: Exception | None = None
+
+
+class _CommandOutcome(Generic[T]):
+  """Result of a command that runs to completion even if its caller goes away."""
+
+  def __init__(self) -> None:
+    """Start with no result."""
+    self.finished = anyio.Event()
+    self.completed = False
+    self.value: T | None = None
+    self.error: Exception | None = None
+
+
+class CeligoSession(HasLifespan):
+  """Own the driver, durable jobs, and in-flight commands for one scoped service lifespan.
+
+  The lifespan holds the hardware lock and the job store, and owns every command, job execution,
+  and driver lifespan in one task group. `grpc.aio` limits it to asyncio. On exit it refuses
+  new commands, finishes accepted ones, cancels the active job cooperatively, waits for every
+  execution, closes the driver, and then closes the store and releases the lock.
+  """
 
   device_type = "Celigo"
   display_name = "Celigo"
@@ -87,9 +118,12 @@ class CeligoSession:
     connection_id: str = "default",
     image_storage_bytes: int = DEFAULT_QUOTA,
   ):
+    super().__init__()
     self.config = config
     self.driver_factory = driver_factory
     self.driver: Celigo | None = None
+    self._driver_ownership: _DriverOwnership | None = None
+    self._task_group: anyio.abc.TaskGroup | None = None
     self.hardware_lock = hardware_lock
     self.lock_file: BinaryIO | None = None
     serialized = json.dumps(
@@ -116,9 +150,9 @@ class CeligoSession:
     self.closing = False
     self.initialized = False
     self.fault = ""
-    self.lock = asyncio.Lock()
-    self.read_slots = asyncio.Semaphore(2)
-    self.commands: set[asyncio.Task] = set()
+    self.lock = anyio.Lock()
+    self.read_slots = anyio.Semaphore(2)
+    self.commands: set[anyio.Event] = set()
     self.command_limit = 32
     self.status = device_pb.DeviceStatus(device_id=device_id, instance_id=uuid4().hex)
     self.updates: Latest[device_pb.DeviceStatus] = Latest()
@@ -299,23 +333,62 @@ class CeligoSession:
       self.publish_status()
       raise
 
+  async def _run_command_to_completion(
+    self, operation: Coroutine[object, object, T], outcome: _CommandOutcome[T]
+  ) -> None:
+    """Run an accepted command in the session's task group and record its result."""
+    try:
+      outcome.value = await operation
+      outcome.completed = True
+    except Exception as exc:  # Recorded for the caller, which may have disconnected.
+      outcome.error = exc
+    finally:
+      self.commands.discard(outcome.finished)
+      outcome.finished.set()
+
   async def run_command(self, operation: Coroutine[object, object, T]) -> T:
     """Keep accepted motion and durable bookkeeping alive if the caller disconnects."""
-    if self.closing or len(self.commands) >= self.command_limit:
+    task_group = self._task_group
+    if task_group is None or self.closing or len(self.commands) >= self.command_limit:
       operation.close()
-      if self.closing:
+      if task_group is None or self.closing:
         raise StateError("service is stopping")
       raise CapacityError("too many pending commands")
-    task = asyncio.create_task(operation)
-    self.commands.add(task)
+    outcome: _CommandOutcome[T] = _CommandOutcome()
+    self.commands.add(outcome.finished)
+    task_group.start_soon(self._run_command_to_completion, operation, outcome)
+    await outcome.finished.wait()
+    if outcome.error is not None:
+      raise outcome.error
+    if not outcome.completed:
+      raise StateError("command was interrupted by service shutdown")
+    return cast(T, outcome.value)
 
-    def finished(done):
-      self.commands.discard(done)
-      if not done.cancelled():
-        done.exception()  # Observe failures even when the RPC disconnected.
+  async def wait_for_commands(self) -> None:
+    """Wait until every accepted command has finished."""
+    while self.commands:
+      await next(iter(self.commands)).wait()
 
-    task.add_done_callback(finished)
-    return await asyncio.shield(task)
+  def refuse_commands(self) -> None:
+    """Refuse new commands while accepted work finishes."""
+    self.closing = True
+
+  async def _execute_job(self, job: AcquisitionJob) -> None:
+    """Run one job's execution in the session's task group, isolating its failure."""
+    try:
+      await job.run()
+    except Exception:
+      logger.exception("Execution of %s failed", job.ref.job_id)
+    finally:
+      assert job.finished is not None
+      job.finished.set()
+
+  def start_job_execution(self, job: AcquisitionJob) -> None:
+    """Start a job's execution, owned by the session rather than the accepting RPC."""
+    if self._task_group is None:
+      raise StateError("service is not running")
+    job.finished = anyio.Event()
+    self._task_group.start_soon(self._execute_job, job, name=f"celigo-grpc-{job.ref.job_id}")
 
   async def create_job(
     self,
@@ -328,7 +401,7 @@ class CeligoSession:
     """Persist an inert job, reusing its request ID only when all settings match."""
     async with self.lock:
       self.ensure_available()
-      await asyncio.to_thread(self.validate_job_specification, spec, initialize)
+      await anyio.to_thread.run_sync(self.validate_job_specification, spec, initialize)
       if not 1 <= len(request_id) <= 128:
         raise ValueError("request_id must be 1..128 characters")
       reservation = 0 if initialize else spec.calculate_storage_reservation()
@@ -427,22 +500,6 @@ class CeligoSession:
       raise StateError("job does not contain a scan plan")
     return plan
 
-  async def open(self) -> None:
-    self.hardware_lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    self.lock_file = self.hardware_lock.open("a+b")
-    try:
-      fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError as exc:
-      self.lock_file.close()
-      self.lock_file = None
-      raise BusyError("another Celigo service owns the hardware lock") from exc
-    for spec, status in await self.store.open():
-      job = AcquisitionJob(self, spec, status)
-      self.jobs[job.ref.job_id] = job
-      self.requests[status.request_id] = job
-    self.previews.value = await self.run_storage_operation(self.store.get_latest_preview)
-    self.publish_status()
-
   async def check_imaging_status(self) -> None:
     """Check controller health and a configured door input before acquisition."""
     driver = self.driver
@@ -467,9 +524,39 @@ class CeligoSession:
     if not door_closed:
       raise StateError("configured door interlock is open")
 
+  async def _own_driver(
+    self,
+    ownership: _DriverOwnership,
+    *,
+    task_status: anyio.abc.TaskStatus[None] = anyio.TASK_STATUS_IGNORED,
+  ) -> None:
+    """Hold a driver's lifespan in one task, so it is entered and exited by the same task.
+
+    An entry failure propagates to the caller of `initialize`. A failure while closing is
+    recorded for `close_driver` to raise.
+    """
+    entered = False
+    try:
+      async with ownership.driver.lifespan():
+        entered = True
+        task_status.started()
+        await ownership.release.wait()
+    except Exception as exc:
+      if not entered:
+        raise
+      ownership.close_error = exc
+    finally:
+      ownership.closed.set()
+
   async def initialize(self) -> None:
-    self.driver = self.driver_factory()
-    await self.driver.setup()  # PLR opens USB, configures the camera, and homes the imaging axes.
+    """Enter a new driver's lifespan: PLR opens USB, configures the camera, and homes."""
+    if self._task_group is None:
+      raise StateError("service is not running")
+    driver = self.driver_factory()
+    ownership = _DriverOwnership(driver)
+    await self._task_group.start(self._own_driver, ownership)
+    self.driver = driver
+    self._driver_ownership = ownership
     await self.check_imaging_status()
 
   async def capture_frame(self, job: AcquisitionJob, sequence: int) -> stored_pb.ImageFrame | None:
@@ -484,14 +571,14 @@ class CeligoSession:
     await self.check_imaging_status()
     if job.stop_requested.is_set():
       return None
-    stage_move_started = time.monotonic()
+    stage_move_started = anyio.current_time()
     settled = await driver.move_to_scan_block(plan.blocks[0])
-    stage_move_elapsed = timedelta(seconds=time.monotonic() - stage_move_started)
+    stage_move_elapsed = timedelta(seconds=anyio.current_time() - stage_move_started)
     await self.check_imaging_status()
     if job.stop_requested.is_set():
       return None
     acquisition_started_at = time.time()
-    acquisition_started = time.monotonic()
+    acquisition_started = anyio.current_time()
     result = await driver.acquire_scan_position(
       position=plan.frames[0].position,
       label=job.ref.job_id,
@@ -506,12 +593,12 @@ class CeligoSession:
     timing = AcquisitionTiming(
       started_at=acquisition_started_at,
       finished_at=time.time(),
-      elapsed=timedelta(seconds=time.monotonic() - acquisition_started),
+      elapsed=timedelta(seconds=anyio.current_time() - acquisition_started),
       stage_move_elapsed=stage_move_elapsed,
     )
     if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
       raise ValueError("camera returned dimensions different from calibration")
-    return await asyncio.to_thread(
+    return await anyio.to_thread.run_sync(
       encode_frame,
       job.ref,
       result,
@@ -537,7 +624,7 @@ class CeligoSession:
       """Commit pixels and progress together, then honor cooperative cancellation."""
       if (result.frame.width, result.frame.height) != (job.spec.width, job.spec.height):
         raise ValueError("camera returned dimensions different from calibration")
-      frame = await asyncio.to_thread(
+      frame = await anyio.to_thread.run_sync(
         encode_scan_frame,
         job.ref,
         result,
@@ -561,10 +648,17 @@ class CeligoSession:
       pass
 
   async def close_driver(self) -> None:
-    if self.driver is not None:
-      await self.driver.stop()
-      self.driver = None
+    """Exit the driver's lifespan, running its safety shutdown, and wait until it has closed."""
+    ownership, self._driver_ownership = self._driver_ownership, None
+    self.driver = None
     self.initialized = False
+    if ownership is None:
+      return
+    ownership.release.set()
+    with anyio.CancelScope(shield=True):
+      await ownership.closed.wait()
+    if ownership.close_error is not None:
+      raise ownership.close_error
 
   async def _move_door(self, sample_position: tuple[float, float] | None) -> None:
     """Own drawer motion until completion; a missing position selects ejection."""
@@ -627,27 +721,54 @@ class CeligoSession:
         self.initialized = False
         raise
 
-  async def stop(self) -> None:
+  def _release_hardware_lock(self) -> None:
+    """Close the hardware lock file, releasing its advisory lock."""
+    lock_file, self.lock_file = self.lock_file, None
+    if lock_file is not None:
+      lock_file.close()
+
+  def _clear_task_group(self) -> None:
+    """Forget the task group once every task it owned has finished."""
+    self._task_group = None
+
+  async def _finish_accepted_work(self) -> None:
+    """Refuse new work, finish accepted commands and jobs, and close the driver."""
     self.closing = True
     try:
-      while self.commands:
-        await asyncio.gather(*list(self.commands), return_exceptions=True)
+      await self.wait_for_commands()
       if self.active_job:
         try:
           await self.active_job.cancel()
         except StorageError:
           logger.exception("Shutdown cancellation could not be persisted")
-      await asyncio.gather(*(job.task for job in self.jobs.values() if job.task))
+      for job in list(self.jobs.values()):
+        if job.finished is not None:
+          await job.finished.wait()
     finally:
-      try:
-        await self.store.close()
-      finally:
-        try:
-          await run_owned_operation(self.close_driver())
-        finally:
-          if self.lock_file is not None:
-            self.lock_file.close()
-            self.lock_file = None
+      await self.close_driver()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Take the hardware lock and recover durable records without opening hardware."""
+    await super()._enter_lifespan(stack)
+    require_asyncio(type(self).__name__)
+    self.hardware_lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    self.lock_file = self.hardware_lock.open("a+b")
+    stack.callback(self._release_hardware_lock)
+    try:
+      fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+      raise BusyError("another Celigo service owns the hardware lock") from exc
+    records = await self.store.open()
+    stack.push_shielded_async_callback(self.store.close)
+    for spec, status in records:
+      job = AcquisitionJob(self, spec, status)
+      self.jobs[job.ref.job_id] = job
+      self.requests[status.request_id] = job
+    self.previews.value = await self.run_storage_operation(self.store.get_latest_preview)
+    stack.callback(self._clear_task_group)
+    self._task_group = await stack.enter_task_group()
+    stack.push_shielded_async_callback(self._finish_accepted_work)
+    self.publish_status()
 
   def get_device_info(self) -> device_pb.DeviceInfo:
     """Advertise actual registered services independently of image-specific limits."""

@@ -1,6 +1,7 @@
-import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Tuple
+
+import anyio
 
 # The letters a channel's module is addressed by, in order from the back.
 CHANNEL_MODULE_LETTERS = "123456789ABCDEFG"
@@ -36,7 +37,7 @@ class _FirmwareLock:
   _WITHOUT_THE_AUTOLOAD: Tuple[str, ...] = ("C0", "X0", "H0", "D0", "R0") + CHANNEL_MODULES
 
   def __init__(self):
-    self._locks = {name: asyncio.Lock() for name in self._SUBSYSTEMS}
+    self._locks = {name: anyio.Lock(fast_acquire=True) for name in self._SUBSYSTEMS}
 
   @classmethod
   def subsystem_of(cls, module: str) -> str:

@@ -894,7 +894,7 @@ def _parse_protocol(props_xml: bytes, exported_xml: bytes) -> BdzProtocol:
   for mix in proto_el.findall(".//Mix"):
     if mix.get("enabled", "true").lower() != "true":
       raise ValueError("Disabled Mix steps are not supported for structured editing")
-    if len(mix.findall("Mixing/Shakes/Shake")) != 1 or list(mix.find("Steps") or []):
+    if len(mix.findall("Mixing/Shakes/Shake")) != 1 or mix.findall("Steps/*"):
       raise ValueError("Multi-shake or nested Mix steps are not supported for structured editing")
     precollect = mix.find("Precollect")
     if precollect is not None and precollect.get("enabled", "false").lower() == "true":

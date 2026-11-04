@@ -1,10 +1,16 @@
 import logging
 import unittest
 import xml.etree.ElementTree as ET
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Optional
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
+from pylabrobot.concurrency import HasLifespan
 from pylabrobot.inheco.scila.scila import SCILA, SCILADrawerLoadingTray
 from pylabrobot.inheco.transport.sila import InhecoSiLAInterface
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 _TEMPERATURE_RESPONSE = (
   "<Response>"
@@ -13,6 +19,31 @@ _TEMPERATURE_RESPONSE = (
   "  <Parameter name='TemperatureControl'><Boolean>true</Boolean></Parameter>"
   "</Response>"
 )
+
+
+class _FakeSiLAInterface:
+  """Software-only SiLA interface that records its lifespan and commands."""
+
+  def __init__(self, trace: list[str], initialize_error: Optional[Exception] = None) -> None:
+    self.trace = trace
+    self.initialize_error = initialize_error
+    self.bound_port = 80
+    self.client_ip = "127.0.0.1"
+    self.machine_ip = "127.0.0.1"
+
+  @asynccontextmanager
+  async def lifespan(self) -> AsyncIterator["_FakeSiLAInterface"]:
+    self.trace.append("transport-enter")
+    try:
+      yield self
+    finally:
+      self.trace.append("transport-exit")
+
+  async def send_command(self, command: str, **kwargs: Any) -> Any:
+    self.trace.append(command)
+    if command == "Initialize" and self.initialize_error is not None:
+      raise self.initialize_error
+    return {}
 
 
 class _SCILATestCase(unittest.IsolatedAsyncioTestCase):
@@ -32,14 +63,6 @@ class _SCILATestCase(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSCILA(_SCILATestCase):
-  async def test_setup(self):
-    await self.scila.setup()
-    self.mock_sila_interface.setup.assert_called_once()
-
-  async def test_stop(self):
-    await self.scila.stop()
-    self.mock_sila_interface.close.assert_called_once()
-
   async def test_request_status(self):
     self.mock_sila_interface.send_command.return_value = {"GetStatusResponse": {"state": "Standby"}}
     self.assertEqual(await self.scila.request_status(), "Standby")
@@ -122,6 +145,71 @@ class TestSCILA(_SCILATestCase):
     scila = SCILA(name="scila2", scila_ip="127.0.0.1", gas_mixer_connected=False)
     self.assertIs(scila.gas_mixer_connected, False)
     self.assertIs(scila.serialize()["gas_mixer_connected"], False)
+
+
+class TestSCILALifecycle(AnyioTestBase):
+  """Verify SCILA owns the lifespan of its SiLA transport."""
+
+  _anyio_backends = ["asyncio"]
+
+  def _make_scila(self, trace: list[str], initialize_error: Optional[Exception] = None) -> SCILA:
+    interface = _FakeSiLAInterface(trace, initialize_error)
+    with patch("pylabrobot.inheco.scila.scila.InhecoSiLAInterface", return_value=interface):
+      return SCILA(name="scila", scila_ip="127.0.0.1")
+
+  def test_managed_methods_are_inherited(self) -> None:
+    assert SCILA.setup is HasLifespan.setup
+    assert SCILA.stop is HasLifespan.stop
+    assert SCILA.__aenter__ is HasLifespan.__aenter__
+    assert SCILA.__aexit__ is HasLifespan.__aexit__
+
+  async def test_transport_is_entered_before_reset_and_initialize(self) -> None:
+    trace: list[str] = []
+    scila = self._make_scila(trace)
+
+    async with scila:
+      assert trace == ["transport-enter", "Reset", "Initialize"]
+
+    assert trace == ["transport-enter", "Reset", "Initialize", "transport-exit"]
+
+  async def test_initialize_failure_unwinds_transport_before_reaching_caller(self) -> None:
+    trace: list[str] = []
+    initialize_error = RuntimeError("initialize failed")
+    scila = self._make_scila(trace, initialize_error)
+
+    with pytest.raises(RuntimeError, match="initialize failed") as error_info:
+      async with scila:
+        pytest.fail("failed initialization reached the lifespan body")
+
+    assert error_info.value is initialize_error
+    assert trace == ["transport-enter", "Reset", "Initialize", "transport-exit"]
+
+  async def test_setup_and_stop_drive_the_transport_lifespan(self) -> None:
+    trace: list[str] = []
+    scila = self._make_scila(trace)
+
+    with pytest.warns(DeprecationWarning, match="setup.*deprecated"):
+      await scila.setup()
+    assert trace == ["transport-enter", "Reset", "Initialize"]
+
+    await scila.stop()
+    assert trace == ["transport-enter", "Reset", "Initialize", "transport-exit"]
+
+
+class TestSCILATrioLifespan(AnyioTestBase):
+  """Verify the SCILA owner accepts a Trio-backed transport lifespan."""
+
+  _anyio_backends = ["trio"]
+
+  async def test_parent_enters_and_releases_transport(self) -> None:
+    trace: list[str] = []
+    interface = _FakeSiLAInterface(trace)
+    with patch("pylabrobot.inheco.scila.scila.InhecoSiLAInterface", return_value=interface):
+      scila = SCILA(name="scila", scila_ip="127.0.0.1")
+
+    async with scila:
+      assert trace == ["transport-enter", "Reset", "Initialize"]
+    assert trace == ["transport-enter", "Reset", "Initialize", "transport-exit"]
 
 
 class TestSCILATemperature(_SCILATestCase):

@@ -1,7 +1,8 @@
 import logging
-import time
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple
+
+import anyio
 
 try:
   import serial  # type: ignore
@@ -11,10 +12,11 @@ except ImportError as e:
   HAS_SERIAL = False
   _SERIAL_IMPORT_ERROR = e
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 
 
-class XPeel:
+class XPeel(HasLifespan):
   """Serial driver for the Azenta XPeel automated plate seal remover (RS-232).
 
   Owns the hardware connection and provides generic send/receive plus device-level operations
@@ -57,6 +59,7 @@ class XPeel:
     self.logger = logging.getLogger(__name__)
     self.port = port
     self.response_timeout = timeout if timeout is not None else self.RESPONSE_TIMEOUT
+    self._command_lock = anyio.Lock()
 
     self.io = Serial(
       human_readable_device_name="XPeel",
@@ -65,16 +68,13 @@ class XPeel:
       bytesize=serial.EIGHTBITS,
       parity=serial.PARITY_NONE,
       stopbits=serial.STOPBITS_ONE,
-      timeout=self.response_timeout,
-      write_timeout=self.response_timeout,
       rtscts=False,
     )
 
-  async def setup(self):
-    await self.io.setup()
-
-  async def stop(self):
-    await self.io.stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport for the driver's lifespan."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
 
   @classmethod
   def describe_error(cls, code: int) -> str:
@@ -94,46 +94,40 @@ class XPeel:
     except Exception:
       return None
 
-  async def send_command(
-    self, cmd, expect_ack=False, wait_for_ready=False, clear_buffer=True
+  async def _read_command_response(
+    self, full_cmd: str, expect_ack: bool, wait_for_ready: bool
   ) -> List[str]:
-    full_cmd = cmd if cmd.endswith("\r\n") else f"{cmd}\r\n"
-
-    self.logger.debug("Sending command: %s", full_cmd.strip())
-    if clear_buffer:
-      await self.io.reset_input_buffer()
-    await self.io.write(full_cmd.encode("ascii"))
-
+    """Collect command responses until the expected finite boundary or timeout."""
     responses: List[str] = []
-    start = time.time()
-    while time.time() - start < self.response_timeout:
-      raw = await self.io.readline()
-      line = raw.decode("ascii", errors="ignore").strip()
-      if not line:
-        continue
+    with anyio.move_on_after(self.response_timeout) as response_scope:
+      while True:
+        raw = await self.io.readline()
+        line = raw.decode("ascii", errors="ignore").strip()
+        if not line:
+          continue
 
-      display_line = line
-      if line.startswith("*ready:"):
-        parsed = self.parse_ready_line(line)
-        if parsed:
-          code, desc = parsed
-          display_line = f"{line} [{desc}]"
+        display_line = line
+        if line.startswith("*ready:"):
+          parsed = self.parse_ready_line(line)
+          if parsed:
+            code, desc = parsed
+            display_line = f"{line} [{desc}]"
 
-      responses.append(display_line)
-      self.logger.info("Received: %s", display_line)
+        responses.append(display_line)
+        self.logger.info("Received: %s", display_line)
 
-      if line.startswith("*ack"):
-        if not wait_for_ready:
+        if line.startswith("*ack"):
+          if not wait_for_ready:
+            break
+          continue
+
+        if wait_for_ready and line.startswith("*ready"):
           break
-        continue
 
-      if wait_for_ready and line.startswith("*ready"):
-        break
+        if not wait_for_ready and not expect_ack:
+          break
 
-      if not wait_for_ready and not expect_ack:
-        break
-
-    if time.time() - start >= self.response_timeout:
+    if response_scope.cancelled_caught:
       self.logger.warning(
         "Timed out waiting for response to %s after %.2fs",
         full_cmd.strip(),
@@ -141,6 +135,22 @@ class XPeel:
       )
 
     return responses
+
+  async def send_command(
+    self, cmd, expect_ack=False, wait_for_ready=False, clear_buffer=True
+  ) -> List[str]:
+    full_cmd = cmd if cmd.endswith("\r\n") else f"{cmd}\r\n"
+
+    self.logger.debug("Sending command: %s", full_cmd.strip())
+    async with self._command_lock:
+      if clear_buffer:
+        await self.io.reset_input_buffer()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self.io.write(full_cmd.encode("ascii"))
+        responses = await self._read_command_response(full_cmd, expect_ack, wait_for_ready)
+      await anyio.lowlevel.checkpoint()
+      return responses
 
   async def request_status(self) -> Tuple[int, int, int]:
     """Request instrument status; returns three error codes."""

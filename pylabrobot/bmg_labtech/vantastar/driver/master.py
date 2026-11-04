@@ -9,12 +9,13 @@ The commands are sent with the fields and in the order BMG's Voyager software us
 (firmware 1.12).
 """
 
-import asyncio
 import contextvars
 import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
+
+import anyio
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import (
@@ -27,6 +28,7 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   usb_packet_type,
   usb_wrap_payload,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.usb import USB
 
 from .configuration import HARDWARE_INFO_ID, VANTAstarConfiguration, parse_hardware_info
@@ -240,7 +242,7 @@ _USE_AUTO_GAIN = 0x40
 # ---------------------------------------------------------------------------
 
 
-class VANTAstarDriver:
+class VANTAstarDriver(HasLifespan):
   """Owns the VANTAstar USB connection and the command layer."""
 
   _default_read_timeout: float = 150.0
@@ -282,6 +284,7 @@ class VANTAstarDriver:
     """
     if io is not None and not isinstance(io, USB):
       raise TypeError(f"io must be a USB, got {type(io).__name__}")
+    super().__init__()
     self.io: USB = (
       io
       if io is not None
@@ -299,7 +302,7 @@ class VANTAstarDriver:
       )
     )
     self.name = name
-    self._lock = asyncio.Lock()
+    self._lock = anyio.Lock()
     self._measuring = False
     self._last_warning: Optional[Codes] = None
     self.configuration = VANTAstarConfiguration()
@@ -313,24 +316,24 @@ class VANTAstarDriver:
 
   # -- USB setup / teardown -------------------------------------------------
 
-  async def _usb_setup(self) -> None:
+  async def _enter_usb_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the USB device and send the two vendor requests it needs before bulk traffic.
 
     1. Control OUT 0x22/0x8B data ``01``: enable the bulk protocol.
     2. Control OUT 0x22/0x88 data 8 bytes: four zero bytes, then the Unix time (u32 BE).
     """
-    await self.io.setup()
-    self.io.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x01")
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._disable_bulk_protocol)
+    await self.io.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x01")
     now = int(time.time()).to_bytes(4, "big")
-    self.io.ctrl_transfer(0x22, 0x88, 0, 0, b"\x00\x00\x00\x00" + now)
+    await self.io.ctrl_transfer(0x22, 0x88, 0, 0, b"\x00\x00\x00\x00" + now)
 
-  async def _usb_close(self) -> None:
-    """Disable the bulk protocol and close the USB device."""
+  async def _disable_bulk_protocol(self) -> None:
+    """Disable the bulk protocol before closing the USB device."""
     try:
-      self.io.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x00")
+      await self.io.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x00")
     except Exception:
       logger.warning("could not disable the bulk protocol before closing", exc_info=True)
-    await self.io.stop()
 
   # -- packet exchange ------------------------------------------------------
 
@@ -413,7 +416,7 @@ class VANTAstarDriver:
         if attempt == retries:
           raise
         await self.io.drain()
-        await asyncio.sleep(self._RETRY_SETTLE)
+        await anyio.sleep(self._RETRY_SETTLE)
     raise AssertionError("unreachable")
 
   # -- reply checking -------------------------------------------------------
@@ -516,15 +519,15 @@ class VANTAstarDriver:
     Raises:
       TimeoutError: if the condition does not hold after ``timeout`` seconds.
     """
-    start = time.time()
+    start = anyio.current_time()
     while True:
       status = await self.request_status()
       if until(status) if until is not None else not status.busy:
         return status
-      if timeout is not None and time.time() - start >= timeout:
+      if timeout is not None and anyio.current_time() - start >= timeout:
         raise TimeoutError(f"VANTAstar still {status} after {timeout} s")
       if poll_interval:
-        await asyncio.sleep(poll_interval)
+        await anyio.sleep(poll_interval)
 
   # -- command sending ------------------------------------------------------
 
@@ -1075,7 +1078,7 @@ class VANTAstarDriver:
       await self.send_command(
         CommandId.VALUES, bytes([ValuesType.TIME_DATA]) + bytes(6), when_idle=False
       )
-      start = time.monotonic()
+      start = anyio.current_time()
       blocks: List[MeasurementData] = []
       while True:
         reply = await self._exchange_with_retries(_MW_BLOCK_STATUS, retries=5)
@@ -1115,15 +1118,16 @@ class VANTAstarDriver:
           await self.send_command(CommandId.VALUES, _CURRENT_DATA_BLOCK, when_idle=False)
         elif not status.busy:
           raise RuntimeError("the run ended without its data")
-        if time.monotonic() - start >= timeout:
+        if anyio.current_time() - start >= timeout:
           raise TimeoutError(f"the measurement took longer than {timeout} s")
-        await asyncio.sleep(self.measurement_poll_interval)
+        await anyio.sleep(self.measurement_poll_interval)
       await self._wait_until_ready(
-        max(timeout - (time.monotonic() - start), 1.0), self.measurement_poll_interval
+        max(timeout - (anyio.current_time() - start), 1.0), self.measurement_poll_interval
       )
       return blocks
     except BaseException:
-      await self._drain_and_stop()
+      with anyio.CancelScope(shield=True):
+        await self._drain_and_stop()
       raise
     finally:
       self._measuring = False
@@ -1302,46 +1306,50 @@ class VANTAstarDriver:
     serial = fields.get("serial_number", "unknown")
     return f"[{self.name}] Connected on USB 0x0483:0xA29A (serial {serial})"
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    accept_plate_left_in_device: bool = False,
+  ) -> None:
     """Connect, initialize the reader (about 10 s), and read its configuration."""
+    await super()._enter_lifespan(stack)
     logger.warning(
       "the VANTAstar driver has been tested on one reader (firmware 1.12) only; its luminescence "
       "read not yet (that reader has no luminescence module). If you verify it on your reader, "
       "please report the result or open a pull request to update this warning."
     )
-    await self._usb_setup()
+    await self._enter_usb_lifespan(stack)
     await self.io.drain()
     await self.initialize()
+    stack.push_shielded_async_callback(self._shut_down, accept_plate_left_in_device)
     self.discover()
     logger.info("%s", self.format_setup_summary())
 
-  async def stop(self, accept_plate_left_in_device: bool = False) -> None:
-    """Stop a running measurement, close the drawer, and close the connection.
+  async def _shut_down(self, accept_plate_left_in_device: bool = False) -> None:
+    """Stop a running measurement and close the drawer.
 
     Raises:
       RuntimeError: if a plate is still in the reader, unless ``accept_plate_left_in_device``;
-        the drawer is opened.  The connection is closed either way.
+        the drawer is opened.
     """
+    if self._measuring:
+      await self._drain_and_stop()
     try:
-      if self._measuring:
-        await self._drain_and_stop()
-      try:
-        if await self.drawer.sense_drawer_open():
-          try:
-            await self.drawer.close()
-          except (CommandRefusedError, TimeoutError):
-            logger.warning("the drawer did not close", exc_info=True)
+      if await self.drawer.sense_drawer_open():
+        try:
+          await self.drawer.close()
+        except (CommandRefusedError, TimeoutError):
+          logger.warning("the drawer did not close", exc_info=True)
 
-        plate_present = await self.drawer.sense_plate_present()
-        if not accept_plate_left_in_device and plate_present:
-          try:
-            await self.drawer.open()
-          except (CommandRefusedError, TimeoutError):
-            logger.warning("the drawer did not open", exc_info=True)
-          raise RuntimeError(
-            "a plate is still in the reader; take it out, or pass accept_plate_left_in_device=True"
-          )
-      except (FrameError, TimeoutError):
-        logger.warning("could not query the reader's state before closing", exc_info=True)
-    finally:
-      await self._usb_close()
+      plate_present = await self.drawer.sense_plate_present()
+      if not accept_plate_left_in_device and plate_present:
+        try:
+          await self.drawer.open()
+        except (CommandRefusedError, TimeoutError):
+          logger.warning("the drawer did not open", exc_info=True)
+        raise RuntimeError(
+          "a plate is still in the reader; take it out, or pass accept_plate_left_in_device=True"
+        )
+    except (FrameError, TimeoutError):
+      logger.warning("could not query the reader's state before closing", exc_info=True)

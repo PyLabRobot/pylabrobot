@@ -8,10 +8,13 @@ from dataclasses import replace
 from typing import Callable, Deque, List
 from unittest import mock
 
+import pytest
+
 from pylabrobot.bmg_labtech.vantastar.device import (
   VANTAstarDevice,
 )
 from pylabrobot.bmg_labtech.vantastar.driver import master_tests
+from pylabrobot.bmg_labtech.vantastar.driver.configuration_tests import HARDWARE_INFO
 from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
   MeasurementSettings,
   ShakeSettings,
@@ -23,6 +26,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
 )
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.resources import cor_96_wellplate_360uL_Fb
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 PHOTOCATALYST_WELLS = ["A1", "A6", "A12", "H1", "H6", "H12"]
 
@@ -68,12 +72,14 @@ def make_recorded_device(name: str) -> VANTAstarDevice:
   return make_device_answering(master_tests.RecordedReader(load_flows()[name]))
 
 
-class StopTests(unittest.IsolatedAsyncioTestCase):
+class TestStop(AnyioTestBase):
   """Stopping the device while a plate is in the reader."""
 
   async def test_drawer_open_when_a_plate_is_left_in(self):
-    """When stop finds a plate left in, it opens the drawer, so the plate can be taken off."""
-    device = make_device_answering(lambda p: master_tests.STATUS_IDLE)
+    """When shutdown finds a plate left in, it opens the drawer, so the plate can be taken off."""
+    device = make_device_answering(
+      lambda p: HARDWARE_INFO if p[0] == 0x01 else master_tests.STATUS_IDLE
+    )
 
     async def request_status(retries: int = 5) -> VANTAstarStatus:
       """The recorded status for where the drawer is, with a plate: none is recorded with one."""
@@ -81,9 +87,9 @@ class StopTests(unittest.IsolatedAsyncioTestCase):
       reply = master_tests.STATUS_DRAWER_OPEN if moved else master_tests.STATUS_IDLE
       return replace(VANTAstarDriver._parse_status(reply), plate_detected=True)
 
-    device.driver.request_status = request_status  # type: ignore[method-assign]
-    with self.assertRaises(RuntimeError):
-      await device.stop()
+    with pytest.raises(RuntimeError):
+      async with device:
+        device.driver.request_status = request_status  # type: ignore[method-assign]
     plate = device.plate_holder.resource
     assert plate is not None
     device.plate_holder.unassign_child_resource(plate)  # allowed: the drawer is open
@@ -103,7 +109,7 @@ def sent(device: VANTAstarDevice) -> List[bytes]:
   return [c for c in master_tests.commands(device.driver) if c[0] != 0x80]
 
 
-class EstimateDurationTests(unittest.IsolatedAsyncioTestCase):
+class TestEstimateDuration(AnyioTestBase):
   """The reader's estimate of a read's run time, without reading."""
 
   async def test_the_read_with_calc_time_only(self):
@@ -113,19 +119,22 @@ class EstimateDurationTests(unittest.IsolatedAsyncioTestCase):
     seconds = await device.estimate_duration(
       lambda: device.fluorescence.measure(CHANNEL_365_400, focal_height=5.0, gain=500)
     )
-    self.assertEqual(seconds, 95)
+    assert seconds == 95
     (estimate,) = sent(device)
-    self.assertFalse(device.driver.estimating)
+    assert not device.driver.estimating
     await device.fluorescence.measure(CHANNEL_365_400, focal_height=5.0, gain=500)
     run = sent(device)[1]
-    self.assertEqual(run[0], 0x04)
-    self.assertEqual((estimate[67], run[67]), (0x03, 0x02))  # CalcTimeOnly, then a read
-    self.assertEqual(estimate[:67] + estimate[68:], run[:67] + run[68:])
+    assert run[0] == 0x04
+    assert (estimate[67], run[67]) == (0x03, 0x02)  # CalcTimeOnly, then a read
+    assert estimate[:67] + estimate[68:] == run[:67] + run[68:]
 
   async def test_shaking_and_pause_are_skipped(self):
     """Shaking before the read and the pause before reading are left out of an estimate."""
     device = make_device([])
-    with mock.patch("asyncio.sleep", new_callable=mock.AsyncMock) as sleep:
+    with mock.patch(
+      "pylabrobot.bmg_labtech.vantastar.driver.features.measurement.anyio.sleep",
+      new_callable=mock.AsyncMock,
+    ) as sleep:
       seconds = await device.estimate_duration(
         lambda: device.absorbance.measure(
           [450],
@@ -133,9 +142,9 @@ class EstimateDurationTests(unittest.IsolatedAsyncioTestCase):
           shake_settings=ShakeSettings(pattern="orbital", speed=300, duration=5),
         )
       )
-    self.assertEqual(seconds, 95)
-    self.assertEqual([c[0] for c in sent(device)], [0x04])  # no IdleMove
-    self.assertNotIn(mock.call(5), sleep.await_args_list)
+    assert seconds == 95
+    assert [c[0] for c in sent(device)] == [0x04]  # no IdleMove
+    assert mock.call(5) not in sleep.await_args_list
 
   async def test_other_commands_are_refused(self):
     """An estimate of a drawer move or a gain and focus adjustment is refused before anything is
@@ -143,21 +152,21 @@ class EstimateDurationTests(unittest.IsolatedAsyncioTestCase):
     device = make_device([])
     plate = device.plate_holder.resource
     assert plate is not None
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await device.estimate_duration(lambda: device.drawer.open())
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await device.estimate_duration(
         lambda: device.fluorescence.adjust_gain_and_focus(
           CHANNEL_365_400, wells=plate.get_items(["A1"])
         )
       )
-    self.assertEqual(sent(device), [])
-    self.assertFalse(device.driver.estimating)
+    assert sent(device) == []
+    assert not device.driver.estimating
 
   async def test_without_a_read(self):
     """A call that ends without a read has nothing to estimate."""
     device = make_device([])
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await device.estimate_duration(lambda: device.drawer.sense_drawer_open())
 
 

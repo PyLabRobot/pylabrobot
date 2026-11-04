@@ -1,6 +1,6 @@
-import asyncio
-import time
 from typing import Any, Optional
+
+import anyio
 
 from pylabrobot.events import event_operation, evented_operation, resource_reference
 from pylabrobot.legacy.machines.machine import Machine
@@ -133,13 +133,16 @@ class TemperatureController(ResourceHolder, Machine):
     ):
       if self.target_temperature is None:
         raise RuntimeError("Target temperature is not set.")
-      start = time.time()
-      while time.time() - start < timeout:
-        temperature = await self.get_temperature()
-        if abs(temperature - self.target_temperature) < tolerance:
-          completion_data["current_temperature"] = float(temperature)
-          return
-        await asyncio.sleep(1.0)
+      if timeout is None:
+        # This wait has no unbounded form: it must fail fast rather than poll forever.
+        raise TypeError("wait_for_temperature() requires a numeric timeout, not None.")
+      with anyio.move_on_after(timeout):
+        while True:
+          temperature = await self.get_temperature()
+          if abs(temperature - self.target_temperature) < tolerance:
+            completion_data["current_temperature"] = float(temperature)
+            return
+          await anyio.sleep(1.0)
       raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
 
   @evented_operation("temperature_controller.hold_temperature", _hold_temperature_event_context)
@@ -156,7 +159,7 @@ class TemperatureController(ResourceHolder, Machine):
     """
     if duration < 0:
       raise ValueError("Temperature hold duration must not be negative.")
-    await asyncio.sleep(duration)
+    await anyio.sleep(duration)
 
   @evented_operation("temperature_controller.deactivate", _temperature_controller_event_context)
   async def deactivate(self):
@@ -166,10 +169,9 @@ class TemperatureController(ResourceHolder, Machine):
     self.target_temperature = None
     return await self.backend.deactivate()
 
-  async def stop(self):
-    """Stop the temperature controller and close the backend connection."""
+  async def _pre_backend_stop(self) -> None:
+    """Deactivate the temperature controller before closing the backend connection."""
     await self.deactivate()
-    await super().stop()
 
   def serialize(self) -> dict:
     return {

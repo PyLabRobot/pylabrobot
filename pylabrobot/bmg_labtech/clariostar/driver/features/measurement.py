@@ -5,11 +5,9 @@ and end with the trailer, the flashes and the cycle time; the fields between are
 mode's own. The reply data comes back row by row over the measured wells.
 """
 
-import asyncio
 import functools
 import logging
 import math
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import (
@@ -27,6 +25,8 @@ from typing import (
   TypeVar,
   cast,
 )
+
+import anyio
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.results.directory import append_results, check_directory
@@ -795,11 +795,11 @@ class Measurement:
     replies: Optional[List[bytes]] = None
     pages: List[bytes] = []
     read_at = datetime.now()
-    start = time.monotonic()
+    start = anyio.current_time()
     try:
       # A poll sent right after the RUN's reply goes unanswered, as the reader answered: wait
       # one poll interval first.
-      await asyncio.sleep(self._driver.default_poll_interval)
+      await anyio.sleep(self._driver.default_poll_interval)
       while True:
         status = await self._driver.send_command(self._driver.CommandFamily.STATUS, retries=5)
         busy = self._driver._parse_status(status).busy
@@ -820,9 +820,10 @@ class Measurement:
           return replies, read_at
         if not busy and not ready:
           raise RuntimeError("the run ended without reporting its data ready")
-        if time.monotonic() - start >= timeout:
+        if anyio.current_time() - start >= timeout:
           raise TimeoutError(f"the measurement took longer than {timeout} s")
-        await asyncio.sleep(self._driver.default_poll_interval)
+        await anyio.sleep(self._driver.default_poll_interval)
     except BaseException:  # a timeout, a cancelled call, a bad reply: stop the run first
-      await self._drain_and_stop("measurement run")
+      with anyio.CancelScope(shield=True):
+        await self._drain_and_stop("measurement run")
       raise

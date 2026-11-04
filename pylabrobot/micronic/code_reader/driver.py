@@ -10,17 +10,17 @@ scanner path directly:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import tempfile
-import time
 from dataclasses import dataclass
 from datetime import datetime
-from functools import partial
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Literal, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.tube_rack import TubeRack
@@ -81,7 +81,7 @@ class RackScanResult:
   rack_barcode: Optional[Barcode] = None
 
 
-class MicronicRD235:
+class MicronicRD235(HasLifespan):
   """Control a Micronic RD235 rack scanner without the OEM application.
 
   Args:
@@ -107,6 +107,7 @@ class MicronicRD235:
     Raises:
       ValueError: If either device timeout is not positive.
     """
+    super().__init__()
     if scanner_timeout <= 0:
       raise ValueError("scanner_timeout must be positive")
     if serial_timeout <= 0:
@@ -125,35 +126,53 @@ class MicronicRD235:
       bytesize=7,
       parity="E",
       stopbits=1,
-      timeout=0.1,
       write_timeout=1.0,
     )
     self.last_image_path: Optional[Path] = None
     self.last_scan_metadata: dict[str, object] = {}
     self.last_decode_metadata: dict[str, object] = {}
-    self._scan_lock = asyncio.Lock()
+    self._scan_lock = anyio.Semaphore(1)
+    self._rack_id_lock = anyio.Lock()
+    self._active_scans = 0
+    self._no_active_scans = anyio.Event()
+    self._no_active_scans.set()
+    self._accepting_operations = False
 
-  async def setup(self) -> None:
-    """Create the image directory and connect to the side barcode reader."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter the scanner and side barcode reader lifespans."""
+    await super()._enter_lifespan(stack)
     self.image_dir.mkdir(parents=True, exist_ok=True)
-    await self.scanner.setup()
-    try:
-      await self.io.setup()
-    except BaseException:
-      try:
-        await self.scanner.stop()
-      except Exception:
-        logger.warning("Failed to stop Micronic scanner after setup failure", exc_info=True)
-      raise
+    await stack.enter_async_context(self.scanner.lifespan())
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._wait_for_active_scans)
+    self._accepting_operations = True
     logger.info("Set up Micronic code reader")
 
-  async def stop(self) -> None:
-    """Disconnect from the side barcode reader and image scanner."""
-    try:
-      await self.io.stop()
-    finally:
-      await self.scanner.stop()
+  async def _wait_for_active_scans(self) -> None:
+    """Stop admitting operations and wait for active scan ownership to finish."""
+    self._accepting_operations = False
+    await self._no_active_scans.wait()
+    async with self._scan_lock:
+      pass
     logger.info("Stopped Micronic code reader")
+
+  def _require_active(self) -> None:
+    """Reject operations outside this reader's active lifespan."""
+    if not self.is_active or not self._accepting_operations:
+      raise RuntimeError("MicronicRD235 operations require an active lifespan")
+
+  def _begin_scan(self) -> None:
+    """Admit one operation into the active-scan teardown barrier."""
+    self._require_active()
+    if self._active_scans == 0:
+      self._no_active_scans = anyio.Event()
+    self._active_scans += 1
+
+  def _finish_scan(self) -> None:
+    """Release one operation from the active-scan teardown barrier."""
+    self._active_scans -= 1
+    if self._active_scans == 0:
+      self._no_active_scans.set()
 
   async def _read_barcode(self) -> str:
     """Trigger and parse one side rack-barcode read.
@@ -164,24 +183,24 @@ class MicronicRD235:
     Raises:
       MicronicError: If serial communication fails.
     """
-    deadline = time.monotonic() + self.serial_timeout
-    chunks: list[bytes] = []
-    try:
-      await self.io.reset_input_buffer()
-      await self.io.write(b"<t>\r\n")
-      while time.monotonic() < deadline:
-        value = await self.io.read(1)
-        if value:
-          chunks.append(value)
-          if value in {b"\r", b"\n"}:
-            break
-    except Exception as exc:
-      logger.exception("Micronic rack ID serial read failed")
-      raise MicronicError(
-        "Rack ID serial read failed. Install the PLR serial extra with "
-        "`pip install pylabrobot[serial]` and verify the serial port: "
-        f"{exc}"
-      ) from exc
+    async with self._rack_id_lock:
+      chunks: list[bytes] = []
+      try:
+        await self.io.reset_input_buffer()
+        await self.io.write(b"<t>\r\n")
+        with anyio.move_on_after(self.serial_timeout):
+          while True:
+            value = await self.io.read(1)
+            chunks.append(value)
+            if value in {b"\r", b"\n"}:
+              break
+      except Exception as exc:
+        logger.exception("Micronic rack ID serial read failed")
+        raise MicronicError(
+          "Rack ID serial read failed. Install the PLR serial extra with "
+          "`pip install pylabrobot[serial]` and verify the serial port: "
+          f"{exc}"
+        ) from exc
     text = b"".join(chunks).decode("utf-8", errors="ignore")
     match = re.search(r"\d{6,}", text)
     return match.group(0) if match else "NOREAD"
@@ -195,10 +214,7 @@ class MicronicRD235:
     )
     try:
       self.last_scan_metadata = await self.scanner.acquire(image_path, self.scanner_timeout)
-    except asyncio.CancelledError:
-      self._release_image(image_path)
-      raise
-    except Exception:
+    except BaseException:
       self._release_image(image_path)
       raise
     self.last_image_path = image_path
@@ -237,14 +253,23 @@ class MicronicRD235:
     Raises:
       MicronicError: If the rack shape is unsupported, a scan is already running, image
         acquisition fails, or decoding fails.
-      asyncio.TimeoutError: If the operation exceeds ``timeout``.
+      TimeoutError: If the operation exceeds ``timeout``.
     """
+    self._begin_scan()
     logger.info("Starting Micronic rack scan")
     try:
-      result = await asyncio.wait_for(self._scan_rack(rack), timeout=timeout)
+      with anyio.fail_after(timeout):
+        try:
+          result = await self._scan_rack(rack)
+        except BaseException:
+          await anyio.lowlevel.checkpoint()
+          raise
+        await anyio.lowlevel.checkpoint()
     except Exception:
       logger.exception("Micronic rack scan failed")
       raise
+    finally:
+      self._finish_scan()
     logger.info(
       "Completed Micronic rack scan: rack_id=%s decoded=%d",
       result.rack_id,
@@ -263,79 +288,47 @@ class MicronicRD235:
 
     Raises:
       MicronicError: If serial communication fails.
-      asyncio.TimeoutError: If the operation exceeds ``timeout``.
+      TimeoutError: If the operation exceeds ``timeout``.
     """
+    self._begin_scan()
     try:
-      rack_id = await asyncio.wait_for(self._read_barcode(), timeout=timeout)
+      with anyio.fail_after(timeout):
+        rack_id = await self._read_barcode()
     except Exception:
       logger.exception("Micronic rack ID scan failed")
       raise
+    finally:
+      self._finish_scan()
     logger.info("Completed Micronic rack ID scan: rack_id=%s", rack_id)
     return rack_id
 
   async def _scan_rack(self, rack: TubeRack) -> RackScanResult:
     """Coordinate one cancellation-safe rack scan."""
     self._validate_rack(rack)
-    if self._scan_lock.locked():
+    try:
+      self._scan_lock.acquire_nowait()
+    except anyio.WouldBlock:
       raise MicronicError("Micronic rack scan is already in progress.")
-    await self._scan_lock.acquire()
-    release_lock = True
     image_path: Optional[Path] = None
     try:
       rack_id = await self._read_barcode()
       image_path = await self._acquire_image()
-      loop = asyncio.get_running_loop()
-      scan_future = loop.run_in_executor(
-        None,
-        self._decode_rack_image,
-        image_path,
-        rack_id,
-      )
-      try:
-        return await asyncio.shield(scan_future)
-      except asyncio.CancelledError:
-        release_lock = False
-        scan_future.add_done_callback(partial(self._finish_cancelled_scan, image_path=image_path))
-        image_path = None
-        raise
+      decoded, metadata = await anyio.to_thread.run_sync(decode_image, image_path)
+      self.last_decode_metadata = metadata
+      for position, result in decoded.items():
+        logger.debug("Micronic decoded %s via %s", position, result.method)
+      return self._build_rack_scan_result(decoded, rack_id)
     finally:
       if image_path is not None:
         self._release_image(image_path)
-      if release_lock:
-        self._release_scan_lock()
-
-  def _finish_cancelled_scan(
-    self,
-    future: asyncio.Future[RackScanResult],
-    *,
-    image_path: Path,
-  ) -> None:
-    """Release scan resources after a cancelled caller's decode finishes."""
-    try:
-      exception = future.exception()
-    except asyncio.CancelledError:
-      exception = None
-    if exception is not None:
-      logger.error("Cancelled Micronic rack scan later failed: %s", exception)
-    self._release_image(image_path)
-    self._release_scan_lock()
-
-  def _release_scan_lock(self) -> None:
-    """Release the scan lock if it is currently held."""
-    if self._scan_lock.locked():
       self._scan_lock.release()
 
-  def _decode_rack_image(
+  def _build_rack_scan_result(
     self,
-    image_path: Path,
+    decoded: dict[str, DecodeResult],
     rack_id: str,
   ) -> RackScanResult:
-    """Decode an acquired rack image in a worker thread."""
-    decoded, self.last_decode_metadata = decode_image(image_path)
-
-    for position, result in decoded.items():
-      logger.debug("Micronic decoded %s via %s", position, result.method)
-
+    """Construct a rack result from position-indexed tube decodes."""
     entries = [
       RackScanEntry(
         position=position,

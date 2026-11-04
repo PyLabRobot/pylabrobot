@@ -24,7 +24,6 @@ bit. libftdi claims the FTDI device directly, so the kernel ``ftdi_sio`` driver 
 hold it (any ``/dev/ttyUSB*`` for this board goes away while the driver is connected).
 """
 
-import asyncio
 import contextlib
 import logging
 import math
@@ -32,9 +31,12 @@ import struct
 import time
 from dataclasses import dataclass
 from datetime import timedelta
-from functools import cached_property, partial
+from functools import partial
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.plate import Plate
 from pylabrobot.revvity.celigo.camera import CameraFrame, CeligoCamera, LumeneraCamera
@@ -304,7 +306,7 @@ def _analog_dac_to_volts(
   return dac_count / _ANALOG_DAC_FULL_SCALE * (max_voltage - min_voltage) + min_voltage
 
 
-class Celigo:
+class Celigo(HasLifespan):
   """Celigo image cytometer motion/illumination controller.
 
   Talks to the FTDI-based USB-IO board over serial. Exposes stage/Z motion in
@@ -330,6 +332,7 @@ class Celigo:
     fluorescence_warmup_seconds: float = 300.0,
     fluorescence_power_change_interval: float = 10.0,
   ):
+    super().__init__()
     if not math.isfinite(reply_timeout) or reply_timeout <= 0:
       raise ValueError("reply_timeout must be a finite, positive number of seconds")
     if not math.isfinite(move_timeout) or move_timeout <= 0:
@@ -354,6 +357,7 @@ class Celigo:
     self.fluorescence_power_change_interval = fluorescence_power_change_interval
     self.current_channel: Optional[str] = None
     self._connected = False
+    self._command_lock = anyio.Lock()
     has_lamp_power = bool(
       config.hardware.io is not None
       and any(
@@ -383,10 +387,6 @@ class Celigo:
   def controller_firmware_version(self) -> Optional[Tuple[int, int, int]]:
     """The identified controller-board firmware version, if setup has reached identification."""
     return None if self.controller_info is None else self.controller_info.firmware_version
-
-  @cached_property
-  def _command_lock(self) -> asyncio.Lock:
-    return asyncio.Lock()
 
   def _build_linear_axes(self) -> Dict[LinearAxisName, LinearAxis]:
     hardware = self.config.hardware
@@ -554,57 +554,60 @@ class Celigo:
 
   # -- lifecycle -------------------------------------------------------------
 
-  async def setup(self) -> None:
-    io_open = False
-    try:
-      await self.io.setup()
-      io_open = True
-      await self.io.set_baudrate(self.baudrate)
-      await self.io.set_line_property(8, 0, 0)  # 8 data bits, 1 stop bit, no parity
-      await self.io.set_latency_timer(self.latency_ms)
-      await self.io.usb_purge_rx_buffer()
-      await self.io.usb_purge_tx_buffer()
-      for _ in range(2):
-        with contextlib.suppress(CeligoError):
-          await self.abort_controller_operation()
-      # The first command after opening can drop; read status a few times to warm up.
-      status: Optional[ControllerStatus] = None
-      last_status_error: Optional[CeligoError] = None
-      for _ in range(3):
-        try:
-          status = await self.request_controller_status()
-          break
-        except CeligoError as exc:
-          last_status_error = exc
-          await asyncio.sleep(0.1)
-      if status is None:
-        raise CeligoError("Celigo did not return a valid controller status") from last_status_error
-
-      # Identity is required to choose the correct motor-tunnel framing safely.
-      self.controller_info = await self.request_controller_info()
-      await self._initialize_hardware()
-      await self.camera.setup()
-      await self._configure_camera_for_calibration()
-      await self.home_imaging_axes()
-    except BaseException:
-      if io_open:
-        with contextlib.suppress(Exception):
-          await self.abort_controller_operation()
-        with contextlib.suppress(Exception):
-          await self._initialize_safe_outputs()
-      with contextlib.suppress(Exception):
-        await self.camera.stop()
-      if io_open:
-        with contextlib.suppress(Exception):
-          await self.io.stop()
-      raise
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own FTDI, controller safety, and the camera through one scoped lifespan."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._clear_connection_state)
+    stack.push_shielded_async_callback(self._safe_shutdown, shield_timeout=self._shutdown_timeout())
+    await self.io.set_baudrate(self.baudrate)
+    await self.io.set_line_property(8, 0, 0)  # 8 data bits, 1 stop bit, no parity
+    await self.io.set_latency_timer(self.latency_ms)
+    await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
+    for _ in range(2):
+      with contextlib.suppress(CeligoError):
+        await self.abort_controller_operation()
+    status: Optional[ControllerStatus] = None
+    last_status_error: Optional[CeligoError] = None
+    for _ in range(3):
+      try:
+        status = await self.request_controller_status()
+        break
+      except CeligoError as exc:
+        last_status_error = exc
+        await anyio.sleep(0.1)
+    if status is None:
+      raise CeligoError("Celigo did not return a valid controller status") from last_status_error
+    self.controller_info = await self.request_controller_info()
+    await self._initialize_hardware()
+    await stack.enter_async_context(self.camera.lifespan())
+    await self._configure_camera_for_calibration()
+    await self.home_imaging_axes()
     self._connected = True
     logger.info("[Celigo] connected (status=%s, %s)", status, self.controller_info)
 
-  async def stop(self) -> None:
+  def _shutdown_timeout(self) -> float:
+    """Bound the existing abort and output-reset sequence, including retries."""
+    return (self.reply_timeout * 2 * 20) + 5
+
+  def _clear_connection_state(self) -> None:
+    """Invalidate connection-local knowledge after the FTDI scope ends."""
+    self._connected = False
+    self.controller_info = None
+    self.current_channel = None
+    for axis in self._configured_motion_axes():
+      axis._initialized = False
+      if isinstance(axis, LinearAxis):
+        axis._has_position_reference = False
+      if isinstance(axis, FilterWheel):
+        axis._home_encoder_ticks = None
+
+  async def _safe_shutdown(self) -> None:
+    """Attempt both existing controller safety actions before FTDI closes."""
     first_error: Optional[BaseException] = None
 
-    async def attempt(operation) -> None:
+    async def attempt(operation: Callable[[], Awaitable[None]]) -> None:
       nonlocal first_error
       try:
         await operation()
@@ -612,34 +615,22 @@ class Celigo:
         if first_error is None:
           first_error = exc
 
-    if self._connected:
-      await attempt(self.abort_controller_operation)
-      await attempt(self._initialize_safe_outputs)
-    await attempt(self.camera.stop)
-    await attempt(self.io.stop)
-    self._connected = False
+    await attempt(self.abort_controller_operation)
+    await attempt(self._initialize_safe_outputs)
     if first_error is not None:
       raise first_error
 
   # -- packet layer ----------------------------------------------------------
 
-  async def _read_exact_bytes(self, byte_count: int, reply_timeout: float) -> bytes:
-    chunks = []
-    remaining = byte_count
-    deadline = time.monotonic() + reply_timeout
-    while remaining > 0:
-      chunk = await self.io.read(remaining)
-      if chunk:
-        chunks.append(chunk)
-        remaining -= len(chunk)
-        continue
-      if time.monotonic() >= deadline:
-        break
-      await asyncio.sleep(0.001)
-    received_bytes = b"".join(chunks)
-    if len(received_bytes) != byte_count:
-      raise CeligoError(f"Short read: expected {byte_count} bytes, got {len(received_bytes)}")
-    return received_bytes
+  async def _read_exact_bytes(self, byte_count: int) -> bytes:
+    """Assemble a fixed-size packet within the caller's reply deadline."""
+    received = bytearray()
+    while len(received) < byte_count:
+      try:
+        received.extend(await self.io.read(byte_count - len(received)))
+      except anyio.EndOfStream as exc:
+        raise CeligoError(f"Short read: expected {byte_count} bytes, got {len(received)}") from exc
+    return bytes(received)
 
   async def send_command(
     self,
@@ -655,6 +646,7 @@ class Celigo:
     if not math.isfinite(selected_reply_timeout) or selected_reply_timeout <= 0:
       raise ValueError("reply_timeout must be a finite, positive number of seconds")
     async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
       self._command_sequence += 1
       sequence = self._command_sequence
       command_packet = _build_command_packet(opcode, sequence, payload)
@@ -662,19 +654,21 @@ class Celigo:
       while True:
         attempt += 1
         try:
-          written = await self.io.write(command_packet)
-          if written != len(command_packet):
-            raise CeligoError(f"Short write: expected {len(command_packet)} bytes, wrote {written}")
-          return await self._read_controller_response(
-            opcode,
-            sequence,
-            selected_reply_timeout,
-          )
+          with anyio.CancelScope(shield=True):
+            written = await self.io.write(command_packet)
+            if written != len(command_packet):
+              raise CeligoError(
+                f"Short write: expected {len(command_packet)} bytes, wrote {written}"
+              )
+            with anyio.fail_after(selected_reply_timeout * 2):
+              result = await self._read_controller_response(opcode, sequence)
+          await anyio.lowlevel.checkpoint()
+          return result
         except BaseException as exc:
-          # A cancelled executor-backed FTDI read can still consume bytes in its worker.
-          # Queue both purges behind it before allowing another command to use the link.
           with contextlib.suppress(Exception):
-            await complete_cleanup(self._purge_controller_buffers())
+            with anyio.CancelScope(shield=True):
+              await self._purge_controller_buffers()
+          await anyio.lowlevel.checkpoint()
           if isinstance(exc, CeligoError) and exc.ack in _ACK_RETRYABLE and attempt < retries:
             continue
           raise
@@ -695,9 +689,8 @@ class Celigo:
     self,
     opcode: int,
     sequence: int,
-    reply_timeout: float,
   ) -> bytes:
-    header = await self._read_exact_bytes(_RX_HEADER_SIZE, reply_timeout)
+    header = await self._read_exact_bytes(_RX_HEADER_SIZE)
     ack = header[0]
     echo_opcode = header[1]
     echo_seq = struct.unpack_from(">i", header, 2)[0]
@@ -722,7 +715,7 @@ class Celigo:
         f"{_MAX_RESPONSE_PAYLOAD_BYTES} bytes"
       )
 
-    return await self._read_exact_bytes(payload_length, reply_timeout) if payload_length else b""
+    return await self._read_exact_bytes(payload_length) if payload_length else b""
 
   # -- status / encoders -----------------------------------------------------
 
@@ -771,12 +764,14 @@ class Celigo:
       raise ValueError("timeout must be a finite, non-negative number of seconds")
     if not math.isfinite(poll_interval) or poll_interval <= 0:
       raise ValueError("poll_interval must be a finite, positive number of seconds")
-    deadline = time.monotonic() + timeout
-    while await self.request_is_busy():
-      if time.monotonic() >= deadline:
-        return False
-      await asyncio.sleep(poll_interval)
-    return True
+    if not await self.request_is_busy():
+      return True
+    with anyio.move_on_after(timeout) as scope:
+      while True:
+        await anyio.sleep(poll_interval)
+        if not await self.request_is_busy():
+          return True
+    return not scope.cancel_called
 
   async def request_detected_motor_addresses(self) -> List[DetectedMotorAddress]:
     """Return the EZStepper addresses reported by the controller's UARTs."""
@@ -867,7 +862,7 @@ class Celigo:
   async def abort_controller_operation(self) -> None:
     """Abort the current controller command."""
     await self.send_command(_CMD_ABORT)
-    await asyncio.sleep(0.05)
+    await anyio.sleep(0.05)
 
   async def reset_controller(self) -> None:
     """Reset the controller board."""
@@ -1169,7 +1164,7 @@ class Celigo:
       self._lighting_output_analog_count(output, intensity_percent),
     )
     if output.delay:
-      await asyncio.sleep(output.delay)
+      await anyio.sleep(output.delay)
 
   async def _set_channel_intensity(
     self,
@@ -1233,10 +1228,13 @@ class Celigo:
       raise CeligoError(f"Fluorescence lamp cannot change power for {remaining:.1f}s")
     if not enabled:
       await self._set_named_digital_output("FLOnOff", False)
-    await self.set_digital_output(output.bit_index, enabled != output.invert)
-    now = time.monotonic()
-    self._fluorescence_on_since = now if enabled else None
-    self._last_fluorescence_power_change = now
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self.set_digital_output(output.bit_index, enabled != output.invert)
+      now = time.monotonic()
+      self._fluorescence_on_since = now if enabled else None
+      self._last_fluorescence_power_change = now
+    await anyio.lowlevel.checkpoint()
 
   async def turn_off_illumination(self) -> None:
     """Turn off every configured illumination output and fluorescence strobe."""
@@ -1384,7 +1382,7 @@ class Celigo:
   ) -> CeligoCamera:
     camera = self.camera
     if not camera.is_open:
-      await camera.setup()
+      raise CeligoError("Camera is not open; enter the Celigo lifespan first")
     if require_calibrated_geometry:
       self._validate_camera_geometry()
     return camera
@@ -1405,8 +1403,7 @@ class Celigo:
     if gain is not None:
       await camera.set_gain(gain)
     if restart_camera_stream:
-      await camera.stop()
-      await camera.setup()
+      await camera.restart_stream()
       await self._configure_camera_for_calibration()
     return camera.exposure_ms, camera.gain
 
@@ -1512,7 +1509,7 @@ class Celigo:
       try:
         await z_axis.move_to_ticks(z_ticks)
         if settle_seconds > 0:
-          await asyncio.sleep(settle_seconds)
+          await anyio.sleep(settle_seconds)
         frame = await self.capture_frame(flush_frames=focus_flush_frames)
         score = evaluate(frame)
         inspected_z_ticks.add(z_ticks)
@@ -1826,7 +1823,7 @@ class Celigo:
     if initial_brightfield_z_mm is None:
       initial_brightfield_z_mm = plan.spec.initial_brightfield_z_mm
 
-    started_at = time.monotonic()
+    started_at = anyio.current_time()
     frame_results: List[FrameResult] = []
     frames_by_block: Dict[int, List[PlannedFrame]] = {block.index: [] for block in plan.blocks}
     for planned_frame in plan.frames:
@@ -1839,9 +1836,9 @@ class Celigo:
       block_frames.append(planned_frame)
 
     for block in plan.blocks:
-      stage_move_started = time.monotonic()
+      stage_move_started = anyio.current_time()
       settled_stage_position_mm = await self.move_to_scan_block(block)
-      stage_move_elapsed = timedelta(seconds=time.monotonic() - stage_move_started)
+      stage_move_elapsed = timedelta(seconds=anyio.current_time() - stage_move_started)
       focused_brightfield_z_mm = initial_brightfield_z_mm
       label = block.label if block.label is not None else f"block-{block.index}"
       for frame_index, planned_frame in enumerate(frames_by_block[block.index]):
@@ -1855,7 +1852,7 @@ class Celigo:
           else focused_brightfield_z_mm + channel_config.z_offset_to_brightfield_mm
         )
         acquisition_started_at = time.time()
-        acquisition_started = time.monotonic()
+        acquisition_started = anyio.current_time()
         acquisition = await self.acquire_scan_position(
           position=planned_frame.position,
           label=label,
@@ -1870,7 +1867,7 @@ class Celigo:
         timing = AcquisitionTiming(
           started_at=acquisition_started_at,
           finished_at=time.time(),
-          elapsed=timedelta(seconds=time.monotonic() - acquisition_started),
+          elapsed=timedelta(seconds=anyio.current_time() - acquisition_started),
           stage_move_elapsed=stage_move_elapsed if frame_index == 0 else None,
         )
         if acquisition.focus is not None:
@@ -1892,7 +1889,7 @@ class Celigo:
     return ScanResult(
       plan=plan,
       frames=tuple(frame_results),
-      elapsed=timedelta(seconds=time.monotonic() - started_at),
+      elapsed=timedelta(seconds=anyio.current_time() - started_at),
     )
 
   async def scan(
@@ -2049,13 +2046,8 @@ class Celigo:
         await axis.move_to_ticks(target_encoder_ticks)
       finally:
         # Always attempt restoration, including cancellation or a failed outward move.
-        restoration = asyncio.create_task(axis.move_to_ticks(start_encoder_ticks))
-        try:
-          end_encoder_ticks = await asyncio.shield(restoration)
-        except asyncio.CancelledError:
-          with contextlib.suppress(Exception):
-            await restoration
-          raise
+        with anyio.CancelScope(shield=True):
+          end_encoder_ticks = await axis.move_to_ticks(start_encoder_ticks)
       return {
         "start": start_encoder_ticks,
         "end": end_encoder_ticks,

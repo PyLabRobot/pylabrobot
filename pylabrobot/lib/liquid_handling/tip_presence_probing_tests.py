@@ -1,10 +1,10 @@
 """Tests for probing tip presence by pick-up, against a fake device's calls."""
 
-import asyncio
 import math
 import random
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+import anyio
 import pytest
 
 from pylabrobot.lib.liquid_handling.tip_presence_probing import (
@@ -84,11 +84,13 @@ class _Device:
 
 
 def _probe(device: _Device, spots: List[TipSpot], channels: List[int]) -> Dict[str, bool]:
-  return asyncio.run(probe_tip_presence_via_pickup(spots, channels, **device.kwargs()))
+  return anyio.run(
+    lambda: probe_tip_presence_via_pickup(spots, channels, **device.kwargs())
+  )
 
 
 def _inventory(device: _Device, spots: List[TipSpot], channels: List[int]) -> Dict[str, bool]:
-  return asyncio.run(probe_tip_inventory(spots, channels, **device.kwargs()))
+  return anyio.run(lambda: probe_tip_inventory(spots, channels, **device.kwargs()))
 
 
 # -- planning ----------------------------------------------------------------------------------
@@ -211,8 +213,8 @@ def test_integer_sensor_readings_count_as_flags():
   async def sensed() -> Sequence[bool]:
     return [int(held is not None) for held in device.held]  # type: ignore[misc]
 
-  found = asyncio.run(
-    probe_tip_presence_via_pickup(
+  found = anyio.run(
+    lambda: probe_tip_presence_via_pickup(
       spots,
       [0, 1],
       pick_up_tips=device.pick_up_tips,
@@ -250,8 +252,8 @@ def test_a_failure_the_sensors_do_not_explain_is_raised():
     raise RuntimeError("the arm stalled")
 
   with pytest.raises(RuntimeError, match="stalled"):
-    asyncio.run(
-      probe_tip_presence_via_pickup(
+    anyio.run(
+      lambda: probe_tip_presence_via_pickup(
         spots,
         [0, 1],
         pick_up_tips=stalled,
@@ -291,8 +293,8 @@ def test_a_failure_in_a_later_column_leaves_the_earlier_ones_put_back():
     return [True] * 8
 
   with pytest.raises(RuntimeError, match="stalled"):
-    asyncio.run(
-      probe_tip_presence_via_pickup(
+    anyio.run(
+      lambda: probe_tip_presence_via_pickup(
         spots,
         [0, 1],
         pick_up_tips=second_fails,
@@ -307,19 +309,23 @@ def test_a_cancellation_is_not_caught():
   spots = _spots(_rack(), "A1")
   device = _Device()
 
-  async def cancelled(tip_spots, channels):
-    raise asyncio.CancelledError()
+  async def run_cancelled():
+    with anyio.CancelScope() as scope:
 
-  with pytest.raises(asyncio.CancelledError):
-    asyncio.run(
-      probe_tip_presence_via_pickup(
+      async def cancelled(tip_spots, channels):
+        scope.cancel()
+        await anyio.sleep_forever()
+
+      await probe_tip_presence_via_pickup(
         spots,
         [0],
         pick_up_tips=cancelled,
         drop_tips=device.drop_tips,
         sense_tip_presence=device.sense_tip_presence,
       )
-    )
+    assert scope.cancelled_caught
+
+  anyio.run(run_cancelled)
 
 
 def test_a_refused_plan_sends_nothing():
@@ -346,8 +352,8 @@ def _named(error: Exception):
 
 
 def _probe_named(device, spots, channels, pick_up, sensors=None):
-  return asyncio.run(
-    probe_tip_presence_via_pickup(
+  return anyio.run(
+    lambda: probe_tip_presence_via_pickup(
       spots,
       channels,
       pick_up_tips=pick_up,

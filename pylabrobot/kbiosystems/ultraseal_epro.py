@@ -1,7 +1,8 @@
 import enum
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.kbiosystems.sealer import KBiosystemsError, KBiosystemsSealer
 
 logger = logging.getLogger(__name__)
@@ -116,12 +117,13 @@ class KBiosystemsUltrasealEPRO(KBiosystemsSealer):
     )
     self.firmware_version: Optional[str] = None
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own Serial through the base lifespan and initialize the ePRO."""
     logger.warning(
       "KBiosystemsUltrasealEPRO has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self._open()
+    await super()._enter_lifespan(stack, **kwargs)
     # Initialize/home the sealer (``I``).
     if self._check(await self.send_command("I"), {"ok", "err"}, "I") != "ok":
       raise KBiosystemsError(title="Initializing the Ultraseal ePRO failed")
@@ -174,8 +176,7 @@ class KBiosystemsUltrasealEPRO(KBiosystemsSealer):
 
   async def request_firmware_version(self) -> str:
     """Read the firmware version (``V``). This device replies with two lines."""
-    line1 = await self.send_command("V")
-    line2 = await self._read_line()
+    line1, line2 = await self._send_command("V", reply_count=2)
     return f"{line1} | {line2}"
 
   # === Operations ===

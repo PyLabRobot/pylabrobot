@@ -1,20 +1,36 @@
-import asyncio
+import anyio
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
+
+# Bounds dispatching and completing one command exchange: the write, the fixed inter-frame
+# delay, and the reply read share this single budget. It is a transport budget, not a device
+# budget, so it is deliberately a fixed constant rather than anything derived from the
+# requested intensity or from how long the fan has been asked to run.
+_HEPA_COMMAND_TIMEOUT = 30.0
 
 
 class HamiltonHepaFanBackend(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
   def __init__(self, device_id=None):
+    super().__init__()
     self.io = FTDI(
       human_readable_device_name="Hamilton HEPA Fan", device_id=device_id, vid=0x0856, pid=0xAC11
     )
+    self._command_lock = anyio.Lock()
 
-  async def setup(self):
-    await self.io.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the FTDI transport, configure it, and run the initialization packets.
+
+    Turning the fan off is not registered here: the `Fan` frontend already owns that action
+    through `_pre_backend_stop`, and a running HEPA fan is the safe state.
+    """
+    await super()._enter_lifespan(stack)
+
+    await stack.enter_async_context(self.io.lifespan())
     await self.io.set_baudrate(9600)
     await self.io.set_line_property(8, 0, 0)  # 8N1
     await self.io.set_latency_timer(16)
@@ -142,13 +158,33 @@ class HamiltonHepaFanBackend(FanBackend):
   async def turn_off(self):
     await self.send(b"\x55\xc1\x01\x11\x00\x7b")
 
-  async def stop(self):
-    await self.io.stop()
-
   async def send(self, command: bytes):
-    await self.io.write(command)
-    await asyncio.sleep(0.1)
-    await self.io.read(64)
+    """Run one complete command exchange as a single serialized transaction.
+
+    Waiting for the transaction and the checkpoint before the write stay cancellable. Once the
+    write may have committed, the write/delay/read exchange is shielded and finite, so
+    cancellation cannot abandon a command the fan has already received. The transaction is
+    released before the final checkpoint, so a pending external cancellation wins over a
+    stored timeout.
+    """
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    await self._command_lock.acquire()
+    try:
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        with anyio.move_on_after(_HEPA_COMMAND_TIMEOUT) as exchange_scope:
+          await self.io.write(command)
+          await anyio.sleep(0.1)
+          await self.io.read(64)
+        exchange_timed_out = exchange_scope.cancelled_caught
+    finally:
+      self._command_lock.release()
+    await anyio.lowlevel.checkpoint()
+    if exchange_timed_out:
+      raise TimeoutError(
+        f"HEPA command exchange {command.hex()} was not confirmed within "
+        f"{_HEPA_COMMAND_TIMEOUT} seconds."
+      )
 
 
 # Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)

@@ -1,11 +1,12 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
-import asyncio
 import logging
-import time
 import warnings
 from typing import List, Literal, Optional, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.scales.scale_backend import ScaleBackend
 
@@ -158,10 +159,13 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
     command processing or ignores entire commands."
   """
 
+  _RESPONSE_RECONCILIATION_TIMEOUT = 2.0
+
   # === Constructor ===
 
   def __init__(self, port: Optional[str] = None, vid: int = 0x0403, pid: int = 0x6001):
     super().__init__()
+    self._command_lock = anyio.Lock()
 
     self.io = Serial(
       human_readable_device_name="Mettler Toledo Scale",
@@ -169,22 +173,15 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       vid=vid,
       pid=pid,
       baudrate=9600,
-      timeout=1,
     )
 
-  async def setup(self) -> None:
-    # Core state
-    await self.io.setup()
-
-    # set output unit to grams
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the serial transport and initialize the scale."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
     await self.send_command("M21 0 0")
-
-    # Handshake: parse requested serial number
     self.serial_number = await self.request_serial_number()
     # TODO: verify serial number pattern
-
-  async def stop(self) -> None:
-    await self.io.stop()
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.io.port}
@@ -263,17 +260,34 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       timeout: The timeout in seconds.
     """
 
-    await self.io.write(command.encode() + b"\r\n")
-
     raw_response = b""
-    timeout_time = time.time() + timeout
-    while True:
-      raw_response = await self.io.readline()
-      await asyncio.sleep(0.001)
-      if time.time() > timeout_time:
-        raise TimeoutError("Timeout while waiting for response from scale.")
-      if raw_response != b"":
-        break
+    write_completed = False
+    operation_timed_out = False
+    await self._command_lock.acquire()
+    try:
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        try:
+          with anyio.fail_after(timeout) as timeout_scope:
+            await self.io.write(command.encode() + b"\r\n")
+            write_completed = True
+            while raw_response == b"":
+              raw_response = await self.io.readline()
+              await anyio.lowlevel.checkpoint()
+        except TimeoutError:
+          if not timeout_scope.cancelled_caught:
+            raise
+          operation_timed_out = True
+        if operation_timed_out and write_completed and raw_response == b"":
+          with anyio.move_on_after(self._RESPONSE_RECONCILIATION_TIMEOUT):
+            while raw_response == b"":
+              raw_response = await self.io.readline()
+              await anyio.lowlevel.checkpoint()
+    finally:
+      self._command_lock.release()
+    await anyio.lowlevel.checkpoint()
+    if operation_timed_out:
+      raise TimeoutError("Timeout while waiting for response from scale.") from None
     logger.debug("[scale] Received response: %s", raw_response)
     response = raw_response.decode("utf-8").strip().split()
 

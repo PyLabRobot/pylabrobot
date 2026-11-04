@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from collections.abc import Coroutine
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, TypeVar
+
+import anyio
 
 from pylabrobot.revvity.celigo.grpc.job_specification import JobSpecification
 from pylabrobot.revvity.celigo.grpc.job_store import advance_job_status
@@ -22,17 +23,14 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-async def run_owned_operation(operation: Coroutine[object, object, T]) -> T:
-  """Keep ownership until an in-flight operation finishes, even on executor cancellation."""
-  task = asyncio.create_task(operation)
-  try:
-    return await asyncio.shield(task)
-  except asyncio.CancelledError:
-    try:
-      await task
-    except Exception:
-      logger.exception("In-flight operation failed while executor was cancelling")
-    raise
+async def run_owned_operation(operation: Awaitable[T]) -> T:
+  """Keep ownership until an in-flight operation finishes, even on executor cancellation.
+
+  A cancellation requested meanwhile is delivered at the next checkpoint after it returns.
+  """
+  with anyio.CancelScope(shield=True):
+    result = await operation
+  return result
 
 
 class AcquisitionJob:
@@ -42,10 +40,12 @@ class AcquisitionJob:
     self.status = status
     self.ref = copy_message(status.job)
     self.preview = status.kind == "Preview"
-    self.stop_requested = asyncio.Event()
+    self.stop_requested = anyio.Event()
     if status.cancellation_requested:
       self.stop_requested.set()
-    self.task: asyncio.Task[None] | None = None
+    # Set while the session executes this job; cancelling the scope interrupts the execution.
+    self.finished: anyio.Event | None = None
+    self.execution_scope = anyio.CancelScope()
     self.updates: Latest[stored_pb.JobStatus] = Latest(copy_message(status))
 
   def publish_status(self, status: stored_pb.JobStatus) -> None:
@@ -76,7 +76,7 @@ class AcquisitionJob:
       self.publish_status(status)
       self.session.active_job = self
       self.session.publish_status()
-      self.task = asyncio.create_task(self.run(), name=f"celigo-grpc-{self.ref.job_id}")
+      self.session.start_job_execution(self)
       return copy_message(self.status)
 
   async def cancel(self) -> stored_pb.JobStatus:
@@ -135,74 +135,88 @@ class AcquisitionJob:
           image_pb.GetFrameRequest(job=self.ref, frame_id=frame.frame_id)
         )
 
+  async def _execute(self) -> None:
+    """Perform the job's hardware work, honoring cooperative stop requests between steps."""
+    if self.status.kind == "Initialize":
+      if not self.stop_requested.is_set():
+        await run_owned_operation(self.session.initialize())
+    elif self.spec.scan_plan is not None:
+      if not self.stop_requested.is_set():
+        await run_owned_operation(self.session.execute_scan(self))
+    else:
+      for sequence in range(1, self.spec.frame_count + 1):
+        if self.stop_requested.is_set():
+          break
+        if self.spec.interval_ms:
+          with anyio.move_on_after(self.spec.interval_ms / 1000):
+            await self.stop_requested.wait()
+          if self.stop_requested.is_set():
+            break
+        frame = await run_owned_operation(self.session.capture_frame(self, sequence))
+        if frame is None:
+          break
+        await self.commit_frame(frame)
+        del frame  # Retention lives in SQLite; memory does not accumulate with scan length.
+
+  async def _finish(self, error: str, interrupted: bool) -> None:
+    """Release the instrument and durably publish the job's final state."""
+    try:
+      await self.session.finish_operation(self, bool(error))
+    except Exception as exc:
+      logger.exception("Operation cleanup failed for %s", self.ref.job_id)
+      error = f"{error}; cleanup failed: {type(exc).__name__}: {exc}".lstrip("; ")
+    async with self.session.lock:
+      outcome = (
+        job_pb.OUTCOME_INTERRUPTED
+        if interrupted
+        else job_pb.OUTCOME_FAILED
+        if error
+        else (
+          job_pb.OUTCOME_CANCELLED if self.stop_requested.is_set() else job_pb.OUTCOME_SUCCEEDED
+        )
+      )
+      status = advance_job_status(
+        self.status,
+        state=job_pb.JOB_STATE_FINISHED,
+        phase="Finished",
+        outcome=outcome,
+        cancellation_requested=self.stop_requested.is_set(),
+        error=error,
+      )
+      if self.status.kind == "Initialize" and outcome == job_pb.OUTCOME_SUCCEEDED:
+        status.completed = 1
+      try:
+        await self.session.run_storage_operation(
+          self.session.store.save_job_status, status, "finish"
+        )
+      except StorageError as exc:
+        # The disk may still contain Running. Recovery will mark it Interrupted.
+        status.state_durable = False
+        status.outcome = job_pb.OUTCOME_FAILED
+        status.error = f"Completion could not be persisted: {exc}"
+      self.publish_status(status)
+      if self.status.kind == "Initialize":
+        self.session.initialized = status.outcome == job_pb.OUTCOME_SUCCEEDED
+      self.session.active_job = None
+      self.session.publish_status()
+
   async def run(self) -> None:
+    """Execute the job, then release the instrument and persist the outcome, even if cancelled."""
     error = ""
     interrupted = False
     try:
-      if self.status.kind == "Initialize":
-        if not self.stop_requested.is_set():
-          await run_owned_operation(self.session.initialize())
-      elif self.spec.scan_plan is not None:
-        if not self.stop_requested.is_set():
-          await run_owned_operation(self.session.execute_scan(self))
-      else:
-        for sequence in range(1, self.spec.frame_count + 1):
-          if self.stop_requested.is_set():
-            break
-          if self.spec.interval_ms:
-            try:
-              await asyncio.wait_for(self.stop_requested.wait(), self.spec.interval_ms / 1000)
-              break
-            except asyncio.TimeoutError:
-              pass
-          frame = await run_owned_operation(self.session.capture_frame(self, sequence))
-          if frame is None:
-            break
-          await self.commit_frame(frame)
-          del frame  # Retention lives in SQLite; memory does not accumulate with scan length.
-    except asyncio.CancelledError:
-      interrupted = True
-      error = "Execution task was interrupted; in-flight operation and cleanup were awaited."
-    except Exception as exc:
-      logger.exception("Acquisition %s failed", self.ref.job_id)
-      error = f"{type(exc).__name__}: {exc}"
-    finally:
-      try:
-        await run_owned_operation(self.session.finish_operation(self, bool(error)))
-      except (Exception, asyncio.CancelledError) as exc:
-        logger.exception("Operation cleanup failed for %s", self.ref.job_id)
-        error = f"{error}; cleanup failed: {type(exc).__name__}: {exc}".lstrip("; ")
-      async with self.session.lock:
-        outcome = (
-          job_pb.OUTCOME_INTERRUPTED
-          if interrupted
-          else job_pb.OUTCOME_FAILED
-          if error
-          else (
-            job_pb.OUTCOME_CANCELLED if self.stop_requested.is_set() else job_pb.OUTCOME_SUCCEEDED
-          )
-        )
-        status = advance_job_status(
-          self.status,
-          state=job_pb.JOB_STATE_FINISHED,
-          phase="Finished",
-          outcome=outcome,
-          cancellation_requested=self.stop_requested.is_set(),
-          error=error,
-        )
-        if self.status.kind == "Initialize" and outcome == job_pb.OUTCOME_SUCCEEDED:
-          status.completed = 1
+      with self.execution_scope:
         try:
-          await self.session.run_storage_operation(
-            self.session.store.save_job_status, status, "finish"
-          )
-        except StorageError as exc:
-          # The disk may still contain Running. Recovery will mark it Interrupted.
-          status.state_durable = False
-          status.outcome = job_pb.OUTCOME_FAILED
-          status.error = f"Completion could not be persisted: {exc}"
-        self.publish_status(status)
-        if self.status.kind == "Initialize":
-          self.session.initialized = status.outcome == job_pb.OUTCOME_SUCCEEDED
-        self.session.active_job = None
-        self.session.publish_status()
+          await self._execute()
+        except Exception as exc:
+          logger.exception("Acquisition %s failed", self.ref.job_id)
+          error = f"{type(exc).__name__}: {exc}"
+      interrupted = self.execution_scope.cancelled_caught
+    except anyio.get_cancelled_exc_class():
+      interrupted = True
+      raise
+    finally:
+      if interrupted:
+        error = "Execution task was interrupted; in-flight operation and cleanup were awaited."
+      with anyio.CancelScope(shield=True):
+        await self._finish(error, interrupted)

@@ -3,6 +3,8 @@
 import logging
 from typing import TYPE_CHECKING, Optional
 
+import anyio
+
 from pylabrobot.resources import Coordinate, Plate, PlateHolder
 
 if TYPE_CHECKING:
@@ -96,7 +98,8 @@ class Drawer:
       # A move that stopped part way left the drawer anywhere; a failed read must not replace
       # the move's exception.
       try:
-        await self.sense_drawer_open()
+        with anyio.CancelScope(shield=True):
+          await self.sense_drawer_open()
       except Exception:
         logger.warning("could not sense whether the drawer is open; its model is stale")
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import os
@@ -13,7 +12,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Protocol, cast
+from typing import Any, AsyncContextManager, Optional, Protocol, cast
+
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 
 try:
   import numpy as np
@@ -25,7 +28,7 @@ except ImportError as e:
   np = cast(Any, None)
 
 try:
-  from PIL import Image
+  from PIL import Image  # type: ignore[import-not-found]
 
   _HAS_PIL = True
 except ImportError as e:
@@ -182,7 +185,7 @@ class CancelledPreparedUserProtocolResult:
     }
 
 
-class _TheGhostTouch:
+class _TheGhostTouch(HasLifespan):
   """Verified RSI touchscreen control for the BTX Gemini X2.
 
   This control intentionally supports only the user-protocol path used by the BTX end-to-end
@@ -200,6 +203,7 @@ class _TheGhostTouch:
     min_conf: float = 0.70,
     down_ms: int = 70,
   ) -> None:
+    super().__init__()
     if down_ms < 0:
       raise ValueError("down_ms must be non-negative.")
     self.down_ms = down_ms
@@ -217,18 +221,13 @@ class _TheGhostTouch:
   def min_conf(self) -> float:
     return self._detector.min_conf
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Set up the RSI serial session."""
+    await super()._enter_lifespan(stack)
     logger.info("Setting up Gemini X2 touchscreen control on port %s", self.port)
     self._require_dependencies()
-    await self._transport.setup()
+    await stack.enter_async_context(self._transport.lifespan())
     logger.info("Gemini X2 touchscreen control ready on port %s", self.port)
-
-  async def stop(self) -> None:
-    """Stop the RSI serial session."""
-    logger.info("Stopping Gemini X2 touchscreen control on port %s", self.port)
-    await self._transport.stop()
-    logger.info("Gemini X2 touchscreen control stopped")
 
   def _require_dependencies(self) -> None:
     if not _HAS_NUMPY:
@@ -281,8 +280,10 @@ class _TheGhostTouch:
       raise ValueError("max_run_seconds must be greater than zero.")
     logger.info("Starting Gemini X2 electroporation protocol %s", protocol_name)
     verified = await self.verify_prepared_user_protocol(protocol_name)
-    start = await self.start_run()
-    done = await self.wait_run_done(max_seconds=max_run_seconds)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      start = await self.start_run()
+      done = await self.wait_run_done(max_seconds=max_run_seconds)
     completed_at_utc = datetime.now(timezone.utc).isoformat()
     home = None if not home_after else await self.ensure_home()
 
@@ -377,7 +378,7 @@ class _TheGhostTouch:
       except RuntimeError as exc:
         last_error = str(exc)
         current = await self.ensure_home()
-        await asyncio.sleep(1.0)
+        await anyio.sleep(1.0)
         continue
       return current
 
@@ -439,23 +440,25 @@ class _TheGhostTouch:
       snap = await self.snapshot(f"verify-prepared-{attempt}")
       if snap.detection.state != STATE_PROTOCOL_RUN_VIEW:
         last_reason = f"Expected Run Protocol view, got {snap.detection.state}."
-        await asyncio.sleep(0.35)
+        await anyio.sleep(0.35)
         continue
 
       protocol_match = await self._run_view_matches_protocol(snap.image_path, protocol_name)
       if protocol_match is False:
-        header = (await asyncio.to_thread(self._detector.run_header_text, snap.image_path)).strip()
+        header = (
+          await anyio.to_thread.run_sync(self._detector.run_header_text, snap.image_path)
+        ).strip()
         raise RuntimeError(
           f"Prepared run screen does not match protocol '{protocol_name}'. header='{header}'"
         )
       if protocol_match is None:
         last_reason = "Could not verify the protocol header on the prepared run screen."
-        await asyncio.sleep(0.35)
+        await anyio.sleep(0.35)
         continue
 
       if not self._detector.looks_prerun(snap.detection):
         last_reason = "Run screen is not in the pre-run state."
-        await asyncio.sleep(0.35)
+        await anyio.sleep(0.35)
         continue
 
       return snap
@@ -509,40 +512,39 @@ class _TheGhostTouch:
     interval: float,
     prefix: str,
   ) -> Snapshot | None:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
     idx = 0
-    while loop.time() < deadline:
-      snap = await self.snapshot(f"{prefix}-{idx:02d}")
-      detection = snap.detection
-      if (
-        self._detector.is_run_done(detection)
-        or self._detector.has_confirm_dialog(detection)
-        or (
-          detection.state == STATE_PROTOCOL_RUN_VIEW
-          and not self._detector.looks_prerun(detection)
-          and detection.confidence >= self.min_conf
-        )
-      ):
-        return snap
-      idx += 1
-      await asyncio.sleep(interval)
+    if timeout > 0:
+      with anyio.move_on_after(timeout):
+        while True:
+          snap = await self.snapshot(f"{prefix}-{idx:02d}")
+          detection = snap.detection
+          if (
+            self._detector.is_run_done(detection)
+            or self._detector.has_confirm_dialog(detection)
+            or (
+              detection.state == STATE_PROTOCOL_RUN_VIEW
+              and not self._detector.looks_prerun(detection)
+              and detection.confidence >= self.min_conf
+            )
+          ):
+            return snap
+          idx += 1
+          await anyio.sleep(interval)
     return None
 
   async def wait_run_done(self, max_seconds: float) -> Snapshot:
     """Poll the RSI screen until the run has finished."""
     if max_seconds <= 0:
       raise ValueError("max_seconds must be greater than zero.")
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + max_seconds
     idx = 0
-    while loop.time() < deadline:
-      # Use one frame attempt per poll. Retried requests can accumulate during pulse delivery.
-      snap = await self._snapshot_run_poll(f"run-wait-{idx:02d}")
-      if self._detector.is_run_done(snap.detection):
-        return snap
-      idx += 1
-      await asyncio.sleep(0.7)
+    with anyio.move_on_after(max_seconds):
+      while True:
+        # Use one frame attempt per poll. Retried requests can accumulate during pulse delivery.
+        snap = await self._snapshot_run_poll(f"run-wait-{idx:02d}")
+        if self._detector.is_run_done(snap.detection):
+          return snap
+        idx += 1
+        await anyio.sleep(0.7)
     raise TimeoutError(f"Timed out waiting for run completion after {max_seconds} seconds.")
 
   async def read_frame(self) -> FrameCapture:
@@ -569,8 +571,12 @@ class _TheGhostTouch:
 
   async def _snapshot_from_frame(self, prefix: str, frame: FrameCapture) -> Snapshot:
     """Save and classify a captured framebuffer."""
-    image_path = await asyncio.to_thread(self._save_frame, frame, prefix)
-    detection = await asyncio.to_thread(self._detector.classify_image, image_path)
+    image_path = await anyio.to_thread.run_sync(
+      self._save_frame, frame, prefix, abandon_on_cancel=True
+    )
+    detection = await anyio.to_thread.run_sync(
+      self._detector.classify_image, image_path, abandon_on_cancel=True
+    )
     return Snapshot(frame=frame, image_path=image_path, detection=detection)
 
   async def tap(self, x: int, y: int, down_ms: Optional[int] = None) -> None:
@@ -587,19 +593,19 @@ class _TheGhostTouch:
     initial_delay: float = 0.0,
   ) -> Snapshot | None:
     """Poll screenshots until one of the expected screen states is visible."""
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
     idx = 0
-    if initial_delay > 0:
-      await asyncio.sleep(initial_delay)
-    while loop.time() < deadline:
-      snap = await self.snapshot(f"{prefix}-{idx:02d}")
-      if snap.detection.state in states and (
-        snap.detection.state == STATE_UNKNOWN or snap.detection.confidence >= self.min_conf
-      ):
-        return snap
-      idx += 1
-      await asyncio.sleep(interval)
+    if timeout > 0:
+      with anyio.move_on_after(timeout):
+        if initial_delay > 0:
+          await anyio.sleep(initial_delay)
+        while True:
+          snap = await self.snapshot(f"{prefix}-{idx:02d}")
+          if snap.detection.state in states and (
+            snap.detection.state == STATE_UNKNOWN or snap.detection.confidence >= self.min_conf
+          ):
+            return snap
+          idx += 1
+          await anyio.sleep(interval)
     return None
 
   async def tap_and_wait(
@@ -624,19 +630,19 @@ class _TheGhostTouch:
     )
 
   async def _summary_matches_protocol(self, image_path: str, protocol_name: str) -> bool | None:
-    return await asyncio.to_thread(
+    return await anyio.to_thread.run_sync(
       self._detector.summary_matches_protocol, image_path, protocol_name
     )
 
   async def _run_view_matches_protocol(self, image_path: str, protocol_name: str) -> bool | None:
-    return await asyncio.to_thread(
+    return await anyio.to_thread.run_sync(
       self._detector.run_view_matches_protocol, image_path, protocol_name
     )
 
   async def _scroll_user_protocols_to_top(self, current: Snapshot) -> Snapshot:
     if current.detection.state != STATE_USER_PROTOCOLS:
       raise RuntimeError(f"Expected User Protocols screen, got {current.detection.state}.")
-    if await asyncio.to_thread(self._detector.user_protocols_at_top, current):
+    if await anyio.to_thread.run_sync(self._detector.user_protocols_at_top, current):
       return current
 
     for attempt in range(8):
@@ -652,7 +658,7 @@ class _TheGhostTouch:
       if next_snapshot is None:
         raise RuntimeError("Lost User Protocols screen while scrolling to top.")
       current = next_snapshot
-      if await asyncio.to_thread(self._detector.user_protocols_at_top, current):
+      if await anyio.to_thread.run_sync(self._detector.user_protocols_at_top, current):
         return current
 
     raise RuntimeError("Failed to reach the top of User Protocols.")
@@ -677,7 +683,7 @@ class _TheGhostTouch:
       USER_PROTOCOLS_FIRST_ROW_COORD[1],
       down_ms=max(self.down_ms, 80),
     )
-    await asyncio.sleep(1.0)
+    await anyio.sleep(1.0)
     current = await self.snapshot(f"goto-user-first-row-selected-{attempt}")
     detector = self._detector
     if current.detection.state == STATE_USER_PROTOCOLS:
@@ -686,19 +692,19 @@ class _TheGhostTouch:
         DETAIL_CONFIRM_COORD[1],
         down_ms=max(self.down_ms, 80),
       )
-      await asyncio.sleep(1.0)
+      await anyio.sleep(1.0)
       current = await self.snapshot(f"goto-user-summary-{attempt}-00")
       if (
         current.detection.state != STATE_PROTOCOL_RUN_VIEW
         and not detector.looks_user_protocol_summary(current.detection)
       ):
-        await asyncio.sleep(0.45)
+        await anyio.sleep(0.45)
         current = await self.snapshot(f"goto-user-summary-{attempt}-01")
     elif (
       current.detection.state != STATE_PROTOCOL_RUN_VIEW
       and not detector.looks_user_protocol_summary(current.detection)
     ):
-      await asyncio.sleep(0.45)
+      await anyio.sleep(0.45)
       current = await self.snapshot(f"goto-user-summary-{attempt}-01")
     return current
 
@@ -741,7 +747,9 @@ class _TheGhostTouch:
   async def _verify_run_view_protocol(self, current: Snapshot, protocol_name: str) -> None:
     protocol_match = await self._run_view_matches_protocol(current.image_path, protocol_name)
     if protocol_match is False:
-      header = (await asyncio.to_thread(self._detector.run_header_text, current.image_path)).strip()
+      header = (
+        await anyio.to_thread.run_sync(self._detector.run_header_text, current.image_path)
+      ).strip()
       raise RuntimeError(
         f"Run header does not match target protocol '{protocol_name}'. header='{header}'"
       )
@@ -751,14 +759,14 @@ class _TheGhostTouch:
       raise RuntimeError(f"Unsupported Set Plate Columns keypad key '{key}'.")
     x, y = SET_COLUMNS_KEY_COORDS[key]
     await self.tap(x, y, down_ms=max(self.down_ms, 70))
-    await asyncio.sleep(pause_s)
+    await anyio.sleep(pause_s)
 
   async def _enter_set_columns_value(self, columns: int) -> None:
     for _ in range(4):
       await self._tap_set_columns_key("delete")
     for digit in str(columns):
       await self._tap_set_columns_key(digit)
-    await asyncio.sleep(0.04)
+    await anyio.sleep(0.04)
 
   def _snapshot_result(self, snap: Snapshot) -> ScreenSnapshotResult:
     return ScreenSnapshotResult(
@@ -772,10 +780,7 @@ class _AsyncSerialLike(Protocol):
   def port(self) -> str:
     pass
 
-  async def setup(self) -> None:
-    pass
-
-  async def stop(self) -> None:
+  def lifespan(self) -> AsyncContextManager[Any]:
     pass
 
   async def write(self, data: bytes) -> None:
@@ -788,7 +793,7 @@ class _AsyncSerialLike(Protocol):
     pass
 
 
-class _RSITransport:
+class _RSITransport(HasLifespan):
   """RSI transport built on PLR Serial plus Gemini-specific frame handling."""
 
   READ_CHUNK_BYTES = 8192
@@ -801,6 +806,7 @@ class _RSITransport:
     retries: int,
     serial_io: Optional[_AsyncSerialLike] = None,
   ) -> None:
+    super().__init__()
     if timeout <= 0:
       raise ValueError("timeout must be greater than zero.")
     if retries <= 0:
@@ -823,26 +829,16 @@ class _RSITransport:
   def port(self) -> str:
     return self._serial.port
 
-  async def setup(self) -> None:
-    if self._is_setup:
-      return
-    try:
-      await self._serial.setup()
-    except Exception:
-      try:
-        await self._serial.stop()
-      except Exception:
-        logger.debug("Failed to close Gemini RSI serial after setup failure", exc_info=True)
-      raise
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the RSI serial session for the duration of this mode."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self._serial.lifespan())
+    stack.callback(self._mark_closed)
     self._is_setup = True
 
-  async def stop(self) -> None:
-    if not self._is_setup:
-      return
-    try:
-      await self._serial.stop()
-    finally:
-      self._is_setup = False
+  def _mark_closed(self) -> None:
+    """Invalidate the RSI session before closing its serial transport."""
+    self._is_setup = False
 
   def ensure_open(self) -> _AsyncSerialLike:
     if not self._is_setup:
@@ -856,37 +852,51 @@ class _RSITransport:
     await self.ensure_open().write(line.encode("ascii") + b"\r")
 
   async def _read_frame_once(self) -> FrameCapture:
+    """Finish a finite framebuffer reply before releasing the serial mode.
+
+    Once ``scap`` is sent, a polling deadline can overrun by one frame timeout:
+    interrupting the reply would let late bytes be mistaken for the next frame.
+    """
+    await anyio.lowlevel.checkpoint()
+    try:
+      with anyio.CancelScope(shield=True):
+        frame = await self._read_frame_transaction()
+    finally:
+      await anyio.lowlevel.checkpoint()
+    return frame
+
+  async def _read_frame_transaction(self) -> FrameCapture:
+    """Request and collect one prompt-terminated framebuffer."""
     self.ensure_open()
     await self.reset_input_buffer()
     await self.write_line("echo off")
-    await asyncio.sleep(0.03)
+    await anyio.sleep(0.03)
     await self.reset_input_buffer()
     await self.write_line("scap")
 
     buf = bytearray()
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + self.timeout
-    while loop.time() < deadline:
-      chunk = await self.ensure_open().read(self.READ_CHUNK_BYTES)
-      if chunk:
-        buf.extend(chunk)
-      else:
-        await asyncio.sleep(0.01)
+    with anyio.move_on_after(self.timeout):
+      while True:
+        chunk = await self.ensure_open().read(self.READ_CHUNK_BYTES)
+        if chunk:
+          buf.extend(chunk)
+        else:
+          await anyio.sleep(0.01)
 
-      if len(buf) < FRAME_BYTES + 1:
-        continue
+        if len(buf) < FRAME_BYTES + 1:
+          continue
 
-      end = buf.rfind(b":")
-      if end >= FRAME_BYTES:
-        fb = bytes(buf[end - FRAME_BYTES : end])
-        rgba = _decode_rsi_framebuffer(fb)
-        stable = rgba[0:160, 0:430, :]
-        return FrameCapture(
-          rgba=rgba,
-          raw_len=len(buf),
-          frame_sha1=hashlib.sha1(fb).hexdigest(),
-          stable_sha1=hashlib.sha1(stable.tobytes()).hexdigest(),
-        )
+        end = buf.rfind(b":")
+        if end >= FRAME_BYTES:
+          fb = bytes(buf[end - FRAME_BYTES : end])
+          rgba = _decode_rsi_framebuffer(fb)
+          stable = rgba[0:160, 0:430, :]
+          return FrameCapture(
+            rgba=rgba,
+            raw_len=len(buf),
+            frame_sha1=hashlib.sha1(fb).hexdigest(),
+            stable_sha1=hashlib.sha1(stable.tobytes()).hexdigest(),
+          )
 
     raise TimeoutError(f"Failed to read full scap frame, collected {len(buf)} bytes")
 
@@ -899,13 +909,15 @@ class _RSITransport:
         if attempt == attempts - 1:
           raise
         await self.reset_input_buffer()
-        await asyncio.sleep(0.06)
+        await anyio.sleep(0.06)
     raise RuntimeError("Unreachable RSI retry state.")  # pragma: no cover
 
   async def tap(self, x: int, y: int, hold_ms: int) -> None:
-    await self.write_line(f"@key {x} {y}")
-    await asyncio.sleep(hold_ms / 1000.0)
-    await self.write_line("@key")
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self.write_line(f"@key {x} {y}")
+      await anyio.sleep(hold_ms / 1000.0)
+      await self.write_line("@key")
 
 
 class _GeminiScreenDetector:

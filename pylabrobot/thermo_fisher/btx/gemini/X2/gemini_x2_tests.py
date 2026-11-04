@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, cast
 from unittest.mock import AsyncMock, patch
 
@@ -23,6 +24,10 @@ from pylabrobot.thermo_fisher.btx.gemini.X2.the_ghost_touch import (
 
 
 class _DummySerial:
+  @asynccontextmanager
+  async def lifespan(self):
+    yield self
+
   async def setup(self) -> None:
     pass
 
@@ -54,6 +59,14 @@ class _FakeFileTransferControl:
     self.serial_number = "1135421"
     self.device_time = "03/09/2026 5:00:00 PM"
     self._parser = _FileTransferControl(port=self.port, serial_io=_DummySerial())
+
+  @asynccontextmanager
+  async def lifespan(self):
+    await self.setup()
+    try:
+      yield self
+    finally:
+      await self.stop()
 
   async def list_protocols(self) -> list[str]:
     return list(self.protocols)
@@ -127,6 +140,14 @@ class _FakeGhostTouchSession:
   def __init__(self, factory: "_FakeGhostTouchFactory", port: str) -> None:
     self.factory = factory
     self.port = port
+
+  @asynccontextmanager
+  async def lifespan(self):
+    await self.setup()
+    try:
+      yield self
+    finally:
+      await self.stop()
 
   async def setup(self) -> None:
     await self.factory.setup()
@@ -401,6 +422,91 @@ class TestBTXGeminiX2(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(result.cleanup.deleted)
     self.assertEqual(result.rsi_result.completed_state, "protocol_finish")
 
+  async def test_zero_log_timeout_completes_one_checkpointing_listing_before_warning(self):
+    file_control = _FakeFileTransferControl()
+    file_control.log_contents["new.log"] = "Protocol Name: other\nProtocol Result: Complete"
+    gemini = _make_gemini(file_control)
+    gemini.LOG_POLL_TIMEOUT_SECONDS = 0
+    attempts = 0
+
+    async def listing() -> list[str]:
+      nonlocal attempts
+      attempts += 1
+      await asyncio.sleep(0)
+      return ["old.log", "new.log"]
+
+    with patch.object(file_control, "list_log_files", listing):
+      with self.assertLogs(
+        "pylabrobot.thermo_fisher.btx.gemini.X2.gemini_x2", level="WARNING"
+      ) as logs:
+        result = await asyncio.wait_for(
+          gemini._collect_matching_new_log({"old.log"}, "target"), timeout=1
+        )
+
+    self.assertEqual(attempts, 1)
+    self.assertEqual(result.after_count, 2)
+    self.assertEqual(result.new_log_paths, ("new.log",))
+    self.assertIsNone(result.matched_log_path)
+    self.assertIn("No new Gemini X2 run log matched protocol target", logs.output[0])
+
+  async def test_log_listing_stall_returns_baseline_on_timeout(self):
+    file_control = _FakeFileTransferControl()
+    gemini = _make_gemini(file_control)
+    gemini.LOG_POLL_TIMEOUT_SECONDS = 0.02
+    baseline = {"previous.log"}
+
+    async def stalled_listing() -> list[str]:
+      await asyncio.Event().wait()
+      return []
+
+    with patch.object(file_control, "list_log_files", stalled_listing):
+      result = await asyncio.wait_for(
+        gemini._collect_matching_new_log(baseline, "target"), timeout=1
+      )
+
+    self.assertEqual(result.before_count, 1)
+    self.assertEqual(result.after_count, 1)
+    self.assertEqual(result.new_log_paths, ())
+    self.assertIsNone(result.matched_log_path)
+
+  async def test_log_fetch_stall_returns_last_completed_listing_on_timeout(self):
+    file_control = _FakeFileTransferControl()
+    gemini = _make_gemini(file_control)
+    gemini.LOG_POLL_TIMEOUT_SECONDS = 0.02
+    file_control.log_snapshots = [["previous.log", "new.log"]]
+
+    async def stalled_fetch(path: str) -> str:
+      self.assertEqual(path, "new.log")
+      await asyncio.Event().wait()
+      return ""
+
+    with patch.object(file_control, "fetch_sd_file", stalled_fetch):
+      result = await asyncio.wait_for(
+        gemini._collect_matching_new_log({"previous.log"}, "target"), timeout=1
+      )
+
+    self.assertEqual(result.after_count, 2)
+    self.assertEqual(result.new_log_paths, ("new.log",))
+    self.assertIsNone(result.matched_log_path)
+
+  async def test_log_parent_cancellation_is_not_a_timeout_result(self):
+    file_control = _FakeFileTransferControl()
+    gemini = _make_gemini(file_control)
+    gemini.LOG_POLL_TIMEOUT_SECONDS = 1
+    entered = asyncio.Event()
+
+    async def stalled_listing() -> list[str]:
+      entered.set()
+      await asyncio.Event().wait()
+      return []
+
+    with patch.object(file_control, "list_log_files", stalled_listing):
+      task = asyncio.create_task(gemini._collect_matching_new_log(set(), "target"))
+      await entered.wait()
+      task.cancel()
+      with self.assertRaises(asyncio.CancelledError):
+        await task
+
   async def test_start_verification_failure_leaves_protocol_for_explicit_cancel(self):
     file_control = _FakeFileTransferControl()
     prepared = _prepared_run()
@@ -431,16 +537,17 @@ class TestBTXGeminiX2(unittest.IsolatedAsyncioTestCase):
     self.ghost_factory.stop.assert_awaited_once_with()
     self.assertEqual(file_control.setup.await_count, 2)
 
-  async def test_primary_run_error_is_not_masked_by_touch_stop_error(self):
+  async def test_touch_cleanup_error_retains_primary_run_error(self):
     file_control = _FakeFileTransferControl()
     self.ghost_factory.start_error = RuntimeError("primary run failure")
     self.ghost_factory.stop.side_effect = RuntimeError("secondary stop failure")
     gemini = _make_gemini(file_control)
     await gemini.setup()
 
-    with self.assertRaisesRegex(RuntimeError, "primary run failure"):
+    with self.assertRaisesRegex(RuntimeError, "secondary stop failure") as caught:
       await gemini.start_prepared_run(_prepared_run())
 
+    assert caught.exception.__context__ is self.ghost_factory.start_error
     self.assertEqual(file_control.setup.await_count, 2)
 
   async def test_restore_failure_marks_device_stopped_without_masking_primary_error(self):
@@ -495,17 +602,19 @@ class TestBTXGeminiX2(unittest.IsolatedAsyncioTestCase):
     file_control.setup.assert_awaited_once_with()
     file_control.stop.assert_awaited_once_with()
 
-  async def test_setup_and_stop_are_idempotent(self):
+  async def test_reentry_is_rejected_and_sequential_reuse_is_allowed(self):
     file_control = _FakeFileTransferControl()
     gemini = _make_gemini(file_control)
 
     await gemini.setup()
+    with self.assertRaisesRegex(RuntimeError, "active lifespan"):
+      await gemini.setup()
+    await gemini.stop()
     await gemini.setup()
     await gemini.stop()
-    await gemini.stop()
 
-    file_control.setup.assert_awaited_once_with()
-    file_control.stop.assert_awaited_once_with()
+    self.assertEqual(file_control.setup.await_count, 2)
+    self.assertEqual(file_control.stop.await_count, 2)
 
   async def test_device_lock_serializes_public_operations(self):
     file_control = _FakeFileTransferControl()

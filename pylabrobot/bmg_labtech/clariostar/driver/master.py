@@ -4,12 +4,13 @@ The command layer speaks logical payloads and is the same for both interfaces; o
 framing differs (see ``framing.py``), and it is chosen once, from ``use_io``.
 """
 
-import asyncio
 import json
 import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, cast
+
+import anyio
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import (
@@ -24,6 +25,7 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   usb_wrap_payload,
 )
 from pylabrobot.bmg_labtech.transport.ftdi_interface import BMGFTDIInterface
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 
@@ -90,7 +92,7 @@ def _flag(channels: Optional[int]) -> Optional[bool]:
   return None if channels is None else bool(channels)
 
 
-class CLARIOstarDriver:
+class CLARIOstarDriver(HasLifespan):
   """Owns the CLARIOstar connection, the command layer, and the reader's features.
 
   Features are reached as attributes, e.g. ``driver.drawer``.
@@ -224,6 +226,7 @@ class CLARIOstarDriver:
       TypeError: if ``io`` is neither an ``FTDI`` nor a ``USB``.
       ValueError: if ``use_io`` is not ``"ftdi"`` or ``"usb"``, or disagrees with ``io``.
     """
+    super().__init__()
     if use_io is not None and use_io not in ("ftdi", "usb"):
       raise ValueError(f"use_io must be 'ftdi' or 'usb', got {use_io!r}")
     if io is not None:
@@ -243,7 +246,7 @@ class CLARIOstarDriver:
     self.configuration = DeviceConfiguration()
     # One lock over the link: a reply belongs to the last command written, so exchanges never
     # overlap.
-    self._lock = asyncio.Lock()
+    self._lock = anyio.Lock()
     # Whether a measurement is running; the reader runs only one at a time
     # (`_enforce_one_measurement_at_a_time`).
     self._measuring = False
@@ -272,7 +275,7 @@ class CLARIOstarDriver:
     interface = self._ftdi_interface
     if interface is None or interface.io is not self.io:
       if interface is not None:
-        interface.stop()
+        interface._stop_queued_reads()
       interface = BMGFTDIInterface(
         cast(FTDI, self.io),
         header=FTDI_HEADER,
@@ -291,13 +294,12 @@ class CLARIOstarDriver:
     """The io, as a USB."""
     return cast(USB, self.io)
 
-  async def _usb_setup(self) -> None:
+  async def _enter_usb_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the USB device, then send the two vendor requests it needs before bulk traffic."""
-    await self._usb.setup()
-    # USB.ctrl_transfer types its data as int (a read length); pyusb also takes bytes to send.
-    self._usb.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x01")  # type: ignore[arg-type]  # bulk protocol on
+    await stack.enter_async_context(self._usb.lifespan())
+    await self._usb.ctrl_transfer(0x22, 0x8B, 0, 0, b"\x01")  # bulk protocol on
     now = int(time.time()).to_bytes(4, "big")
-    self._usb.ctrl_transfer(0x22, 0x88, 0, 0, b"\x00\x00\x00\x00" + now)  # type: ignore[arg-type]
+    await self._usb.ctrl_transfer(0x22, 0x88, 0, 0, b"\x00\x00\x00\x00" + now)
 
   async def _usb_read_packet(self) -> bytes:
     """Read one USB packet; raise FrameError if none arrives in time."""
@@ -388,7 +390,7 @@ class CLARIOstarDriver:
         if attempt == retries:
           raise
         await self._purge_rx()
-        await asyncio.sleep(self._RETRY_SETTLE)
+        await anyio.sleep(self._RETRY_SETTLE)
     raise AssertionError("unreachable")
 
   def _check_reply(self, payload: bytes, reply: bytes) -> None:
@@ -441,17 +443,17 @@ class CLARIOstarDriver:
       CommandRefusedError: if the reader refuses the status query (e.g. before INIT).
     """
     status_payload = bytes([self.CommandFamily.STATUS])
-    start = time.time()
+    start = anyio.current_time()
     while True:
       reply = await self._exchange_with_retries(status_payload, retries=5)
       self._check_reply(status_payload, reply)
       status = self._parse_status(reply)
       if until(status) if until is not None else not status.busy:
         return
-      if timeout is not None and time.time() - start >= timeout:
+      if timeout is not None and anyio.current_time() - start >= timeout:
         raise TimeoutError(f"CLARIOstar status still {status} after {timeout} s")
       if poll_interval:
-        await asyncio.sleep(poll_interval)
+        await anyio.sleep(poll_interval)
 
   async def send_command(
     self,
@@ -919,22 +921,28 @@ class CLARIOstarDriver:
     lines.append(f"  Atmospheric control unit: {c.atmospheric_control_unit_connected}")
     return "\n".join(lines)
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    accept_plate_left_in_device: bool = False,
+  ) -> None:
     """Connect, initialize the reader (about 13 s), and read its configuration.
 
     Raises:
       RuntimeError: if the motors are still off after INIT, or the reader does not match the
         declared configuration.
     """
+    await super()._enter_lifespan(stack)
     logger.debug("setting up the CLARIOstar on %s ...", self._describe_link())
     if self.use_io == "ftdi":
-      await self._ftdi.setup()
+      await stack.enter_async_context(self._ftdi.lifespan())
     else:
       logger.warning(
         "the CLARIOstar USB interface has not been tested on hardware with this driver; please "
         "report how it works"
       )
-      await self._usb_setup()
+      await self._enter_usb_lifespan(stack)
     await self._purge_rx()
 
     logger.debug("[PHASE 1] Device initialization")
@@ -943,6 +951,7 @@ class CLARIOstarDriver:
       raise RuntimeError(
         "CLARIOstar motors are still off after INIT. A power cycle may be required."
       )
+    stack.push_shielded_async_callback(self._shut_down, accept_plate_left_in_device)
 
     logger.debug("[PHASE 2] Discovery")
     await self.discover()
@@ -1011,18 +1020,3 @@ class CLARIOstarDriver:
       raise RuntimeError(
         "a plate is still in the reader; take it out, or pass accept_plate_left_in_device=True"
       )
-
-  async def stop(self, accept_plate_left_in_device: bool = False) -> None:
-    """Stop a running measurement, switch heating off, close the drawer, and close the
-    connection.
-
-    Raises:
-      RuntimeError: if a plate is still in the reader, unless `accept_plate_left_in_device`; the
-        drawer is opened and the connection stays open.
-      ValueError: if the plate on the plate holder is too tall to close the drawer with; the
-        drawer stays open and the connection stays open.
-    """
-    await self._shut_down(accept_plate_left_in_device)
-    if self._ftdi_interface is not None:
-      self._ftdi_interface.stop()  # before the device handle under them is closed
-    await self.io.stop()

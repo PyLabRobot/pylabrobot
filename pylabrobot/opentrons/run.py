@@ -1,10 +1,10 @@
 """Run-scoped Opentrons command primitives and completion handling."""
 
-import asyncio
 import math
 import re
-import time
 from typing import Any, Dict, Optional, Tuple
+
+import anyio
 
 from pylabrobot.io.http import HTTPError
 from pylabrobot.opentrons.api import OpentronsAPI
@@ -18,6 +18,29 @@ from pylabrobot.opentrons.types import CommandInfo, LabwareIdentity, Mount, _obj
 from pylabrobot.resources.coordinate import Coordinate
 
 COMMAND_POLL_HEADROOM = 30.0
+
+
+class RobotOperationLock:
+  """Reentrant operation lock keyed by the current AnyIO task."""
+
+  def __init__(self) -> None:
+    self._lock = anyio.Lock()
+    self._owner: Optional[int] = None
+    self._depth = 0
+
+  async def __aenter__(self) -> "RobotOperationLock":
+    task_id = anyio.get_current_task().id
+    if task_id != self._owner:
+      await self._lock.acquire()
+      self._owner = task_id
+    self._depth += 1
+    return self
+
+  async def __aexit__(self, *args: Any) -> None:
+    self._depth -= 1
+    if self._depth == 0:
+      self._owner = None
+      self._lock.release()
 
 
 def _version_tuple(version: str) -> Tuple[int, ...]:
@@ -83,6 +106,7 @@ class OpentronsRun:
     self.command_timeout = command_timeout
     self.command_poll_interval = command_poll_interval
     self._active = True
+    self._command_lock = anyio.Lock()
 
   @property
   def id(self) -> str:
@@ -102,27 +126,33 @@ class OpentronsRun:
 
   async def stop(self) -> None:
     """Wait for this run to stop; retain active state until shutdown is confirmed."""
-    if self._active:
-      await self._api.stop_run(self.id)
-      deadline = time.monotonic() + self.command_timeout
-      while True:
-        try:
-          status = (await self._api.get_run(self.id)).status
-        except HTTPError as error:
-          if error.status == 404:
-            break  # The legacy stop route can delete the run.
-          raise
-        if status == "stopped":
-          break
-        if status is None:
-          raise OpentronsProtocolError(f"Missing status while waiting for run {self.id} to stop")
-        if time.monotonic() >= deadline:
-          raise OpentronsError(
-            f"Timed out waiting for run {self.id} to stop (status {status!r}); "
-            "state is retained for retry"
-          )
-        await asyncio.sleep(self.command_poll_interval)
-      self._active = False
+    async with self._command_lock:
+      if self._active:
+        await anyio.lowlevel.checkpoint()
+        with anyio.CancelScope(shield=True):
+          await self._api.stop_run(self.id)
+          deadline = anyio.current_time() + self.command_timeout
+          while True:
+            try:
+              status = (await self._api.get_run(self.id)).status
+            except HTTPError as error:
+              if error.status == 404:
+                break  # The legacy stop route can delete the run.
+              raise
+            if status == "stopped":
+              break
+            if status is None:
+              raise OpentronsProtocolError(
+                f"Missing status while waiting for run {self.id} to stop"
+              )
+            if anyio.current_time() >= deadline:
+              raise OpentronsError(
+                f"Timed out waiting for run {self.id} to stop (status {status!r}); "
+                "state is retained for retry"
+              )
+            await anyio.sleep(self.command_poll_interval)
+          self._active = False
+        await anyio.lowlevel.checkpoint()
 
   async def execute(
     self,
@@ -145,33 +175,41 @@ class OpentronsRun:
     if isinstance(volume, (int, float)) and isinstance(rate, (int, float)):
       if math.isfinite(volume) and math.isfinite(rate) and rate > 0:
         duration = max(duration, abs(volume) / rate + COMMAND_POLL_HEADROOM)
-    command_id = await self._api.submit_command(self.id, command_type, params)
-    if not wait:
-      return CommandInfo(status="queued", result={}, error={}, id=command_id)
-    deadline = time.monotonic() + duration
-    while True:
-      try:
-        command = await self._api.get_command(self.id, command_id)
-      except TimeoutError as error:
-        raise OpentronsCommandTimeout(self.id, command_id, command_type) from error
-      if command.status == "succeeded":
-        return CommandInfo(command.status, command.result, command.error, command_id)
-      if command.status == "failed":
-        raise OpentronsCommandError(
-          self.id,
-          command_id,
-          command_type,
-          command.error.get("errorType", "unknown"),
-          command.error.get("detail", "no detail returned"),
-        )
-      if command.status not in {"queued", "running"}:
-        raise OpentronsProtocolError(
-          f"{command_type} ({command_id} in run {self.id}) returned "
-          f"unexpected command status {command.status!r}"
-        )
-      if time.monotonic() >= deadline:
-        raise OpentronsCommandTimeout(self.id, command_id, command_type)
-      await asyncio.sleep(self.command_poll_interval)
+    async with self._command_lock:
+      self._require_active()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        command_id = await self._api.submit_command(self.id, command_type, params)
+        if not wait:
+          result = CommandInfo(status="queued", result={}, error={}, id=command_id)
+        else:
+          deadline = anyio.current_time() + duration
+          while True:
+            try:
+              command = await self._api.get_command(self.id, command_id)
+            except TimeoutError as error:
+              raise OpentronsCommandTimeout(self.id, command_id, command_type) from error
+            if command.status == "succeeded":
+              result = CommandInfo(command.status, command.result, command.error, command_id)
+              break
+            if command.status == "failed":
+              raise OpentronsCommandError(
+                self.id,
+                command_id,
+                command_type,
+                command.error.get("errorType", "unknown"),
+                command.error.get("detail", "no detail returned"),
+              )
+            if command.status not in {"queued", "running"}:
+              raise OpentronsProtocolError(
+                f"{command_type} ({command_id} in run {self.id}) returned "
+                f"unexpected command status {command.status!r}"
+              )
+            if anyio.current_time() >= deadline:
+              raise OpentronsCommandTimeout(self.id, command_id, command_type)
+            await anyio.sleep(self.command_poll_interval)
+      await anyio.lowlevel.checkpoint()
+      return result
 
   async def load_pipette(self, name: str, mount: Mount) -> str:
     result = (await self.execute("loadPipette", {"pipetteName": name, "mount": mount})).result
@@ -179,7 +217,13 @@ class OpentronsRun:
 
   async def define_labware(self, definition: Dict[str, Any]) -> LabwareIdentity:
     self._require_active()
-    return await self._api.define_labware(self.id, definition)
+    async with self._command_lock:
+      self._require_active()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        identity = await self._api.define_labware(self.id, definition)
+      await anyio.lowlevel.checkpoint()
+      return identity
 
   async def load_labware(
     self, identity: LabwareIdentity, slot: str, labware_id: Optional[str], display_name: str

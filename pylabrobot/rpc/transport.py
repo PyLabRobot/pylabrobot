@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Generic, TypeVar, cast
 
 import grpc
+import sniffio
 from google.protobuf.message import Message
 
 from pylabrobot.rpc.errors import BusyError, CapacityError, DataLossError, StateError, StorageError
@@ -36,6 +37,23 @@ def copy_message(value: M) -> M:
   result = type(value)()
   result.CopyFrom(value)
   return result
+
+
+def require_asyncio(owner: str) -> None:
+  """Reject non-asyncio backends before acquiring a `grpc.aio` resource.
+
+  Args:
+    owner: Name of the integration, reported in the error.
+
+  Raises:
+    RuntimeError: If the running AnyIO backend is not asyncio.
+  """
+  backend = sniffio.current_async_library()
+  if backend != "asyncio":
+    raise RuntimeError(
+      f"{owner} only supports the asyncio backend, because `grpc.aio` is asyncio-only "
+      f"(running under {backend!r})."
+    )
 
 
 def require_device(actual: str, expected: str) -> None:

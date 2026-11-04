@@ -7,6 +7,9 @@ communication. Useful for testing protocols offline.
 import logging
 from typing import Dict, List, Optional, Tuple
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.legacy.liquid_handling.backends.opentrons_backend import OpentronsOT2Backend
 from pylabrobot.legacy.liquid_handling.standard import (
@@ -31,8 +34,8 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     >>> from pylabrobot.legacy.liquid_handling import LiquidHandler
     >>> from pylabrobot.legacy.liquid_handling.backends import OpentronsOT2Simulator
     >>> from pylabrobot.resources.opentrons import OTDeck
-    >>> lh = LiquidHandler(backend=OpentronsOT2Simulator(), deck=OTDeck())
-    >>> await lh.setup()
+    >>> async with LiquidHandler(backend=OpentronsOT2Simulator(), deck=OTDeck()) as lh:
+    ...   pass
   """
 
   def __init__(
@@ -59,7 +62,12 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
 
     self._left_pipette_name = left_pipette_name
     self._right_pipette_name = right_pipette_name
-    self._setup_pipettes()
+    self.left_pipette = None
+    self.right_pipette = None
+    self.left_pipette_has_tip = False
+    self.right_pipette_has_tip = False
+    self.traversal_height = 120
+    self._positions: Dict[str, Coordinate] = {}
 
   def _setup_pipettes(self):
     self.left_pipette = (
@@ -74,8 +82,7 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     )
     self.left_pipette_has_tip = False
     self.right_pipette_has_tip = False
-    self.traversal_height = 120
-    self._positions: Dict[str, Coordinate] = {}
+    self._positions = {}
     if self.left_pipette is not None:
       self._positions["sim-left"] = Coordinate.zero()
     if self.right_pipette is not None:
@@ -88,9 +95,16 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
       "right_pipette_name": self._right_pipette_name,
     }
 
-  async def setup(self, skip_home: bool = False):
-    await LiquidHandlerBackend.setup(self)
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_home: bool = False,
+  ) -> None:
+    """Enter the resource-free simulator without the parent's HTTP lifecycle."""
+    self._validate_lifespan_context()
     self._setup_pipettes()
+    stack.callback(self._clear_simulated_state)
     logger.info(
       "OpentronsOT2Simulator setup: left=%s, right=%s",
       self._left_pipette_name,
@@ -98,18 +112,21 @@ class OpentronsOT2Simulator(OpentronsOT2Backend):
     )
     if not skip_home:
       await self.home()
+    await anyio.lowlevel.checkpoint_if_cancelled()
 
   async def home(self):
     logger.info("Homing (simulated).")
 
-  async def stop(self):
+  def _clear_simulated_state(self) -> None:
+    """Clear all state published for one simulator lifespan."""
     self.left_pipette = None
     self.right_pipette = None
     self.left_pipette_has_tip = False
     self.right_pipette_has_tip = False
+    self._positions = {}
     logger.info("OpentronsOT2Simulator stopped.")
 
-  def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
+  async def _current_channel_position(self, channel: int) -> Tuple[str, Coordinate]:
     pipette_id = self._pipette_id_for_channel(channel)
     return pipette_id, self._positions.get(pipette_id, Coordinate.zero())
 

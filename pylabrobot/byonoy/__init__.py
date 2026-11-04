@@ -14,6 +14,7 @@ from .driver import (
   ByonoyDevice,
   ByonoyDeviceInfo,
   ByonoyEnvironment,
+  ByonoyMeasurementCancelledError,
   ByonoySlotState,
   ByonoyStatus,
   ByonoyVersions,

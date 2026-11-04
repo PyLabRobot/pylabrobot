@@ -2,19 +2,63 @@
 
 from __future__ import annotations
 
-import asyncio
+import datetime
 import http.server
 import logging
 import random
 import socket
-import socketserver
+import threading
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from pylabrobot.inheco.scila.soap import XSI, soap_decode, soap_encode
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+
+_CALLBACK_REQUEST_TIMEOUT_S = 10.0
+_MACHINE_REQUEST_TIMEOUT_S = 10.0
+
+
+class _CallbackHTTPServer(http.server.ThreadingHTTPServer):
+  """Track accepted callback sockets so shutdown can unblock every handler."""
+
+  def __init__(self, *args: Any, **kwargs: Any) -> None:
+    self._active_requests: set[socket.socket] = set()
+    self._active_requests_lock = threading.Lock()
+    super().__init__(*args, **kwargs)
+
+  def process_request(self, request: Any, client_address: Any) -> None:
+    """Track an accepted socket before starting its request thread."""
+    with self._active_requests_lock:
+      self._active_requests.add(request)
+    try:
+      super().process_request(request, client_address)
+    except BaseException:
+      with self._active_requests_lock:
+        self._active_requests.discard(request)
+      raise
+
+  def shutdown_request(self, request: Any) -> None:
+    """Stop tracking a request when its handler releases the socket."""
+    with self._active_requests_lock:
+      self._active_requests.discard(request)
+    super().shutdown_request(request)
+
+  def close_active_requests(self) -> None:
+    """Close accepted sockets so blocked request handlers can finish."""
+    with self._active_requests_lock:
+      requests = tuple(self._active_requests)
+      self._active_requests.clear()
+    for request in requests:
+      try:
+        request.shutdown(socket.SHUT_RDWR)
+      except OSError:
+        pass
+      request.close()
+
 
 SOAP_RESPONSE_ResponseEventResponse = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
   <s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -67,7 +111,7 @@ class SiLAError(RuntimeError):
     self.details = details or {}
 
 
-class InhecoSiLAInterface:
+class InhecoSiLAInterface(HasLifespan):
   @dataclass(frozen=True)
   class _HTTPRequest:
     method: str
@@ -76,11 +120,13 @@ class InhecoSiLAInterface:
     headers: dict[str, str]
     body: bytes
 
-  @dataclass(frozen=True)
+  @dataclass
   class _SiLACommand:
     name: str
     request_id: int
-    fut: asyncio.Future[Any]
+    completed: anyio.Event
+    result: Optional[ET.Element] = None
+    error: Optional[Exception] = None
 
   def __init__(
     self,
@@ -88,21 +134,24 @@ class InhecoSiLAInterface:
     client_ip: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
   ) -> None:
+    super().__init__()
     self._client_ip = client_ip or _get_local_ip(machine_ip)
     self._machine_ip = machine_ip
     self._logger = logger or logging.getLogger(__name__)
 
     # single "in-flight token"
-    self._making_request = asyncio.Lock()
+    self._making_request: Optional[anyio.Lock] = None
 
     # pending command information
     self._pending: Optional[InhecoSiLAInterface._SiLACommand] = None
 
     # server plumbing
-    self._loop: Optional[asyncio.AbstractEventLoop] = None
-    self._httpd: Optional[socketserver.TCPServer] = None
-    self._server_task: Optional[asyncio.Task[None]] = None
-    self._closed = False
+    self._portal: Optional[anyio.from_thread.BlockingPortal] = None
+    self._httpd: Optional[_CallbackHTTPServer] = None
+    self._callback_server_started: Optional[anyio.Event] = None
+    self._callback_server_stopped: Optional[anyio.Event] = None
+    self._callback_server_startup_resolved: Optional[anyio.Event] = None
+    self._callback_server_worker_requested = False
 
   @property
   def client_ip(self) -> str:
@@ -118,17 +167,28 @@ class InhecoSiLAInterface:
       raise RuntimeError("Server not started yet")
     return self._httpd.server_address[1]
 
-  async def start(self) -> None:
-    if self._httpd is not None:
-      return
-    if self._closed:
-      raise RuntimeError("Bridge is closed")
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Bind and own the HTTP callback server and AnyIO thread bridge."""
+    await super()._enter_lifespan(stack)
 
-    self._loop = asyncio.get_running_loop()
+    task_group = await stack.enter_task_group()
+    stack.callback(self._clear_run_state)
+    self._making_request = anyio.Lock()
+    self._pending = None
+    self._portal = await stack.enter_task_group_context(anyio.from_thread.BlockingPortal())
+    self._callback_server_started = anyio.Event()
+    self._callback_server_stopped = anyio.Event()
+    self._callback_server_startup_resolved = anyio.Event()
+    self._callback_server_worker_requested = False
     outer = self
 
     class _Handler(http.server.BaseHTTPRequestHandler):
       server_version = "OneInFlightHTTPBridge/0.1"
+
+      def setup(self) -> None:
+        """Initialize streams with a finite socket-operation timeout."""
+        super().setup()
+        self.connection.settimeout(_CALLBACK_REQUEST_TIMEOUT_S)
 
       def log_message(self, fmt: str, *args) -> None:
         return  # silence
@@ -138,7 +198,8 @@ class InhecoSiLAInterface:
         return self.rfile.read(length) if length else b""
 
       def _do(self) -> None:
-        assert outer._loop is not None
+        portal = outer._portal
+        assert portal is not None
 
         parsed = urllib.parse.urlsplit(self.path)
         req = InhecoSiLAInterface._HTTPRequest(
@@ -149,9 +210,8 @@ class InhecoSiLAInterface:
           body=self._read_body(),
         )
 
-        fut = asyncio.run_coroutine_threadsafe(outer._on_http(req), outer._loop)
         try:
-          resp_body = fut.result()
+          resp_body = portal.call(outer._on_http, req)
           status = 200
         except Exception as e:
           resp_body = f"Internal Server Error: {type(e).__name__}: {e}\n".encode()
@@ -176,37 +236,96 @@ class InhecoSiLAInterface:
         self._do()
 
     # port 0: choose random free port
-    self._httpd = http.server.ThreadingHTTPServer((self._client_ip, 0), _Handler)
+    server = await anyio.to_thread.run_sync(
+      lambda: _CallbackHTTPServer((self._client_ip, 0), _Handler),
+      abandon_on_cancel=False,
+    )
+    self._httpd = server
+    server.daemon_threads = False
+    stack.push_shielded_async_callback(self._close_callback_server)
+    stack.callback(task_group.cancel_scope.cancel)
+    task_group.start_soon(self._serve_callbacks)
+    await self._callback_server_started.wait()
 
-    async def run_server() -> None:
-      assert self._httpd is not None
-      await asyncio.to_thread(self._httpd.serve_forever)
-
-    self._server_task = asyncio.create_task(run_server(), name="http-server")
-
-  async def close(self) -> None:
-    self._closed = True
-    if self._httpd is None:
-      return
-
-    self._httpd.shutdown()
-    self._httpd.server_close()
-
-    if self._server_task is not None:
-      await self._server_task
-
+  def _clear_run_state(self) -> None:
+    """Clear state published for one lifespan, including partial entry."""
+    self._pending = None
     self._httpd = None
-    self._server_task = None
+    self._callback_server_started = None
+    self._callback_server_stopped = None
+    self._callback_server_startup_resolved = None
+    self._callback_server_worker_requested = False
+    self._portal = None
+    self._making_request = None
+
+  async def _serve_callbacks(self) -> None:
+    """Run the blocking callback server in lifespan-owned worker work."""
+    server = self._httpd
+    started = self._callback_server_started
+    stopped = self._callback_server_stopped
+    startup_resolved = self._callback_server_startup_resolved
+    if server is None or started is None or stopped is None or startup_resolved is None:
+      raise RuntimeError("Callback server is not initialized")
+    self._callback_server_worker_requested = True
+
+    def serve() -> None:
+      def mark_started() -> None:
+        started.set()
+        startup_resolved.set()
+
+      anyio.from_thread.run_sync(mark_started)
+      server.serve_forever()
+
+    try:
+      await anyio.to_thread.run_sync(serve, abandon_on_cancel=False)
+    finally:
+      stopped.set()
+      startup_resolved.set()
+
+  async def _close_callback_server(self) -> None:
+    """Stop callback acceptance, await its worker, and release its socket."""
+    pending = self._pending
+    self._pending = None
+    if pending is not None and not pending.completed.is_set():
+      pending.error = RuntimeError("SiLA callback server stopped before command completion")
+      pending.completed.set()
+
+    server = self._httpd
+    started = self._callback_server_started
+    stopped = self._callback_server_stopped
+    startup_resolved = self._callback_server_startup_resolved
+    if server is not None:
+      try:
+        if self._callback_server_worker_requested:
+          if startup_resolved is None:
+            raise RuntimeError("Callback server startup state is unavailable")
+          await startup_resolved.wait()
+        if started is not None and started.is_set():
+          try:
+            await anyio.to_thread.run_sync(server.shutdown, abandon_on_cancel=False)
+            if stopped is not None:
+              await stopped.wait()
+          finally:
+            try:
+              await anyio.to_thread.run_sync(server.close_active_requests, abandon_on_cancel=False)
+            finally:
+              await anyio.to_thread.run_sync(server.server_close, abandon_on_cancel=False)
+        else:
+          await anyio.to_thread.run_sync(server.server_close, abandon_on_cancel=False)
+      finally:
+        self._httpd = None
 
   async def _on_http(self, req: _HTTPRequest) -> bytes:
     """
-    Called on the asyncio loop for every incoming HTTP request.
+    Called on the owning AnyIO event loop for every incoming HTTP request.
     If there's a pending command, try to match and resolve it.
     """
 
     cmd = self._pending
 
-    if cmd is not None and not cmd.fut.done():
+    if cmd is not None and not cmd.completed.is_set():
+      from pylabrobot.inheco.scila.soap import soap_decode
+
       response_event = soap_decode(req.body.decode("utf-8"))
       if "ResponseEvent" in response_event:
         request_id = response_event["ResponseEvent"].get("requestId")
@@ -217,13 +336,16 @@ class InhecoSiLAInterface:
           return_code = return_value.get("returnCode")
           if return_code != 3:  # error
             err_msg = return_value.get("message", "Unknown error").replace("\n", " ")
-            cmd.fut.set_exception(
-              RuntimeError(f"Command {cmd.name} failed with code {return_code}: '{err_msg}'")
+            cmd.error = RuntimeError(
+              f"Command {cmd.name} failed with code {return_code}: '{err_msg}'"
             )
           else:
             response_data = response_event["ResponseEvent"].get("responseData", "")
             root = ET.fromstring(response_data)
-            cmd.fut.set_result(root)
+            cmd.result = root
+          cmd.completed.set()
+          if self._pending is cmd:
+            self._pending = None
     else:
       self._logger.warning("No pending command to match response to.")
 
@@ -242,9 +364,6 @@ class InhecoSiLAInterface:
       raise ValueError(f"returnCode not found in response for {command_name}")
     return return_code, result_level.get("message", "")
 
-  async def setup(self) -> None:
-    await self.start()
-
   def _make_request_id(self):
     return random.randint(1, 2**31 - 1)
 
@@ -253,8 +372,11 @@ class InhecoSiLAInterface:
     command: str,
     **kwargs,
   ) -> Any:
-    if self._closed:
-      raise RuntimeError("Bridge is closed")
+    from pylabrobot.inheco.scila.soap import XSI, soap_decode, soap_encode
+
+    making_request = self._making_request
+    if not self.is_active or making_request is None:
+      raise RuntimeError("Inheco SiLA interface is not active")
 
     request_id = self._make_request_id()
     cmd_xml = soap_encode(
@@ -279,32 +401,51 @@ class InhecoSiLAInterface:
       },
     )
 
-    if self._making_request.locked():
+    if making_request.locked() or self._pending is not None:
       raise RuntimeError("can't send multiple commands at the same time")
 
-    async with self._making_request:
+    async with making_request:
+      pending: Optional[InhecoSiLAInterface._SiLACommand] = None
       try:
 
         def _do_request() -> bytes:
-          with urllib.request.urlopen(req) as resp:
+          with urllib.request.urlopen(req, timeout=_MACHINE_REQUEST_TIMEOUT_S) as resp:
             return resp.read()  # type: ignore
 
-        body = await asyncio.to_thread(_do_request)
-        return_code, message = self._get_return_code_and_message(
-          command, soap_decode(body.decode("utf-8"))
-        )
+        body = await anyio.to_thread.run_sync(_do_request, abandon_on_cancel=False)
+        response = soap_decode(body.decode("utf-8"))
+        return_code, message = self._get_return_code_and_message(command, response)
         if return_code == 1:  # success
-          return soap_decode(body.decode("utf-8"))
+          return response
         elif return_code == 2:  # concurrent command
-          fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
-          self._pending = InhecoSiLAInterface._SiLACommand(
-            name=command, request_id=request_id, fut=fut
+          result = response.get(f"{command}Response", {}).get(f"{command}Result", {})
+          duration = result.get("duration")
+          if not isinstance(duration, datetime.timedelta):
+            raise ValueError(f"duration not found or invalid in accepted response for {command}")
+          pending = InhecoSiLAInterface._SiLACommand(
+            name=command, request_id=request_id, completed=anyio.Event()
           )
-          return await fut  # wait for response to be handled in _on_http
+          self._pending = pending
+          callback_timeout: TimeoutError | None = None
+          with anyio.CancelScope(shield=True):
+            try:
+              with anyio.fail_after(duration.total_seconds() + _CALLBACK_REQUEST_TIMEOUT_S):
+                await pending.completed.wait()
+            except TimeoutError as error:
+              callback_timeout = error
+          if callback_timeout is not None:
+            raise callback_timeout
+          if pending.error is not None:
+            raise pending.error
+          if pending.result is None:
+            raise RuntimeError("SiLA callback completed without a result")
+          await anyio.lowlevel.checkpoint()
+          return pending.result
         else:
           raise RuntimeError(f"command {command} failed: {return_code} {message}")
       finally:
-        self._pending = None
+        if pending is not None and pending.completed.is_set() and self._pending is pending:
+          self._pending = None
 
 
 def _parse_scalar(text: Optional[str], tag: str) -> object:

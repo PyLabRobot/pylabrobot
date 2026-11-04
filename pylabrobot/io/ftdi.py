@@ -1,10 +1,12 @@
-import asyncio
 import ctypes
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from io import IOBase
-from typing import Optional, Tuple, cast
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable, Optional, TypeVar, cast
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import emit_event
 
 try:
@@ -42,9 +44,12 @@ except ImportError as e:
 
 from pylabrobot.io.capture import CaptureReader, Command, capturer, get_capture_or_validation_active
 from pylabrobot.io.errors import ValidationError
+from pylabrobot.io.io import ReconnectableConnectionIO
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 def is_ftdi_transport_error(error: BaseException) -> bool:
@@ -54,7 +59,7 @@ def is_ftdi_transport_error(error: BaseException) -> bool:
   return isinstance(error, FtdiError)
 
 
-def _parse_usb_address(address: str) -> Tuple[int, Tuple[int, ...]]:
+def _parse_usb_address(address: str) -> tuple[int, tuple[int, ...]]:
   """Parse a USB topology path '<bus>-<port>[.<port>...]' into its bus and ports."""
   bus_str, sep, port_str = address.partition("-")
   if not sep:
@@ -64,6 +69,8 @@ def _parse_usb_address(address: str) -> Tuple[int, Tuple[int, ...]]:
     ports = tuple(int(port) for port in port_str.split(".")) if port_str else ()
   except ValueError as exc:
     raise ValueError(f"Invalid USB address {address!r}: {exc}") from exc
+  if bus <= 0 or not ports or any(port <= 0 for port in ports):
+    raise ValueError(f"Invalid USB address {address!r}")
   return bus, ports
 
 
@@ -75,7 +82,15 @@ class FTDICommand(Command):
     self.data = data
 
 
-class FTDI(IOBase):
+@dataclass
+class _PendingRead:
+  """Completion state for one lifespan-owned device read."""
+
+  completed: anyio.Event
+  error: Optional[BaseException] = None
+
+
+class FTDI(ReconnectableConnectionIO):
   """Thin wrapper around pylibftdi with device resolution and logging.
 
   Finds devices based on the following parameters:
@@ -100,6 +115,7 @@ class FTDI(IOBase):
     interface_select: Optional[int] = None,
     usb_address: Optional[str] = None,
   ):
+    super().__init__()
     if not HAS_PYLIBFTDI:
       global _FTDI_ERROR
       raise RuntimeError(
@@ -122,11 +138,15 @@ class FTDI(IOBase):
 
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
-    self._executor: Optional[ThreadPoolExecutor] = None
+    self._tg: Optional[anyio.abc.TaskGroup] = None
+    self._operation_lock = anyio.Lock()
+    self._reader_lock = anyio.Lock()
+    self._limiter = anyio.CapacityLimiter(1)
     # Bytes off the wire that no read has taken yet, and the read still in flight, if any.
     self._unread = bytearray()
-    self._pending_read: Optional["asyncio.Future"] = None
-    self._detached_kernel_driver: Optional[Tuple[int, int, int]] = None
+    self._pending_read: Optional[_PendingRead] = None
+    self._detached_kernel_driver: Optional[tuple[int, int, int]] = None
+    self._connection_lost = False
 
     if get_capture_or_validation_active():
       raise RuntimeError(
@@ -135,6 +155,8 @@ class FTDI(IOBase):
 
   @property
   def dev(self) -> "Device":
+    if self._connection_lost:
+      raise ConnectionError("FTDI connection lost; reconnect or enter a new lifespan")
     if self._dev is None:
       raise RuntimeError("Device not initialized. Call setup() first.")
     return self._dev
@@ -222,7 +244,7 @@ class FTDI(IOBase):
     device_serial_number = cast(str, usb.util.get_string(device, device.iSerialNumber))
     return device_serial_number
 
-  def _resolve_device_location(self) -> Tuple[int, int]:
+  def _resolve_device_location(self) -> tuple[int, int]:
     """Resolve a topology path to the exact libusb bus/device-address pair."""
     if self._vid is None or self._pid is None:
       raise RuntimeError("usb_address requires both vid and pid to be specified.")
@@ -276,7 +298,7 @@ class FTDI(IOBase):
       usb.util.dispose_resources(device)
 
   def _reattach_kernel_driver(self) -> None:
-    detached = getattr(self, "_detached_kernel_driver", None)
+    detached = self._detached_kernel_driver
     self._detached_kernel_driver = None
     if detached is None:
       return
@@ -298,79 +320,122 @@ class FTDI(IOBase):
       usb.util.dispose_resources(device)
 
   def _setup_sync(self) -> None:
-    """Resolve and open the device. Runs on the executor that owns all device calls."""
+    """Resolve and open the device on the serialized worker."""
     if self._dev is not None and not self._dev.closed:
       self._dev.close()
     self._dev = None
 
-    if self._usb_address is not None:
-      usb_bus, usb_device_address = self._resolve_device_location()
-      self._detach_kernel_driver(usb_bus, usb_device_address)
-      self._device_id = self._usb_address
-      dev = _USBAddressDevice(
-        lazy_open=True,
-        usb_bus=usb_bus,
-        usb_device_address=usb_device_address,
-        pid=self._pid,
-        vid=self._vid,
-        interface_select=self._interface_select,
-      )
-    else:
-      self._device_id = self._resolve_device_serial()
-      dev = Device(
-        lazy_open=True,
-        device_id=self.device_id,
-        pid=self._pid,
-        vid=self._vid,
-        interface_select=self._interface_select,
-      )
+    dev: Optional[Device] = None
     try:
+      if self._usb_address is not None:
+        usb_bus, usb_device_address = self._resolve_device_location()
+        self._detach_kernel_driver(usb_bus, usb_device_address)
+        self._device_id = self._usb_address
+        dev = _USBAddressDevice(
+          lazy_open=True,
+          usb_bus=usb_bus,
+          usb_device_address=usb_device_address,
+          pid=self._pid,
+          vid=self._vid,
+          interface_select=self._interface_select,
+        )
+      else:
+        self._device_id = self._resolve_device_serial()
+        dev = Device(
+          lazy_open=True,
+          device_id=self.device_id,
+          pid=self._pid,
+          vid=self._vid,
+          interface_select=self._interface_select,
+        )
       dev.open()
     except BaseException:
+      if dev is not None:
+        try:
+          dev.close()
+        except Exception:
+          logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
       try:
-        dev.close()
+        self._reattach_kernel_driver()
       except Exception:
-        logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
-      self._reattach_kernel_driver()
+        logger.warning("Failed to reattach FTDI kernel driver after setup failure", exc_info=True)
       raise
     self._dev = dev
 
-  async def setup(self):
+  def _clear_task_group(self) -> None:
+    """Drop the task group reference once its lifespan-owned children have finished."""
+    self._tg = None
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Initialize the FTDI device connection with device resolution."""
-    if self._executor is None:
-      self._executor = ThreadPoolExecutor(max_workers=1)
-    loop = asyncio.get_running_loop()
-    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    await super()._enter_lifespan(stack)
+    self._connection_lost = False
+    # Registered before the task group so the stack closes the device only after that group
+    # has cancelled and joined every read and write it owns.
+    stack.push_shielded_async_callback(self._close)
+    stack.callback(self._clear_task_group)
+    self._tg = await stack.enter_task_group()
     try:
-      await asyncio.shield(setup_future)
-    except BaseException as exc:
-      if isinstance(exc, asyncio.CancelledError):
-        try:
-          await setup_future
-        except BaseException:
-          pass
-      if self._dev is not None:
-        try:
-          await loop.run_in_executor(self._executor, self._dev.close)
-        except Exception:
-          logger.warning("Failed to close FTDI device after setup failure", exc_info=True)
-        self._dev = None
-      await loop.run_in_executor(self._executor, self._reattach_kernel_driver)
-      self._shutdown_executor()
-      if isinstance(exc, FtdiError):
-        raise RuntimeError(
-          f"Failed to open FTDI device for '{self.human_readable_device_name}': {exc}. "
-          "Is the device connected? Is it in use by another process? "
-          "Try restarting the kernel."
-        ) from exc
-      raise
+      await anyio.to_thread.run_sync(self._setup_sync, limiter=self._limiter)
+    except FtdiError as exc:
+      raise RuntimeError(
+        f"Failed to open FTDI device for '{self.human_readable_device_name}': {exc}. "
+        "Is the device connected? Is it in use by another process? "
+        "Try restarting the kernel."
+      ) from exc
     logger.info(f"Successfully opened FTDI device: {self.device_id}")
 
-  def _shutdown_executor(self) -> None:
-    if self._executor is not None:
-      # the worker is idle here, so this does not block the event loop
-      self._executor.shutdown(wait=False, cancel_futures=True)
-      self._executor = None
+  async def _close(self) -> None:
+    """Close the device after all lifespan-owned worker calls finish."""
+    async with self._operation_lock:
+      await self._close_locked()
+
+  async def _close_locked(self) -> None:
+    """Dispose the current device while the operation lock excludes worker calls."""
+    dev = self._dev
+    try:
+      if dev is not None:
+        await anyio.to_thread.run_sync(dev.close, limiter=self._limiter)
+    except BaseException:
+      try:
+        await anyio.to_thread.run_sync(self._reattach_kernel_driver, limiter=self._limiter)
+      except Exception:
+        logger.warning("Failed to reattach FTDI kernel driver after close failure", exc_info=True)
+      raise
+    else:
+      await anyio.to_thread.run_sync(self._reattach_kernel_driver, limiter=self._limiter)
+    finally:
+      self._dev = None
+      self._discard_reads()
+
+  async def reconnect(self) -> None:
+    """Replace the FTDI handle without leaving its lifespan-owned task group."""
+    if not self.is_active:
+      raise RuntimeError("FTDI reconnect requires an active lifespan")
+    async with self._operation_lock:
+      if not self.is_active:
+        raise RuntimeError("FTDI reconnect requires an active lifespan")
+      with anyio.CancelScope(shield=True):
+        await self._close_locked()
+      try:
+        await anyio.to_thread.run_sync(self._setup_sync, limiter=self._limiter)
+        await anyio.lowlevel.checkpoint_if_cancelled()
+      except BaseException:
+        with anyio.CancelScope(shield=True):
+          await self._close_locked()
+        raise
+      self._connection_lost = False
+
+  async def _device_worker(self, operation: Callable[[], _T]) -> _T:
+    """Run a device call, invalidating the connection on a hard I/O error."""
+    try:
+      return await anyio.to_thread.run_sync(operation, limiter=self._limiter)
+    except BaseException as error:
+      if is_ftdi_transport_error(error) or (
+        isinstance(error, OSError) and not isinstance(error, TimeoutError)
+      ):
+        self._connection_lost = True
+      raise
 
   @property
   def device_id(self) -> str:
@@ -379,47 +444,54 @@ class FTDI(IOBase):
     return self._device_id
 
   async def set_baudrate(self, baudrate: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: setattr(self.dev, "baudrate", baudrate))
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(partial(self._set_baudrate_sync, dev, baudrate))
     logger.log(LOG_LEVEL_IO, "[%s] set_baudrate %s", self._device_id, baudrate)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="set_baudrate", data=str(baudrate))
     )
 
+  @staticmethod
+  def _set_baudrate_sync(dev: "Device", baudrate: int) -> None:
+    """Set baud rate on the serialized device worker."""
+    dev.baudrate = baudrate
+
   async def set_rts(self, level: bool):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setrts(level))
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(partial(dev.ftdi_fn.ftdi_setrts, level))
     logger.log(LOG_LEVEL_IO, "[%s] set_rts %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self.device_id, action="set_rts", data=str(level)))
 
   async def set_dtr(self, level: bool):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setdtr(level))
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(partial(dev.ftdi_fn.ftdi_setdtr, level))
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self.device_id, action="set_dtr", data=str(level)))
 
   async def usb_reset(self):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_reset())
     self._discard_reads()
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(dev.ftdi_fn.ftdi_usb_reset)
     logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_reset", data=""))
 
   async def set_latency_timer(self, latency: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
-      self._executor, lambda: self.dev.ftdi_fn.ftdi_set_latency_timer(latency)
-    )
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(partial(dev.ftdi_fn.ftdi_set_latency_timer, latency))
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="set_latency_timer", data=str(latency))
     )
 
   async def set_line_property(self, bits: int, stopbits: int, parity: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
-      self._executor, lambda: self.dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
-    )
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(partial(dev.ftdi_fn.ftdi_set_line_property, bits, stopbits, parity))
     logger.log(
       LOG_LEVEL_IO, "[%s] set_line_property %s,%s,%s", self._device_id, bits, stopbits, parity
     )
@@ -430,32 +502,34 @@ class FTDI(IOBase):
     )
 
   async def set_flowctrl(self, flowctrl: int):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_setflowctrl(flowctrl))
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(partial(dev.ftdi_fn.ftdi_setflowctrl, flowctrl))
     logger.log(LOG_LEVEL_IO, "[%s] set_flowctrl %s", self._device_id, flowctrl)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="set_flowctrl", data=str(flowctrl))
     )
 
   async def usb_purge_rx_buffer(self):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer())
     self._discard_reads()
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(dev.ftdi_fn.ftdi_usb_purge_rx_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_rx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_purge_rx_buffer", data=""))
 
   async def usb_purge_tx_buffer(self):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(self._executor, lambda: self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer())
+    async with self._operation_lock:
+      dev = self.dev
+      await self._device_worker(dev.ftdi_fn.ftdi_usb_purge_tx_buffer)
     logger.log(LOG_LEVEL_IO, "[%s] usb_purge_tx_buffer", self._device_id)
     capturer.record(FTDICommand(device_id=self.device_id, action="usb_purge_tx_buffer", data=""))
 
   async def poll_modem_status(self) -> int:
-    loop = asyncio.get_running_loop()
-    stat = ctypes.c_ushort(0)
-    await loop.run_in_executor(
-      self._executor, lambda: self.dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
-    )
+    async with self._operation_lock:
+      dev = self.dev
+      stat = ctypes.c_ushort(0)
+      await self._device_worker(partial(dev.ftdi_fn.ftdi_poll_modem_status, ctypes.byref(stat)))
     logger.log(LOG_LEVEL_IO, "[%s] poll_modem_status %s", self._device_id, stat.value)
     capturer.record(
       FTDICommand(device_id=self.device_id, action="poll_modem_status", data=str(stat.value))
@@ -464,48 +538,6 @@ class FTDI(IOBase):
 
   async def request_serial(self) -> str:
     return self.device_id
-
-  async def stop(self):
-    loop = asyncio.get_running_loop()
-    executor = self._executor
-    first_error: Optional[BaseException] = None
-
-    async def attempt(operation) -> None:
-      nonlocal first_error
-      future = loop.run_in_executor(executor, operation)
-      try:
-        await asyncio.shield(future)
-      except asyncio.CancelledError as exc:
-        try:
-          await future
-        except Exception:
-          logger.warning("FTDI shutdown operation failed after cancellation", exc_info=True)
-        if first_error is None:
-          first_error = exc
-      except BaseException as exc:
-        if first_error is None:
-          first_error = exc
-        else:
-          logger.warning("Additional FTDI shutdown operation failed", exc_info=True)
-
-    try:
-      if self._dev is not None:
-        await attempt(self.dev.close)
-        self._dev = None
-      if getattr(self, "_detached_kernel_driver", None) is not None:
-        await attempt(self._reattach_kernel_driver)
-    finally:
-      try:
-        self._shutdown_executor()
-      except BaseException as exc:
-        if first_error is None:
-          first_error = exc
-        else:
-          logger.warning("FTDI executor shutdown failed", exc_info=True)
-      finally:
-        self._discard_reads()
-    if first_error is not None:
-      raise first_error
 
   def _discard_reads(self) -> None:
     """Drop read data buffered here and in flight, once the caller has declared it stale."""
@@ -521,25 +553,36 @@ class FTDI(IOBase):
     """
     self._unread.extend(chunk if isinstance(chunk, bytes) else chunk.encode("latin-1"))
 
-  def _buffer_read(self, future: "asyncio.Future") -> None:
-    """Keep the bytes of a read whose caller was cancelled, for the next read to take."""
-    if future is not self._pending_read:
-      return  # a purge, reset or close has since declared everything in flight stale
-    self._pending_read = None
-    if future.cancelled() or future.exception() is not None:
-      return
-    self._keep(future.result())
+  async def _run_read(self, pending: _PendingRead, dev: "Device", num_bytes: int) -> None:
+    """Run one read owned by the resource lifespan and retain its result if still current."""
+    try:
+      async with self._operation_lock:
+        if dev is not self._dev:
+          raise ConnectionError("FTDI connection replaced before read")
+        if self._connection_lost:
+          raise ConnectionError("FTDI connection lost; reconnect or enter a new lifespan")
+        chunk = await self._device_worker(partial(dev.read, num_bytes))
+      if pending is self._pending_read:
+        self._keep(chunk)
+    except BaseException as error:
+      pending.error = error
+    finally:
+      if pending is self._pending_read:
+        self._pending_read = None
+      pending.completed.set()
 
   async def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
+    async with self._operation_lock:
+      dev = self.dev
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        result = cast(int, await self._device_worker(partial(dev.write, data)))
+      if result != len(data):
+        self._connection_lost = True
+        raise OSError(f"FTDI short write: wrote {result} of {len(data)} bytes")
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     capturer.record(FTDICommand(device_id=self.device_id, action="write", data=data.hex()))
-    loop = asyncio.get_running_loop()
-    # shield: a call handed to the worker cannot be recalled, so cancelling the caller would
-    # otherwise leave the device holding a partial command, or none, with no way to tell which.
-    bytes_written = cast(
-      int, await asyncio.shield(loop.run_in_executor(self._executor, self.dev.write, data))
-    )
     emit_event(
       "io.write",
       transport="ftdi",
@@ -547,28 +590,27 @@ class FTDI(IOBase):
       device_id=self.device_id,
       data=data.hex(),
     )
-    return bytes_written
+    return result
 
   async def read(self, num_bytes: int = 1) -> bytes:
-    if not self._unread:
-      pending = self._pending_read
-      if pending is None or pending.done():
-        loop = asyncio.get_running_loop()
-        pending = loop.run_in_executor(self._executor, self.dev.read, num_bytes)
-        self._pending_read = pending
-      try:
-        # shield: the worker keeps going after the caller is gone, so its bytes are held for the
-        # next read instead of being dropped part-way through a response.
-        chunk = await asyncio.shield(pending)
-      except asyncio.CancelledError:
-        pending.add_done_callback(self._buffer_read)
-        raise
-      if pending is self._pending_read:
-        self._pending_read = None
-        self._keep(chunk)
-    data = bytes(self._unread[:num_bytes])
-    del self._unread[:num_bytes]
-    if len(data) != 0:
+    if num_bytes <= 0:
+      raise ValueError("num_bytes must be positive")
+    async with self._reader_lock:
+      dev = self.dev
+      while not self._unread:
+        pending = self._pending_read
+        if pending is None:
+          task_group = self._tg
+          if task_group is None:
+            raise RuntimeError("Device not initialized. Call setup() first.")
+          pending = _PendingRead(completed=anyio.Event())
+          self._pending_read = pending
+          task_group.start_soon(self._run_read, pending, dev, num_bytes)
+        await pending.completed.wait()
+        if pending.error is not None:
+          raise pending.error
+      data = bytes(self._unread[:num_bytes])
+      del self._unread[:num_bytes]
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
       capturer.record(FTDICommand(device_id=self.device_id, action="read", data=data.hex()))
       emit_event(
@@ -598,21 +640,16 @@ class FTDI(IOBase):
     """
     if not terminator:
       raise ValueError("terminator must be at least one byte")
-    loop = asyncio.get_running_loop()
-    deadline = None if timeout is None else loop.time() + timeout
     line = bytearray()
-    while not line.endswith(terminator):
-      chunk = await self.read(1)
-      if chunk:
-        line.extend(chunk)
-        continue
-      if deadline is not None and loop.time() >= deadline:
-        raise TimeoutError(
-          f"'{self.human_readable_device_name}' sent no complete line within {timeout} s; "
-          f"received {bytes(line)!r} so far."
-        )
-      # An empty read already cost a latency-timer period, so yield without adding delay.
-      await asyncio.sleep(0)
+    try:
+      with anyio.fail_after(timeout):
+        while not line.endswith(terminator):
+          line.extend(await self.read(1))
+    except TimeoutError as exc:
+      raise TimeoutError(
+        f"'{self.human_readable_device_name}' sent no complete line within {timeout} s; "
+        f"received {bytes(line)!r} so far."
+      ) from exc
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, bytes(line))
     return bytes(line)
 
@@ -631,8 +668,13 @@ class FTDIValidator(FTDI):
     super().__init__(human_readable_device_name=human_readable_device_name, device_id=device_id)
     self.cr = cr
 
-  async def setup(self):
-    pass
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter a validator lifespan without opening an FTDI device."""
+
+  async def reconnect(self) -> None:
+    """Validate a reconnect without accessing the hardware."""
+    if not self.is_active:
+      raise RuntimeError("FTDI reconnect requires an active lifespan")
 
   async def set_baudrate(self, baudrate: int):
     next_command = FTDICommand(**self.cr.next_command())
@@ -744,6 +786,7 @@ class FTDIValidator(FTDI):
     return int(next_command.data)
 
   async def write(self, data: bytes):
+    await anyio.lowlevel.checkpoint()
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -757,6 +800,9 @@ class FTDIValidator(FTDI):
     return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
+    if num_bytes <= 0:
+      raise ValueError("num_bytes must be positive")
+    await anyio.lowlevel.checkpoint()
     next_command = FTDICommand(**self.cr.next_command())
     if not (
       next_command.module == "ftdi"
@@ -766,7 +812,10 @@ class FTDIValidator(FTDI):
       and len(next_command.data) <= num_bytes * 2
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI read {self._device_id}")
-    return bytes.fromhex(next_command.data)
+    data = bytes.fromhex(next_command.data)
+    if not data:
+      raise anyio.EndOfStream
+    return data
 
   # readline is inherited: it assembles the line from read(), so a replay goes through the
   # recorded reads rather than a "readline" command that is no longer recorded.

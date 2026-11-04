@@ -8,7 +8,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+import anyio
+import anyio.abc
 import grpc
+import pytest
 
 from pylabrobot.rpc.device import SERVICE_NAME as DEVICE_SERVICE
 from pylabrobot.rpc.device import DeviceClient, DeviceServer
@@ -90,7 +93,8 @@ class PumpDevice(StatusDevice):
     self.operation.updated_at.CopyFrom(self.operation.created_at)
     self.job_updates = Latest(self.operation)
     self.finished = asyncio.Event()
-    self.task: asyncio.Task[None] | None = None
+    self.done = asyncio.Event()
+    self.task_group: anyio.abc.TaskGroup | None = None
     self.executions = 0
 
   def validate_job(self, job_id: str) -> None:
@@ -114,6 +118,13 @@ class PumpDevice(StatusDevice):
 
   async def execute(self) -> None:
     """Wait for simulated device completion independently of any client connection."""
+    try:
+      await self._finish_execution()
+    finally:
+      self.done.set()
+
+  async def _finish_execution(self) -> None:
+    """Publish the simulated outcome once the device finishes."""
     await self.finished.wait()
     self.operation.state = job_pb.JOB_STATE_FINISHED
     self.operation.outcome = (
@@ -141,12 +152,13 @@ class PumpDevice(StatusDevice):
     self.validate_job(job_id)
     if self.operation.state == job_pb.JOB_STATE_FINISHED:
       raise StateError("finished jobs cannot restart")
-    if self.task is None:
+    if self.executions == 0:
+      assert self.task_group is not None
       self.executions += 1
       self.operation.state = job_pb.JOB_STATE_RUNNING
       self.operation.phase = "Priming"
       self.publish()
-      self.task = asyncio.create_task(self.execute())
+      self.task_group.start_soon(self.execute)
     return copy_message(self.operation)
 
   async def cancel_job(self, job_id: str) -> job_pb.JobStatus:
@@ -172,25 +184,22 @@ class PumpDevice(StatusDevice):
         if status.state == job_pb.JOB_STATE_FINISHED:
           return
 
-  async def close(self) -> None:
-    """Finish fixture-owned execution before shutting down its event loop."""
-    self.finished.set()
-    if self.task is not None:
-      await self.task
-
 
 @asynccontextmanager
 async def pump_system():
-  """Run a non-imaging server without registering ImageService."""
+  """Run a non-imaging server without registering ImageService.
+
+  The fixture's task group owns simulated execution; exit finishes it before closing the server.
+  """
   backend = PumpDevice()
   server = DeviceServer(backend)
   job_rpc.add_JobServiceServicer_to_server(JobService(backend), server.server)
-  await server.start()
-  try:
-    yield backend, server
-  finally:
-    await backend.close()
-    await server.stop()
+  async with server, anyio.create_task_group() as task_group:
+    backend.task_group = task_group
+    try:
+      yield backend, server
+    finally:
+      backend.finished.set()
 
 
 class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
@@ -200,21 +209,19 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
       with self.subTest(host=host):
         backend = StatusDevice("incubator-01", "IncubatorSimulator")
         server = DeviceServer(backend, host=host)
-        await server.start()
-        try:
+        async with server:
           self.assertEqual(server.endpoint, f"{host}:{server.port}")
-          async with DeviceClient(f"{target}:{server.port}", backend.device_id) as client:
+          client = DeviceClient(f"{target}:{server.port}", backend.device_id)
+          async with client:
             self.assertEqual((await client.get_device_info()).device_id, backend.device_id)
-        finally:
-          await server.stop()
 
   async def test_status_only_device_has_no_optional_services(self) -> None:
     """An incubator can appear in a dashboard without a job engine or image service."""
     backend = StatusDevice("incubator-01", "IncubatorSimulator")
     server = DeviceServer(backend)
-    await server.start()
-    try:
-      async with DeviceClient(server.endpoint, backend.device_id) as client:
+    async with server:
+      client = DeviceClient(server.endpoint, backend.device_id)
+      async with client:
         info = await client.get_device_info()
         status = await client.get_status()
         assert list(info.services) == [DEVICE_SERVICE]
@@ -226,8 +233,6 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(grpc.aio.AioRpcError) as unavailable:
           await ImageClient(client.channel, backend.device_id).get_image_capabilities()
         assert unavailable.exception.code() == grpc.StatusCode.UNIMPLEMENTED
-    finally:
-      await server.stop()
 
   async def test_independent_device_types_survive_one_disconnect(self) -> None:
     """Failure of one network endpoint must not affect another device connection."""
@@ -235,38 +240,36 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
       backend, server = pump
       second = StatusDevice("incubator-01", "IncubatorSimulator")
       other = DeviceServer(second)
-      await other.start()
-      try:
-        async with (
-          DeviceClient(server.endpoint, backend.device_id) as a,
-          DeviceClient(other.endpoint, second.device_id, timeout=0.2) as b,
-        ):
+      a = DeviceClient(server.endpoint, backend.device_id)
+      b = DeviceClient(other.endpoint, second.device_id, timeout=0.2)
+      async with a:
+        async with other, b:
           assert (await a.get_device_info()).device_type != (await b.get_device_info()).device_type
-          await other.stop()
+          await other.server.stop(0)  # the endpoint fails while its client stays connected
           with self.assertRaises(grpc.aio.AioRpcError):
             await b.get_status()
-          assert (await a.get_status()).state == device_pb.OPERATIONAL_STATE_READY
-      finally:
-        await other.stop()
+        assert (await a.get_status()).state == device_pb.OPERATIONAL_STATE_READY
 
   async def test_non_imaging_job_survives_disconnect_and_recovery(self) -> None:
     """The common job API needs neither Celigo semantics nor image retention."""
     async with pump_system() as pump:
       backend, server = pump
-      async with DeviceClient(server.endpoint, backend.device_id) as client:
+      client = DeviceClient(server.endpoint, backend.device_id)
+      async with client:
         assert client.channel is not None
         jobs = JobClient(client.channel, backend.device_id)
         job = await jobs.recover_job("prime-request")
         await job.start()
         await job.start()
         assert (await client.get_status()).active_job_id == job.identifier
-        with self.assertRaises(asyncio.TimeoutError):
+        with self.assertRaises(TimeoutError):
           await job.wait(timeout=0.01)
         assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
         assert not (await job.get_status()).cancellation_requested
       backend.finished.set()
-      await backend.task
-      async with DeviceClient(server.endpoint, backend.device_id) as client:
+      await backend.done.wait()
+      client = DeviceClient(server.endpoint, backend.device_id)
+      async with client:
         assert client.channel is not None
         job = await JobClient(client.channel, backend.device_id).recover_job("prime-request")
         status = await job.wait()
@@ -281,7 +284,8 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
     """Cancellation semantics remain owned by the device-specific executor."""
     async with pump_system() as pump:
       backend, server = pump
-      async with DeviceClient(server.endpoint, backend.device_id) as client:
+      client = DeviceClient(server.endpoint, backend.device_id)
+      async with client:
         assert client.channel is not None
         job = await JobClient(client.channel, backend.device_id).recover_job("prime-request")
         await job.start()
@@ -296,7 +300,8 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
     """Device scoping prevents a valid job ID from being routed to the wrong instrument."""
     async with pump_system() as pump:
       backend, server = pump
-      async with DeviceClient(server.endpoint, backend.device_id) as client:
+      client = DeviceClient(server.endpoint, backend.device_id)
+      async with client:
         assert client.channel is not None
         stub = job_rpc.JobServiceStub(client.channel)
         with self.assertRaises(grpc.aio.AioRpcError) as wrong:
@@ -308,7 +313,8 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
     """Closing a dashboard watch must release its server-side subscription slot."""
     async with pump_system() as pump:
       backend, server = pump
-      async with DeviceClient(server.endpoint, backend.device_id) as client:
+      client = DeviceClient(server.endpoint, backend.device_id)
+      async with client:
         async with client.watch_status() as updates:
           assert (await updates.get()).state == device_pb.OPERATIONAL_STATE_READY
           assert len(backend.updates.queues) == 1
@@ -328,3 +334,16 @@ class DeviceCapabilityTests(unittest.IsolatedAsyncioTestCase):
       with self.assertRaises(CapacityError), latest.subscribe():
         pass
     assert not latest.queues
+
+
+def test_grpc_lifespans_reject_trio_before_acquisition() -> None:
+  """`grpc.aio` is asyncio-only, so the lifespans refuse Trio before opening anything."""
+  import trio
+
+  async def enter(owner: DeviceServer | DeviceClient) -> None:
+    async with owner:
+      pass
+
+  for owner in (DeviceServer(StatusDevice("d", "T")), DeviceClient("127.0.0.1:1", "d")):
+    with pytest.raises(RuntimeError, match="asyncio"):
+      trio.run(enter, owner)

@@ -1,11 +1,6 @@
-import asyncio
 import datetime
-import logging
-import threading
-import time
 import warnings
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
 from typing import (
   Any,
   Dict,
@@ -16,7 +11,9 @@ from typing import (
   TypeVar,
 )
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.hamilton.protocol.text.framing import to_list
+from pylabrobot.hamilton.protocol.text.router import ReplyRouter, USBReplyReader
 from pylabrobot.io.usb import USB
 from pylabrobot.legacy.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
@@ -36,19 +33,6 @@ T = TypeVar("T")
 
 # What the firmware's tip type table calls the CO-RE grip tool (cat. 186100).
 CORE_GRIPPER_TIP_TYPE_INDEX = 14
-
-logger = logging.getLogger("pylabrobot")
-
-
-@dataclass
-class HamiltonTask:
-  """A command that has been sent, awaiting a response."""
-
-  id_: Optional[int]
-  loop: asyncio.AbstractEventLoop
-  fut: asyncio.Future
-  cmd: str
-  timeout_time: float
 
 
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
@@ -91,14 +75,23 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     self.id_ = 0
 
-    self._reading_thread: Optional[threading.Thread] = None
-    self._reading_thread_stop = threading.Event()
-    self._waiting_tasks: List[HamiltonTask] = []
-    # The firmware's own table already carries the CO-RE grip tool at index 14, so that index is
-    # taken rather than handed out to a tip, which would overwrite the grip tool.
+    self._reply_router = self._make_reply_router()
+    self._tth2tti: dict[int, int] = {}
     self._tip_type_indices: Dict[str, int] = {
       hamilton_core_gripper_tool.__name__: CORE_GRIPPER_TIP_TYPE_INDEX
     }
+
+  def _make_reply_router(self) -> ReplyRouter:
+    """Construct the text reply router used by this backend."""
+    return ReplyRouter(
+      io=self.io,
+      module_id_length=self.module_id_length,
+      parse_id=self.get_id_from_fw_response,
+      raise_for_error=self.check_fw_string_error,
+      packet_read_timeout=self.packet_read_timeout,
+      read_timeout=self.read_timeout,
+      reader=USBReplyReader(self.io),
+    )
 
   def __setattr__(self, name: str, value: Any) -> None:
     if name == "allow_firmware_planning":
@@ -111,25 +104,18 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       return
     super().__setattr__(name, value)
 
-  async def setup(self):
-    await super().setup()
-    await self.io.setup()
-    self._reading_thread_stop.clear()
-    self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
-    self._reading_thread.start()
-
-  async def stop(self):
-    self._reading_thread_stop.set()
-    if self._reading_thread is not None:
-      self._reading_thread.join(timeout=10)
-      self._reading_thread = None
-    for task in self._waiting_tasks:
-      task.loop.call_soon_threadsafe(
-        task.fut.set_exception, RuntimeError("Stopping HamiltonLiquidHandler.")
-      )
-    self._waiting_tasks.clear()
-    self._tip_type_indices = {hamilton_core_gripper_tool.__name__: CORE_GRIPPER_TIP_TYPE_INDEX}
-    await self.io.stop()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the USB transport and reply reader for one configured lifespan."""
+    await super()._enter_lifespan(stack)
+    self._validate_lifespan_context()
+    self._reply_router.io = self.io
+    self._reply_router.reader = USBReplyReader(self.io)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._tth2tti.clear)
+    stack.callback(self._tip_type_indices.clear)
+    self._tip_type_indices.clear()
+    self._tip_type_indices[hamilton_core_gripper_tool.__name__] = CORE_GRIPPER_TIP_TYPE_INDEX
+    await stack.enter_async_context(self._reply_router.lifespan())
 
   def serialize(self) -> dict:
     usb_serialized = self.io.serialize()
@@ -264,40 +250,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     wait: bool = True,
   ) -> Optional[str]:
     """Write a command to the Hamilton machine and read the response."""
-    await self.io.write(cmd.encode(), timeout=write_timeout)
-
-    if not wait:
-      return None
-
-    # Attempt to read packets until timeout, or when we identify the right id.
-    if read_timeout is None:
-      read_timeout = self.read_timeout
-
-    loop = asyncio.get_event_loop()
-    fut: asyncio.Future[str] = loop.create_future()
-    self._start_reading(id_, loop, fut, cmd, read_timeout)
-    result = await fut
-    return result
-
-  def _start_reading(
-    self,
-    id_: Optional[int],
-    loop: asyncio.AbstractEventLoop,
-    fut: asyncio.Future,
-    cmd: str,
-    timeout: int,
-  ) -> None:
-    """Submit a task to the reading thread."""
-
-    timeout_time = time.time() + timeout
-    self._waiting_tasks.append(
-      HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
+    return await self._reply_router.send(
+      cmd=cmd,
+      id_=id_,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      wait=wait,
     )
-
-    if self._reading_thread is None or not self._reading_thread.is_alive():
-      self._reading_thread_stop.clear()
-      self._reading_thread = threading.Thread(target=self._reading_thread_main, daemon=True)
-      self._reading_thread.start()
 
   @abstractmethod
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -310,69 +269,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   @abstractmethod
   def _parse_response(self, resp: str, fmt: Any) -> dict:
     """Parse a firmware response."""
-
-  def _reading_thread_main(self) -> None:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(self._continuously_read())
-
-  async def _continuously_read(self) -> None:
-    """Continuously read from the USB port until stop is requested.
-
-    Tasks are stored in the `self._waiting_tasks` list, and contain a future that will be
-    completed when the task is finished. Tasks are submitted to the list using the
-    `self._start_reading` method.
-
-    On each iteration, read the USB port. If a response is received, parse it and check if it is
-    relevant to any of the tasks. If so, complete the future and remove the task from the
-    list. If a task has timed out, complete the future with a `TimeoutError`.
-    """
-
-    while not self._reading_thread_stop.is_set():
-      for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
-        task = self._waiting_tasks[idx]
-        if time.time() > task.timeout_time:
-          logger.warning("Timeout while waiting for response to command %s.", task.cmd)
-          task.loop.call_soon_threadsafe(
-            task.fut.set_exception,
-            TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
-          )
-          del self._waiting_tasks[idx]
-
-      if len(self._waiting_tasks) == 0:
-        await asyncio.sleep(0.01)
-        continue
-
-      try:
-        resp = (await self.io.read()).decode("utf-8")
-      except TimeoutError:
-        continue
-
-      if resp == "":
-        continue
-
-      # Parse response.
-      try:
-        response_id = self.get_id_from_fw_response(resp)
-      except ValueError as e:
-        logger.warning("Could not parse response: %s (%s)", resp, e)
-        continue
-
-      module_and_command = resp[: self.module_id_length + 2]
-      for idx in range(len(self._waiting_tasks)):
-        task = self._waiting_tasks[idx]
-        # if the command has no id, we have to check the command itself
-        if response_id == task.id_ or (
-          task.id_ is None and task.cmd.startswith(module_and_command)
-        ):
-          try:
-            self.check_fw_string_error(resp)
-          except Exception as e:
-            task.loop.call_soon_threadsafe(task.fut.set_exception, e)
-          else:
-            task.loop.call_soon_threadsafe(task.fut.set_result, resp)
-          del self._waiting_tasks[idx]
-          break
 
   def _ops_to_fw_positions(
     self, ops: Sequence[PipettingOp], use_channels: List[int]
@@ -504,18 +400,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     wait: bool = True,
   ) -> Optional[str]:
     """Send a raw command to the machine."""
-    id_index = command.find("id")
-    if id_index != -1:
-      id_str = command[id_index + 2 : id_index + 6]
-      if not id_str.isdigit():
-        raise ValueError("Id must be a 4 digit int.")
-      id_ = int(id_str)
-    else:
-      id_ = None
-
-    return await self._write_and_read_command(
-      id_=id_,
-      cmd=command,
+    return await self._reply_router.send_raw(
+      command=command,
       write_timeout=write_timeout,
       read_timeout=read_timeout,
       wait=wait,

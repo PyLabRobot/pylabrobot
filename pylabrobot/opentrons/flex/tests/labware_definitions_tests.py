@@ -723,7 +723,8 @@ class TestCustomLabwareLoadFlow(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(api.define_labware.await_count, 1)
 
     await flex.disconnect()
-    await flex.setup()  # new run
+    await flex.create_run()  # new run in the same transport lifespan
+    await flex.initialize()
     self.assertFalse(flex._require_labware().is_loaded(plate))
     self.assertIsNone(flex._require_labware().definition(plate))
 

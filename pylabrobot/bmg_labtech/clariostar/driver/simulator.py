@@ -18,6 +18,7 @@ from typing import (
   overload,
 )
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 from pylabrobot.lib.absorbance.results import AbsorbanceResult, AbsorbanceSpectrumResult
@@ -428,7 +429,12 @@ class CLARIOstarSimulationFluorescence(Fluorescence):
     ):
       what = f"simulated_data[{index}]"
       optics = self._get_result_optics(fluorescence_channel)
-      given = {name: getattr(result, name) for name in optics}
+      given = {
+        "excitation_wavelength": result.excitation_wavelength,
+        "excitation_bandwidth": result.excitation_bandwidth,
+        "emission_wavelength": result.emission_wavelength,
+        "emission_bandwidth": result.emission_bandwidth,
+      }
       if given != optics:
         raise ValueError(f"{what} holds {given}, measuring {optics}")
       if points > 1:
@@ -817,25 +823,27 @@ class CLARIOstarSimulationDriver(CLARIOstarDriver):
     configuration = os.path.basename(self.declared_configuration_json or "no configuration")
     return f"{SIMULATED_LINK} ({configuration})"
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    accept_plate_left_in_device: bool = False,
+  ) -> None:
     """Initialize and read the configuration, with nothing to connect."""
     logger.debug("setting up the CLARIOstar on %s ...", self._describe_link())
     logger.debug("[PHASE 1] Device initialization")
     await self.initialize()
+    stack.callback(self._mark_uninitialized)
+    stack.push_shielded_async_callback(self._shut_down, accept_plate_left_in_device)
     logger.debug("[PHASE 2] Discovery")
     await self.discover()
     logger.debug("[PHASE 3] Temperature monitoring")
     await self._start_temperature_monitoring()
     logger.info("%s", self.format_setup_summary())
 
+  def _mark_uninitialized(self) -> None:
+    """Mark the simulated reader not initialized."""
+    self.initialized = False
+
   async def _stop_run(self) -> None:
     """Nothing to stop: a simulated read ends before `measure` returns."""
-
-  async def stop(self, accept_plate_left_in_device: bool = False) -> None:
-    """Shut down as a reader does, then mark it not initialized; there is nothing to close.
-
-    Raises:
-      RuntimeError: if a plate is still in the reader, unless `accept_plate_left_in_device`.
-    """
-    await self._shut_down(accept_plate_left_in_device)
-    self.initialized = False

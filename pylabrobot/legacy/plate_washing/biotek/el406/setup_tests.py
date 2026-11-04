@@ -3,6 +3,7 @@
 
 import unittest
 
+from pylabrobot.io.ftdi import FTDI
 from pylabrobot.legacy.plate_washing.biotek.el406 import (
   EL406CommunicationError,
   ExperimentalBioTekEL406Backend,
@@ -13,24 +14,25 @@ from pylabrobot.legacy.plate_washing.biotek.el406.mock_tests import EL406TestCas
 class TestEL406BackendSetup(EL406TestCase):
   """Test EL406 backend setup and teardown."""
 
-  async def test_setup_creates_io(self):
-    """Setup should create and configure FTDI IO wrapper."""
+  async def test_lifespan_uses_configured_io(self):
+    """The lifespan should configure the selected FTDI IO wrapper."""
     backend = ExperimentalBioTekEL406Backend(timeout=0.01)
     backend.io = MockFTDI()
-    await backend.setup()
 
-    self.assertIsNotNone(backend.io)
+    async with backend.lifespan(skip_reset=True):
+      assert backend.io.is_active
 
-  async def test_stop_closes_device(self):
-    """Stop should close the FTDI device."""
+    assert not backend.io.is_active
+
+  async def test_lifespan_closes_device(self):
+    """Lifespan exit should close the FTDI device."""
     backend = ExperimentalBioTekEL406Backend(timeout=0.01)
     backend.io = MockFTDI()
-    await backend.setup()
 
-    self.assertIsNotNone(backend.io)
-    await backend.stop()
+    async with backend.lifespan(skip_reset=True):
+      assert backend.io.is_active
 
-    self.assertIsNone(backend.io)
+    assert not backend.io.is_active
 
 
 class TestEL406CommunicationError(unittest.TestCase):
@@ -62,6 +64,6 @@ class TestEL406BackendSerialization(unittest.TestCase):
     self.assertEqual(serialized["timeout"], 30.0)
 
   def test_init_without_ftdi_available(self):
-    """Backend should be instantiable without FTDI library."""
+    """Backend should construct its FTDI transport during initialization."""
     backend = ExperimentalBioTekEL406Backend()
-    self.assertIsNone(backend.io)
+    self.assertIsInstance(backend.io, FTDI)

@@ -18,6 +18,7 @@ from pylabrobot.brooks.precise_flex.resource_model.pf400_manipulator import (
   BASE_PLATE_SIZE,
   base_plate,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -28,11 +29,13 @@ _RECORDINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "driver",
 RECORDING_PF400 = os.path.join(_RECORDINGS, "pf400_extended_400mm.json")
 
 
-class PreciseFlexDevice(Resource):
+class PreciseFlexDevice(Resource, HasLifespan):
   """The complete modelling and control interface for a PreciseFlex arm.
 
   The device is itself a resource and its base plate is its child: one tree, rooted here.
   `device.driver` speaks to the arm in its own terms and stays reachable.
+
+  Open the device with ``async with device:`` (or ``async with device.lifespan(skip_home=True):``).
   """
 
   def __init__(
@@ -44,8 +47,9 @@ class PreciseFlexDevice(Resource):
     size_y: float,
     size_z: float,
     model: Optional[str] = None,
-  ):
-    """
+  ) -> None:
+    """Bind a PreciseFlex driver to its base plate resource.
+
     Args:
       base_plate: what the device stands on, and the driver builds the arm on. It becomes a
         child of the device.
@@ -64,6 +68,7 @@ class PreciseFlexDevice(Resource):
       category="device",
       model=model if model is not None else self.__class__.__name__,
     )
+    HasLifespan.__init__(self)
     self.base_plate = base_plate
     self.driver = driver
     if self.driver.base_plate is not None and self.driver.base_plate is not base_plate:
@@ -91,18 +96,24 @@ class PreciseFlexDevice(Resource):
     """The vision feature, if setup found one."""
     return self.driver.vision
 
-  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
-    """Bring the device up.
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_home: bool = False,
+    skip_vision_setup: bool = False,
+  ) -> None:
+    """Open the underlying driver lifespan.
 
     Args:
-      skip_home: as `PreciseFlexDriver.setup` takes it.
-      skip_vision_setup: as `PreciseFlexDriver.setup` takes it.
+      stack: exit stack managing lifespan resources.
+      skip_home: as ``PreciseFlexDriver.lifespan`` takes it.
+      skip_vision_setup: as ``PreciseFlexDriver.lifespan`` takes it.
     """
-    await self.driver.setup(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
-
-  async def stop(self):
-    """Put the device down."""
-    await self.driver.stop()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(
+      self.driver.lifespan(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
+    )
 
 
 def PreciseFlex400(
@@ -114,7 +125,7 @@ def PreciseFlex400(
   """A PreciseFlex 400: its base plate, for the driver to build the arm on.
 
   Nothing about the arm is declared here. The column, the carriage, the links and the gripper are
-  built at setup, from the configuration the controller answers - a simulated one
+  built when the lifespan opens, from the configuration the controller answers - a simulated one
   answers as its declared configuration. Where the controller reports from is
   `pf400_manipulator.SHOULDER_AXIS`, within the base plate.
 

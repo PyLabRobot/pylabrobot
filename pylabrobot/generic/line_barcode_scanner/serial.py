@@ -1,14 +1,16 @@
-import asyncio
 import logging
 from typing import Literal, Optional, Sequence, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources.barcode import Barcode, Barcode1DSymbology, BarcodePosition
 
 logger = logging.getLogger(__name__)
 
 
-class SerialBarcodeScanner:
+class SerialBarcodeScanner(HasLifespan):
   """Barcode scanner that returns one barcode per terminated serial line.
 
   This class is intended for scanners configured as RS-232 or USB virtual COM devices. It reads
@@ -35,6 +37,7 @@ class SerialBarcodeScanner:
     trigger_command: Optional[bytes] = None,
     untrigger_command: Optional[bytes] = None,
   ) -> None:
+    super().__init__()
     if len(terminators) == 0:
       raise ValueError("At least one line terminator must be configured.")
     if any(len(t) != 1 for t in terminators):
@@ -52,34 +55,32 @@ class SerialBarcodeScanner:
       parity=parity,
       stopbits=stopbits,
       write_timeout=write_timeout,
-      timeout=read_timeout,
       rtscts=rtscts,
       dsrdtr=dsrdtr,
       xonxoff=xonxoff,
     )
     self.encoding = encoding
+    self.read_timeout = read_timeout
     self.terminators = tuple(terminators)
     self.max_line_length = max_line_length
 
     self.trigger_command = trigger_command
     self.untrigger_command = untrigger_command
 
-  async def setup(self) -> None:
-    """Connect to the scanner's serial port."""
-    await self.io.setup()
-    logger.info("[Serial barcode scanner %s] connected", self.io.port)
-
-  async def stop(self) -> None:
-    """Disconnect from the scanner's serial port."""
-    await self.io.stop()
-    logger.info("[Serial barcode scanner %s] disconnected", self.io.port)
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+  ) -> None:
+    """Own the serial transport for the scanner lifespan."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
 
   async def read_line(self, timeout: Optional[float] = None) -> str:
     """Read one barcode line from the serial stream.
 
     Args:
-      timeout: Optional total read timeout in seconds. If omitted, the
-        underlying :class:`pylabrobot.io.Serial` timeout is used.
+      timeout: Optional total read timeout in seconds. If omitted, use the
+        scanner's configured reply timeout.
 
     Returns:
       The decoded line without the trailing line terminator. Returns an empty
@@ -99,31 +100,28 @@ class SerialBarcodeScanner:
 
   async def _read_until_terminator(self, timeout: Optional[float]) -> bytes:
     """Read bytes until a configured terminator, timeout, or length limit is reached."""
-    loop = asyncio.get_running_loop()
-    deadline = None if timeout is None else loop.time() + timeout
+    effective_timeout = self.read_timeout if timeout is None else timeout
     buf = bytearray()
-
-    while len(buf) < self.max_line_length:
-      if deadline is None:
+    if effective_timeout <= 0:
+      return b""
+    with anyio.move_on_after(effective_timeout):
+      while len(buf) < self.max_line_length:
         chunk = await self.io.read(1)
-      else:
-        remaining = deadline - loop.time()
-        if remaining <= 0:
+        buf.extend(chunk)
+        if bytes(chunk) in self.terminators:
           break
-        with self.io.temporary_timeout(remaining):
-          chunk = await self.io.read(1)
-
-      if len(chunk) == 0:
-        break
-      buf.extend(chunk)
-      if bytes(chunk) in self.terminators:
-        break
 
     return bytes(buf)
 
   async def reset_input_buffer(self) -> None:
     """Clear unread bytes buffered by the serial transport."""
     await self.io.reset_input_buffer()
+
+  async def _untrigger_scanner(self) -> None:
+    """Safely release the scanner trigger after a scan attempt."""
+    if self.untrigger_command is not None:
+      with anyio.CancelScope(shield=True):
+        await self.write(self.untrigger_command)
 
   async def scan_barcode(
     self,
@@ -151,8 +149,7 @@ class SerialBarcodeScanner:
     try:
       data = await self.read_line(timeout=read_time)
     finally:
-      if self.untrigger_command is not None:
-        await self.write(self.untrigger_command)
+      await self._untrigger_scanner()
 
     if data == "":
       return None

@@ -7,13 +7,14 @@ from contextlib import aclosing, asynccontextmanager
 from typing import Protocol
 
 import grpc
-from typing_extensions import Self
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.rpc.transport import (
   API_VERSION,
   Updates,
   build_channel_options,
   copy_message,
+  require_asyncio,
   require_device,
   translate_rpc_errors,
 )
@@ -78,8 +79,12 @@ class DeviceService(rpc.DeviceServiceServicer):
           yield copy_message(status)
 
 
-class DeviceServer:
-  """gRPC transport hosting identity/status and explicitly added services."""
+class DeviceServer(HasLifespan):
+  """gRPC transport hosting identity/status and explicitly added services.
+
+  `grpc.aio` is an asyncio-only dependency, so the lifespan rejects other AnyIO backends before
+  it starts accepting RPCs. A server object is single-use: gRPC cannot restart a stopped server.
+  """
 
   def __init__(
     self,
@@ -90,6 +95,7 @@ class DeviceServer:
     maximum_message_bytes: int = 4 * 1024 * 1024,
   ) -> None:
     """Configure transport only; the device application owns initialization and cleanup."""
+    super().__init__()
     self.server = grpc.aio.server(
       options=build_channel_options(maximum_message_bytes), maximum_concurrent_rpcs=32
     )
@@ -100,17 +106,23 @@ class DeviceServer:
       raise RuntimeError("unable to bind device endpoint")
     self.endpoint = f"{bind_host}:{self.port}"
 
-  async def start(self) -> None:
-    """Start accepting RPCs without operating the device."""
-    await self.server.start()
-
-  async def stop(self) -> None:
+  async def _stop_server(self) -> None:
     """Close transport; the device application separately finishes its accepted work."""
     await self.server.stop(0)
 
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Accept RPCs for the lifespan without operating the device."""
+    await super()._enter_lifespan(stack)
+    require_asyncio(type(self).__name__)
+    await self.server.start()
+    stack.push_shielded_async_callback(self._stop_server)
 
-class DeviceClient:
-  """Connect to any PLR RPC device without importing device-specific or image modules."""
+
+class DeviceClient(HasLifespan):
+  """Connect to any PLR RPC device without importing device-specific or image modules.
+
+  The connection lives for the client's lifespan; `grpc.aio` limits it to asyncio.
+  """
 
   expected_device_type: str | None = None
 
@@ -123,6 +135,7 @@ class DeviceClient:
     maximum_message_bytes: int = 4 * 1024 * 1024,
   ) -> None:
     """Store an endpoint and expected device identity; construction performs no connection."""
+    super().__init__()
     self.endpoint = endpoint
     self.device_id = device_id
     self.timeout = timeout
@@ -144,31 +157,28 @@ class DeviceClient:
     """Read current server state without pretending it is a fresh hardware observation."""
     return await self.devices.GetStatus(self.request, timeout=self.timeout)
 
-  async def disconnect(self) -> None:
+  async def _close_channel(self) -> None:
     """Close this connection without cancelling accepted remote jobs."""
-    if self.channel is not None:
-      await self.channel.close()
-      self.channel = None
+    channel, self.channel = self.channel, None
+    if channel is not None:
+      await channel.close()
 
-  async def connect(self) -> Self:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Connect and validate device identity, protocol version, and optional expected type."""
-    await self.disconnect()
+    await super()._enter_lifespan(stack)
+    require_asyncio(type(self).__name__)
     self.channel = grpc.aio.insecure_channel(
       self.endpoint,
       options=build_channel_options(self.maximum_message_bytes),
     )
+    stack.push_shielded_async_callback(self._close_channel)
     self.devices = rpc.DeviceServiceStub(self.channel)
-    try:
-      info = await self.get_device_info()
-      if info.device_id != self.device_id or info.api_version != API_VERSION:
-        raise ValueError("device identity or API version mismatch")
-      if self.expected_device_type is not None and info.device_type != self.expected_device_type:
-        raise ValueError(f"this client only accepts a {self.expected_device_type}")
-      self.configuration_id = info.configuration_id
-    except BaseException:
-      await self.disconnect()
-      raise
-    return self
+    info = await self.get_device_info()
+    if info.device_id != self.device_id or info.api_version != API_VERSION:
+      raise ValueError("device identity or API version mismatch")
+    if self.expected_device_type is not None and info.device_type != self.expected_device_type:
+      raise ValueError(f"this client only accepts a {self.expected_device_type}")
+    self.configuration_id = info.configuration_id
 
   @asynccontextmanager
   async def watch_status(self) -> AsyncIterator[Updates[pb.DeviceStatus]]:
@@ -178,11 +188,3 @@ class DeviceClient:
       yield Updates[pb.DeviceStatus](call)
     finally:
       call.cancel()
-
-  async def __aenter__(self) -> Self:
-    """Connect for the duration of an asynchronous context."""
-    return await self.connect()
-
-  async def __aexit__(self, *_exc: object) -> None:
-    """Release the connection at context exit."""
-    await self.disconnect()

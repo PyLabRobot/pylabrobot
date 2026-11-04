@@ -1,7 +1,11 @@
-import asyncio
 import logging
-from typing import Optional, Union
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional, Union
 
+import anyio
+from anyio import sleep
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateHolder
@@ -17,7 +21,7 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-class BioShake(PlateHolder):
+class BioShake(PlateHolder, HasLifespan):
   """Serial driver for QInstruments BioShake devices."""
 
   def __init__(
@@ -50,6 +54,7 @@ class BioShake(PlateHolder):
       category="bioshake",
       model=model,
     )
+    HasLifespan.__init__(self)
 
     self.port = port
     self.timeout = timeout
@@ -61,89 +66,123 @@ class BioShake(PlateHolder):
       parity=serial.PARITY_NONE,
       stopbits=serial.STOPBITS_ONE,
       write_timeout=10,
-      timeout=self.timeout,
     )
     self.supports_shaking = supports_shaking
     self.supports_locking = supports_locking
     self.supports_temperature_control = supports_temperature_control
     self.supports_active_cooling = supports_active_cooling
+    self._is_shaking = False
+    self._shaking_state_unknown = False
+    self._shaking_scope_token: Optional[object] = None
+    self._shaking_transition_lock = anyio.Lock()
+    self._temperature_control_active = False
 
   async def send_command(self, cmd: str, delay: float = 0.5, timeout: float = 2):
     try:
       await self.io.reset_input_buffer()
       await self.io.reset_output_buffer()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self.io.write((cmd + "\r").encode("ascii"))
+        await sleep(delay)
 
-      await self.io.write((cmd + "\r").encode("ascii"))
-      await asyncio.sleep(delay)
+        try:
+          with anyio.fail_after(timeout):
+            while not (response := await self.io.readline()):
+              pass
+        except TimeoutError:
+          raise RuntimeError(f"Timed out waiting for response to '{cmd}'") from None
 
-      try:
-        response = await asyncio.wait_for(self.io.readline(), timeout=timeout)
-      except asyncio.TimeoutError:
-        raise RuntimeError(f"Timed out waiting for response to '{cmd}'")
+        decoded = response.decode("ascii", errors="ignore").strip()
 
-      decoded = response.decode("ascii", errors="ignore").strip()
+        if not decoded:
+          raise RuntimeError(f"No response for '{cmd}'")
 
-      if not decoded:
-        raise RuntimeError(f"No response for '{cmd}'")
+        if decoded.startswith("e"):
+          logger.error("[BioShake %s] error for '%s': '%s'", self.port, cmd, decoded)
+          raise RuntimeError(f"Device returned error for '{cmd}': '{decoded}'")
 
-      if decoded.startswith("e"):
-        logger.error("[BioShake %s] error for '%s': '%s'", self.port, cmd, decoded)
-        raise RuntimeError(f"Device returned error for '{cmd}': '{decoded}'")
+        if decoded.startswith("u ->"):
+          raise NotImplementedError(f"'{cmd}' not supported: '{decoded}'")
 
-      if decoded.startswith("u ->"):
-        raise NotImplementedError(f"'{cmd}' not supported: '{decoded}'")
+        if cmd == "shakeOn":
+          self._is_shaking = True
+        elif cmd == "shakeOff":
+          self._is_shaking = False
+        elif cmd == "tempOn":
+          self._temperature_control_active = True
+        elif cmd == "tempOff":
+          self._temperature_control_active = False
 
-      if decoded.lower().startswith("ok"):
-        return None
+        result = None if decoded.lower().startswith("ok") else decoded
 
-      return decoded
+      await anyio.lowlevel.checkpoint()
+      return result
 
     except Exception as e:
       raise RuntimeError(f"Unexpected error while sending '{cmd}': {type(e).__name__}: {e}") from e
 
-  async def setup(self, skip_home: bool = False):
-    """
-    Args:
-      skip_home: If True, skip the reset and home steps during setup.
-    """
-    await self.io.setup()
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, skip_home: bool = False
+  ) -> None:
+    """Own Serial and optionally reset and home the shaker for one lifespan."""
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_home, bool):
+      raise TypeError("skip_home must be a bool")
+
+    await stack.enter_async_context(self.io.lifespan())
+    stack.push_shielded_async_callback(self._deactivate_for_exit)
     if not skip_home and self.supports_shaking:
       await self.reset()
-      await asyncio.sleep(4)
+      await sleep(4)
       await self.home()
     logger.info("[BioShake %s] connected", self.port)
 
-  async def stop(self):
-    await self.io.stop()
+  async def _deactivate_for_exit(self) -> None:
+    """Stop active shaking, then disable active temperature control."""
+    try:
+      await self._force_stop_shaking()
+    finally:
+      if self._temperature_control_active:
+        await self.send_command(cmd="tempOff", delay=0.2)
     logger.info("[BioShake %s] disconnected", self.port)
+
+  async def _force_stop_shaking(self) -> None:
+    """Stop tracked shaking during parent cleanup and invalidate scoped ownership."""
+    async with self._shaking_transition_lock:
+      try:
+        if self._is_shaking or self._shaking_state_unknown:
+          await self.send_command(cmd="shakeOff", delay=0.2)
+      finally:
+        self._is_shaking = False
+        self._shaking_state_unknown = False
+        self._shaking_scope_token = None
 
   async def reset(self):
     await self.io.reset_input_buffer()
     await self.io.reset_output_buffer()
 
-    await self.io.write(("resetDevice\r").encode("ascii"))
-
-    start = asyncio.get_event_loop().time()
-    max_seconds = 30
-
-    while True:
-      if asyncio.get_event_loop().time() - start > max_seconds:
-        raise TimeoutError("Reset did not complete in time")
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self.io.write(("resetDevice\r").encode("ascii"))
 
       try:
-        response = await asyncio.wait_for(self.io.readline(), timeout=2)
-        decoded = response.decode("ascii", errors="ignore").strip()
-        await asyncio.sleep(0.1)
+        with anyio.fail_after(30):
+          while True:
+            response = await self.io.readline()
+            if not response:
+              continue
+            decoded = response.decode("ascii", errors="ignore").strip()
+            await sleep(0.1)
+            if (
+              "Initialization complete" in decoded
+              or "Initialization successfully completed" in decoded
+            ):
+              break
+      except TimeoutError:
+        raise TimeoutError("Reset did not complete in time") from None
 
-        if len(decoded) > 0:
-          if (
-            "Initialization complete" in decoded
-            or "Initialization successfully completed" in decoded
-          ):
-            break
-
-      except asyncio.TimeoutError:
-        continue
+    await anyio.lowlevel.checkpoint()
 
   async def home(self):
     if not self.supports_shaking:
@@ -151,13 +190,19 @@ class BioShake(PlateHolder):
     await self.send_command(cmd="shakeGoHome", delay=5)
 
   async def shake(self, speed: float, duration: float):
-    if not self.supports_shaking:
-      raise RuntimeError("This BioShake device does not support shaking.")
-    await self.start_shaking(speed=speed)
-    await asyncio.sleep(duration)
-    await self.stop_shaking()
+    async with self.shaking(speed=speed):
+      await sleep(duration)
 
   async def start_shaking(self, speed: float, acceleration: Union[int, float] = 0):
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot start shaking while a shaking scope is active")
+      await self._start_shaking_transition(speed, acceleration)
+
+  async def _start_shaking_transition(
+    self, speed: float, acceleration: Union[int, float] = 0
+  ) -> None:
+    """Start shaking while the caller holds the transition lock."""
     if not self.supports_shaking:
       raise RuntimeError("This BioShake device does not support shaking.")
     if isinstance(speed, float):
@@ -199,9 +244,19 @@ class BioShake(PlateHolder):
 
     await self.send_command(cmd=f"setShakeAcceleration{acceleration}", delay=0.2)
     logger.info("[BioShake %s] start shaking: speed=%d, accel=%d", self.port, speed, acceleration)
+    self._shaking_state_unknown = True
     await self.send_command(cmd="shakeOn", delay=0.2)
+    self._is_shaking = True
+    self._shaking_state_unknown = False
 
   async def stop_shaking(self, deceleration: Union[int, float] = 0):
+    async with self._shaking_transition_lock:
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Cannot stop shaking while a shaking scope is active")
+      await self._stop_shaking_transition(deceleration)
+
+  async def _stop_shaking_transition(self, deceleration: Union[int, float] = 0) -> None:
+    """Stop shaking while the caller holds the transition lock."""
     if not self.supports_shaking:
       raise RuntimeError("This BioShake device does not support shaking.")
     if isinstance(deceleration, float):
@@ -225,10 +280,51 @@ class BioShake(PlateHolder):
 
     await self.send_command(cmd=f"setShakeAcceleration{deceleration}", delay=0.2)
     logger.info("[BioShake %s] stop shaking (decel=%d)", self.port, deceleration)
+    self._shaking_state_unknown = True
     await self.send_command(cmd="shakeOff", delay=0.2)
+    self._is_shaking = False
+    self._shaking_state_unknown = False
 
     # The firmware needs the motor to fully decelerate before ELM can operate.
-    await asyncio.sleep(3)
+    await sleep(3)
+
+  @asynccontextmanager
+  async def shaking(
+    self,
+    speed: float,
+    acceleration: float = 0,
+    deceleration: float = 0,
+  ) -> AsyncIterator[None]:
+    """Temporarily shake while owning the confirmed start and stop transitions."""
+    token = object()
+    async with self._shaking_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Shaking scopes require an active BioShake lifespan")
+      if self._shaking_scope_token is not None:
+        raise RuntimeError("Shaking is already scoped")
+      if self._is_shaking or self._shaking_state_unknown:
+        raise RuntimeError("Shaking is already active")
+      await anyio.lowlevel.checkpoint()
+      try:
+        await self._start_shaking_transition(speed, acceleration)
+      except BaseException:
+        if self._is_shaking or self._shaking_state_unknown:
+          with anyio.CancelScope(shield=True):
+            await self._stop_shaking_transition(deceleration)
+        raise
+      self._shaking_scope_token = token
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._shaking_transition_lock:
+          if self._shaking_scope_token is token:
+            try:
+              await self._stop_shaking_transition(deceleration)
+            finally:
+              self._shaking_scope_token = None
 
   async def lock_plate(self):
     if not self.supports_locking:

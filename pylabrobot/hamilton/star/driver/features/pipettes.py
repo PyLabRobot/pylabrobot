@@ -1,6 +1,5 @@
 """The pipetting channels: the row of independently driven pipettes on an arm."""
 
-import asyncio
 import dataclasses
 import datetime
 import enum
@@ -29,8 +28,10 @@ from typing import (
   cast,
 )
 
+import anyio
 from typing_extensions import TypeAlias
 
+from pylabrobot.concurrency import SiblingTaskErrors, non_cancelling_task_group
 from pylabrobot.hamilton.liquid_class_resolver import (
   ASPIRATE_CLASS_ATTRIBUTES,
   DISPENSE_CLASS_ATTRIBUTES,
@@ -614,7 +615,9 @@ class Pipettes:
     Read-only, and asks every channel at once. Fills in `configuration.channels`.
     """
     self.configuration.resolve_channels(self.num_channels)
-    await asyncio.gather(*(self._discover_channel(ch) for ch in range(self.num_channels)))
+    async with anyio.create_task_group() as group:
+      for channel in range(self.num_channels):
+        group.start_soon(self._discover_channel, channel)
     self.configuration.check_channels_agree()
 
   # -- where the channels are ------------------------------------------------
@@ -1149,13 +1152,14 @@ class Pipettes:
           written.append((channel, parameter))
       yield
     finally:
-      for channel, parameter in written:
-        try:
-          await self._set_drive_parameter(channel, parameter, defaults[parameter])
-        except Exception:
-          logger.warning(
-            "could not put channel %s's %s back to %s", channel, parameter, defaults[parameter]
-          )
+      with anyio.CancelScope(shield=True):
+        for channel, parameter in written:
+          try:
+            await self._set_drive_parameter(channel, parameter, defaults[parameter])
+          except Exception:
+            logger.warning(
+              "could not put channel %s's %s back to %s", channel, parameter, defaults[parameter]
+            )
 
   # -- Memory of Speed & Acceleration --------------------------------------------------------------
 
@@ -1618,18 +1622,16 @@ class Pipettes:
     for channel, z in zs.items():
       self._require_channel(channel)
       self._check_reachable("z", z)
-    results = await asyncio.gather(
-      *(
-        self.move_stop_disc_to_z_position(
-          channel, z, speed=speed, acceleration=acceleration, current_limit=current_limit
-        )
-        for channel, z in zs.items()
-      ),
-      return_exceptions=True,
-    )
-    failed = [result for result in results if isinstance(result, BaseException)]
-    if failed:
-      raise failed[0]
+    try:
+      async with non_cancelling_task_group() as group:
+        for channel, z in zs.items():
+          group.start_soon(
+            lambda ch=channel, target=z: self.move_stop_disc_to_z_position(
+              ch, target, speed=speed, acceleration=acceleration, current_limit=current_limit
+            )
+          )
+    except SiblingTaskErrors as error:
+      raise error.exceptions[0]
 
   async def move_tool_bottom_to_z_positions(self, zs: Dict[int, float]):
     """Move the bottom of the tip on each named channel along Z, in one command.
@@ -1772,10 +1774,14 @@ class Pipettes:
       liquid alike, for a channel asked; None for one not asked, whose record is left alone.
     """
     asked = list(range(self.num_channels)) if use_channels is None else use_channels
-    read = await asyncio.gather(*(self.dispensing_drive_request_uL_position(ch) for ch in asked))
     positions: List[Optional[float]] = [None] * self.num_channels
-    for channel, uL in zip(asked, read):
-      positions[channel] = uL
+
+    async def read_one(ch: int) -> None:
+      positions[ch] = await self.dispensing_drive_request_uL_position(ch)
+
+    async with anyio.create_task_group() as group:
+      for ch in asked:
+        group.start_soon(read_one, ch)
     return positions
 
   # -- blow-out air --------------------------------------------------------------------------------
@@ -1920,14 +1926,12 @@ class Pipettes:
 
     if raises:
       await self.move_stop_disc_to_z_positions(raises)
-    results = await asyncio.gather(
-      self.move_to_x_position(x),
-      self._move_to_planned_y_positions(planned_ys),
-      return_exceptions=True,
-    )
-    failed = [result for result in results if isinstance(result, BaseException)]
-    if failed:
-      raise failed[0]
+    try:
+      async with non_cancelling_task_group() as group:
+        group.start_soon(self.move_to_x_position, x)
+        group.start_soon(self._move_to_planned_y_positions, planned_ys)
+    except SiblingTaskErrors as error:
+      raise error.exceptions[0]
 
   # -- spreading -----------------------------------------------------------------------------------
 
@@ -2150,19 +2154,21 @@ class Pipettes:
       self._require_channel(channel)
     if len(set(use_channels)) != len(use_channels):
       raise ValueError(f"use_channels must each be named once, are {use_channels}")
-    await asyncio.gather(
-      *(
-        self.empty_tip(
-          channel,
-          position,
-          flow_rate=flow_rate,
-          acceleration=acceleration,
-          current_limit=current_limit,
-          reset_dispensing_drive_after=reset_dispensing_drive_after,
-        )
-        for channel in use_channels
-      )
-    )
+    try:
+      async with non_cancelling_task_group() as group:
+        for channel in use_channels:
+          group.start_soon(
+            lambda ch=channel: self.empty_tip(
+              ch,
+              position,
+              flow_rate=flow_rate,
+              acceleration=acceleration,
+              current_limit=current_limit,
+              reset_dispensing_drive_after=reset_dispensing_drive_after,
+            )
+          )
+    except SiblingTaskErrors as error:
+      raise error.exceptions[0]
 
   # -- channel initialization ------------------------------------------------
 
@@ -3462,8 +3468,8 @@ class Pipettes:
       for index, batch in enumerate(batches):
         if index > 0:
           if minimum_traverse_height_during is None:
-            # Always, as legacy does: a liquid search records nothing, so the model can have the
-            # channels up while they still stand in the container they searched.
+            # Always: a liquid search records nothing, so the model can have the channels up while
+            # they still stand in the container they searched.
             await self.move_to_safe_z()
           else:
             raises = await self._traverse_raise_targets(minimum_traverse_height_during)
@@ -3476,7 +3482,8 @@ class Pipettes:
         results.append(await func(batch))
     except BaseException:
       # A firmware error, a cancellation, an interrupt: the channels come up before it goes on.
-      await self.move_to_safe_z()
+      with anyio.CancelScope(shield=True):
+        await self.move_to_safe_z()
       raise
     return results
 
@@ -3615,15 +3622,20 @@ class Pipettes:
         await self.move_stop_disc_to_z_positions(
           {channel: start for channel, _, _, start in searches}, speed=approach_speed
         )
-      results = await asyncio.gather(
-        *(
-          self._clld_search(channel, end, start, search_speed=search_speed)
-          if lld_modes[job] == self.LLDMode.CAPACITIVE
-          else self._plld_search(channel, end, start, search_speed=search_speed)
-          for channel, job, end, start in searches
-        ),
-        return_exceptions=True,
-      )
+      results: List[Optional[Exception]] = [None] * len(searches)
+
+      async def run_search(idx: int, ch: int, jb: int, e: float, s: float) -> None:
+        try:
+          if lld_modes[jb] == self.LLDMode.CAPACITIVE:
+            await self._clld_search(ch, e, s, search_speed=search_speed)
+          else:
+            await self._plld_search(ch, e, s, search_speed=search_speed)
+        except Exception as error:
+          results[idx] = error
+
+      async with non_cancelling_task_group() as group:
+        for idx, (channel, job, end, start) in enumerate(searches):
+          group.start_soon(run_search, idx, channel, job, end, start)
       heights = await self.request_last_lld_z_positions()
       for (channel, job, end, _), result in zip(searches, results):
         if isinstance(result, STARFirmwareError) and self._found_nothing(
@@ -3631,7 +3643,7 @@ class Pipettes:
         ):
           found[job].append(None)
           stopped = end
-        elif isinstance(result, BaseException):
+        elif isinstance(result, Exception):
           raise result
         else:
           found[job].append(heights[channel])
@@ -3790,7 +3802,7 @@ class Pipettes:
   async def _after(delay: float, search: Awaitable[T]) -> T:
     """Run `search` once `delay` seconds have passed, so gathered searches set off in a cascade."""
     if delay > 0:
-      await asyncio.sleep(delay)
+      await anyio.sleep(delay)
     return await search
 
   def _get_ztouch_starts(
@@ -3874,18 +3886,22 @@ class Pipettes:
       await self.move_stop_disc_to_z_positions(
         {channel: start for channel, _, _, start in searches}, speed=approach_speed
       )
-      results = await asyncio.gather(
-        *(
-          self._after(
-            index * self.ztouch_cascade_interval,
-            self._ztouch_search(channel, end, start, search_speed=search_speed),
+      results: List[Union[Optional[float], Exception]] = [None] * len(searches)
+
+      async def run_ztouch(idx: int, ch: int, e: float, s: float) -> None:
+        try:
+          results[idx] = await self._after(
+            idx * self.ztouch_cascade_interval,
+            self._ztouch_search(ch, e, s, search_speed=search_speed),
           )
-          for index, (channel, job, end, start) in enumerate(searches)
-        ),
-        return_exceptions=True,
-      )
+        except Exception as error:
+          results[idx] = error
+
+      async with non_cancelling_task_group() as group:
+        for index, (channel, _, end, start) in enumerate(searches):
+          group.start_soon(run_ztouch, index, channel, end, start)
       await self._record_where_they_stopped("z", batch.channels)
-      failed = [result for result in results if isinstance(result, BaseException)]
+      failed = [result for result in results if isinstance(result, Exception)]
       if failed:
         raise failed[0]
       for (channel, job, end, _), stop_disc in zip(searches, results):
@@ -4219,7 +4235,8 @@ class Pipettes:
         if faulted
         else {channel: False for channel in use_channels}
       )
-      presence = await self.sense_tip_presence()
+      with anyio.CancelScope(shield=True):
+        presence = await self.sense_tip_presence()
       sensed = {channel: bool(presence[channel]) for channel in use_channels}
       disagreed = [
         channel for channel in use_channels if faulted and sensed[channel] != picked_up[channel]
@@ -4235,10 +4252,11 @@ class Pipettes:
       # Out of the rack before anything else touches the deck: a channel below the traverse
       # height, by a device read, is raised to it; one already above stays where it is.
       try:
-        raises = await self._traverse_raise_targets(traverse / 10)
-        if raises:
-          await self.move_stop_disc_to_z_positions(raises)
-      except BaseException:
+        with anyio.CancelScope(shield=True):
+          raises = await self._traverse_raise_targets(traverse / 10)
+          if raises:
+            await self.move_stop_disc_to_z_positions(raises)
+      except Exception:
         logger.warning("could not raise the channels to %.1f mm after the failure", traverse / 10)
       picked_up = sensed
       raise
@@ -4253,7 +4271,8 @@ class Pipettes:
         if command_error is None:
           raise
         logger.exception("could not record which tips the channels collected")
-      await self._record_after_command()
+      with anyio.CancelScope(shield=True):
+        await self._record_after_command()
     await self._reread_pistons_after_tip_command(use_channels)
     return picked_up
 
@@ -4487,7 +4506,8 @@ class Pipettes:
         if faulted
         else {channel: False for channel in use_channels}
       )
-      presence = await self.sense_tip_presence()
+      with anyio.CancelScope(shield=True):
+        presence = await self.sense_tip_presence()
       sensed = {channel: not presence[channel] for channel in use_channels}
       disagreed = [
         channel for channel in use_channels if faulted and sensed[channel] != dropped[channel]
@@ -4503,10 +4523,11 @@ class Pipettes:
       # Out of the rack before anything else touches the deck: a channel below the traverse
       # height, by a device read, is raised to it; one already above stays where it is.
       try:
-        raises = await self._traverse_raise_targets(traverse / 10)
-        if raises:
-          await self.move_stop_disc_to_z_positions(raises)
-      except BaseException:
+        with anyio.CancelScope(shield=True):
+          raises = await self._traverse_raise_targets(traverse / 10)
+          if raises:
+            await self.move_stop_disc_to_z_positions(raises)
+      except Exception:
         logger.warning("could not raise the channels to %.1f mm after the failure", traverse / 10)
       dropped = sensed
       raise
@@ -4520,7 +4541,8 @@ class Pipettes:
         if command_error is None:
           raise
         logger.exception("could not record which tips the channels let go of")
-      await self._record_after_command()
+      with anyio.CancelScope(shield=True):
+        await self._record_after_command()
     await self._reread_pistons_after_tip_command(use_channels)
     return dropped
 
@@ -6374,14 +6396,13 @@ class Pipettes:
       if drawing:
         # Together, where the tips stand in air. A draw that failed part way leaves the pistons
         # wherever they stopped: the model takes what the drives say before the failure goes on.
-        results = await asyncio.gather(
-          *(self._aspirate_blow_out_air(ch, air_beforehand[job]) for ch, job in drawing),
-          return_exceptions=True,
-        )
-        failed = [result for result in results if isinstance(result, BaseException)]
-        if failed:
+        try:
+          async with non_cancelling_task_group() as group:
+            for ch, job in drawing:
+              group.start_soon(self._aspirate_blow_out_air, ch, air_beforehand[job])
+        except SiblingTaskErrors as error:
           await self.dispensing_drives_request_uL_positions([ch for ch, _ in drawing])
-          raise failed[0]
+          raise error.exceptions[0]
       await self._touch_floors_of_batch(
         batch,
         touched=touched,

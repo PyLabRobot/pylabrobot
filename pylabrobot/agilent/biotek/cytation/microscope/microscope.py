@@ -10,13 +10,14 @@ come from the AravisCamera (GenICam/USB3 Vision).
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import re
-import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, AsyncIterator, List, Literal, Optional, Tuple, Union
+
+import anyio
 
 from pylabrobot.agilent.biotek.cytation.microscope.models import (
   Exposure,
@@ -27,6 +28,7 @@ from pylabrobot.agilent.biotek.cytation.microscope.models import (
   ImagingResult,
   Objective,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources.plate import Plate
 
 from .aravis_camera import AravisCamera
@@ -57,7 +59,7 @@ class CytationImagingConfig:
   image_read_delay: float = 0.3
 
 
-class CytationMicroscope:
+class CytationMicroscope(HasLifespan):
   """The Cytation's microscope.
 
   Owns the AravisCamera and all imaging state, and drives the optics over the plate
@@ -71,6 +73,7 @@ class CytationMicroscope:
     imaging_config: Optional[CytationImagingConfig] = None,
     use_cam: bool = True,
   ) -> None:
+    super().__init__()
     self.driver = driver
     self.camera = AravisCamera()
     self._camera_serial = camera_serial
@@ -91,28 +94,22 @@ class CytationMicroscope:
     self._pos_x: Optional[float] = None
     self._pos_y: Optional[float] = None
     self._objective: Optional[Objective] = None
-    self._acquiring = False
 
-  async def _on_setup(self) -> None:
-    """Connect camera (if use_cam) and load filters/objectives from firmware."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the camera and load microscope configuration."""
+    await super()._enter_lifespan(stack)
+    stack.callback(self._clear_imaging_state)
     if self._use_cam:
       serial = self._camera_serial or (
         self.imaging_config.camera_serial_number if self.imaging_config else None
       )
-      await self.camera.setup(serial_number=serial)
-      logger.info("Camera connected: %s", self.camera.get_device_info())
+      await stack.enter_async_context(self.camera.lifespan(serial_number=serial))
+      logger.info("Camera connected: %s", await self.camera.get_device_info())
 
     if self._filters is None:
       await self._load_filters()
     if self._objectives is None:
       await self._load_objectives()
-
-  async def _on_stop(self) -> None:
-    self._clear_imaging_state()
-    try:
-      await self.camera.stop()
-    except Exception:
-      logger.exception("Error stopping camera")
 
   # ─── Properties ─────────────────────────────────────────────────────
 
@@ -138,7 +135,6 @@ class CytationMicroscope:
     self._pos_x = None
     self._pos_y = None
     self._objective = None
-    self._acquiring = False
 
   # ─── Filter / Objective Discovery ────────────────────────────────────
 
@@ -315,16 +311,19 @@ class CytationMicroscope:
     """Set camera auto-exposure mode."""
     await self.camera.set_auto_exposure(auto_exposure)
 
-  def start_acquisition(self) -> None:
+  async def start_acquisition(self) -> None:
     """Start camera acquisition (buffered streaming)."""
-    self.camera.start_acquisition()
-    self._acquiring = True
+    await self.camera.start_acquisition()
 
-  def stop_acquisition(self) -> None:
+  async def stop_acquisition(self) -> None:
     """Stop camera acquisition."""
-    if self._acquiring:
-      self.camera.stop_acquisition()
-      self._acquiring = False
+    await self.camera.stop_acquisition()
+
+  @asynccontextmanager
+  async def acquisition(self) -> AsyncIterator[None]:
+    """Delegate acquisition ownership to the camera."""
+    async with self.camera.acquisition():
+      yield
 
   async def acquire_image(self) -> Image:
     """Trigger camera and read image, with retry on failure."""
@@ -335,9 +334,10 @@ class CytationMicroscope:
       except Exception:
         if attempt < config.max_image_read_attempts - 1:
           logger.warning("Failed to get image, retrying...")
-          self.stop_acquisition()
-          self.start_acquisition()
-          await asyncio.sleep(config.image_read_delay)
+          if not self.camera.is_acquisition_scoped:
+            await self.stop_acquisition()
+            await self.start_acquisition()
+          await anyio.sleep(config.image_read_delay)
         else:
           raise
     raise TimeoutError("max_image_read_attempts reached")
@@ -534,7 +534,7 @@ class CytationMicroscope:
       await self.driver.send_command("Y", f"O01{relative_y_str}")
 
     self._pos_x, self._pos_y = x, y
-    await asyncio.sleep(0.1)
+    await anyio.sleep(0.1)
 
   async def capture(
     self,
@@ -569,8 +569,8 @@ class CytationMicroscope:
 
     await self.driver.set_plate(plate)
 
-    if not self._acquiring:
-      self.start_acquisition()
+    if not self.camera.is_acquiring:
+      await self.start_acquisition()
 
     try:
       await self.set_objective(objective)
@@ -618,20 +618,20 @@ class CytationMicroscope:
       images: List[Image] = []
       for x_pos, y_pos in positions:
         await self.set_position(x=x_pos, y=y_pos)
-        t0 = time.time()
+        t0 = anyio.current_time()
         if mode == ImagingMode.COLOR_BRIGHTFIELD:
           images.append(await self._acquire_color_brightfield_image(led_intensity=led_intensity))
         else:
           images.append(await self.acquire_image())
-        t1 = time.time()
+        t1 = anyio.current_time()
         logger.debug("[cytation] acquired image in %.2f seconds", t1 - t0)
     finally:
-      try:
-        await self.led_off()
-      except Exception:
-        logger.exception("Failed to turn off LED during cleanup")
-      if auto_stop_acquisition:
-        self.stop_acquisition()
+      with anyio.CancelScope(shield=True):
+        try:
+          await self.led_off()
+        finally:
+          if auto_stop_acquisition and not self.camera.is_acquisition_scoped:
+            await self.stop_acquisition()
 
     exposure_ms = await self.get_exposure()
     assert self._focal_height is not None

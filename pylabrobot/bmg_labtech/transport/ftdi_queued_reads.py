@@ -3,7 +3,7 @@
 While no bulk-in transfer is pending, the reader's FT232H keeps about 16 bytes of what the reader
 sends and drops the rest, flagging an overrun. libftdi has one transfer pending at a time and
 returns on each status-only packet, so a pause in a reply leaves the chip without one. These reads
-keep many libusb transfers pending, on the handle libftdi opened, from setup until stop; libftdi
+keep many libusb transfers pending, on the handle libftdi opened, for their lifespan; libftdi
 keeps the writes and control requests.
 
 Each transfer completes on one short packet, one per latency period, and the kernel fills the
@@ -11,14 +11,18 @@ pending ones in order without Python: enough are kept to cover a host stall of `
 in which Python cannot submit them again.
 """
 
-import asyncio
-import atexit
 import ctypes
 import logging
 import math
 import threading
 import time
 from typing import Any, List, Optional, Tuple
+
+import anyio
+import anyio.from_thread
+import anyio.lowlevel
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +66,8 @@ _COMPLETED, _CANCELLED = 0, 3  # enum libusb_transfer_status
 # never fills, so each transfer completes on its first packet.
 _PACKET_SIZE = 512
 _LINE_ERRORS = 0x1E  # line status bits: overrun, parity, framing, break
-_EVENT_TIMEOUT = _Timeval(0, 100_000)  # the event thread looks at its state at least this often
-_STOP_TIMEOUT = 2.0  # seconds stop waits for cancelled transfers to complete
+_EVENT_TIMEOUT = _Timeval(0, 100_000)  # the event worker looks at its state at least this often
+_STOP_TIMEOUT = 2.0  # seconds a stop waits for cancelled transfers to complete
 LATENCY_TIMER = 2  # ms the chip waits before sending a short packet; set by the driver
 # Seconds of host stall the queued reads must ride out. The longest stall measured on a reader was
 # 92 ms; the margin covers garbage collection and GIL pauses at negligible cost.
@@ -89,26 +93,32 @@ def _declare_libusb_functions(libusb: Any) -> None:
   libusb.libusb_handle_events_timeout_completed.restype = ctypes.c_int
 
 
-class QueuedReads:
-  """Bulk-in transfers kept pending from `start` until `stop`; `take` hands over what they read.
+class QueuedReads(HasLifespan):
+  """Bulk-in transfers kept pending for the lifespan; `take` hands over what they read.
 
-  A completed transfer is submitted again from its callback, after its data is copied out. One
-  thread handles libusb's events; libftdi's own calls may handle them too, and so run callbacks.
-  A callback that copied out bytes, or left no transfer pending, wakes `wait` in the event loop
-  that started the reads.
+  A completed transfer is submitted again from its callback, after its data is copied out. A
+  worker thread, owned by the lifespan's task group, handles libusb's events; libftdi's own calls
+  may handle them too, and so run callbacks. A callback that copied out bytes, or left no transfer
+  pending, wakes `wait` in the event loop that entered the lifespan. Exit cancels the transfers
+  and waits for the worker before freeing them. A `QueuedReads` is single-use.
   """
 
   error: Optional[str]  # the first failure: a transfer's status, or a submit's result
-  _loop: asyncio.AbstractEventLoop  # the loop `start` ran in, before any transfer is submitted
-  _wake: asyncio.Event  # set when bytes arrive or no transfer is pending; cleared by `wait`
-  _stopping: threading.Event  # set by `stop`
-  _stop_deadline: float  # when the event thread gives up on cancelled transfers
+  _token: Any  # the async token the lifespan entered in, before any transfer is submitted
+  _wake: anyio.Event  # set when bytes arrive or no transfer is pending; replaced by `wait`
+  _stopping: threading.Event  # set by `request_stop`
+  _stop_deadline: float  # when the event worker gives up on cancelled transfers
   _completed: int  # transfers completed and submitted again since the last margin check
+
+  def _wake_now(self) -> None:
+    """Set the current `_wake` event on the async event loop."""
+    with self._lock:
+      self._wake.set()
 
   def _set_wake(self) -> None:
     """Set `_wake` in the event loop that started the reads; nothing once that loop closed."""
     try:
-      self._loop.call_soon_threadsafe(self._wake.set)
+      anyio.from_thread.run_sync(self._wake_now, token=self._token)
     except RuntimeError:  # the loop closed
       pass
 
@@ -162,7 +172,10 @@ class QueuedReads:
       logger.warning("a host stall left %d of %d bulk-in transfers pending", lowest, self._pool)
 
   def _handle_events(self) -> None:
-    """Handle libusb's events until no transfer is pending, or `stop` has waited long enough."""
+    """Handle libusb's events until no transfer is pending, or a stop has waited long enough.
+
+    Runs in a worker thread, so its deadline is read off the thread's own monotonic clock.
+    """
     while self._pending > 0:
       if self._stopping.is_set() and time.monotonic() > self._stop_deadline:
         return
@@ -181,6 +194,7 @@ class QueuedReads:
       handle: libftdi's libusb device handle.
       transfers: how many transfers to keep pending.
     """
+    super().__init__()
     _declare_libusb_functions(libusb)
     self._libusb, self._usb_context, self._handle = libusb, usb_context, handle
     self._transfer_count = transfers
@@ -188,17 +202,16 @@ class QueuedReads:
     self._received = bytearray()
     self._line_errors = 0
     self._pending = 0
-    self._pool = 0  # transfers submitted by `start`
+    self._pool = 0  # transfers submitted on entry
     self._completed = 0
     self._margin_warned = False
     self._stopping = threading.Event()
     self._stop_deadline = 0.0
-    self._wake = asyncio.Event()
+    self._wake = anyio.Event()
     self.error = None
     self._callback = _TRANSFER_CALLBACK(self._on_complete)  # alive as long as transfers may run
     self._buffers: List[Any] = []
     self._transfers: List[Any] = []
-    self._thread = threading.Thread(target=self._handle_events, name="queued reads", daemon=True)
 
   @classmethod
   def from_device(cls, device: Any) -> "QueuedReads":
@@ -214,7 +227,7 @@ class QueuedReads:
 
   @property
   def running(self) -> bool:
-    """Whether transfers are pending and `stop` has not been called."""
+    """Whether transfers are pending and no stop has been requested."""
     return self._pending > 0 and not self._stopping.is_set()
 
   def _free_transfers(self) -> None:
@@ -236,43 +249,56 @@ class QueuedReads:
 
     Bytes that arrived since the last wait end it at once; `take` hands them over.
     """
-    # Not wait_for: before Python 3.12 it drops a cancel that comes as the event is set.
-    timer = asyncio.get_running_loop().call_later(max(timeout, 0), self._wake.set)
-    try:
-      await self._wake.wait()
-    finally:
-      timer.cancel()
-    self._wake.clear()
+    with self._lock:
+      wake = self._wake
+    with anyio.move_on_after(max(timeout, 0)):
+      await wake.wait()
+    with self._lock:
+      self._wake = anyio.Event()
+      if self._received or self._pending == 0:
+        self._wake.set()
 
-  def stop(self) -> None:
-    """Cancel the transfers, wait for them to complete, and free them.
+  def request_stop(self) -> None:
+    """Cancel the transfers; the event worker then waits for them to complete.
 
-    A transfer still pending after ``_STOP_TIMEOUT`` stays allocated (freeing it is undefined).
+    Idempotent. The lifespan's exit requests a stop before it waits for the worker.
     """
     if self._stopping.is_set():
       return
     self._stop_deadline = time.monotonic() + _STOP_TIMEOUT
     self._stopping.set()
-    atexit.unregister(self.stop)
     for pointer in self._transfers:
       self._libusb.libusb_cancel_transfer(pointer)  # a completed one answers NOT_FOUND
-    if self._thread.is_alive():
-      self._thread.join(_STOP_TIMEOUT + 1.0)
+
+  def _release_transfers(self) -> None:
+    """Free the transfers once the event worker has finished with them.
+
+    A transfer still pending after ``_STOP_TIMEOUT`` stays allocated (freeing it is undefined).
+    """
     pending = self._pending
     if pending == 0:
       self._free_transfers()
     else:
       logger.warning("%d bulk-in transfers still pending after stop; left allocated", pending)
 
-  def start(self) -> None:
-    """Allocate and submit the transfers, then start the event thread; `wait` runs in the
-    running event loop.
+  async def _handle_events_in_worker(self) -> None:
+    """Handle libusb's events in a worker thread until the transfers are done, then free them.
+
+    Shielded and non-abandoning: the transfers' buffers must outlive every callback, and a stop
+    request bounds how long the worker keeps going.
+    """
+    try:
+      with anyio.CancelScope(shield=True):
+        await anyio.to_thread.run_sync(self._handle_events, abandon_on_cancel=False)
+    finally:
+      self._release_transfers()
+
+  def _submit_transfers(self) -> None:
+    """Allocate and submit the transfers.
 
     Raises:
-      RuntimeError: if no event loop is running.
       OSError: if no transfer could be allocated and submitted.
     """
-    self._loop = asyncio.get_running_loop()
     result = 0
     for _ in range(self._transfer_count):
       pointer = self._libusb.libusb_alloc_transfer(0)
@@ -297,5 +323,16 @@ class QueuedReads:
       raise OSError(f"no bulk-in transfer submitted (libusb {result})")
     if self._pending < self._transfer_count:
       logger.warning("%d of %d bulk-in transfers pending", self._pending, self._transfer_count)
-    atexit.register(self.stop)  # before the interpreter closes the device under the transfers
-    self._thread.start()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Submit the transfers and handle their events for the lifespan; `wait` runs in this loop.
+
+    Raises:
+      OSError: if no transfer could be allocated and submitted.
+    """
+    await super()._enter_lifespan(stack)
+    self._token = anyio.lowlevel.current_token()
+    self._submit_transfers()
+    task_group = await stack.enter_task_group()
+    stack.callback(self.request_stop)
+    task_group.start_soon(self._handle_events_in_worker)

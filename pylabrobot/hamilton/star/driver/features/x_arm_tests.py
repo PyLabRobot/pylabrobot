@@ -176,6 +176,7 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_does_not_duplicate_the_arm(self):
     driver = await _both_arms()
+    await driver.stop()
     await driver.setup()
     arms = [
       child.name for child in cast(HamiltonDeck, driver.deck).children if child.category == "x_arm"
@@ -305,7 +306,6 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
 
   async def test_an_arm_at_rest_one_increment_short_is_at_the_target(self):
     """675.9 - 675.8 is a hair over 0.1 in floating point, so the check counts increments."""
-    driver = await _both_arms()
     reads = 0
 
     async def answer(module: str, command: str, fmt=None, **kwargs):
@@ -315,15 +315,17 @@ class TestModelFollowsTheArm(unittest.IsolatedAsyncioTestCase):
       reads += 1
       return f"{module}{command}rx+06758 +000067584"
 
-    arm = XArm(
-      SimpleNamespace(
-        left_side_panel_installed=False, configuration=driver.configuration, send_command=answer
-      ),  # type: ignore[arg-type]
-      side="left",
-    )
-    arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
-    with self.assertNoLogs("pylabrobot.hamilton.star.driver.features.x_arm", level="WARNING"):
-      await arm.move_to_x_position(675.9)
+    driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
+    async with driver:
+      arm = XArm(
+        SimpleNamespace(
+          left_side_panel_installed=False, configuration=driver.configuration, send_command=answer
+        ),  # type: ignore[arg-type]
+        side="left",
+      )
+      arm.resource = cast(HamiltonDeck, driver.deck).get_resource("left_x_arm")
+      with self.assertNoLogs("pylabrobot.hamilton.star.driver.features.x_arm", level="WARNING"):
+        await arm.move_to_x_position(675.9)
     self.assertEqual(reads, 2)
 
   async def test_an_arm_that_never_arrives_gives_up_and_keeps_what_it_read(self):

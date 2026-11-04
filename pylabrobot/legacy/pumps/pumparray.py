@@ -1,10 +1,14 @@
-import asyncio
+import functools
 from typing import List, Optional, Union
+
+import anyio
 
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.pumps.backend import PumpArrayBackend
 from pylabrobot.legacy.pumps.calibration import PumpCalibration
 from pylabrobot.legacy.pumps.errors import NotCalibratedError
+
+_PUMP_STOP_TIMEOUT = 30.0  # Allow the backend's finite command and transport wait to complete.
 
 
 class PumpArray(Machine):
@@ -72,18 +76,12 @@ class PumpArray(Machine):
       num_revolutions = [num_revolutions] * len(use_channels)
     await self.backend.run_revolutions(num_revolutions=num_revolutions, use_channels=use_channels)
 
-  async def run_continuously(
+  def _prepare_continuous(
     self,
     speed: Union[float, int, List[float], List[int]],
     use_channels: Union[int, List[int]],
-  ):
-    """Run the specified channels at the specified speeds.
-
-    Args:
-      speed: speed in rpm/pump-specific units.
-      use_channels: pump array channels to run.
-    """
-
+  ) -> tuple[List[float], List[int]]:
+    """Validate and normalize a continuous command before it may be dispatched."""
     if isinstance(use_channels, list) and len(set(use_channels)) != len(use_channels):
       raise ValueError("Channels in use channels must be unique.")
     if isinstance(use_channels, int):
@@ -105,8 +103,23 @@ class PumpArray(Machine):
     if any(channel < 0 for channel in use_channels):
       raise ValueError("Channels in use channels must be positive.")
 
+    return speed, use_channels  # type: ignore[return-value]
+
+  async def run_continuously(
+    self,
+    speed: Union[float, int, List[float], List[int]],
+    use_channels: Union[int, List[int]],
+  ):
+    """Run the specified channels at the specified speeds.
+
+    Args:
+      speed: speed in rpm/pump-specific units.
+      use_channels: pump array channels to run.
+    """
+    speed, use_channels = self._prepare_continuous(speed, use_channels)
+
     await self.backend.run_continuously(
-      speed=speed,  # type: ignore[arg-type]
+      speed=speed,
       use_channels=use_channels,
     )
 
@@ -126,9 +139,17 @@ class PumpArray(Machine):
 
     if duration < 0:
       raise ValueError("Duration must be positive.")
-    await self.run_continuously(speed=speed, use_channels=use_channels)
-    await asyncio.sleep(duration)
-    await self.run_continuously(speed=0, use_channels=use_channels)
+    self._prepare_continuous(speed, use_channels)
+    await anyio.lowlevel.checkpoint()
+    try:
+      await self.run_continuously(speed=speed, use_channels=use_channels)
+      await anyio.sleep(duration)
+    finally:
+      with anyio.CancelScope(shield=True):
+        # Backends may stop the selected channels sequentially; budget for every channel.
+        channel_count = 1 if isinstance(use_channels, int) else len(use_channels)
+        with anyio.fail_after(_PUMP_STOP_TIMEOUT * channel_count):
+          await self.run_continuously(speed=0, use_channels=use_channels)
 
   async def pump_volume(
     self,
@@ -168,30 +189,32 @@ class PumpArray(Machine):
         channel_volume / self.calibration[channel]
         for channel, channel_volume in zip(use_channels, volume)
       ]
-      tasks = [
-        asyncio.create_task(
-          self.run_for_duration(
-            speed=channel_speed,
-            use_channels=channel,
-            duration=duration,
+      async with anyio.create_task_group() as task_group:
+        for channel_speed, channel, duration in zip(speed, use_channels, durations):
+          task_group.start_soon(
+            functools.partial(
+              self.run_for_duration,
+              speed=channel_speed,
+              use_channels=channel,
+              duration=duration,
+            )
           )
-        )
-        for channel_speed, channel, duration in zip(speed, use_channels, durations)
-      ]
     elif self.calibration.calibration_mode == "revolutions":
       num_rotations = [
         channel_volume / self.calibration[channel]
         for channel, channel_volume in zip(use_channels, volume)
       ]
-      tasks = [
-        asyncio.create_task(
-          self.run_revolutions(num_revolutions=num_rotation, use_channels=channel)
-        )
-        for num_rotation, channel in zip(num_rotations, use_channels)
-      ]
+      async with anyio.create_task_group() as task_group:
+        for num_rotation, channel in zip(num_rotations, use_channels):
+          task_group.start_soon(
+            functools.partial(
+              self.run_revolutions,
+              num_revolutions=num_rotation,
+              use_channels=channel,
+            )
+          )
     else:
       raise ValueError("Calibration mode must be 'duration' or 'revolutions'.")
-    await asyncio.gather(*tasks)
 
   async def halt(self):
     """Halt the entire pump array."""

@@ -7,9 +7,7 @@ Filter detection scans every filter position; a z-profile reads one well over it
 and with a target the reader fits the gain at its peak.
 """
 
-import asyncio
 import logging
-import time
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import (
@@ -24,6 +22,8 @@ from typing import (
   Union,
   overload,
 )
+
+import anyio
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
@@ -1026,18 +1026,18 @@ class Fluorescence(Measurement):
     parameters = self._compute_filter_scan_parameters(slide, slot)
     driver = self._driver
     await driver.send_command(driver.CommandFamily.FILTER_SCAN, parameters=parameters)
-    start = time.monotonic()
+    start = anyio.current_time()
     try:
-      await asyncio.sleep(driver.default_poll_interval)
+      await anyio.sleep(driver.default_poll_interval)
       while True:
         status = await driver.send_command(driver.CommandFamily.STATUS, retries=5)
         if len(status) > 2 and status[2] & self._DATA_READY:
           break
         if not driver._parse_status(status).busy:
           raise RuntimeError(f"the {slide} filter scan ended without reporting its data ready")
-        if time.monotonic() - start >= timeout:
+        if anyio.current_time() - start >= timeout:
           raise TimeoutError(f"the {slide} filter scan took longer than {timeout} s")
-        await asyncio.sleep(driver.default_poll_interval)
+        await anyio.sleep(driver.default_poll_interval)
       await driver.send_command(
         driver.CommandFamily.REQUEST,
         driver.Command.SPECTRAL_DATA,
@@ -1051,12 +1051,13 @@ class Fluorescence(Measurement):
         when_idle=False,
       )
       await driver._wait_until_ready(
-        timeout=max(timeout - (time.monotonic() - start), 0),
+        timeout=max(timeout - (anyio.current_time() - start), 0),
         poll_interval=driver.default_poll_interval,
       )
       return reply
     except BaseException:
-      await self._drain_and_stop(f"{slide} filter scan")
+      with anyio.CancelScope(shield=True):
+        await self._drain_and_stop(f"{slide} filter scan")
       raise
 
   async def detect_all_filters(
@@ -1285,10 +1286,10 @@ class Fluorescence(Measurement):
     await driver.send_command(
       driver.CommandFamily.FOCUS_WELL, parameters=parameters, when_idle=False
     )
-    start = time.monotonic()
+    start = anyio.current_time()
     stage: Optional[int] = None
     try:
-      await asyncio.sleep(driver.default_poll_interval)
+      await anyio.sleep(driver.default_poll_interval)
       while True:
         status = await driver.send_command(driver.CommandFamily.STATUS, retries=5)
         if not driver._parse_status(status).busy:
@@ -1296,9 +1297,9 @@ class Fluorescence(Measurement):
         if len(status) > 10 and status[7] != stage:
           stage = status[7]
           logger.debug("z-scan: stage %d, gain %d", stage, int.from_bytes(status[9:11], "big"))
-        if time.monotonic() - start >= timeout:
+        if anyio.current_time() - start >= timeout:
           raise TimeoutError(f"the z-scan took longer than {timeout} s")
-        await asyncio.sleep(driver.default_poll_interval)
+        await anyio.sleep(driver.default_poll_interval)
       if not (len(status) > 2 and status[2] & self._Z_PROFILE_RESULT_READY):
         raise RuntimeError("the z-scan ended without reporting its result ready")
       return await driver.send_command(
@@ -1308,7 +1309,8 @@ class Fluorescence(Measurement):
         when_idle=False,
       )
     except BaseException:
-      await self._drain_and_stop("z-scan")
+      with anyio.CancelScope(shield=True):
+        await self._drain_and_stop("z-scan")
       raise
 
   async def measure_z_profile(
@@ -1542,7 +1544,7 @@ class Fluorescence(Measurement):
     await driver.send_command(
       driver.CommandFamily.PLATE_MAP_SCAN, parameters=parameters, when_idle=False
     )
-    start = time.monotonic()
+    start = anyio.current_time()
     grids: List[bytes] = []
     try:
       layout = await driver.send_command(
@@ -1553,20 +1555,21 @@ class Fluorescence(Measurement):
       )
       side, spacing = self._decode_grid_layout(layout)
       while True:
-        await asyncio.sleep(driver.default_poll_interval)
+        await anyio.sleep(driver.default_poll_interval)
         status = await driver.send_command(driver.CommandFamily.STATUS, retries=5)
         if len(status) > 2 and status[2] & self._DATA_READY:
           grids.append(await self._request_page(retries=1))
           continue
         if not driver._parse_status(status).busy:
           break
-        if time.monotonic() - start >= timeout:
+        if anyio.current_time() - start >= timeout:
           raise TimeoutError(f"the scan took longer than {timeout} s")
       centers = await driver.send_command(
         driver.CommandFamily.REQUEST, driver.Command.PLATE_MAP_XY, parameters=bytes(5)
       )
     except BaseException:
-      await self._drain_and_stop("scan")
+      with anyio.CancelScope(shield=True):
+        await self._drain_and_stop("scan")
       raise
     return side, spacing, grids, centers
 

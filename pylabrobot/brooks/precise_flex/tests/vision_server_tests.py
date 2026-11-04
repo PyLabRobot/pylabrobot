@@ -1,11 +1,16 @@
-import asyncio
 import struct
 import unittest
+from typing import Any, List, Optional, Tuple
 from unittest.mock import AsyncMock, MagicMock
+
+import anyio
+import pytest
 
 from pylabrobot.brooks.precise_flex import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.driver.master import _drain_named_result
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.events import EventBus, use_event_bus
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 def _arm() -> PreciseFlexDriver:
@@ -42,10 +47,11 @@ class TestVisionServerFraming(unittest.TestCase):
         _drain_named_result(bytearray(buf))
 
 
-class TestDriverVisionServer(unittest.IsolatedAsyncioTestCase):
+class TestDriverVisionServer(AnyioTestBase):
   """The driver's two vision server connections: commands on :1450, results off :1500."""
 
-  def setUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     self.prop = MagicMock()
     self.prop.write = AsyncMock()
     self.prop.readline = AsyncMock(return_value=b"0\r\n")
@@ -54,79 +60,87 @@ class TestDriverVisionServer(unittest.IsolatedAsyncioTestCase):
     self.driver._vision_server_io = self.prop  # type: ignore[assignment]
     self.driver._vision_image_io = self.img  # type: ignore[assignment]
 
-  async def test_send_command_writes_line_and_parses_value(self):
+  async def test_send_command_writes_line_and_parses_value(self) -> None:
     """To the vision server, `send_command` ends the line CRLF and returns the success value."""
     self.prop.readline = AsyncMock(return_value=b"0 5.3.3.0\r\n")
-    self.assertEqual(
-      await self.driver.send_command("property get system.engineversion", use_server="vision"),
-      "5.3.3.0",
+    assert (
+      await self.driver.send_command("property get system.engineversion", use_server="vision")
+      == "5.3.3.0"
     )
     self.prop.write.assert_awaited_once_with(b"property get system.engineversion\r\n")
 
-  async def test_a_vision_server_command_emits_the_firmware_command_events(self):
+  async def test_a_vision_server_command_emits_the_firmware_command_events(self) -> None:
     self.driver._vision_host = "192.168.0.200"
     events: list = []
     event_bus = EventBus()
     event_bus.subscribe(events.append)
     with use_event_bus(event_bus):
       await self.driver.send_command("property get system.engineversion", use_server="vision")
-    self.assertEqual(
-      [event.name for event in events],
-      ["precise_flex.firmware_command.started", "precise_flex.firmware_command.completed"],
-    )
-    self.assertEqual(events[0].data["device"]["host"], "192.168.0.200")
-    self.assertEqual(events[0].data["device"]["port"], 1450)
+    assert [event.name for event in events] == [
+      "precise_flex.firmware_command.started",
+      "precise_flex.firmware_command.completed",
+    ]
+    assert events[0].data["device"]["host"] == "192.168.0.200"
+    assert events[0].data["device"]["port"] == 1450
 
-  async def test_concurrent_commands_do_not_interleave(self):
+  async def test_concurrent_commands_do_not_interleave(self) -> None:
     """Two concurrent commands each keep their write paired with their own reply."""
     events: list = []
 
     async def write(data: bytes) -> None:
       events.append("w")
-      await asyncio.sleep(0)
+      await anyio.sleep(0)
 
     async def readline() -> bytes:
       events.append("r")
-      await asyncio.sleep(0)
+      await anyio.sleep(0)
       return b"0\r\n"
 
     self.prop.write, self.prop.readline = write, readline
-    await asyncio.gather(
-      self.driver.send_command("A", use_server="vision"),
-      self.driver.send_command("B", use_server="vision"),
-    )
-    self.assertEqual(events, ["w", "r", "w", "r"])
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(lambda: self.driver.send_command("A", use_server="vision"))
+      tg.start_soon(lambda: self.driver.send_command("B", use_server="vision"))
+    assert events == ["w", "r", "w", "r"]
 
-  async def test_concurrent_result_reads_take_results_in_call_order(self):
+  async def test_concurrent_result_reads_take_results_in_call_order(self) -> None:
     """Two concurrent readers each take a whole result, the first caller the first result."""
     first, second = _framed(1), _framed(2)
     chunks = iter([first[:10], first[10:], second[:10], second[10:]])
+    first_read_started = anyio.Event()
 
     async def read(n: int, timeout: float) -> bytes:
-      await asyncio.sleep(0)
+      first_read_started.set()
+      await anyio.sleep(0)
       return next(chunks)
 
     self.img.read = read
-    a, b = await asyncio.gather(
-      self.driver.read_next_vision_server_result(), self.driver.read_next_vision_server_result()
-    )
-    assert a is not None and b is not None
-    self.assertEqual((a[0], b[0]), ("Primary Image [1]", "Primary Image [2]"))
+    results: List[Optional[Tuple[str, bytes]]] = [None, None]
 
-  async def test_one_read_can_carry_several_results(self):
+    async def read_into(slot: int) -> None:
+      results[slot] = await self.driver.read_next_vision_server_result()
+
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(read_into, 0)
+      await first_read_started.wait()
+      tg.start_soon(read_into, 1)
+    a, b = results
+    assert a is not None and b is not None
+    assert (a[0], b[0]) == ("Primary Image [1]", "Primary Image [2]")
+
+  async def test_one_read_can_carry_several_results(self) -> None:
     two = _framed(2, b"\xff\xd8\xff\xe0a\xff\xd9") + _framed(1, b"\xff\xd8\xff\xe0b\xff\xd9")
     self.img.read = AsyncMock(side_effect=[two, b""])
     first = await self.driver.read_next_vision_server_result()
     second = await self.driver.read_next_vision_server_result()
     assert first is not None and second is not None
-    self.assertEqual((first[0], second[0]), ("Primary Image [2]", "Primary Image [1]"))
+    assert (first[0], second[0]) == ("Primary Image [2]", "Primary Image [1]")
     self.img.read.assert_awaited_once()
 
-  async def test_a_result_cut_by_a_timeout_is_finished_by_the_next_read(self):
+  async def test_a_result_cut_by_a_timeout_is_finished_by_the_next_read(self) -> None:
     whole = _framed(1, b"\xff\xd8\xff\xe0data\xff\xd9")
     self.img.read = AsyncMock(side_effect=[whole[:20], TimeoutError, whole[20:]])
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await self.driver.read_next_vision_server_result()
     recovered = await self.driver.read_next_vision_server_result()
     assert recovered is not None
-    self.assertEqual(recovered[0], "Primary Image [1]")
+    assert recovered[0] == "Primary Image [1]"

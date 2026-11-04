@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional, Tuple
 
+import anyio
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -176,14 +178,15 @@ class XArm:
     Its own failure is logged and swallowed: it must not replace the move's exception, which is the
     one that says what went wrong.
     """
-    try:
-      pipettes = self._driver.pipettes
-      if pipettes is not None:
-        await pipettes.request_locations()  # the arm's X and each channel's Y and Z, in one read
-      else:
-        await self.request_position()
-    except Exception:
-      logger.warning("could not read where the X-arm stopped; its model is stale")
+    with anyio.CancelScope(shield=True):
+      try:
+        pipettes = self._driver.pipettes
+        if pipettes is not None:
+          await pipettes.request_locations()  # the arm's X and each channel's Y and Z, in one read
+        else:
+          await self.request_position()
+      except Exception:
+        logger.warning("could not read where the X-arm stopped; its model is stale")
 
   async def request_commanded_position(self) -> float:
     """Request the X axis position in its own frame.
@@ -251,16 +254,17 @@ class XArm:
         await self._unchecked_fw_set_acceleration(acceleration)
       yield
     finally:
-      if speed_before is not None:
-        try:
-          await self._unchecked_fw_set_speed(speed_before)
-        except Exception:
-          logger.warning("could not restore the X axis speed to %s", speed_before)
-      if acceleration_before is not None:
-        try:
-          await self._unchecked_fw_set_acceleration(acceleration_before)
-        except Exception:
-          logger.warning("could not restore the X axis acceleration to %s", acceleration_before)
+      with anyio.CancelScope(shield=True):
+        if speed_before is not None:
+          try:
+            await self._unchecked_fw_set_speed(speed_before)
+          except Exception:
+            logger.warning("could not restore the X axis speed to %s", speed_before)
+        if acceleration_before is not None:
+          try:
+            await self._unchecked_fw_set_acceleration(acceleration_before)
+          except Exception:
+            logger.warning("could not restore the X axis acceleration to %s", acceleration_before)
 
   # -- x motion --------------------------------------------------------------
 

@@ -1,6 +1,5 @@
 """JSON HTTP over a USB serial bridge, using the standard HTTP response parser."""
 
-import asyncio
 import http.client
 import io
 import json
@@ -11,6 +10,10 @@ import time
 from typing import Any, Dict, Mapping, Optional, Tuple, cast
 from urllib.parse import quote, urlsplit
 
+import anyio
+import anyio.to_thread
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.http import HTTP, HTTPResponse
 
 try:
@@ -126,37 +129,26 @@ class HTTPSerial(HTTP):
         write_timeout=self.timeout,
       )
 
-  def _close(self) -> None:
+  def _close_serial(self) -> None:
     """Release the port in the same worker that handles requests."""
     if self._serial is not None:
       self._serial.close()
       self._serial = None
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Open the USB serial bridge without issuing robot commands."""
-    await super().setup()
-    async with self._require_lock():
-      future = asyncio.get_running_loop().run_in_executor(self._executor, self._open)
-      try:
-        await asyncio.shield(future)
-      except BaseException:
-        # Opening cannot be interrupted midway; finish then release its handle.
-        try:
-          await future
-        finally:
-          await asyncio.get_running_loop().run_in_executor(self._executor, self._close)
-          await super().stop()
-        raise
+    await super()._enter_lifespan(stack)
+    async with self._request_lock:
+      with anyio.CancelScope(shield=True):
+        await anyio.to_thread.run_sync(self._open, limiter=self._limiter)
+        stack.push_shielded_async_callback(self._close_serial_port)
+    await anyio.lowlevel.checkpoint()
     logger.info("Opened HTTP-over-serial connection on %s", self.port)
 
-  async def stop(self) -> None:
+  async def _close_serial_port(self) -> None:
     """Drain queued work and close the USB port."""
-    if self._executor is None:
-      return
-    async with self._require_lock():
-      if self._executor is not None:
-        await asyncio.get_running_loop().run_in_executor(self._executor, self._close)
-        await super().stop()
+    async with self._request_lock:
+      await anyio.to_thread.run_sync(self._close_serial, limiter=self._limiter)
 
   def _exchange(
     self, method: str, path: str, body: Optional[bytes], headers: Mapping[str, str]
@@ -183,7 +175,7 @@ class HTTPSerial(HTTP):
           headers={key.lower(): value for key, value in response.getheaders()},
         )
     except BaseException:
-      self._close()
+      self._close_serial()
       raise
     finally:
       connection.close()

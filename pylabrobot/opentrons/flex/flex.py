@@ -4,6 +4,9 @@ import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Type, cast
 from urllib.parse import quote
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.http import HTTP
 from pylabrobot.io.http_serial import HTTPSerial
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
@@ -24,8 +27,8 @@ from pylabrobot.opentrons.labware import (
   build_tip_rack_definition,
   official_tip_rack_identity,
 )
-from pylabrobot.opentrons.operations import OperationLock, serialized
-from pylabrobot.opentrons.run import COMMAND_POLL_HEADROOM, OpentronsRun
+from pylabrobot.opentrons.operations import serialized
+from pylabrobot.opentrons.run import COMMAND_POLL_HEADROOM, OpentronsRun, RobotOperationLock
 from pylabrobot.opentrons.types import (
   InstrumentInfo,
   LabwareIdentity,
@@ -107,7 +110,7 @@ def _axis_motion_params(
   return params
 
 
-class Flex:
+class Flex(HasLifespan):
   """Opentrons Flex liquid handler, over the robot-server HTTP API.
 
   A device shell composed on the shared ``pylabrobot.io.HTTP`` transport
@@ -117,11 +120,12 @@ class Flex:
   Liquid-handling ops live on the heads, not here — see
   :mod:`pylabrobot.opentrons.flex.flex_head`.
 
-  ``connect()`` opens the transport for health/discovery queries; ``setup()``
-  also creates a run, homes, and composes the heads. Use ``host="robot.local"``
-  for Ethernet/Wi-Fi, or ``serial_port="/dev/cu.usbmodem1201"`` (``"COM3"``
-  on Windows) for the USB-B bridge. USB requires ``pylabrobot[serial]`` and
-  exclusive access to the port; close the Opentrons App first.
+  The lifespan owns its default HTTP or HTTPSerial transport and run.
+  ``query_only=True`` scopes health and discovery without creating a run or
+  moving the robot. Use ``host="robot.local"`` for Ethernet/Wi-Fi, or
+  ``serial_port="/dev/cu.usbmodem1201"`` (``"COM3"`` on Windows) for the USB-B
+  bridge. USB requires ``pylabrobot[serial]`` and exclusive access to the port;
+  close the Opentrons App first.
   """
 
   def __init__(
@@ -135,6 +139,7 @@ class Flex:
     *,
     serial_port: Optional[str] = None,
   ) -> None:
+    super().__init__()
     if (host is None) == (serial_port is None):
       raise ValueError("Specify exactly one of host or serial_port")
     if serial_port is not None and not serial_port:
@@ -158,6 +163,7 @@ class Flex:
     self.command_poll_interval = command_poll_interval
     # Built here rather than on connect: a pylabrobot io refuses construction
     # once a capture is armed, so a robot built first can still be recorded.
+    self._owns_io = io is None
     self.serial_port = serial_port
     self.io: HTTP
     if io is not None:
@@ -177,7 +183,7 @@ class Flex:
         timeout=command_timeout,
       )
     self._api = OpentronsAPI(self.io)
-    self._operation_lock = OperationLock()
+    self._operation_lock = RobotOperationLock()
     self._connected = False
     self._run: Optional[OpentronsRun] = None
     self.run_id: Optional[str] = None
@@ -194,6 +200,7 @@ class Flex:
     self.head96: Optional[_FlexHead] = None
     self.gripper: Optional[FlexGripper] = None
     self._heads: List[_FlexHead] = []
+    self._ready = False
 
   @property
   def traversal_height(self) -> float:
@@ -257,40 +264,45 @@ class Flex:
 
   # --- Lifecycle ---
 
-  @serialized
-  async def setup(self, skip_home: bool = False) -> None:
-    """Bring the robot fully up, PyLabRobot's usual one-call lifecycle entry.
-
-    Composed of the steps below so a caller who needs only some of them (talk to
-    the robot without moving it, hand it back without homing it) can take them
-    one at a time. If a run already exists, warn and keep the current session
-    without reconnecting, homing, or replacing its instruments.
-    """
-    if self._run is not None:
-      warnings.warn("The Flex is already set up; keeping the current session", stacklevel=2)
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_home: bool = False,
+    query_only: bool = False,
+  ) -> None:
+    """Enter the owned link and register run cleanup before discovery or homing."""
+    await super()._enter_lifespan(stack)
+    if self._owns_io:
+      await stack.enter_async_context(self.io.lifespan())
+    self._connected = True
+    stack.callback(self._clear_connection)
+    await self.connect()
+    if query_only:
       return
-    try:
-      await self.connect()
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
       await self.create_run()
-      if not skip_home:
-        await self.home()
-      await self.initialize()
-    except BaseException:
-      await self.disconnect()
-      raise
+      stack.push_shielded_async_callback(self.cancel_run, shield_timeout=self.command_timeout + 5)
+      stack.push_shielded_async_callback(self._park, shield_timeout=self.command_timeout + 5)
+    if not skip_home:
+      await self.home()
+    await self.initialize()
+
+  def _clear_connection(self) -> None:
+    """Invalidate connection-local discovery after the run has stopped."""
+    self._connected = False
+    self.api_version = None
+    self.robot_model = None
+    self._ready = False
 
   @serialized
   async def connect(self) -> None:
-    """Open the link and load the robot's trash location. Starts no run, moves nothing."""
-    if self._connected:
-      return
-    await self.io.setup()
-    try:
-      health = await self._api.get_health()
-      await self._load_trash_configuration()
-    except BaseException:
-      await self.io.stop()
-      raise
+    """Confirm an active connection answers and load the robot's trash location. Moves nothing."""
+    if not self._connected:
+      raise RuntimeError("The Flex is not connected; enter its lifespan first")
+    health = await self._api.get_health()
+    await self._load_trash_configuration()
     self.api_version = health.software_version
     self.robot_model = health.model
     self._connected = True
@@ -318,7 +330,9 @@ class Flex:
     if not self._connected:
       raise RuntimeError("The Flex is not connected")
     await self.cancel_run()
-    receipt = await self._api.create_run()
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      receipt = await self._api.create_run()
     self.run_id = receipt.id
     self._run = OpentronsRun(
       self._api,
@@ -382,6 +396,7 @@ class Flex:
     if gripper_model is not None:
       self.gripper = FlexGripper(self, gripper_model)
       logger.info("Discovered gripper on the extension mount (model: %s)", gripper_model)
+    self._ready = True
 
   @serialized
   async def cancel_run(self) -> None:
@@ -398,14 +413,12 @@ class Flex:
     self.left = self.right = self.head96 = None
     self.gripper = None
     self._heads.clear()
+    self._ready = False
 
   @serialized
   async def disconnect(self) -> None:
-    """Drop the link, moving nothing. Cancels an open run first."""
+    """Release the active run; the lifespan retains the link until exit."""
     await self.cancel_run()
-    if self._connected:
-      await self.io.stop()
-      self._connected = False
 
   def _require_run(self) -> OpentronsRun:
     """Return the active run or reject commands outside a control session."""
@@ -419,12 +432,10 @@ class Flex:
     return await self._execute_command("home", {})
 
   @serialized
-  async def stop(self) -> None:
-    """Discard mounted tips, park the gantry, and release the robot.
-
-    Check hardware tip presence when no tips are recorded locally, including
-    tips left mounted by an earlier session. Discard requires a configured trash.
-    """
+  async def _park(self) -> None:
+    """Drop tracked or hardware-mounted tips and park before the independent run release."""
+    if self._run is None or not self._ready:
+      return
     # Drop any mounted tips to the trash BEFORE parking/disconnecting, so the
     # robot is never left holding tips. A failure here must not block the
     # home/cancel/disconnect that follows.
@@ -452,8 +463,6 @@ class Flex:
       await self.home()
     except Exception:
       logger.warning("home() before stop failed; continuing to release", exc_info=True)
-    await self.cancel_run()
-    await self.disconnect()
 
   # --- Command execution + discovery (over api/run) ---
 

@@ -26,7 +26,7 @@ def area(outline: Outline) -> float:
   return sum(x_1 * y_2 - x_2 * y_1 for (x_1, y_1), (x_2, y_2) in zip(outline, following)) / 2
 
 
-class TestOutlines(unittest.IsolatedAsyncioTestCase):
+class TestOutlines(unittest.TestCase):
   """A part seen from above: within its cuboid, and convex, as the clearance needs it."""
 
   def test_an_outline_lies_about_its_parts_cuboid(self):

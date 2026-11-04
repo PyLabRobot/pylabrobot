@@ -18,12 +18,14 @@ The line is roughly how much of a command has to be restated to share it. One or
 initialization command needs, is a constant. Thirty is a different command.
 """
 
-import asyncio
 import datetime
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
+import anyio
+
+from pylabrobot.concurrency import SiblingTaskErrors, non_cancelling_task_group
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
@@ -1085,9 +1087,10 @@ class Head:
         read_timeout=read_timeout,
       )
     finally:
-      await self._record_where_it_stopped("y")
-      await self._restore_drive_parameter("yv", speed, was_speed)
-      await self._restore_drive_parameter("yr", acceleration, was_acceleration)
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("y")
+        await self._restore_drive_parameter("yv", speed, was_speed)
+        await self._restore_drive_parameter("yr", acceleration, was_acceleration)
 
   # -- x and y together ----------------------------------------------------------------------------
 
@@ -1172,14 +1175,20 @@ class Head:
           )
     if self.arm is not None and self.arm.pipettes is not None:
       await self.arm.pipettes.move_to_safe_z()
-    await asyncio.gather(
-      self.move_to_x_position(
-        x, acceleration_level=x_acceleration_level, current_limit=x_current_limit
-      ),
-      self.move_to_y_position(
-        y, speed=y_speed, acceleration=y_acceleration, current_limit=y_current_limit
-      ),
-    )
+    try:
+      async with non_cancelling_task_group() as group:
+        group.start_soon(
+          lambda: self.move_to_x_position(
+            x, acceleration_level=x_acceleration_level, current_limit=x_current_limit
+          )
+        )
+        group.start_soon(
+          lambda: self.move_to_y_position(
+            y, speed=y_speed, acceleration=y_acceleration, current_limit=y_current_limit
+          )
+        )
+    except SiblingTaskErrors as error:
+      raise error.exceptions[0]
 
   # -- z position ----------------------------------------------------------------------------------
 
@@ -1251,9 +1260,10 @@ class Head:
         read_timeout=read_timeout,
       )
     finally:
-      await self._record_where_it_stopped("z")
-      await self._restore_drive_parameter("zv", speed, was_speed)
-      await self._restore_drive_parameter("zr", acceleration, was_acceleration)
+      with anyio.CancelScope(shield=True):
+        await self._record_where_it_stopped("z")
+        await self._restore_drive_parameter("zv", speed, was_speed)
+        await self._restore_drive_parameter("zr", acceleration, was_acceleration)
 
   async def move_tool_bottom_to_z_position(
     self,

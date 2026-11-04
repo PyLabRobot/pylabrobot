@@ -1,10 +1,13 @@
-import asyncio
 import inspect
 import json
 import unittest
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock
 
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.high_res.sample_storage import AmbiStore, SteriStore, TundraStore
 from pylabrobot.high_res.sample_storage.driver import HighResSampleStorage
@@ -17,7 +20,8 @@ from pylabrobot.high_res.sample_storage.driver.errors import (
 )
 from pylabrobot.high_res.sample_storage.driver.models import get_model_info
 from pylabrobot.high_res.sample_storage.driver.settings import HighResSampleStorageSettings
-from pylabrobot.resources import Coordinate, Lid, Plate, PlateCarrier, PlateHolder, Well
+from pylabrobot.resources import Coordinate, Lid, Plate, PlateCarrier, PlateHolder, Resource, Well
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # Real responses captured from a SteriStore (firmware 3.0.0.119, serial
 # HRB-2209-35148) over the port-1000 remote-control server.
@@ -79,21 +83,40 @@ CAPTURES: Dict[str, List[str]] = {
 }
 
 
-class FakeSocket:
+class FakeSocket(HasLifespan):
   """Replays scripted line responses keyed by the command written to it."""
 
   def __init__(self, captures: Dict[str, List[str]]):
+    super().__init__()
     self.captures = {command: list(lines) for command, lines in captures.items()}
     self.written: List[str] = []
     self._queue: List[str] = []
     self.setup_calls = 0
     self.stop_calls = 0
+    self.reconnect_calls = 0
+    self.reconnect_error: Optional[Exception] = None
+    self.timeout_command: Optional[str] = None
+    self.block_after_ack_command: Optional[str] = None
+    self.blocked_after_ack = anyio.Event()
 
-  async def setup(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("FakeSocket does not accept lifespan options")
     self.setup_calls += 1
+    stack.push_shielded_async_callback(self._close)
 
-  async def stop(self):
+  async def _close(self) -> None:
+    await anyio.lowlevel.checkpoint()
     self.stop_calls += 1
+
+  async def reconnect(self) -> None:
+    """Replace the connection while retaining its owner lifespan."""
+    if not self.is_active:
+      raise RuntimeError("reconnect requires an active lifespan")
+    self.reconnect_calls += 1
+    self._queue.clear()
+    if self.reconnect_error is not None:
+      raise self.reconnect_error
 
   async def write(self, data: bytes, timeout=None):
     command = data.decode("ascii").rstrip("\r\n")
@@ -101,31 +124,85 @@ class FakeSocket:
     self._queue = list(self.captures[command])
 
   async def readuntil(self, separator: bytes = b"\n", timeout=None) -> bytes:
+    if self.written[-1] == self.timeout_command and len(self._queue) == 1:
+      raise TimeoutError("simulated response timeout")
+    if self.written[-1] == self.block_after_ack_command and len(self._queue) == 1:
+      self.blocked_after_ack.set()
+      await anyio.sleep_forever()
     return self._queue.pop(0).encode("ascii") + b"\r\n"
 
 
-class TimeoutAfterAckSocket(FakeSocket):
-  """Return one acknowledgement and then simulate a stalled device response."""
+class AnyioTestCase(AnyioTestBase):
+  """AnyIO test base retaining unittest's explicit assertion helpers."""
 
-  def __init__(self, captures: Dict[str, List[str]], timeout_command: str):
-    super().__init__(captures)
-    self.timeout_command = timeout_command
+  def assertAlmostEqual(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertAlmostEqual(*args, **kwargs)
 
-  async def readuntil(self, separator: bytes = b"\n", timeout=None) -> bytes:
-    if self.written[-1] == self.timeout_command and len(self._queue) == 1:
-      raise TimeoutError("simulated response timeout")
-    return await super().readuntil(separator=separator, timeout=timeout)
+  def assertEqual(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertEqual(*args, **kwargs)
+
+  def assertFalse(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertFalse(*args, **kwargs)
+
+  def assertIn(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIn(*args, **kwargs)
+
+  def assertIs(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIs(*args, **kwargs)
+
+  def assertIsInstance(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIsInstance(*args, **kwargs)
+
+  def assertIsNone(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIsNone(*args, **kwargs)
+
+  def assertIsNotNone(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIsNotNone(*args, **kwargs)
+
+  def assertLogs(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertLogs(*args, **kwargs)
+
+  def assertNotIn(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertNotIn(*args, **kwargs)
+
+  def assertRaises(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertRaises(*args, **kwargs)
+
+  def assertRaisesRegex(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertRaisesRegex(*args, **kwargs)
+
+  def assertTrue(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertTrue(*args, **kwargs)
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    self._assertions = unittest.TestCase()
 
 
-class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
+class TestHighResSampleStorage(AnyioTestCase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     self.driver = SteriStore(host="10.253.253.253", name="sample_store", racks={})
     self.socket = FakeSocket(CAPTURES)
     self.driver.io = self.socket  # type: ignore[assignment]
     self.retrieval = self.driver
 
+  async def test_ack_and_completion_share_one_reply_deadline(self) -> None:
+    """A slow ACK leaves less time for the completion frame."""
+    self.socket.captures["status"] = ["ACK! status 6", "OK! status 6"]
+    original_readuntil = self.socket.readuntil
+
+    async def delayed_readuntil(separator: bytes = b"\n", timeout=None) -> bytes:
+      await anyio.sleep(0.015)
+      return await original_readuntil(separator, timeout)
+
+    self.socket.readuntil = delayed_readuntil  # type: ignore[method-assign]
+    with pytest.raises(TimeoutError):
+      await self.driver._send_command("status", timeout=0.02)
+    assert self.driver._transport_invalidated
+
   async def test_setup_loads_device_nests_without_locations(self):
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
 
     self.assertEqual(self.socket.written, ["version", "environmentstatus", "neststatus"])
     self.assertEqual(
@@ -142,7 +219,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     socket = FakeSocket(CAPTURES)
     driver.io = socket  # type: ignore[assignment]
 
-    await driver.setup()
+    async with driver.lifespan():
+      pass
 
     self.assertEqual(
       socket.written,
@@ -168,9 +246,11 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     socket = FakeSocket(CAPTURES)
     driver.io = socket  # type: ignore[assignment]
 
-    await driver.setup()
+    async with driver.lifespan():
+      pass
     original_racks = list(driver.racks)
-    await driver.setup()
+    async with driver.lifespan():
+      pass
 
     self.assertEqual(driver.racks, original_racks)
     self.assertTrue(
@@ -179,10 +259,12 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(socket.written.count("getstackerdimensions"), 1)
 
   async def test_setup_reuses_nests_when_called_again(self):
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
     original_nests = list(self.driver.nests)
 
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
 
     self.assertEqual(self.driver.nests, original_nests)
     self.assertTrue(
@@ -197,7 +279,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       "OK! neststatus 12",
     ]
 
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
 
     self.assertEqual(
       [nest.name for nest in self.driver.nests], ["sample_store_nest_1", "sample_store_nest_2"]
@@ -206,7 +289,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(all(nest.resource is None for nest in self.driver.nests))
 
   async def test_repeated_setup_preserves_nest_bookkeeping(self):
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
     plate = Plate(
       name="plate_on_nest",
       size_x=127.76,
@@ -222,7 +306,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       "OK! neststatus 12",
     ]
 
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
 
     self.assertEqual(
       [nest.name for nest in self.driver.nests], ["sample_store_nest_1", "sample_store_nest_2"]
@@ -238,7 +323,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     ]
 
     with self.assertRaisesRegex(RuntimeError, r"contiguous nest numbers.*\[1, 3\]"):
-      await self.driver.setup()
+      async with self.driver.lifespan():
+        pass
 
   async def test_setup_keeps_user_configured_model(self):
     driver = HighResSampleStorage(
@@ -246,7 +332,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     )
     driver.io = FakeSocket(CAPTURES)  # type: ignore[assignment]
 
-    await driver.setup()
+    async with driver.lifespan():
+      pass
 
     self.assertEqual(driver.model, "TundraStore")
     self.assertEqual(driver.model_info, get_model_info("TundraStore"))
@@ -259,7 +346,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     socket = FakeSocket(CAPTURES)
     driver.io = socket  # type: ignore[assignment]
 
-    await driver.setup()
+    async with driver.lifespan():
+      pass
 
     self.assertEqual(socket.written, ["version", "neststatus"])
     self.assertFalse(hasattr(driver, "environment"))
@@ -271,7 +359,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       with self.assertLogs(
         "pylabrobot.high_res.sample_storage.driver.driver", level="WARNING"
       ) as logs:
-        await driver.setup()
+        async with driver.lifespan():
+          pass
       self.assertIn("not been verified against hardware", " ".join(logs.output))
       self.assertIn("host: str", str(inspect.signature(model_class)))
 
@@ -312,14 +401,169 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(HighResSampleStorageProtocolError, "received a second ACK"):
       await self.driver._send_command("bad")
 
-  async def test_send_command_closes_transport_after_response_timeout(self):
-    socket = TimeoutAfterAckSocket({"slow": ["ACK! slow 1", "OK! slow 1"]}, timeout_command="slow")
-    self.driver.io = socket  # type: ignore[assignment]
+  async def test_send_command_invalidates_transport_after_response_timeout(self):
+    self.socket.captures["slow"] = ["ACK! slow 1", "OK! slow 1"]
+    self.socket.timeout_command = "slow"
 
-    with self.assertRaisesRegex(TimeoutError, "simulated response timeout"):
-      await self.driver._send_command("slow")
+    async with self.driver.lifespan():
+      self.socket.written.clear()
+      with self.assertRaisesRegex(TimeoutError, "simulated response timeout"):
+        await self.driver._send_command("slow")
+      self.assertTrue(self.driver._transport_invalidated)
+      self.assertEqual(self.socket.stop_calls, 0)
 
-    self.assertEqual(socket.stop_calls, 1)
+    self.assertEqual(self.socket.stop_calls, 1)
+
+  async def test_lifespan_accepts_only_home_option(self):
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+      async with self.driver.lifespan(unexpected=True):
+        pass
+
+  @pytest.mark.parametrize("phase", ["version", "racks", "environment", "nests", "home"])
+  async def test_setup_failure_rolls_back_transport_and_staged_resources(self, phase: str):
+    driver = SteriStore(host="10.253.253.253", name="staged_store")
+    socket = FakeSocket(CAPTURES)
+    driver.io = socket  # type: ignore[assignment]
+
+    if phase == "version":
+      socket.captures["version"] = ["malformed"]
+    elif phase == "racks":
+      socket.captures["getstackerdimensions"] = [
+        "ACK! getstackerdimensions 35",
+        "OK! getstackerdimensions 35",
+      ]
+    elif phase == "environment":
+
+      async def fail_refresh() -> None:
+        raise RuntimeError("environment failed")
+
+      driver.environment.refresh = fail_refresh  # type: ignore[assignment]
+    elif phase == "nests":
+      socket.captures["neststatus"] = ["ACK! neststatus 11", "OK! neststatus 11"]
+
+    with pytest.raises(Exception):
+      async with driver.lifespan(home=phase == "home"):
+        pass
+
+    assert socket.setup_calls == 1
+    assert socket.stop_calls == 1
+    assert driver.racks == []
+    assert driver.nests == []
+    assert not driver.is_active
+
+  async def test_failed_second_rack_attachment_rolls_back_all_staged_resources(self):
+    driver = SteriStore(host="10.253.253.253", name="staged_store")
+    captures = dict(CAPTURES)
+    captures["getstackerdimensions"] = [
+      "ACK! getstackerdimensions 35",
+      "1: 0.000 22.867 24",
+      "2: 0.000 22.867 24",
+      "OK! getstackerdimensions 35",
+    ]
+    socket = FakeSocket(captures)
+    driver.io = socket  # type: ignore[assignment]
+    rack_attachments = 0
+
+    def fail_second_rack(resource: Resource) -> None:
+      nonlocal rack_attachments
+      if isinstance(resource, PlateCarrier):
+        rack_attachments += 1
+        if rack_attachments == 2:
+          raise RuntimeError("second rack attachment failed")
+
+    driver.register_will_assign_resource_callback(fail_second_rack)
+
+    with pytest.raises(RuntimeError, match="second rack attachment failed"):
+      async with driver.lifespan():
+        pass
+
+    assert rack_attachments == 2
+    assert driver.children == []
+    assert driver.racks == []
+    assert driver.nests == []
+    assert not driver.is_active
+    assert socket.stop_calls == 1
+
+  async def test_failed_second_nest_attachment_rolls_back_racks_and_first_nest(self):
+    driver = SteriStore(host="10.253.253.253", name="staged_store")
+    socket = FakeSocket(CAPTURES)
+    driver.io = socket  # type: ignore[assignment]
+    nest_attachments = 0
+
+    def fail_second_nest(resource: Resource) -> None:
+      nonlocal nest_attachments
+      if isinstance(resource, PlateHolder):
+        nest_attachments += 1
+        if nest_attachments == 2:
+          raise RuntimeError("second nest attachment failed")
+
+    driver.register_will_assign_resource_callback(fail_second_nest)
+
+    with pytest.raises(RuntimeError, match="second nest attachment failed"):
+      async with driver.lifespan():
+        pass
+
+    assert nest_attachments == 2
+    assert driver.children == []
+    assert driver.racks == []
+    assert driver.nests == []
+    assert not driver.is_active
+    assert socket.stop_calls == 1
+
+  async def test_cancelled_command_requires_reconnect_before_further_io(self):
+    command = "slow"
+    self.socket.captures[command] = [f"ACK! {command} 1", f"OK! {command} 1"]
+    self.socket.block_after_ack_command = command
+    cancel_scope = anyio.CancelScope()
+
+    async def send_cancelled_command() -> None:
+      with cancel_scope:
+        await self.driver._send_command(command)
+
+    async with self.driver.lifespan():
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(send_cancelled_command)
+        with anyio.fail_after(1):
+          await self.socket.blocked_after_ack.wait()
+        cancel_scope.cancel()
+
+      assert self.socket.stop_calls == 0
+      written = list(self.socket.written)
+      with pytest.raises(ConnectionError, match="invalidated"):
+        await self.driver._send_command("status")
+      assert self.socket.written == written
+      await self.driver._reconnect_invalidated_transport()
+      assert self.socket.setup_calls == 1
+      assert self.socket.reconnect_calls == 1
+    assert self.socket.stop_calls == 1
+
+  async def test_malformed_envelope_invalidates_owned_socket(self):
+    self.socket.captures["bad"] = ["malformed"]
+
+    async with self.driver.lifespan():
+      self.socket.written.clear()
+      with pytest.raises(HighResSampleStorageProtocolError):
+        await self.driver._send_command("bad")
+      assert self.driver._transport_invalidated
+      assert self.socket.stop_calls == 0
+    assert self.socket.stop_calls == 1
+
+  async def test_failed_reconnect_keeps_command_stream_invalidated(self):
+    self.socket.captures["bad"] = ["malformed"]
+
+    async with self.driver.lifespan():
+      with pytest.raises(HighResSampleStorageProtocolError):
+        await self.driver._send_command("bad")
+      self.socket.reconnect_error = OSError("offline")
+      with pytest.raises(OSError, match="offline"):
+        await self.driver._reconnect_invalidated_transport()
+      assert self.driver._transport_invalidated
+      with pytest.raises(ConnectionError, match="invalidated"):
+        await self.driver._send_command("status")
+      self.socket.reconnect_error = None
+      await self.driver._reconnect_invalidated_transport()
+      assert not self.driver._transport_invalidated
+      assert self.socket.reconnect_calls == 2
 
   async def test_version(self):
     v = await self.driver.request_version()
@@ -647,6 +891,33 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(HighResSampleStorageError):
       await self.driver.open_all_doors()
 
+  async def test_door_wait_bounds_stalled_sensor_request(self):
+    self.driver._motion_timeout = 0.02
+
+    async def stalled():
+      await anyio.sleep_forever()
+
+    self.driver.request_door_status = stalled  # type: ignore[method-assign]
+    with anyio.fail_after(0.2):
+      self.assertFalse(await self.driver._wait_for_robot_doors("open", "opening"))
+
+  async def test_zero_door_timeout_checks_the_first_sensor_report(self):
+    self.driver._motion_timeout = 0
+
+    async def open_doors():
+      await anyio.lowlevel.checkpoint()
+      return {"RI": "open"}
+
+    self.driver.request_door_status = open_doors  # type: ignore[method-assign]
+    self.assertTrue(await self.driver._wait_for_robot_doors("open", "opening"))
+
+    async def moving_doors():
+      await anyio.lowlevel.checkpoint()
+      return {"RI": "opening"}
+
+    self.driver.request_door_status = moving_doors  # type: ignore[method-assign]
+    self.assertFalse(await self.driver._wait_for_robot_doors("open", "opening"))
+
   async def test_open_all_doors_preserves_error_if_a_robot_door_remains_closed(self):
     self.socket.captures["openalldoors"] = [
       "ACK! openalldoors 74",
@@ -676,7 +947,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.socket.written, ["pick 3 12 1"])
 
   async def test_tray_maps_to_nest(self):
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
     # 0-based tray -> device-reported nest number.
     self.assertEqual(self.retrieval._nest_for_tray(0), 1)
     self.assertEqual(self.retrieval._nest_for_tray(1), 2)
@@ -684,7 +956,8 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
       self.retrieval._nest_for_tray(2)
 
   async def test_serialization_round_trip(self):
-    await self.driver.setup()
+    async with self.driver.lifespan():
+      pass
     self.driver.metadata["owner"] = "lab"
 
     serialized = json.loads(json.dumps(self.driver.serialize()))
@@ -699,8 +972,9 @@ class HighResSampleStorageTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(restored.serialize(), serialized)
 
 
-class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
+class TestHighResSampleStorageBookkeeping(AnyioTestCase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     self.site = PlateHolder(
       name="site_1", size_x=127.76, size_y=85.48, size_z=20, pedestal_size_z=0
     )
@@ -717,8 +991,7 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.socket = FakeSocket(CAPTURES)
     self.driver.io = self.socket  # type: ignore[assignment]
 
-  async def asyncSetUp(self):
-    await self.driver.setup()
+    await stack.enter_async_context(self.driver.lifespan())
     self.socket.written.clear()
 
   def _set_nest_status(self, nest_1: str, nest_2: str = "CLEAR") -> None:
@@ -829,9 +1102,11 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.driver.nests[0].resource, self.plate)
 
   async def test_transfer_lock_covers_validation_motion_and_bookkeeping(self):
-    transfer_started = asyncio.Event()
-    release_transfer = asyncio.Event()
+    transfer_started = anyio.Event()
+    release_transfer = anyio.Event()
     pick_calls = []
+    results = []
+    errors = []
 
     async def blocked_pick(stacker: int, slot: int, nest: int, close_door: bool = True):
       pick_calls.append((stacker, slot, nest, close_door))
@@ -839,21 +1114,29 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
       await release_transfer.wait()
 
     self.driver._pick = blocked_pick  # type: ignore[method-assign]
-    first = asyncio.create_task(self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0))
-    await asyncio.wait_for(transfer_started.wait(), timeout=1)
 
-    second = asyncio.create_task(self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=1))
-    await asyncio.sleep(0)
+    async def transfer(tray_index: int) -> None:
+      try:
+        results.append(await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index))
+      except BaseException as error:
+        errors.append(error)
 
-    # The second transfer must not even validate against the stale resource
-    # tree while the first hardware move is in progress.
-    self.assertEqual(pick_calls, [(1, 1, 1, True)])
-    self.assertFalse(second.done())
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(transfer, 0)
+      with anyio.fail_after(1):
+        await transfer_started.wait()
+      task_group.start_soon(transfer, 1)
+      await anyio.lowlevel.checkpoint()
 
-    release_transfer.set()
-    self.assertIs(await first, self.plate)
-    with self.assertRaisesRegex(ValueError, "not attached to a plate carrier"):
-      await second
+      # The second transfer must not validate against stale resource state.
+      self.assertEqual(pick_calls, [(1, 1, 1, True)])
+
+      release_transfer.set()
+
+    self.assertEqual(results, [self.plate])
+    self.assertEqual(len(errors), 1)
+    self.assertIsInstance(errors[0], ValueError)
+    self.assertIn("not attached to a plate carrier", str(errors[0]))
     self.assertEqual(pick_calls, [(1, 1, 1, True)])
 
   def test_inventory_queries_use_resource_tree(self):
@@ -910,6 +1193,35 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.site.resource, self.plate)
     self.assertIs(self.plate.parent, self.site)
     self.assertIsNone(self.driver.unresolved_transfer)
+
+  async def test_failed_bookkeeping_records_unresolved_completed_transfer(self):
+    self.plate.unassign()
+    nest = self.driver.nests[0]
+    nest.assign_child_resource(self.plate)
+    self._set_nest_status("PLATE_AVAILABLE")
+    self.socket.captures["place 1 1 1"] = [
+      "ACK! place 1 1 1 41",
+      "OK! place 1 1 1 41",
+    ]
+
+    def fail_assignment(
+      resource: Resource,
+      location: Optional[Coordinate] = None,
+      reassign: bool = True,
+    ) -> None:
+      raise RuntimeError("bookkeeping failed")
+
+    self.site.assign_child_resource = fail_assignment  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="bookkeeping failed"):
+      await self.driver.store_plate(self.plate, self.site, tray_index=0)
+
+    transfer = self.driver.unresolved_transfer
+    assert transfer is not None
+    assert transfer.source is nest
+    assert transfer.destination is self.site
+    assert transfer.error_type == "RuntimeError"
+    assert self.plate.parent is None
 
   async def test_store_refuses_logical_plate_when_physical_nest_is_clear(self):
     self.plate.unassign()
@@ -982,10 +1294,8 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_timeout_after_pick_ack_records_unresolved_transfer(self):
     command = "pick 1 1 1"
-    captures = dict(CAPTURES)
-    captures[command] = [f"ACK! {command} 42", f"OK! {command} 42"]
-    socket = TimeoutAfterAckSocket(captures, timeout_command=command)
-    self.driver.io = socket  # type: ignore[assignment]
+    self.socket.captures[command] = [f"ACK! {command} 42", f"OK! {command} 42"]
+    self.socket.timeout_command = command
 
     with self.assertRaisesRegex(TimeoutError, "simulated response timeout"):
       await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
@@ -996,37 +1306,43 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(transfer.command, command)
     self.assertEqual(transfer.error_type, "TimeoutError")
     self.assertIs(self.plate.parent, self.site)
-    self.assertEqual(socket.stop_calls, 1)
+    self.assertEqual(self.socket.stop_calls, 0)
     with self.assertRaisesRegex(RuntimeError, "Plate location is unresolved"):
       self.driver.serialize()
 
     result = await self.driver.resolve_unresolved_transfer("source")
 
     self.assertIs(result, self.plate)
-    self.assertEqual(socket.setup_calls, 1)
+    self.assertEqual(self.socket.setup_calls, 1)
+    self.assertEqual(self.socket.reconnect_calls, 1)
     self.assertIsNone(self.driver.unresolved_transfer)
-    self.assertEqual(socket.written[-2:], ["platestatus", "neststatus"])
+    self.assertEqual(self.socket.written[-2:], ["platestatus", "neststatus"])
 
   async def test_cancelled_pick_records_unresolved_transfer(self):
-    started = asyncio.Event()
+    started = anyio.Event()
+    cancel_scope = anyio.CancelScope()
 
     async def blocked_pick(stacker: int, slot: int, nest: int, close_door: bool = True):
       started.set()
-      await asyncio.Event().wait()
+      await anyio.sleep_forever()
 
     self.driver._pick = blocked_pick  # type: ignore[method-assign]
-    task = asyncio.create_task(self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0))
-    await asyncio.wait_for(started.wait(), timeout=1)
-    task.cancel()
 
-    with self.assertRaises(asyncio.CancelledError):
-      await task
+    async def cancelled_transfer() -> None:
+      with cancel_scope:
+        await self.driver.fetch_plate_to_loading_tray(self.plate, tray_index=0)
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(cancelled_transfer)
+      with anyio.fail_after(1):
+        await started.wait()
+      cancel_scope.cancel()
 
     transfer = self.driver.unresolved_transfer
     self.assertIsNotNone(transfer)
     assert transfer is not None
     self.assertEqual(transfer.command, "pick 1 1 1")
-    self.assertEqual(transfer.error_type, "CancelledError")
+    self.assertEqual(transfer.error_type, anyio.get_cancelled_exc_class().__name__)
     self.assertIs(self.plate.parent, self.site)
 
   async def test_aborted_pick_records_unresolved_transfer(self):
@@ -1201,6 +1517,27 @@ class HighResSampleStorageBookkeepingTests(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.plate.parent, self.driver.nests[0])
     self.assertIsNone(self.driver.unresolved_transfer)
     self.assertEqual(self.socket.written[-2:], ["platestatus", "neststatus"])
+
+
+class TestHighResSampleStorageManagedLifecycle(AnyioTestCase):
+  _anyio_backends = ["asyncio"]
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    self.driver = SteriStore(host="10.253.253.253", name="sample_store", racks={})
+    self.socket = FakeSocket(CAPTURES)
+    self.driver.io = self.socket  # type: ignore[assignment]
+
+  async def test_managed_setup_and_stop_own_socket_lifespan(self):
+    await self.driver.setup()
+
+    assert self.driver.is_active
+    assert self.socket.setup_calls == 1
+
+    await self.driver.stop()
+
+    assert not self.driver.is_active
+    assert self.socket.stop_calls == 1
 
 
 if __name__ == "__main__":

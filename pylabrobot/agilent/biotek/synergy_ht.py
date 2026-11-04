@@ -1,11 +1,12 @@
 """Endpoint absorbance and tray/temperature control for the BioTek Synergy HT."""
 
-import asyncio
 import logging
 import math
 import re
 from datetime import datetime
 from typing import List, Literal, Optional, Sequence, Tuple
+
+import anyio
 
 from pylabrobot.agilent.biotek._reader import _BioTekReader
 from pylabrobot.agilent.biotek.results import AbsorbanceResult
@@ -57,18 +58,17 @@ class SynergyHT(_BioTekReader):
     it arrives after the purge once RTS is asserted again. Read until the line has been
     quiet for about half a second, or give up after ten seconds.
     """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + 10
+    deadline = anyio.current_time() + 10
     dropped = bytearray()
     quiet = 0
-    while quiet < 10 and loop.time() < deadline:
+    while quiet < 10 and anyio.current_time() < deadline:
       chunk = await self.io.read(64)
       if chunk:
         dropped.extend(chunk)
         quiet = 0
       else:
         quiet += 1
-        await asyncio.sleep(0.05)
+        await anyio.sleep(0.05)
     if quiet < 10:
       raise TimeoutError("Synergy HT kept sending data; wait until it is idle")
     if dropped:
@@ -298,10 +298,11 @@ class SynergyHT(_BioTekReader):
       await self._exchange(b"Q", b"1", ack_only=True)
       await self._exchange(b"t", b"40000\x03")
       await self._exchange(b"S")
-      data, temperature = await asyncio.wait_for(
-        self._read_absorbance_frame(r1 - r0 + 1, c1 - c0 + 1),
-        self.read_timeout + shake_duration,
-      )
+      try:
+        with anyio.fail_after(self.read_timeout + shake_duration):
+          data, temperature = await self._read_absorbance_frame(r1 - r0 + 1, c1 - c0 + 1)
+      except TimeoutError as exc:
+        raise TimeoutError("Synergy HT: timeout while waiting for absorbance result") from exc
       timestamp = datetime.now()
     result: List[List[Optional[float]]] = [[None] * columns for _ in range(rows)]
     for row, column in selected:

@@ -1,5 +1,6 @@
 import unittest
 from collections import deque
+from contextlib import asynccontextmanager
 from typing import Deque, List, Sequence, Tuple
 from unittest.mock import AsyncMock, patch
 
@@ -37,6 +38,18 @@ class _FakeSerial:
     self.writes: List[bytes] = []
     self.read_chunks: Deque[bytes] = deque()
 
+  @asynccontextmanager
+  async def lifespan(self):
+    try:
+      await self.setup()
+    except BaseException:
+      await self.stop()
+      raise
+    try:
+      yield self
+    finally:
+      await self.stop()
+
   async def write(self, data: bytes) -> None:
     self.writes.append(data)
 
@@ -67,6 +80,18 @@ class _ConstructedSerial:
     self.stop = AsyncMock()
     _ConstructedSerial.instances.append(self)
 
+  @asynccontextmanager
+  async def lifespan(self):
+    try:
+      await self.setup()
+    except BaseException:
+      await self.stop()
+      raise
+    try:
+      yield self
+    finally:
+      await self.stop()
+
   async def write(self, data: bytes) -> None:
     del data
 
@@ -86,17 +111,19 @@ class TestFileTransferControl(unittest.IsolatedAsyncioTestCase):
     fake.setup.assert_awaited_once_with()
     fake.stop.assert_awaited_once_with()
 
-  async def test_setup_and_stop_are_idempotent(self):
+  async def test_reentry_is_rejected_and_sequential_reuse_is_allowed(self):
     fake = _FakeSerial()
     control = _FileTransferControl(serial_io=fake)
 
     await control.setup()
+    with self.assertRaisesRegex(RuntimeError, "active lifespan"):
+      await control.setup()
+    await control.stop()
     await control.setup()
     await control.stop()
-    await control.stop()
 
-    fake.setup.assert_awaited_once_with()
-    fake.stop.assert_awaited_once_with()
+    self.assertEqual(fake.setup.await_count, 2)
+    self.assertEqual(fake.stop.await_count, 2)
 
   async def test_setup_failure_attempts_serial_cleanup(self):
     fake = _FakeSerial()

@@ -12,7 +12,6 @@ the separate vision server protocol rather than the TCS controller, and are adde
 this module.
 """
 
-import asyncio
 import functools
 import io
 import logging
@@ -30,6 +29,8 @@ from typing import (
   Union,
   cast,
 )
+
+import anyio
 
 if TYPE_CHECKING:
   from ..master import PreciseFlexDriver
@@ -664,9 +665,10 @@ class PreciseFlexVision:
     # Drop results an earlier tool run left behind; a frame arrives before its trigger's reply, so
     # nothing older is still in flight once the stream is idle.
     try:
-      while await asyncio.wait_for(self.driver.read_next_vision_server_result(), 0.05) is not None:
-        pass
-    except asyncio.TimeoutError:
+      with anyio.fail_after(0.05):
+        while await self.driver.read_next_vision_server_result(timeout=0.05) is not None:
+          pass
+    except TimeoutError:
       pass
     await self.driver._set_vision_server_property("system.cameraacquire", index)
     while True:
@@ -712,7 +714,8 @@ class PreciseFlexVision:
     try:
       return await self._run_vision_process(process_name)
     finally:
-      await self._set_vision_tool_property(acquire_tool, "acquiremode", "NORMAL_ACQUIRE")
+      with anyio.CancelScope(shield=True):
+        await self._set_vision_tool_property(acquire_tool, "acquiremode", "NORMAL_ACQUIRE")
 
   # -- stereo location (FiducialLocator) -----------------------------------
 

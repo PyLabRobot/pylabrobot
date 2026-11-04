@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import logging
 import signal
 from pathlib import Path
 from typing import Optional, Sequence
 
+import anyio
 from google.protobuf.json_format import MessageToDict
 
 from pylabrobot.revvity.celigo import Celigo, CeligoConfig
@@ -37,34 +37,28 @@ async def serve(args: argparse.Namespace) -> None:
     image_storage_bytes=args.image_storage_bytes,
   )
   server = CeligoServer(session, host=args.host, port=args.port)
-  stopped = asyncio.Event()
-  for signum in (signal.SIGINT, signal.SIGTERM):
-    asyncio.get_running_loop().add_signal_handler(signum, stopped.set)
-  await server.start()
-  try:
-    print(
-      json.dumps(
-        {
-          "endpoint": server.endpoint,
-          "device_id": args.device_id,
-          "device_type": "Celigo",
-          "state": "Uninitialized",
-          "configuration_id": session.configuration_id,
-        }
-      ),
-      flush=True,
-    )
-    await stopped.wait()
-  finally:
-    await server.stop()
+  with anyio.open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
+    async with server:
+      print(
+        json.dumps(
+          {
+            "endpoint": server.endpoint,
+            "device_id": args.device_id,
+            "device_type": "Celigo",
+            "state": "Uninitialized",
+            "configuration_id": session.configuration_id,
+          }
+        ),
+        flush=True,
+      )
+      async for _ in signals:
+        break
 
 
 async def inspect(args: argparse.Namespace) -> dict:
   """Read identity, status, and configuration from a running service."""
-  async with CeligoClient(
-    args.endpoint,
-    device_id=args.device_id,
-  ) as client:
+  client = CeligoClient(args.endpoint, device_id=args.device_id)
+  async with client:
     return {
       "device": MessageToDict(await client.get_device_info(), preserving_proto_field_name=True),
       "status": MessageToDict(await client.get_status(), preserving_proto_field_name=True),
@@ -122,9 +116,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
   if args.command == "serve":
     if args.data_dir is None:
       args.data_dir = Path.home() / ".pylabrobot" / "celigo" / args.device_id
-    asyncio.run(serve(args))
+    anyio.run(serve, args, backend="asyncio")
   else:
-    print(json.dumps(asyncio.run(inspect(args)), indent=2))
+    print(json.dumps(anyio.run(inspect, args, backend="asyncio"), indent=2))
 
 
 if __name__ == "__main__":

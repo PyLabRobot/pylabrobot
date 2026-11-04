@@ -5,8 +5,10 @@ This module contains tests for Query methods.
 """
 
 import unittest
+from typing import Any
 
 # Import the backend module
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.plate_washing.biotek.el406 import (
   EL406Sensor,
   EL406SyringeManifold,
@@ -454,8 +456,8 @@ class TestGetInstrumentSettings(EL406TestCase):
     buf += MockFTDI.build_completion_frame(bytes([0x01, 0x00, 0x00]))
     return buf
 
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     self.backend.io.read_buffer = self._build_multi_query_buffer()
 
   async def test_request_instrument_settings_returns_dict(self):

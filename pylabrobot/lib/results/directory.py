@@ -6,13 +6,14 @@ finite number (an infinite optical density) is written as null. A crash mid-writ
 last line, removed before the next write.
 """
 
-import asyncio
 import json
 import logging
 import math
 import os
 import threading
 from typing import Any, BinaryIO, Dict, Sequence
+
+import anyio.to_thread
 
 from .table import get_table
 
@@ -117,7 +118,7 @@ async def append_results(directory: str, results: Sequence[Any]) -> None:
     results: as `table.get_table`.
   """
   try:
-    await asyncio.to_thread(_append_results, directory, results)
+    await anyio.to_thread.run_sync(_append_results, directory, results)
   except Exception as error:
     logger.error("results not written to %s: %s", directory, error, exc_info=error)
     _ERRORS[directory] = error

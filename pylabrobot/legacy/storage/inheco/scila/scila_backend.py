@@ -1,49 +1,21 @@
-import xml.etree.ElementTree as ET
 from typing import Any, Dict, Literal, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.inheco.transport.sila import InhecoSiLAInterface, get_params
 from pylabrobot.legacy.machines.backend import MachineBackend
-from pylabrobot.legacy.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
-
-
-def _parse_scalar(text: Optional[str], tag: str) -> object:
-  if text is None:
-    return None
-  s = text.strip()
-  t = tag.lower()
-  if t in ("float64", "float32", "double", "single"):
-    return float(s)
-  if t in ("int32", "int64", "uint32", "uint64", "integer"):
-    return int(s)
-  if t in ("boolean", "bool"):
-    return s.lower() == "true"
-  return s  # String or unknown => raw text
-
-
-def _get_param(root: ET.Element, name: str):
-  p = root.find(f".//Parameter[@name='{name}']")
-  if p is None or len(p) == 0:
-    raise RuntimeError(f"Response missing parameter '{name}'")
-  child = next(iter(p))  # e.g. <Float64>, <Boolean>, <String>
-  return _parse_scalar(child.text, child.tag)
-
-
-def _get_params(root: ET.Element, names: list[str]) -> dict[str, object]:
-  return {n: _get_param(root, n) for n in names}
-
 
 DrawerStatus = Literal["Opened", "Closed"]
 
 
 class SCILABackend(MachineBackend):
   def __init__(self, scila_ip: str, client_ip: Optional[str] = None) -> None:
+    super().__init__()
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
 
-  async def setup(self) -> None:
-    await self._sila_interface.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self._sila_interface.lifespan())
     await self._reset_and_initialize()
-
-  async def stop(self) -> None:
-    await self._sila_interface.close()
 
   async def _reset_and_initialize(self) -> None:
     event_uri = f"http://{self._sila_interface.client_ip}:{self._sila_interface.bound_port}/"
@@ -61,11 +33,11 @@ class SCILABackend(MachineBackend):
 
   async def request_liquid_level(self) -> str:
     root = await self._sila_interface.send_command("GetLiquidLevel")
-    return _get_param(root, "LiquidLevel")  # type: ignore
+    return get_params(root, ["LiquidLevel"])["LiquidLevel"]  # type: ignore
 
   async def request_temperature_information(self) -> dict[str, Any]:
     root = await self._sila_interface.send_command("GetTemperature")
-    return _get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
+    return get_params(root, ["CurrentTemperature", "TargetTemperature", "TemperatureControl"])  # type: ignore
 
   async def measure_temperature(self) -> float:
     return (await self.request_temperature_information())["CurrentTemperature"]  # type: ignore
@@ -98,7 +70,7 @@ class SCILABackend(MachineBackend):
 
   async def request_drawer_statuses(self) -> Dict[int, DrawerStatus]:
     root = await self._sila_interface.send_command("GetDoorStatus")
-    params = _get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])
+    params = get_params(root, ["Drawer1", "Drawer2", "Drawer3", "Drawer4"])
     return {i: params[f"Drawer{i}"] for i in range(1, 5)}  # type: ignore
 
   async def request_drawer_status(self, drawer_id: int) -> DrawerStatus:
@@ -109,7 +81,7 @@ class SCILABackend(MachineBackend):
 
   async def request_co2_flow_status(self) -> str:
     root = await self._sila_interface.send_command("GetCO2FlowStatus")
-    return _get_param(root, "CO2FlowStatus")  # type: ignore
+    return get_params(root, ["CO2FlowStatus"])["CO2FlowStatus"]  # type: ignore
 
   async def request_valve_status(self) -> dict[str, str]:
     """
@@ -123,7 +95,7 @@ class SCILABackend(MachineBackend):
     """
 
     root = await self._sila_interface.send_command("GetValveStatus")
-    return _get_params(root, ["H2O", "CO2 Normal", "CO2 Boost"])  # type: ignore
+    return get_params(root, ["H2O", "CO2 Normal", "CO2 Boost"])  # type: ignore
 
   async def start_temperature_control(self, temperature: float) -> None:
     await self._sila_interface.send_command(

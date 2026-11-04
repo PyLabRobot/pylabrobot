@@ -18,15 +18,18 @@ import re
 import secrets
 import socket
 import sys
-import threading
 import webbrowser
 from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, urlsplit
 
+import anyio
+import sniffio
 import websockets
+from typing_extensions import override
 from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -152,7 +155,7 @@ def _signature(cleaned: Dict[str, Any], key: str) -> str:
   return key + repr([round(v, STATE_DECIMALS) for v in _xyz(cleaned["location"])])
 
 
-class Viewer3D:
+class Viewer3D(HasLifespan):
   """A visualizer that takes any resource as its world.
 
   Args:
@@ -190,6 +193,7 @@ class Viewer3D:
   _pending: Dict[str, Tuple[Dict[str, Any], str]]
   _flush_scheduled: bool
   _loop: Optional[asyncio.AbstractEventLoop]
+  _task_group: Optional[anyio.abc.TaskGroup]
   _legacy_bytes: int
   _mesh_files: Dict[str, str]
   _mesh_ids: Dict[str, str]
@@ -201,10 +205,12 @@ class Viewer3D:
   _scene_payload: Optional[Dict[str, Any]]
   _scene: Optional[Scene]
   _refused_a_token: bool
-  _browser_drawing: Optional[asyncio.Event]
+  _browser_drawing: Optional[anyio.Event]
+  _active_file_requests: Set[socket.socket]
   _moved: Set[str]
   _scene_timer: Optional[asyncio.TimerHandle]
   _subscribed: Dict[int, Tuple[Resource, Callable[[Dict[str, Any]], None]]]
+  _root_callbacks_registered: bool
 
   # -- packing -----------------------------------------------------------------
 
@@ -400,9 +406,9 @@ class Viewer3D:
     self._pending[name] = state_signature(state)
     if "location" in state:
       self._moved.add(name)
-    if self._loop is not None and not self._flush_scheduled:
+    if self._task_group is not None and not self._flush_scheduled:
       self._flush_scheduled = True
-      asyncio.ensure_future(self._flush())
+      self._task_group.start_soon(self._flush)
 
   # -- scene channel -----------------------------------------------------------
 
@@ -507,15 +513,18 @@ class Viewer3D:
   # tips is one operation to a user and a hundred and ninety-two callbacks here.
   SCENE_DEBOUNCE_S = 0.05
 
+  def _schedule_flush_scene(self) -> None:
+    self._scene_timer = None
+    if self._task_group is not None:
+      self._task_group.start_soon(self._flush_scene)
+
   def _mark_scene_dirty(self) -> None:
     # A pending timer is what says the scene is stale; a burst keeps pushing it back.
     if self._scene_timer is not None:
       self._scene_timer.cancel()
     if self._loop is None:
       return
-    self._scene_timer = self._loop.call_later(
-      self.SCENE_DEBOUNCE_S, lambda: asyncio.ensure_future(self._flush_scene())
-    )
+    self._scene_timer = self._loop.call_later(self.SCENE_DEBOUNCE_S, self._schedule_flush_scene)
 
   def _resend(self) -> None:
     """The tree changed shape: schedule one rebuild for the burst."""
@@ -608,13 +617,60 @@ class Viewer3D:
 
   # -- static files ------------------------------------------------------------
 
-  # How often the serving thread looks up from its socket, which is how long `stop` waits for it.
-  FS_POLL_S = 0.05
   # How long a file server connection may sit idle or take over one request before it is closed:
-  # each holds a thread, and keep-alive would hold it for as long as the other end likes.
+  # each holds a worker thread, and keep-alive would hold it for as long as the other end likes.
   FS_TIMEOUT_S = 30.0
 
-  def _start_file_server(self) -> None:
+  @staticmethod
+  def _handle_file_request(
+    httpd: http.server.HTTPServer, request: socket.socket, client_address: Any
+  ) -> None:
+    """Answer one accepted connection, keep-alive included, in a worker thread."""
+    try:
+      httpd.finish_request(request, client_address)
+    except Exception:
+      httpd.handle_error(request, client_address)
+
+  async def _serve_file_request(
+    self, httpd: http.server.HTTPServer, request: socket.socket, client_address: Any
+  ) -> None:
+    """Answer one connection in a non-abandoning worker, then close it on the event loop."""
+    self._active_file_requests.add(request)
+    try:
+      await anyio.to_thread.run_sync(
+        self._handle_file_request, httpd, request, client_address, abandon_on_cancel=False
+      )
+    finally:
+      self._active_file_requests.discard(request)
+      httpd.shutdown_request(request)
+
+  async def _accept_file_requests(
+    self, httpd: http.server.HTTPServer, task_group: anyio.abc.TaskGroup
+  ) -> None:
+    """Accept connections on the event loop, each answered by a task of the lifespan's group.
+
+    A page loads its meshes in parallel, so connections are answered concurrently.
+    """
+    while True:
+      await anyio.wait_readable(httpd.socket)
+      try:
+        request, client_address = httpd.get_request()
+      except (BlockingIOError, InterruptedError, ConnectionAbortedError):
+        continue
+      if not httpd.verify_request(request, client_address):
+        httpd.shutdown_request(request)
+        continue
+      task_group.start_soon(self._serve_file_request, httpd, request, client_address)
+
+  def _interrupt_file_requests(self) -> None:
+    """Wake every worker blocked on a connection, so the task group can be joined promptly."""
+    for request in self._active_file_requests:
+      try:
+        request.shutdown(socket.SHUT_RDWR)
+      except OSError:
+        pass
+
+  def _start_file_server(self, task_group: anyio.abc.TaskGroup) -> None:
     directory = STATIC_DIR
     ws_port = self.ws_port
     name = self.name
@@ -684,7 +740,7 @@ class Viewer3D:
           return
         return super().do_GET()
 
-    class Server(http.server.ThreadingHTTPServer):
+    class Server(http.server.HTTPServer):
       address_family = socket.AF_INET6 if ":" in self.host else socket.AF_INET
 
       def handle_error(self, request: Any, client_address: Any) -> None:
@@ -694,8 +750,6 @@ class Viewer3D:
           return
         super().handle_error(request, client_address)
 
-    # Threaded: a page loads its meshes in parallel, and a server answering one request at a time
-    # was seen closing one of twenty-two without a response, which drew that resource as a box.
     for attempt in range(PORT_TRIES):
       try:
         httpd = Server((self.host, self.fs_port), Handler)
@@ -705,10 +759,8 @@ class Viewer3D:
           raise
         self.fs_port += 1
     self._httpd = httpd
-
-    serve = functools.partial(httpd.serve_forever, poll_interval=self.FS_POLL_S)
-    thread = threading.Thread(target=serve, daemon=True, name="viz3d_fs")
-    thread.start()
+    httpd.socket.setblocking(False)
+    task_group.start_soon(self._accept_file_requests, httpd, task_group)
 
   # -- lifecycle ---------------------------------------------------------------
 
@@ -723,6 +775,7 @@ class Viewer3D:
     models_root: Optional[str] = None,
     allowed_hosts: Iterable[str] = (),
   ):
+    super().__init__()
     self.root = root
     self.host = host
     self.fs_port = fs_port
@@ -741,10 +794,12 @@ class Viewer3D:
 
     self._clients = set()
     self._httpd = None
+    self._active_file_requests = set()
     self._ws_server = None
     self._pending = {}
     self._flush_scheduled = False
     self._loop = None
+    self._task_group = None
     self._legacy_bytes = 0  # measured once, at start, off the loop
     # Files a resource declared as its own geometry, by the id the page fetches them under. Only a
     # path that a resource named is ever served, so this doubles as the whitelist.
@@ -781,19 +836,48 @@ class Viewer3D:
     # Every resource this viewer listens to, with the callback it gave, so `stop` can take it back.
     # By identity: a tip compares by value and is not hashable.
     self._subscribed = {}
-    self._subscribe(root)
-    # A newly assigned resource has to start publishing too, or its state never reaches the viewer.
-    root.register_did_assign_resource_callback(self._on_assign)
-    root.register_did_unassign_resource_callback(self._on_unassign)
+    self._root_callbacks_registered = False
 
-  async def start(self) -> None:
+  def _ensure_root_subscriptions(self) -> None:
+    self._subscribe(self.root)
+    if not self._root_callbacks_registered:
+      # A newly assigned resource has to start publishing too, or its state never reaches the viewer.
+      self.root.register_did_assign_resource_callback(self._on_assign)
+      self.root.register_did_unassign_resource_callback(self._on_unassign)
+      self._root_callbacks_registered = True
+
+  @override
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    backend = sniffio.current_async_library()
+    if backend != "asyncio":
+      raise RuntimeError(
+        "Viewer3D only supports the asyncio backend, because `websockets` provides an "
+        f"asyncio-only server implementation (running under {backend!r})."
+      )
+    stack.push_shielded_async_callback(self._close_servers)
+    self._task_group = await stack.enter_task_group()
+    stack.callback(self._task_group.cancel_scope.cancel)
+    stack.callback(self._interrupt_file_requests)
+    stack.callback(self._stop_listening)
+    await self._start(self._task_group)
+
+  async def _start(self, task_group: anyio.abc.TaskGroup) -> None:
+    self._ensure_root_subscriptions()
     self._loop = asyncio.get_running_loop()
-    self._browser_drawing = asyncio.Event()
+    self._browser_drawing = anyio.Event()
+
     # Off the loop, before a client can connect: the package walk for model files, and the size of
     # the tree as one node per resource, which the stats panel compares against.
-    self._legacy_bytes, _ = await asyncio.gather(
-      asyncio.to_thread(legacy_size, self.root), asyncio.to_thread(_models_on_disk, PACKAGE_ROOT)
-    )
+    async def _compute_legacy_size() -> None:
+      self._legacy_bytes = await anyio.to_thread.run_sync(legacy_size, self.root)
+
+    async def _scan_models() -> None:
+      await anyio.to_thread.run_sync(_models_on_disk, PACKAGE_ROOT)
+
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(_compute_legacy_size)
+      tg.start_soon(_scan_models)
 
     # The websocket first: the file server bakes its port into the page. The other way round, a
     # viewer whose port is taken serves a page pointing at the viewer that took it.
@@ -808,7 +892,7 @@ class Viewer3D:
           raise
         self.ws_port += 1
 
-    self._start_file_server()
+    self._start_file_server(task_group)
 
     print(f"viewer on {self.url}  (websocket {self.ws_port})")
     if self.open_browser:
@@ -824,31 +908,31 @@ class Viewer3D:
 
     Raises:
       RuntimeError: the viewer has not been started.
-      asyncio.TimeoutError: no browser was drawing within `timeout`.
+      TimeoutError: no browser was drawing within `timeout`.
     """
     if self._browser_drawing is None:
       raise RuntimeError("start the viewer before waiting for a browser")
-    await asyncio.wait_for(self._browser_drawing.wait(), timeout)
+    with anyio.fail_after(timeout):
+      await self._browser_drawing.wait()
 
-  async def stop(self) -> None:
-    """Close both servers and stop listening to the tree.
-
-    The ports are free for the next viewer, and no change is handed to a loop that is gone.
-    """
+  def _stop_listening(self) -> None:
     self._unsubscribe(self.root)
-    self.root.deregister_did_assign_resource_callback(self._on_assign)
-    self.root.deregister_did_unassign_resource_callback(self._on_unassign)
+    if self._root_callbacks_registered:
+      self.root.deregister_did_assign_resource_callback(self._on_assign)
+      self.root.deregister_did_unassign_resource_callback(self._on_unassign)
+      self._root_callbacks_registered = False
     self._loop = None
+    self._task_group = None
     if self._scene_timer is not None:
       self._scene_timer.cancel()
       self._scene_timer = None
+
+  async def _close_servers(self) -> None:
     if self._ws_server is not None:
       self._ws_server.close()
       await self._ws_server.wait_closed()
       self._ws_server = None
     self._clients.clear()
     if self._httpd is not None:
-      # Shutdown waits for the serving thread's poll: not on the loop's time.
-      await asyncio.to_thread(self._httpd.shutdown)
       self._httpd.server_close()
       self._httpd = None

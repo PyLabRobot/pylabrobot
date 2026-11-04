@@ -1,8 +1,11 @@
 import dataclasses
 import json
+import logging
 import os
 import tempfile
 import unittest
+
+import pytest
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.device import RECORDING_PF400
@@ -21,6 +24,7 @@ from pylabrobot.brooks.precise_flex.tests.wire_tests import (
   _FakeController,
   _make_arm,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 def configuration(rail=None) -> PreciseFlexConfiguration:
@@ -75,7 +79,7 @@ def configuration(rail=None) -> PreciseFlexConfiguration:
   )
 
 
-class TestSavedConfiguration(unittest.IsolatedAsyncioTestCase):
+class TestSavedConfiguration(unittest.TestCase):
   """A configuration is written to a file and read back as the dataclasses it was."""
 
   def round_trip(self, written: PreciseFlexConfiguration) -> PreciseFlexConfiguration:
@@ -148,7 +152,7 @@ class TestSavedConfiguration(unittest.IsolatedAsyncioTestCase):
       self.assertFalse(os.path.exists(path))
 
 
-class TestTheRecordedPF400(unittest.IsolatedAsyncioTestCase):
+class TestTheRecordedPF400(unittest.TestCase):
   """The recording shipped with the driver: what one extended-reach PF400 answered."""
 
   def setUp(self):
@@ -179,7 +183,7 @@ class TestTheRecordedPF400(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(json.load(f), driver._saved_configuration())
 
 
-class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase):
+class TestADeclaredConfigurationIsCrossChecked(unittest.TestCase):
   """Discovery refuses a declaration that does not describe the arm that answers."""
 
   def setUp(self):
@@ -233,10 +237,10 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase)
     driver._check_declared_against(configuration())
 
 
-class TestDiscoveryAgainstADeclaration(unittest.IsolatedAsyncioTestCase):
+class TestDiscoveryAgainstADeclaration(AnyioTestBase):
   """What `discover` does with a declaration, against the wire tests' controller."""
 
-  async def test_a_declaration_saved_off_the_same_arm_is_accepted(self):
+  async def test_a_declaration_saved_off_the_same_arm_is_accepted(self) -> None:
     first = _make_arm(_FakeController())
     await first.discover()
     with tempfile.TemporaryDirectory() as directory:
@@ -244,18 +248,18 @@ class TestDiscoveryAgainstADeclaration(unittest.IsolatedAsyncioTestCase):
       first.save_configuration(path)
       second = _make_arm(_FakeController())
       second.declared = read_configuration(path)
-    self.assertEqual(await second.discover(), first.configuration)
+    assert await second.discover() == first.configuration
 
-  async def test_a_declaration_for_another_arm_is_refused_and_nothing_is_adopted(self):
+  async def test_a_declaration_for_another_arm_is_refused_and_nothing_is_adopted(self) -> None:
     arm = _make_arm(_FakeController(_RAIL_REPLIES), has_rail=True)
     arm.declared = read_configuration(RECORDING_PF400)
-    with self.assertRaisesRegex(ValueError, "has_rail: declared False, device answers True"):
+    with pytest.raises(ValueError, match="has_rail: declared False, device answers True"):
       await arm.discover()
-    with self.assertRaises(RuntimeError):
-      arm.configuration
+    with pytest.raises(RuntimeError):
+      _ = arm.configuration
 
 
-class TestAVisionGripperIsItsCameras(unittest.IsolatedAsyncioTestCase):
+class TestAVisionGripperIsItsCameras(AnyioTestBase):
   """Discovery counts the cameras through the controller; the arm's name does not decide it."""
 
   NAME = "pd 2002"
@@ -266,21 +270,30 @@ class TestAVisionGripperIsItsCameras(unittest.IsolatedAsyncioTestCase):
     arm = _make_arm(fake)
     return await arm.discover(), fake
 
-  async def test_an_arm_that_counts_none_has_none_whatever_it_is_called(self):
+  async def test_an_arm_named_without_a_v_that_counts_two_cameras_has_one(self) -> None:
+    configuration, _ = await self.discovered()
+    assert configuration.camera_count == 2
+    assert configuration.has_vision_gripper
+
+  async def test_an_arm_that_counts_none_has_none_whatever_it_is_called(self) -> None:
     configuration, _ = await self.discovered(**{self.NAME: "0 PreciseFlex 400SXV", self.COUNT: "0"})
-    self.assertFalse(configuration.has_vision_gripper)
+    assert not configuration.has_vision_gripper
 
-  async def test_an_arm_that_will_not_say_has_none(self):
+  async def test_an_arm_that_will_not_say_has_none(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     # The relay answers a bare negative code where the vision server is not there to count.
-    with self.assertLogs("pylabrobot.brooks.precise_flex.driver.master", "WARNING"):
+    with caplog.at_level("WARNING", logger="pylabrobot.brooks.precise_flex.driver.master"):
       configuration, _ = await self.discovered(**{self.COUNT: "not a number"})
-    self.assertEqual(configuration.camera_count, 0)
+    assert configuration.camera_count == 0
+    assert caplog.records
     refused, _ = await self.discovered(**{self.COUNT: "-4015"})
-    self.assertFalse(refused.has_vision_gripper)
+    assert not refused.has_vision_gripper
 
-  async def test_an_arm_without_the_vision_module_is_not_asked(self):
+  async def test_an_arm_without_the_vision_module_is_not_asked(self) -> None:
     configuration, fake = await self.discovered(
       version="0 TCP Command Server 3.0D4, PARobot Module 3.0D4"
     )
-    self.assertNotIn(self.COUNT, fake.sent)
-    self.assertFalse(configuration.has_vision_gripper)
+    assert self.COUNT not in fake.sent
+    assert not configuration.has_vision_gripper

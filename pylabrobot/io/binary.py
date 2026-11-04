@@ -99,7 +99,9 @@ class Writer:
 class Reader:
   """Raw byte reader.
 
-  Reads primitive values from byte sequences.
+  Reads primitive values from already-delimited byte sequences. Missing primitive
+  fields raise ``ValueError``; this decoder cannot establish a transport boundary,
+  validate a report ID, or decide whether a device-protocol reply is complete.
   """
 
   def __init__(self, data: bytes, little_endian: bool = True):

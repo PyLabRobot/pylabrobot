@@ -33,12 +33,9 @@ from pylabrobot.rpc.v1 import jobs_pb2 as job_pb
 @asynccontextmanager
 async def local_server(directory, **kwargs):
   server, driver = make_server(directory, **kwargs)
-  await server.start()
-  try:
-    async with CeligoClient(server.endpoint, device_id=server.session.device_id) as client:
-      yield server, client
-  finally:
-    await server.stop()
+  client = CeligoClient(server.endpoint, device_id=server.session.device_id)
+  async with server, client:
+    yield server, client
 
 
 # This child process runs the real service with mocked driver methods and test-only crash injection.
@@ -67,13 +64,12 @@ async def run():
     stopped = asyncio.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
         asyncio.get_running_loop().add_signal_handler(signum, stopped.set)
-    await server.start()
-    try:
-        print(json.dumps({'endpoint': server.endpoint}), flush=True)
-        await stopped.wait()
-    finally:
-        release.set()
-        await server.stop()
+    async with server:
+        try:
+            print(json.dumps({'endpoint': server.endpoint}), flush=True)
+            await stopped.wait()
+        finally:
+            release.set()
 asyncio.run(run())
 """
 
@@ -97,9 +93,8 @@ async def process_server(directory, crash_point="none"):
       assert process.stdout is not None
       ready = await asyncio.wait_for(process.stdout.readline(), 15)
       assert ready, log_path.read_text()[-4000:]
-      async with CeligoClient(
-        json.loads(ready)["endpoint"], device_id="celigo-test", timeout=3
-      ) as client:
+      client = CeligoClient(json.loads(ready)["endpoint"], device_id="celigo-test", timeout=3)
+      async with client:
         yield process, client
     finally:
       if process.returncode is None:
@@ -146,7 +141,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         assert (await capture(client, "completed")).identifier == completed.identifier
         async with client.watch_previews() as updates:
           assert await asyncio.wait_for(updates.get(), 2) == frame
-        assert all(job.task is None for job in server.session.jobs.values())
+        assert all(job.finished is None for job in server.session.jobs.values())
         with self.assertRaises(grpc.aio.AioRpcError):
           await ready.start()
         await initialize(client, "initialize-again")
@@ -386,7 +381,7 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
                 client.timeout = 20
                 if job is not None:
                   job.timeout = 20
-              await asyncio.gather(*list(server.session.commands))
+              await server.session.wait_for_commands()
               recovered = await client.recover_job("lost-response")
               assert (await capture(client, "lost-response")).identifier == recovered.identifier
               if point.startswith("create"):
@@ -403,11 +398,13 @@ class PersistenceTests(unittest.IsolatedAsyncioTestCase):
         ready = await capture(client, "old-configuration")
         competing, _ = make_server(directory)
         with self.assertRaises(BusyError):
-          await competing.start()
+          async with competing:
+            pass
         assert (await ready.get_status()).configuration_id == client.configuration_id
       wrong, _ = make_server(directory, device_id="another-device")
       with self.assertRaisesRegex(StateError, "device_id mismatch"):
-        await wrong.start()
+        async with wrong:
+          pass
       async with local_server(directory, connection_id="another-controller") as (_, client):
         await initialize(client)
         old = await client.recover_job("old-configuration")

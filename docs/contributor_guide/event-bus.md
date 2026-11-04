@@ -25,10 +25,29 @@ one subscriber is active. Use one of these helpers:
 - `@evented_operation(...)` for a trivial projection of one public async method's invocation.
 - `with event_operation(...):` for explicit semantic context assembled inside an operation.
 - `emit_event(...)` only for a meaningful state transition that is not an operation lifecycle.
+- `LifespanEventInfo` from `_lifespan_event_info()` for entry and exit of a `HasLifespan` object.
 
 Use a low-level diagnostic event only when the transport boundary itself is useful to observe.
 Diagnostic events may inherit the enclosing semantic operation context, but do not define a new
 protocol-level action or resource-transfer meaning.
+
+## Lifespan transition events
+
+For a `HasLifespan` object using the default lifespan, return `LifespanEventInfo` from
+`_lifespan_event_info()`. The base lifespan emits entry `.started` before acquisition and
+`.completed` only after the entire resource has entered. On exit, it emits stop `.started` before
+the exit stack unwinds and `.completed` only after all cleanup succeeds. Failures are assigned to
+the entry or exit transition that failed; a body exception by itself is not a stop failure.
+
+The underlying helper is `with lifespan_events(info) as events:` surrounding an owned lifespan,
+whose active body is nested inside `with events.lifespan_active:`. It observes scope boundaries;
+it does not enter or exit resources. Keep child ownership in `async with` or
+`stack.enter_async_context(child.lifespan())`. Shield individual safety actions while the child is
+active, not the child lifespan's exit (which may unwind an AnyIO task group).
+
+The entry and exit have separate correlated operation IDs. An entry failure, including rollback
+after partial acquisition, emits only `setup.failed`; the resource never became active, so no stop
+transition is reported. A successful entry followed by a teardown failure emits `stop.failed`.
 
 ## Choosing an instrumentation style
 

@@ -1,7 +1,8 @@
 import enum
 import logging
-from typing import Dict
+from typing import Any, Dict
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.kbiosystems.sealer import KBiosystemsError, KBiosystemsSealer
 
 logger = logging.getLogger(__name__)
@@ -108,12 +109,13 @@ class KBiosystemsUltrasealXTPro(KBiosystemsSealer):
       offline_temperature=offline_temperature,
     )
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    """Own Serial through the base lifespan and initialize the XT Pro."""
     logger.warning(
       "KBiosystemsUltrasealXTPro has NOT been tested against hardware in PyLabRobot. "
       "Please make a PR to remove this message if you have verified it on your hardware."
     )
-    await self._open()
+    await super()._enter_lifespan(stack, **kwargs)
     await self.wait_for_idle(
       UltrasealXTProStatus.NoFoil
       | UltrasealXTProStatus.NotAtSealTemperature

@@ -30,7 +30,9 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.backend.send_command.reset_mock()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
+    self.addAsyncCleanup(self.lh.stop)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[0] = self.tip_rack = hamilton_96_tiprack_300uL_filter(name="tip_rack_01")

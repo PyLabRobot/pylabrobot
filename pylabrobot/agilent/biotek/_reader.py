@@ -1,17 +1,19 @@
 """Connection, commands, and common operations for BioTek plate readers."""
 
-import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Optional
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.ftdi import FTDI
 
 logger = logging.getLogger(__name__)
 
 
-class _BioTekReader:
+class _BioTekReader(HasLifespan):
   """Shared BioTek reader behavior, independent of the assay protocol.
 
   The connection lock covers complete operations, including asynchronous results.
@@ -21,15 +23,17 @@ class _BioTekReader:
   def __init__(
     self, timeout: float, device_id: Optional[str], human_readable_device_name: str
   ) -> None:
+    super().__init__()
     self.timeout = timeout
     self.io = FTDI(device_id=device_id, human_readable_device_name=human_readable_device_name)
-    self._lock: Optional[asyncio.Lock] = None
-    self._operation_owner: Optional[asyncio.Task] = None
+    self._lock = anyio.Lock()
+    self._operation_owner: Optional[anyio.TaskInfo] = None
     self._basecode: Optional[str] = None
     self._version: Optional[str] = None
     self._serial_number: Optional[str] = None
     self._capabilities: Dict[int, bytes] = {}
     self._receive_buffer = bytearray()
+    self._io_closed = False
 
   @property
   def serial_number(self) -> Optional[str]:
@@ -51,12 +55,33 @@ class _BioTekReader:
     self._capabilities.clear()
     self._receive_buffer.clear()
 
+  def _mark_io_closed(self) -> None:
+    """Reject commands once lifespan cleanup reaches transport closure."""
+    self._io_closed = True
+
   async def _disconnect(self) -> None:
     """Close the transport and discard connection-dependent information."""
     try:
-      await self.io.stop()
+      await self.io._close()
     finally:
       self._reset_state()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the FTDI transport and initialize the reader for this lifespan."""
+    await super()._enter_lifespan(stack)
+    self._reset_state()
+    self._io_closed = False
+    stack.callback(self._reset_state)
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._mark_io_closed)
+    async with self._lock:
+      self._operation_owner = anyio.get_current_task()
+      try:
+        await self._configure_serial()
+        await self._initialize_reader()
+      finally:
+        self._operation_owner = None
+    logger.info("Connected to %s, firmware %s", type(self).__name__, self._version)
 
   @asynccontextmanager
   async def _operation(self) -> AsyncIterator[None]:
@@ -65,25 +90,25 @@ class _BioTekReader:
     Only the owning task may nest operations. Other tasks wait until the complete
     response is consumed, or until a failed exchange has closed the transport.
     """
-    task = asyncio.current_task()
-    if task is not None and self._operation_owner is task:
+    task = anyio.get_current_task()
+    if self._operation_owner == task:
       yield
       return
-    if self._lock is None:
-      self._lock = asyncio.Lock()
     async with self._lock:
       self._operation_owner = task
       try:
         yield
-      except (Exception, asyncio.CancelledError):
-        try:
-          await self._disconnect()
-        except (Exception, asyncio.CancelledError):
-          logger.exception("Failed to close %s after an operation failure", type(self).__name__)
+      except (Exception, anyio.get_cancelled_exc_class()):
+        with anyio.CancelScope(shield=True):
+          try:
+            await self._disconnect()
+          except (Exception, anyio.get_cancelled_exc_class()):
+            logger.exception("Failed to close %s after an operation failure", type(self).__name__)
         logger.error("%s operation failed; reconnect once the reader is idle", type(self).__name__)
         raise
       finally:
         self._operation_owner = None
+    await anyio.lowlevel.checkpoint()
 
   async def _configure_serial(self) -> None:
     """Configure the common BioTek 9600-baud, 8N2, RTS/CTS connection settings."""
@@ -114,7 +139,7 @@ class _BioTekReader:
       chunk = await self._read_chunk(length - len(self._receive_buffer))
       self._receive_buffer.extend(chunk)
       if not chunk:
-        await asyncio.sleep(0.01)
+        await anyio.sleep(0.01)
     data = self._receive_buffer[:length]
     del self._receive_buffer[:length]
     return bytes(data)
@@ -133,10 +158,12 @@ class _BioTekReader:
     if timeout is None:
       timeout = self.timeout
     try:
-      response = await asyncio.wait_for(self._read_delimited(terminator), timeout)
-    except asyncio.TimeoutError as exc:
-      # Preserve the public timeout type on Python versions where these differ.
-      raise TimeoutError("BioTek: timeout while waiting for a response") from exc
+      with anyio.fail_after(timeout):
+        response = await self._read_delimited(terminator)
+    except TimeoutError as exc:
+      raise TimeoutError(
+        f"BioTek: timeout while waiting for a response; partial={bytes(self._receive_buffer).hex()}"
+      ) from exc
     logger.debug("BioTek received %s", response)
     return response
 
@@ -183,13 +210,20 @@ class _BioTekReader:
     timeout: Optional[float],
   ) -> Optional[bytes]:
     """Bound the entire command/ACK/parameter/response exchange by one deadline."""
+    if self._io_closed:
+      raise RuntimeError(f"{self.__class__.__name__} is not active")
+    effective_timeout = self.timeout if timeout is None else timeout
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    response: Optional[bytes] = None
     try:
-      return await asyncio.wait_for(
-        self._command_unlocked(command, parameters, data_length, wait_for_response),
-        self.timeout if timeout is None else timeout,
-      )
-    except asyncio.TimeoutError as exc:
+      with anyio.CancelScope(shield=True):
+        with anyio.fail_after(effective_timeout):
+          response = await self._command_unlocked(
+            command, parameters, data_length, wait_for_response
+          )
+    except TimeoutError as exc:
       raise TimeoutError("BioTek: timeout while waiting for a response") from exc
+    return response
 
   async def send_command(
     self,
@@ -203,6 +237,8 @@ class _BioTekReader:
     Commands with parameters return the response after their parameter. Commands
     without parameters include the leading ACK, as in the existing BioTek API.
     """
+    if self._io_closed:
+      raise RuntimeError(f"{self.__class__.__name__} is not active")
     async with self._operation():
       return await self._command(
         command.encode("ascii"),
@@ -221,11 +257,13 @@ class _BioTekReader:
     timeout: Optional[float] = None,
   ) -> bytes:
     """Exchange binary parameters or fixed-length data, returning only the payload."""
+    if self._io_closed:
+      raise RuntimeError(f"{self.__class__.__name__} is not active")
     async with self._operation():
       response = await self._command(command, parameters, data_length, not ack_only, timeout)
       if ack_only:
         # These commands acknowledge before their parameter, with no trailing status.
-        await asyncio.sleep(0.25)
+        await anyio.sleep(0.25)
         return b""
       assert response is not None
       return response[1:-5] if parameters is None else response[:-5]
@@ -274,30 +312,7 @@ class _BioTekReader:
 
   async def _initialize_reader(self) -> None:
     """Identify the firmware; subclasses perform any additional initialization."""
-    await self.request_firmware_version()
-
-  async def _before_stop(self) -> None:
-    """Stop model-specific background work before closing or reopening the connection."""
-
-  async def setup(self) -> None:
-    """Connect and initialize the reader. The instrument must have finished booting."""
-    async with self._operation():
-      await self._before_stop()
-      self._reset_state()
-      await self.io.setup()
-      await self._configure_serial()
-      await self._initialize_reader()
-      logger.info("Connected to %s, firmware %s", type(self).__name__, self.version)
-
-  async def stop(self) -> None:
-    """Disconnect without disabling incubation or aborting a plate measurement.
-
-    After a timeout or cancellation, ensure the instrument is idle before reconnecting.
-    """
-    async with self._operation():
-      await self._before_stop()
-      await self._disconnect()
-      logger.info("Disconnected from %s", type(self).__name__)
+    self._version = await self.request_firmware_version()
 
   async def open(self) -> None:
     """Move the plate tray out for loading."""

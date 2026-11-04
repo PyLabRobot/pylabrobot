@@ -2,9 +2,10 @@
 
 import asyncio
 from dataclasses import FrozenInstanceError, dataclass
-from functools import partial
-from unittest.mock import Mock
 
+import pytest
+
+from pylabrobot.concurrency import BaseExceptionGroup
 from pylabrobot.hamilton.nimbus.error_tables import NIMBUS_ERROR_CODES
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.events import EventOverflowError, OverflowPolicy
@@ -16,7 +17,6 @@ from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tests.tcp_tests import _MemorySocket, _response, _SessionTest
 from pylabrobot.hamilton.transport.tcp.wire_types import I32, Str
-from pylabrobot.io.socket import Socket
 
 
 @dataclass(frozen=True)
@@ -37,42 +37,19 @@ class _Query(TCPCommand[int]):
 class TestRequestAPI(_SessionTest):
   async def test_cancel_during_completed_socket_drain_preserves_uncertainty(self):
     """Replay the real writer's drain race through the full request API."""
-    client, io = self.make_client()
-    writer = Mock(spec=asyncio.StreamWriter)
-    cancellations: list[bool] = []
-
-    def cancel_request(completed: asyncio.Task[None]) -> None:
-      """Cancel after drain completes, before its waiter resumes."""
-      cancellations.append(task.cancel())
-
-    def reply_after_write(completed: asyncio.Task[None]) -> None:
-      """A later response must not turn accepted cancellation into success."""
-      io.feed(_response())
-
-    async def drain() -> None:
-      """Complete before cancellation reaches the socket's timeout wait."""
-      drain_task = asyncio.current_task()
-      assert drain_task is not None
-      drain_task.add_done_callback(cancel_request)
-      write_task = client._session._write_task
-      assert write_task is not None
-      write_task.add_done_callback(reply_after_write)
-
-    writer.drain.side_effect = drain
-    io._writer = writer
-    io.write = partial(Socket.write, io)  # type: ignore[method-assign]
+    client, io = await self.make_client()
     task = asyncio.create_task(client.execute(_Query(Address(1, 1, 257))))
+    await self.wait_until(lambda: len(io.writes) == 1)
+    task.cancel()
     with self.assertRaises(asyncio.CancelledError):
       await task
-    self.assertEqual(cancellations, [True])
     self.assertEqual(client.connection_info.state, SessionState.UNCERTAIN)
     with self.assertRaises(ConnectionError):
       await client.execute(_Query(Address(1, 1, 257)))
-    self.assertEqual(writer.write.call_count, 1)
-    self.assertIsNone(client._session._write_task)
+    self.assertEqual(len(io.writes), 1)
 
   async def test_execute_decodes_and_exchange_preserves_frame(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     async def respond(request: HarpPacket) -> None:
       """Check the request action and echo its correlation fields."""
@@ -88,7 +65,7 @@ class TestRequestAPI(_SessionTest):
     self.assertEqual(raw.hoi.action_code, Hoi2Action.STATUS_RESPONSE)
 
   async def test_request_reuse_has_no_session_stamping(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     command = _Query(Address(1, 1, 257))
     original = _Query(Address(1, 1, 257))
 
@@ -104,7 +81,7 @@ class TestRequestAPI(_SessionTest):
       command.dest = Address(1, 1, 999)  # type: ignore[misc]
 
   async def test_discovery_returns_declared_response(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     params = HoiParams().add("Root", Str).add("v1", Str).u32(6).u16(2).build()
 
     async def respond(request: HarpPacket) -> None:
@@ -116,7 +93,7 @@ class TestRequestAPI(_SessionTest):
     self.assertEqual(result, GetObjectCommand.Response("Root", "v1", 6, 2))
 
   async def test_empty_typed_response_is_decode_error_without_poisoning_connection(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     async def respond(request: HarpPacket) -> None:
       """Provide a terminal frame with missing required fields."""
@@ -128,7 +105,7 @@ class TestRequestAPI(_SessionTest):
     self.assertEqual(client._session.state, SessionState.READY)
 
   async def test_socket_and_raw_io_are_not_public(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     with self.assertRaises(AttributeError):
       client.io  # type: ignore[attr-defined]
     with self.assertRaises(AttributeError):
@@ -140,7 +117,7 @@ class TestRequestAPI(_SessionTest):
     info = client.connection_info
     with self.assertRaises(FrozenInstanceError):
       info.port = 999  # type: ignore[misc]
-    await client.stop()
+    await self._sessions.aclose()
     self.assertEqual(info.state, SessionState.READY)
     self.assertEqual(client.connection_info.state, SessionState.CLOSED)
     self.assertEqual(io.writes, [])
@@ -148,18 +125,18 @@ class TestRequestAPI(_SessionTest):
 
 class TestDiscoveryLifetime(_SessionTest):
   async def test_retained_facade_rejects_cache_hits_after_reconnect(self):
-    client, old_io = self.make_client()
+    client, old_io = await self.make_client()
     old = client._session
     intro = client.introspection
     address = Address(1, 1, 257)
     old.registry.register("Root", ObjectInfo("Root", "", 0, 0, address))
     intro._method_table_by_address[address] = []
     self.assertEqual(await intro.resolve_path("Root"), address)
-    await client.stop()
+    await self._sessions.aclose()
     fresh_io = _MemorySocket()
     fresh = TCPSession(fresh_io)
     fresh.client_address = Address(2, 2, 65535)
-    fresh.state = SessionState.CONNECTING
+    await self._sessions.enter_async_context(fresh.lifespan())
     fresh.start_reader()
     client._session = fresh
     for operation in (
@@ -175,7 +152,7 @@ class TestDiscoveryLifetime(_SessionTest):
     self.assertEqual(fresh_io.writes, [])
 
   async def test_uncertain_session_rejects_cached_discovery(self):
-    client, _ = self.make_client()
+    client, _ = await self.make_client()
     intro = client.introspection
     address = Address(1, 1, 257)
     intro._method_table_by_address[address] = []
@@ -187,7 +164,7 @@ class TestDiscoveryLifetime(_SessionTest):
 
 class TestFirmwareErrorAPI(_SessionTest):
   async def test_errors_preserve_payload_and_do_not_enrich_or_recurse(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     payload = HoiParams().add("0x0001.0x0001.0x0101:0x01,0x0006,0x0F08", Str).build()
 
     async def respond(request: HarpPacket) -> None:
@@ -207,7 +184,7 @@ class TestFirmwareErrorAPI(_SessionTest):
     self.assertEqual(raw.hoi.action_code, Hoi2Action.STATUS_EXCEPTION)
 
   async def test_empty_firmware_exception_stays_structured(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
 
     async def respond(request: HarpPacket) -> None:
       """Return an invalid-action error without diagnostic entries."""
@@ -223,7 +200,7 @@ class TestFirmwareErrorAPI(_SessionTest):
     self.assertEqual(ctx.exception.raw_response, b"")
 
   async def test_static_error_table_keys_use_interface_id(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     client._session._error_codes = NIMBUS_ERROR_CODES
 
     for result, description in (
@@ -245,7 +222,7 @@ class TestFirmwareErrorAPI(_SessionTest):
 
 class TestAsyncEventAPI(_SessionTest):
   async def test_events_arrive_between_commands_and_context_unsubscribes(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     async with client.events() as events:
       io.feed(_response(action=Hoi2Action.EVENT))
       event = await asyncio.wait_for(events.__anext__(), 1)
@@ -255,7 +232,7 @@ class TestAsyncEventAPI(_SessionTest):
       await events.__anext__()
 
   async def test_slow_subscriber_overflow_is_explicit_and_does_not_block_responses(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     slow = client.events(capacity=1)
     fast = client.events(capacity=3)
     task = self.send(client)
@@ -271,7 +248,7 @@ class TestAsyncEventAPI(_SessionTest):
     self.assertTrue(client.is_connected)
 
   async def test_drop_policies_report_loss_and_preserve_expected_event(self):
-    client, _ = self.make_client()
+    client, _ = await self.make_client()
     policies: tuple[tuple[OverflowPolicy, int], ...] = (("drop_oldest", 2), ("drop_newest", 1))
     for policy, expected in policies:
       async with client.events(capacity=1, overflow=policy) as events:
@@ -281,25 +258,28 @@ class TestAsyncEventAPI(_SessionTest):
         self.assertEqual((await events.__anext__()).harp.seq, expected)
 
   async def test_stop_wakes_consumer_and_closes_subscription(self):
-    client, _ = self.make_client()
+    client, _ = await self.make_client()
     events = client.events()
     waiting = asyncio.create_task(events.__anext__())
     await asyncio.sleep(0)
-    await client.stop()
+    await self._sessions.aclose()
     with self.assertRaises(StopAsyncIteration):
       await waiting
     self.assertEqual(client._session._subscriptions, set())
 
   async def test_reader_failure_wakes_consumer(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     events = client.events()
     waiting = asyncio.create_task(events.__anext__())
     io.stream.set_exception(ConnectionResetError("reset"))
     with self.assertRaises(ConnectionResetError):
       await asyncio.wait_for(waiting, 1)
+    with pytest.raises(BaseExceptionGroup) as raised:
+      await self._sessions.aclose()
+    assert isinstance(raised.value.exceptions[0], ConnectionResetError)
 
   async def test_request_timeout_closes_subscriptions(self):
-    client, _ = self.make_client()
+    client, _ = await self.make_client()
     events = client.events()
     with self.assertRaises(asyncio.TimeoutError):
       await client.exchange(_Query(Address(1, 1, 257)), read_timeout=0)
@@ -307,7 +287,7 @@ class TestAsyncEventAPI(_SessionTest):
       await events.__anext__()
 
   async def test_cancelled_consumer_can_resume(self):
-    client, io = self.make_client()
+    client, io = await self.make_client()
     async with client.events() as events:
       waiting = asyncio.create_task(events.__anext__())
       await asyncio.sleep(0)

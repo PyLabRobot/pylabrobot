@@ -49,37 +49,34 @@ class StorageCompatibilityTests(unittest.IsolatedAsyncioTestCase):
       instance_id = ""
       for _ in range(2):
         server, driver = make_server(directory, device_id="legacy-device")
-        await server.start()
-        try:
-          async with CeligoClient(server.endpoint, device_id="legacy-device") as client:
-            info = await client.get_device_info()
-            assert info.instance_id and info.instance_id != instance_id
-            instance_id = info.instance_id
-            assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
-            assert len(server.session.jobs) == 3
-            for name in ("retained", "released", "interrupted"):
-              job = await client.recover_job(name)
-              status = await job.get_status()
-              assert status.state == job_pb.JOB_STATE_FINISHED and status.completed == 1
-              assert status.outcome == (
-                job_pb.OUTCOME_INTERRUPTED if name == "interrupted" else job_pb.OUTCOME_SUCCEEDED
-              )
-              retention = await job.get_image_retention()
-              assert retention.images_released == (name == "released")
-              frames = await job.list_frames()
-              assert len(frames) == 1 and frames[0].available != retention.images_released
-              if retention.images_released:
-                with self.assertRaises(grpc.aio.AioRpcError) as released:
-                  await job.get_frame(frames[0].frame_id)
-                assert released.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
-              else:
-                frame = await job.get_frame(frames[0].frame_id)
-                assert frame.image == expected[name]
-                assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
-                assert frame.width == frame.height == 8
-                assert unpack_acquisition_metadata(frame).channel == "brightfield"
-            assert all(job.task is None for job in server.session.jobs.values())
-            driver.setup.assert_not_awaited()
-            driver.acquire_scan_position.assert_not_awaited()
-        finally:
-          await server.stop()
+        client = CeligoClient(server.endpoint, device_id="legacy-device")
+        async with server, client:
+          info = await client.get_device_info()
+          assert info.instance_id and info.instance_id != instance_id
+          instance_id = info.instance_id
+          assert (await client.get_status()).state == device_pb.OPERATIONAL_STATE_UNINITIALIZED
+          assert len(server.session.jobs) == 3
+          for name in ("retained", "released", "interrupted"):
+            job = await client.recover_job(name)
+            status = await job.get_status()
+            assert status.state == job_pb.JOB_STATE_FINISHED and status.completed == 1
+            assert status.outcome == (
+              job_pb.OUTCOME_INTERRUPTED if name == "interrupted" else job_pb.OUTCOME_SUCCEEDED
+            )
+            retention = await job.get_image_retention()
+            assert retention.images_released == (name == "released")
+            frames = await job.list_frames()
+            assert len(frames) == 1 and frames[0].available != retention.images_released
+            if retention.images_released:
+              with self.assertRaises(grpc.aio.AioRpcError) as released:
+                await job.get_frame(frames[0].frame_id)
+              assert released.exception.code() == grpc.StatusCode.FAILED_PRECONDITION
+            else:
+              frame = await job.get_frame(frames[0].frame_id)
+              assert frame.image == expected[name]
+              assert hashlib.sha256(frame.image).hexdigest() == frame.sha256
+              assert frame.width == frame.height == 8
+              assert unpack_acquisition_metadata(frame).channel == "brightfield"
+          assert all(job.finished is None for job in server.session.jobs.values())
+          driver.setup.assert_not_awaited()
+          driver.acquire_scan_position.assert_not_awaited()

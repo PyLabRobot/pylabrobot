@@ -1,22 +1,32 @@
 """PreciseFlex driver: the controller link and lifecycle, the vision server's links, the
 configuration, and the resource model it builds from one."""
 
-import asyncio
 import dataclasses
 import json
 import logging
 import warnings
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
+from functools import wraps
 from typing import (
   Any,
+  AsyncIterator,
+  Awaitable,
+  Callable,
   ClassVar,
+  Concatenate,
   Dict,
   List,
   Literal,
   Optional,
+  ParamSpec,
   Sequence,
   Tuple,
+  TypeVar,
   cast,
 )
+
+import anyio
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.driver.configuration import (
@@ -27,7 +37,8 @@ from pylabrobot.brooks.precise_flex.driver.configuration import (
   to_jsonable,
 )
 from pylabrobot.brooks.precise_flex.kinematics import JointState
-from pylabrobot.events import emit_event, evented_operation
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.events import LifespanEventInfo, emit_event, evented_operation
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -59,6 +70,9 @@ from .features.rail import PreciseFlexRail, PreciseFlexRailConfiguration
 from .features.vision import PreciseFlexVision
 
 logger = logging.getLogger(__name__)
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 # Brooks' PreciseVision server behind a camera-gripper arm: a text property
 # protocol on one port, and the JPEG results it pushes on another.
@@ -118,7 +132,20 @@ def _drain_named_result(buf: bytearray) -> Optional[Tuple[str, bytes]]:
   return name, data
 
 
-class PreciseFlexDriver:
+def _admitted_motion(
+  method: Callable[Concatenate["PreciseFlexDriver", _P], Awaitable[_R]],
+) -> Callable[Concatenate["PreciseFlexDriver", _P], Awaitable[_R]]:
+  """Hold finite-motion admission for one public operation, including nested calls."""
+
+  @wraps(method)
+  async def wrapper(self: "PreciseFlexDriver", *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    async with self._motion_admission():
+      return await method(self, *args, **kwargs)
+
+  return cast(Callable[Concatenate["PreciseFlexDriver", _P], Awaitable[_R]], wrapper)
+
+
+class PreciseFlexDriver(HasLifespan):
   """Driver for PreciseFlex robotic arms.
 
   Owns the Socket I/O connection and device-level operations (power, attach,
@@ -195,12 +222,20 @@ class PreciseFlexDriver:
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
-    # Whether the controller link is open, so `disconnect` after a failed setup does nothing.
-    self._connected = False
+    self._setup_completed = False
     self.timeout = timeout
-    # Serializes each request->reply exchange over the single shared controller socket; the
-    # rationale (and why it is kept though uncontended today) is in _locked_exchange.
-    self._io_lock = asyncio.Lock()
+    # Serializes each request->reply exchange over the single shared controller socket; see
+    # `_locked_exchange` for framing details.
+    self._command_lock = anyio.Lock()
+    self._command_reconciled_callback: ContextVar[Optional[Callable[[str], None]]] = ContextVar(
+      "precise_flex_command_reconciled_callback", default=None
+    )
+    self._freedrive_active = False
+    self._freedrive_scope_token: Optional[object] = None
+    self._freedrive_transition_lock = anyio.Lock()
+    self._motion_admission_owner: ContextVar[Optional[int]] = ContextVar(
+      "precise_flex_motion_admission_owner", default=None
+    )
     self._vision_host = vision_host
     # The vision server's two connections, held here beside the controller's; None until
     # setup opens them, which it does only for a reachable `vision_host`.
@@ -210,9 +245,9 @@ class PreciseFlexDriver:
     # mid-result leaves a partial result here, keeping the next read frame-aligned.
     self._vision_image_buf = bytearray()
     self.vision_server_timeout = 5.0
-    # One exchange at a time on each vision server connection, as `_io_lock` on the controller's.
-    self._vision_server_lock = asyncio.Lock()
-    self._vision_image_lock = asyncio.Lock()
+    # One exchange at a time on each vision server connection, as `_command_lock` on the controller's.
+    self._vision_server_lock = anyio.Lock()
+    self._vision_image_lock = anyio.Lock()
     # The vision feature, built at setup when the controller's vision module is loaded.
     self.vision: Optional[PreciseFlexVision] = None
     # Built only on an arm that has a rail; discovery decides at setup.
@@ -248,7 +283,36 @@ class PreciseFlexDriver:
       "port": self.io._port,
     }
 
-  async def _locked_exchange(self, command: str) -> str:
+  def _reject_motion_during_freedrive_scope(self) -> None:
+    """Reject motion before device mutation while a freedrive scope owns the arm."""
+    if self._freedrive_scope_token is not None:
+      raise RuntimeError("Cannot move the arm while a freedrive scope is active")
+
+  @asynccontextmanager
+  async def _motion_admission(self) -> AsyncIterator[None]:
+    """Serialize finite motion with scope entry and parent freedrive cleanup."""
+    task_id = anyio.get_current_task().id
+    if self._motion_admission_owner.get() == task_id:
+      yield
+      return
+
+    self._reject_motion_during_freedrive_scope()
+    async with self._freedrive_transition_lock:
+      self._reject_motion_during_freedrive_scope()
+      token = self._motion_admission_owner.set(task_id)
+      try:
+        yield
+      finally:
+        self._motion_admission_owner.reset(token)
+
+  async def _locked_exchange(
+    self,
+    command: str,
+    *,
+    read_deadline: Optional[float] = None,
+    shield_reply: bool = True,
+    on_reply: Optional[Callable[[str], str]] = None,
+  ) -> str:
     """Write one command and read its one reply line, with the lock held.
 
     The controller takes one connection (port 10100 refuses a second), and a reply is matched to its
@@ -256,11 +320,64 @@ class PreciseFlexDriver:
     held per exchange, not across a move's wait; the interrupt halt bypasses it (see
     ``_wait_for_eom``). The newline is added here; the reply is decoded and stripped.
     """
-    async with self._io_lock:
-      await self.io.write(command.encode("utf-8") + b"\n")
-      return (await self.io.readline()).decode("utf-8").strip()
+    async with self._command_lock:
+      await anyio.lowlevel.checkpoint()
+      remaining = None if read_deadline is None else read_deadline - anyio.current_time()
+      if remaining is not None and remaining <= 0:
+        raise TimeoutError("polling deadline elapsed before command dispatch")
+      if remaining is not None:
+        # Socket.write's lock wait and pre-send checkpoint are cancellable. Its stream send
+        # is shielded internally, so a successful return means the write needs a reply.
+        write_completed = False
+        try:
+          with anyio.CancelScope(
+            deadline=read_deadline if read_deadline is not None else float("inf")
+          ):
+            await self.io.write(command.encode("utf-8") + b"\n", timeout=remaining)
+            write_completed = True
+        except TimeoutError:
+          # Socket.write only raises a timeout after entering its shielded send.
+          self.io._mark_connection_lost()
+          raise
+        if not write_completed:
+          raise TimeoutError("polling deadline elapsed before command dispatch")
+      if shield_reply:
+        with anyio.CancelScope(shield=True):
+          try:
+            # The polling deadline includes the lock wait, committed write, and reply.
+            with anyio.CancelScope(
+              deadline=read_deadline if read_deadline is not None else float("inf")
+            ) as reply_scope:
+              if remaining is None:
+                await self.io.write(command.encode("utf-8") + b"\n")
+              else:
+                await anyio.lowlevel.checkpoint_if_cancelled()
+              reply = (await self.io.readline()).decode("utf-8").strip()
+            if reply_scope.cancelled_caught:
+              raise TimeoutError("polling deadline elapsed while waiting for command reply")
+          except TimeoutError:
+            if remaining is not None:
+              # The write may have committed; its late reply (or partial frame) still belongs here.
+              # Reject further writes until reconnect replaces the stream and clears its buffer.
+              self.io._mark_connection_lost()
+            raise
+          result = on_reply(reply) if on_reply is not None else reply
+      else:
+        with anyio.CancelScope(shield=True):
+          if remaining is None:
+            await self.io.write(command.encode("utf-8") + b"\n")
+        reply = (await self.io.readline()).decode("utf-8").strip()
+        with anyio.CancelScope(shield=True):
+          result = on_reply(reply) if on_reply is not None else reply
+      await anyio.lowlevel.checkpoint()
+      return result
 
-  async def _locked_vision_server_exchange(self, command: str) -> str:
+  async def _locked_vision_server_exchange(
+    self,
+    command: str,
+    *,
+    on_reply: Optional[Callable[[str], str]] = None,
+  ) -> str:
     """As `_locked_exchange`, on the vision server's property connection. Its lines end CRLF.
 
     Raises:
@@ -269,8 +386,13 @@ class PreciseFlexDriver:
     if self._vision_server_io is None:
       raise RuntimeError(_NO_VISION_SERVER)
     async with self._vision_server_lock:
-      await self._vision_server_io.write(command.encode("utf-8") + b"\r\n")
-      return (await self._vision_server_io.readline()).decode("utf-8", "replace").strip()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self._vision_server_io.write(command.encode("utf-8") + b"\r\n")
+        reply = (await self._vision_server_io.readline()).decode("utf-8", "replace").strip()
+        result = on_reply(reply) if on_reply is not None else reply
+      await anyio.lowlevel.checkpoint()
+      return result
 
   def _ensure_successful(self, reply: str) -> str:
     """Return the data of a ``<code> <data>`` reply, raising unless the code is 0.
@@ -293,7 +415,12 @@ class PreciseFlexDriver:
     return data
 
   async def send_command(
-    self, command: str, *, use_server: Literal["controller", "vision"] = "controller"
+    self,
+    command: str,
+    *,
+    read_deadline: Optional[float] = None,
+    use_server: Literal["controller", "vision"] = "controller",
+    shield_reply: bool = True,
   ) -> str:
     """Send a command and return the accepted ``<code> <data>`` payload.
 
@@ -307,8 +434,10 @@ class PreciseFlexDriver:
 
     Args:
       command: the command line, without its line ending.
+      read_deadline: optional deadline in monotonic seconds for the exchange.
       use_server: ``"controller"`` (the default), or ``"vision"`` for the vision server's property
         connection, which answers in the same grammar.
+      shield_reply: whether to shield the reply read against task cancellation.
 
     Raises:
       RuntimeError: If ``use_server`` is ``"vision"`` and the vision server is not connected.
@@ -316,9 +445,8 @@ class PreciseFlexDriver:
     """
     device = self._controller_reference()
     if use_server == "controller":
-      exchange = self._locked_exchange
+      pass
     elif use_server == "vision":
-      exchange = self._locked_vision_server_exchange
       device = {**device, "host": self._vision_host, "port": VISION_SERVER_PROPERTY_PORT}
     else:
       raise ValueError(f"use_server has to be either `controller` or `vision`, is {use_server}")
@@ -326,9 +454,26 @@ class PreciseFlexDriver:
       "device": device,
       "command": command,
     }
+
+    def reconcile_reply(reply: str) -> str:
+      parsed = self._ensure_successful(reply)
+      if use_server == "controller":
+        callback = self._command_reconciled_callback.get()
+        if callback is not None:
+          callback(command)
+      return parsed
+
     emit_event("precise_flex.firmware_command.started", **event_data)
     try:
-      result = self._ensure_successful(await exchange(command))
+      if use_server == "controller":
+        result = await self._locked_exchange(
+          command,
+          read_deadline=read_deadline,
+          shield_reply=shield_reply,
+          on_reply=reconcile_reply,
+        )
+      else:
+        result = await self._locked_vision_server_exchange(command, on_reply=reconcile_reply)
     except BaseException as error:
       emit_event(
         "precise_flex.firmware_command.failed",
@@ -347,6 +492,29 @@ class PreciseFlexDriver:
     """Whether setup opened the vision server's connections."""
     return self._vision_server_io is not None
 
+  @staticmethod
+  async def _open_socket(sock: Socket) -> None:
+    """Open ``sock`` via its lifespan when unpatched, or ``setup()`` when mocked/patched."""
+    if (
+      isinstance(sock, HasLifespan)
+      and type(sock).setup is HasLifespan.setup
+      and "setup" not in sock.__dict__
+    ):
+      stack = AsyncExitStackWithShielding()
+      await stack.enter_async_context(sock.lifespan())
+      sock.__dict__["_owned_lifespan_stack"] = stack
+    else:
+      await sock.setup()
+
+  @staticmethod
+  async def _close_socket(sock: Socket) -> None:
+    """Close a socket opened by ``_open_socket``."""
+    stack = sock.__dict__.pop("_owned_lifespan_stack", None)
+    if isinstance(stack, AsyncExitStackWithShielding):
+      await stack.aclose()
+    else:
+      await sock.stop()
+
   async def _open_vision_server(self, host: str) -> None:
     """Open and hold both vision server connections (property + image stream)."""
     server_io = Socket(
@@ -359,8 +527,13 @@ class PreciseFlexDriver:
       host=host,
       port=VISION_SERVER_IMAGE_PORT,
     )
-    await server_io.setup()
-    await image_io.setup()
+    await self._open_socket(server_io)
+    try:
+      await self._open_socket(image_io)
+    except BaseException:
+      with anyio.CancelScope(shield=True):
+        await self._close_socket(server_io)
+      raise
     self._vision_server_io, self._vision_image_io = server_io, image_io
     self._vision_image_buf.clear()  # a fresh stream; drop anything buffered from a previous session
     logger.info(
@@ -372,11 +545,14 @@ class PreciseFlexDriver:
 
   async def _close_vision_server(self) -> None:
     """Close both vision server connections, if they are open."""
-    if self._vision_image_io is not None:
-      await self._vision_image_io.stop()
-    if self._vision_server_io is not None:
-      await self._vision_server_io.stop()
+    image_io, server_io = self._vision_image_io, self._vision_server_io
     self._vision_server_io = self._vision_image_io = None
+    try:
+      if image_io is not None:
+        await self._close_socket(image_io)
+    finally:
+      if server_io is not None:
+        await self._close_socket(server_io)
 
   async def request_vision_server_property(self, name: str) -> str:
     """Read a named vision server parameter (``property get <name>``); raises on an error reply.
@@ -442,70 +618,189 @@ class PreciseFlexDriver:
 
   # -- lifecycle -------------------------------------------------------------
 
-  @evented_operation(
-    "precise_flex.setup",
-    lambda self, skip_home=False, skip_vision_setup=False: {
+  def _lifespan_event_info(self, **kwargs: Any) -> LifespanEventInfo:
+    """Describe controller setup and shutdown transitions."""
+    start_data: Dict[str, Any] = {
       "device": self._controller_reference(),
-      "skip_home": skip_home,
-      "skip_vision_setup": skip_vision_setup,
-    },
-  )
-  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
-    """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
+      "skip_home": kwargs.get("skip_home", False),
+    }
+    if "skip_vision_setup" in kwargs:
+      start_data["skip_vision_setup"] = kwargs["skip_vision_setup"]
+    return LifespanEventInfo(
+      "precise_flex.setup",
+      "precise_flex.stop",
+      start_data,
+      {"device": self._controller_reference()},
+    )
 
-    ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
-    modelled, before homing so the jaws' opening is checked, axes outside their limits are dealt
-    with, and, when the controller has an IntelliGuide vision module, the vision feature is built
-    as ``self.vision``.
+  def _log_disconnected(self) -> None:
+    """Report the closed Socket after the owned connection exits."""
+    logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
-    A setup that fails or is interrupted hands the arm back and closes its links, as ``disconnect``
-    does, each step on its own: the controller takes one connection and refuses the next while one
-    is open. The setup's own error is the one raised.
+  async def _exit(self) -> None:
+    """Close the communications link immediately.
 
-    Args:
-      skip_home: If True, skip the homing step during setup.
-      skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
-        Mirrors STAR's ``skip_*`` setup flags.
+    Note:
+      Does not affect any robots that may be active.
     """
-    try:
-      await self.connect()
-      configuration = await self.initialize()
-      self._create_feature_resources(configuration)
-      if not skip_home:
-        await self.home()
-      await self.arm._handle_out_of_range_axes()
-      if not skip_vision_setup and configuration.has_vision_server:
-        await self._setup_vision(self._vision_host)
-    except BaseException:
+    await self.io.write(b"exit\n")
+
+  async def _close_io(self) -> None:
+    """Close the controller socket."""
+    await self._close_socket(self.io)
+
+  def _push_lifespan_cleanup(
+    self,
+    stack: AsyncExitStackWithShielding,
+    release: Callable[[], Awaitable[None]],
+    *,
+    failed_setup_message: Optional[str] = None,
+  ) -> None:
+    """Push a shielded cleanup callback that logs instead of masking a failed setup."""
+
+    async def _cleanup() -> None:
       try:
-        for release in (self.detach, self.power_off_robot, self._exit, self._close_vision_server):
-          try:
-            await release()
-          except Exception as error:
+        await release()
+      except Exception as error:
+        if not self._setup_completed:
+          if failed_setup_message is not None:
+            logger.warning(failed_setup_message, self.io._host, error)
+          else:
             logger.warning(
               "[PreciseFlex %s] after a failed setup, %s failed: %s",
               self.io._host,
               release.__name__,
               error,
             )
-      finally:
-        try:
-          await self.io.stop()
-        except Exception as error:
-          logger.warning(
-            "[PreciseFlex %s] could not close the link after a failed setup: %s",
-            self.io._host,
-            error,
-          )
-        self._connected = False
-      raise
+          return
+        raise
 
-  async def connect(self) -> None:
-    """Open the link and agree the response protocol. Powers nothing, moves nothing."""
-    await self.io.setup()
-    self._connected = True
+    stack.push_shielded_async_callback(_cleanup)
+
+  async def _enter_link(self, stack: AsyncExitStackWithShielding) -> None:
+    """Open the controller socket on ``stack`` and switch it to PC response mode."""
+    stack.callback(self._log_disconnected)
+    await self._open_socket(self.io)
+    self._push_lifespan_cleanup(
+      stack,
+      self._close_io,
+      failed_setup_message="[PreciseFlex %s] could not close the link after a failed setup: %s",
+    )
+    self._push_lifespan_cleanup(stack, self._close_vision_server)
+    self._push_lifespan_cleanup(stack, self._exit)
+
     await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
+
+  def _create_feature_resources(self, configuration: "PreciseFlexConfiguration") -> None:
+    """Build the arm on its base plate, from a configuration. No motion.
+
+    The column is stood on the base plate, the carriage hung on it, the links on that and the
+    gripper on link 2, each placed by where its joint has to land. They stand at Z 0 with every
+    joint at 0 until a joint state is read. Does nothing for a driver given no base plate. An arm
+    already built keeps its parts.
+
+    Args:
+      configuration: what the arm reported: the declared one, or the one read on lifespan entry.
+    """
+    base_plate = self.base_plate
+    if base_plate is None:
+      return
+    device = base_plate.parent
+    if device is None:
+      logger.warning("the base plate belongs to no device, so the arm is not modelled")
+      return
+    if self.arm.resource is not None:
+      return
+    c = configuration.arm
+    column = z_column(name=f"{device.name}_z_column", height=z_column_height(c.z_range[1]))
+    base_plate.assign_child_resource(column, location=Z_COLUMN_LOCATION)
+    carriage = z_carriage(name=f"{device.name}_z_carriage")
+    column.assign_child_resource(carriage, location=z_carriage_location(0.0))
+    first = link_1(name=f"{device.name}_link_1", length=c.kinematics.l1)
+    # The reference point is the shoulder axis at the flange plane, which link 1 stands above.
+    above = Coordinate(0.0, 0.0, LINK_1_ABOVE_FLANGE_PLANE)
+    carriage.assign_child_resource(
+      first, location=Z_CARRIAGE_REFERENCE_POINT - first.proximal_joint + above
+    )
+    second = link_2(name=f"{device.name}_link_2", length=c.kinematics.l2)
+    # Link 2's underside lies in the flange plane, that far below link 1's.
+    below = Coordinate(0.0, 0.0, -LINK_1_ABOVE_FLANGE_PLANE)
+    first.assign_child_resource(
+      second, location=cast(Coordinate, first.distal_joint) - second.proximal_joint + below
+    )
+    hand = gripper(
+      name=f"{device.name}_gripper",
+      tool_length=c.kinematics.gripper_length,
+      intelliguide="v23" if configuration.has_vision_gripper else "s23",
+      # The axis's soft limits, in mm, as the gripper takes them when it adopts a configuration.
+      jaw_range=(
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[0]),
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[1]),
+      ),
+    )
+    second.assign_child_resource(
+      hand, location=cast(Coordinate, second.distal_joint) - hand.proximal_joint
+    )
+    self.arm.resource, self.arm.link_1, self.arm.link_2 = carriage, first, second
+    self.gripper.resource = hand
+
+  async def _setup_vision(self, vision_host: Optional[str]) -> None:
+    """Build the vision capability and connect its vision server; best-effort, never raises.
+
+    Called on lifespan entry when the controller is set up for a vision server
+    (``has_vision_server``), whatever gripper is fitted; this class owns the connection, and lifespan
+    exit closes it. The controller side of vision always works; a set, reachable ``vision_host``
+    additionally opens the vision server for image fetch and discovery. A missing or unreachable host
+    leaves ``self.vision`` built with no vision server.
+
+    Args:
+      vision_host: address of the vision server, or ``None`` for controller-only vision.
+    """
+    if vision_host:
+      try:
+        await self._open_vision_server(vision_host)
+      # A missing or unreachable vision server just disables image fetch.
+      except Exception as exc:  # noqa: BLE001
+        logger.warning(
+          "[PreciseFlex %s] vision server at %s unreachable; direct image acquisition disabled: %s",
+          self.io._host,
+          vision_host,
+          exc,
+        )
+    self.vision = PreciseFlexVision(self)
+    await self.vision.setup()  # discovers, caches, and logs the capability summary (best-effort)
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    skip_home: bool = False,
+    skip_vision_setup: bool = False,
+  ) -> None:
+    """Open and initialize the controller, registering rollback after each acquisition."""
+    await super()._enter_lifespan(stack)
+    if not isinstance(skip_home, bool):
+      raise TypeError("skip_home must be a bool")
+    if not isinstance(skip_vision_setup, bool):
+      raise TypeError("skip_vision_setup must be a bool")
+
+    self._setup_completed = False
+    await self._enter_link(stack)
+    await self.power_on_robot()
+    self._push_lifespan_cleanup(stack, self.power_off_robot)
+    await self.attach(1)
+    self._push_lifespan_cleanup(stack, self.detach)
+    self._push_lifespan_cleanup(stack, self.arm._force_stop_freedrive)
+    await self.arm.stop_freedrive_mode()
+    configuration = await self.discover()
+    self._create_feature_resources(configuration)
+    if not skip_home:
+      await self.home()
+    await self.arm._handle_out_of_range_axes()
+    if not skip_vision_setup and configuration.has_vision_server:
+      await self._setup_vision(self._vision_host)
+    self._setup_completed = True
 
   def _check_declared_against(self, discovered: "PreciseFlexConfiguration") -> None:
     """Raise if what was declared cannot stand for what the device answered.
@@ -591,118 +886,7 @@ class PreciseFlexDriver:
     await self.arm.stop_freedrive_mode()
     return await self.discover()
 
-  def _create_feature_resources(self, configuration: "PreciseFlexConfiguration") -> None:
-    """Build the arm on its base plate, from a configuration. No motion.
-
-    The column is stood on the base plate, the carriage hung on it, the links on that and the
-    gripper on link 2, each placed by where its joint has to land. They stand at Z 0 with every
-    joint at 0 until a joint state is read. Does nothing for a driver given no base plate. An arm
-    already built keeps its parts.
-
-    Args:
-      configuration: what the arm reported: the declared one, or the one read at setup.
-    """
-    base_plate = self.base_plate
-    if base_plate is None:
-      return
-    device = base_plate.parent
-    if device is None:
-      logger.warning("the base plate belongs to no device, so the arm is not modelled")
-      return
-    if self.arm.resource is not None:
-      return
-    c = configuration.arm
-    column = z_column(name=f"{device.name}_z_column", height=z_column_height(c.z_range[1]))
-    base_plate.assign_child_resource(column, location=Z_COLUMN_LOCATION)
-    carriage = z_carriage(name=f"{device.name}_z_carriage")
-    column.assign_child_resource(carriage, location=z_carriage_location(0.0))
-    first = link_1(name=f"{device.name}_link_1", length=c.kinematics.l1)
-    # The reference point is the shoulder axis at the flange plane, which link 1 stands above.
-    above = Coordinate(0.0, 0.0, LINK_1_ABOVE_FLANGE_PLANE)
-    carriage.assign_child_resource(
-      first, location=Z_CARRIAGE_REFERENCE_POINT - first.proximal_joint + above
-    )
-    second = link_2(name=f"{device.name}_link_2", length=c.kinematics.l2)
-    # Link 2's underside lies in the flange plane, that far below link 1's.
-    below = Coordinate(0.0, 0.0, -LINK_1_ABOVE_FLANGE_PLANE)
-    first.assign_child_resource(
-      second, location=cast(Coordinate, first.distal_joint) - second.proximal_joint + below
-    )
-    hand = gripper(
-      name=f"{device.name}_gripper",
-      tool_length=c.kinematics.gripper_length,
-      intelliguide="v23" if configuration.has_vision_gripper else "s23",
-      # The axis's soft limits, in mm, as the gripper takes them when it adopts a configuration.
-      jaw_range=(
-        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[0]),
-        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[1]),
-      ),
-    )
-    second.assign_child_resource(
-      hand, location=cast(Coordinate, second.distal_joint) - hand.proximal_joint
-    )
-    self.arm.resource, self.arm.link_1, self.arm.link_2 = carriage, first, second
-    self.gripper.resource = hand
-
-  async def _setup_vision(self, vision_host: Optional[str]) -> None:
-    """Build the vision capability and connect its vision server; best-effort, never raises.
-
-    Called by ``setup`` when the controller is set up for a vision server (``has_vision_server``),
-    whatever gripper is fitted; this class owns the connection, as ``stop`` closes it. The
-    controller side of vision always works; a set, reachable ``vision_host`` additionally opens the
-    vision server for image fetch and discovery. A missing or unreachable host leaves
-    ``self.vision`` built with no vision server.
-
-    Args:
-      vision_host: address of the vision server, or ``None`` for controller-only vision.
-    """
-    if vision_host:
-      try:
-        await self._open_vision_server(vision_host)
-      # A missing or unreachable vision server just disables image fetch.
-      except Exception as exc:  # noqa: BLE001
-        logger.warning(
-          "[PreciseFlex %s] vision server at %s unreachable; direct image acquisition disabled: %s",
-          self.io._host,
-          vision_host,
-          exc,
-        )
-    self.vision = PreciseFlexVision(self)
-    await self.vision.setup()  # discovers, caches, and logs the capability summary (best-effort)
-
-  async def disconnect(self) -> None:
-    """Hand the arm back and close the links. Moves nothing.
-
-    Drops high power as well as releasing the arm, because ``initialize`` raised it. Does nothing
-    when the link is not open, as after a setup that failed and handed the arm back.
-    """
-    if not self._connected:
-      return
-    await self.detach()
-    await self.power_off_robot()
-    await self._exit()
-    await self._close_vision_server()
-    await self.io.stop()
-    self._connected = False
-    logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
-
-  @evented_operation(
-    "precise_flex.stop",
-    lambda self: {"device": self._controller_reference()},
-  )
-  async def stop(self):
-    """Hand the arm back and close every connection (``disconnect``)."""
-    await self.disconnect()
-
   # -- device-level commands -------------------------------------------------
-
-  async def _exit(self) -> None:
-    """Close the communications link immediately.
-
-    Note:
-      Does not affect any robots that may be active.
-    """
-    await self.io.write(b"exit\n")
 
   ResponseMode = Literal["pc", "verbose"]
 
@@ -795,10 +979,16 @@ class PreciseFlexDriver:
     """Detach the robot."""
     await self.attach(0)
 
+  async def _unchecked_fw_home(self) -> None:
+    """Send ``home`` to the controller. Nothing is guarded."""
+    self._reject_motion_during_freedrive_scope()
+    await self.send_command("home")
+
   @evented_operation(
     "precise_flex.home",
     lambda self: {"device": self._controller_reference()},
   )
+  @_admitted_motion
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
@@ -811,6 +1001,7 @@ class PreciseFlexDriver:
       Requires robot to be attached.
       Waits until the homing is complete.
     """
+    self._reject_motion_during_freedrive_scope()
     gripper = self.gripper.configuration
 
     def build_targets(current: JointState) -> List[JointState]:
@@ -819,7 +1010,7 @@ class PreciseFlexDriver:
       return [{**current, PreciseFlexAxis.GRIPPER: gripper.hard_limit_range[1]}]
 
     async def unchecked_fw_move(_targets: Sequence[JointState]) -> None:
-      await self.send_command("home")
+      await self._unchecked_fw_home()
 
     await self.arm._guarded_move(
       build_targets,
@@ -828,6 +1019,7 @@ class PreciseFlexDriver:
       retry_out_of_range=False,
     )
 
+  @_admitted_motion
   async def home_all(self) -> None:
     """Home all robots.
 
@@ -835,6 +1027,7 @@ class PreciseFlexDriver:
       Requires power to be enabled.
       Requires that robots not be attached.
     """
+    self._reject_motion_during_freedrive_scope()
     await self.send_command("homeAll")
 
   @evented_operation(
@@ -1352,6 +1545,7 @@ class PreciseFlexDriver:
     "precise_flex.recover_from_fault",
     lambda self: {"device": self._controller_reference()},
   )
+  @_admitted_motion
   async def recover_from_fault(self) -> None:
     """Recover after a collision / fault that stopped the arm and dropped power, leaving it usable.
 
@@ -1367,6 +1561,7 @@ class PreciseFlexDriver:
       PreciseFlexError: if a hard E-stop is engaged (release the button first) or power cannot be
         re-enabled.
     """
+    self._reject_motion_during_freedrive_scope()
     if await self.request_system_state() == PowerState.OFF_HARD_ESTOP:
       raise PreciseFlexError(
         -1028, "hard E-Stop engaged - release the E-stop button before recovering"
@@ -1374,6 +1569,12 @@ class PreciseFlexDriver:
     await self.power_on_robot()
     await self.attach(1)
     await self.home()
+
+  @asynccontextmanager
+  async def freedrive(self, free_axes: Optional[List[int]] = None) -> AsyncIterator[None]:
+    """Enable freedrive for the lifetime of this context."""
+    async with self.arm.freedrive(free_axes):
+      yield
 
   # -- deprecated: moved to the arm, gripper and rail ---------------------------------------------
 

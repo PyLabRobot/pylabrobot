@@ -1,19 +1,47 @@
 import textwrap
-import unittest
-import unittest.mock
+from typing import Any, Dict, List, cast
 
+import anyio
+import pytest
+
+from pylabrobot.io import Socket
 from pylabrobot.legacy.thermocycling.standard import Protocol, Stage, Step
 from pylabrobot.legacy.thermocycling.thermo_fisher.proflex import ProflexBackend
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+class ProtocolSocket:
+  """Typed software Socket double for the literal protocol transcript."""
+
+  def __init__(self) -> None:
+    self.writes: List[bytes] = []
+    self.reads: List[bytes] = []
+    self.eof_reads: List[bytes] = []
+    self.options: Dict[str, Any] = {}
+
+  async def write(self, data: bytes, timeout: float = 30) -> None:
+    del timeout
+    self.writes.append(data)
+    await anyio.lowlevel.checkpoint()
+
+  async def read(self, size: int = 1024, timeout: float = 30) -> bytes:
+    del size, timeout
+    await anyio.lowlevel.checkpoint()
+    return self.reads.pop(0)
+
+  async def read_until_eof(self, timeout: float = 30) -> bytes:
+    del timeout
+    await anyio.lowlevel.checkpoint()
+    return self.eof_reads.pop(0)
+
+
+class TestProflexBackend(AnyioTestBase):
+  async def _enter_lifespan(self, stack, **kwargs):
+    del stack, kwargs
     self.proflex = ProflexBackend(ip="1.2.3.4")
     self.proflex.num_temp_zones = 2
-    self.proflex.io.write = unittest.mock.AsyncMock()  # type: ignore
-    self.proflex.io.read = unittest.mock.AsyncMock()  # type: ignore
-    self.proflex.io.read_until_eof = unittest.mock.AsyncMock()  # type: ignore
+    self.io = ProtocolSocket()
+    self.proflex.io = cast(Socket, self.io)
 
   async def test_run_protocol(self):
     scpi_command = (
@@ -212,12 +240,12 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
       ]
     )
 
-    self.proflex.io.read.side_effect = [  # type: ignore
+    self.io.reads = [
       b'OK RUNS:EXISts? -type=folders "runname" False\n',
       b'OK RUNS:NEW "runname"\n',
       b"OK CMD 1\n",
     ]
-    self.proflex.io.read_until_eof.side_effect = [  # type: ignore
+    self.io.eof_reads = [
       ("OK " + pretty_xml_scpi).encode("ascii"),
       ("OK " + tmp_scpi).encode("ascii"),
       ("OK " + scpi_command).encode("ascii"),
@@ -233,29 +261,23 @@ class TestProflexBackend(unittest.IsolatedAsyncioTestCase):
       stage_name_prefixes=["InitHold", "OnePot", "digestDenature", "FinalHold"],
     )
 
-    self.proflex.io.write.assert_has_calls(  # type: ignore
-      [
-        unittest.mock.call(b"RUNS:EXISTS? -type=folders runname\r\n", timeout=1),
-        unittest.mock.call(b"RUNS:NEW runname\r\n", timeout=10),
-        unittest.mock.call(pretty_xml_scpi.encode(), timeout=1),
-        unittest.mock.call(tmp_scpi.encode(), timeout=1),
-        unittest.mock.call(scpi_command.encode(), timeout=5),
-        unittest.mock.call(
-          b"TBC2:RunProtocol -User=Admin -CoverTemperature=105 -CoverEnabled=On cloning_protocol runname\r\n",
-          timeout=2,
-        ),
-        unittest.mock.call(b"TBC2:ESTimatedTime?\r\n", timeout=1),
-      ],
-      any_order=False,
-    )
+    assert self.io.writes == [
+      b"RUNS:EXISTS? -type=folders runname\r\n",
+      b"RUNS:NEW runname\r\n",
+      pretty_xml_scpi.encode(),
+      tmp_scpi.encode(),
+      scpi_command.encode(),
+      b"TBC2:RunProtocol -User=Admin -CoverTemperature=105 -CoverEnabled=On cloning_protocol runname\r\n",
+      b"TBC2:ESTimatedTime?\r\n",
+    ]
 
   def test_ssl_init(self):
     backend = ProflexBackend(ip="1.2.3.4", use_ssl=True, serial_number="SN123")
-    self.assertTrue(backend.use_ssl)
-    self.assertEqual(backend.device_shared_secret, b"53rv1c3SN123")
-    self.assertEqual(backend.port, 7443)
-    self.assertIsNotNone(backend.io._ssl)
+    assert backend.use_ssl
+    assert backend.device_shared_secret == b"53rv1c3SN123"
+    assert backend.port == 7443
+    assert backend.io._ssl_context is not None
 
   def test_ssl_init_missing_serial(self):
-    with self.assertRaisesRegex(ValueError, "Serial number is required"):
+    with pytest.raises(ValueError, match="Serial number is required"):
       ProflexBackend(ip="1.2.3.4", use_ssl=True)

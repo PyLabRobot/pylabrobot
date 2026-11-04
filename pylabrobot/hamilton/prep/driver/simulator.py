@@ -16,7 +16,6 @@ no positions of its own. A read nothing here answers is refused with an exceptio
 a command that has not been simulated makes itself known.
 """
 
-import asyncio
 import dataclasses
 import json
 import logging
@@ -24,6 +23,9 @@ import math
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast, get_type_hints
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
@@ -1225,6 +1227,11 @@ class _SimulatedSession(TCPSession):
     super().__init__(io, error_codes=PREP_ERROR_CODES)
     self._driver = driver
 
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own protocol state without acquiring the placeholder network Socket."""
+    self.state = SessionState.CONNECTING
+    stack.push_shielded_async_callback(self._finish_session)
+
   async def exchange(
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
   ) -> CommandResponse:
@@ -1325,11 +1332,10 @@ class _SimulatedIO(HamiltonTCPClient):
       self._driver,
     )
 
-  async def setup(self) -> None:
-    """Open the simulated session and register the recorded root, as the handshake would."""
-    if self._session.state is not SessionState.CLOSED:
-      raise RuntimeError("the simulated Prep is already set up - call stop() first")
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter a socket-free session and register the recorded root."""
     self._session = self._create_session()
+    await stack.enter_async_context(self._session.lifespan())
     self._session.state = SessionState.READY
     self._session.client_id = 1
     self._session.client_address = Address(2, 1, 65535)
@@ -1464,7 +1470,7 @@ class PrepSimulationDriver(PrepDriver):
     if before is not None:
       seconds = self._motion_time(before, self._where_everything_is()) * self.motion_time_scale
       if seconds > 0:
-        await asyncio.sleep(seconds)
+        await anyio.sleep(seconds)
     return answered
 
   def _where_everything_is(self) -> List[Tuple[float, float, float]]:

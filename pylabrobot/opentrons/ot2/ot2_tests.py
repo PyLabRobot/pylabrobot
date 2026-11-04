@@ -38,7 +38,7 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
   async def test_setup_binds_the_discovered_pipette_and_homes(self) -> None:
     await self.robot.setup()
 
-    self.io.setup.assert_awaited_once_with()
+    self.io.setup.assert_not_awaited()
     self.run_class.assert_called_once_with(
       self.api, "run-id", "7.1.0", command_timeout=30, command_poll_interval=0.05
     )
@@ -83,14 +83,14 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.api.get_connected_modules.return_value = modules
     self.api.get_runs.return_value = runs
 
-    await self.robot.connect()
-
-    self.assertEqual(await self.robot.get_health(), self.api.get_health.return_value)
-    self.assertEqual(
-      await self.robot.get_mounted_pipettes(), self.api.get_mounted_pipettes.return_value
-    )
-    self.assertIs(await self.robot.list_connected_modules(), modules)
-    self.assertIs(await self.robot.get_runs(), runs)
+    async with self.robot.lifespan(query_only=True):
+      await self.robot.connect()
+      self.assertEqual(await self.robot.get_health(), self.api.get_health.return_value)
+      self.assertEqual(
+        await self.robot.get_mounted_pipettes(), self.api.get_mounted_pipettes.return_value
+      )
+      self.assertIs(await self.robot.list_connected_modules(), modules)
+      self.assertIs(await self.robot.get_runs(), runs)
     self.api.get_connected_modules.assert_awaited_once_with()
     self.api.get_runs.assert_awaited_once_with()
     self.api.create_run.assert_not_awaited()
@@ -98,8 +98,7 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(self.robot._run)
     self.assertIsNone(self.robot.software_version)
     self.assertEqual(self.robot.pipettes, [])
-    await self.robot.stop()
-    self.io.stop.assert_awaited_once_with()
+    self.io.stop.assert_not_awaited()
     self.protocol_run.stop.assert_not_awaited()
 
   async def test_queries_do_not_rebind_an_active_session(self) -> None:
@@ -126,7 +125,7 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     self.api.create_run.assert_not_awaited()
     self.api.home.assert_not_awaited()
-    self.io.stop.assert_awaited_once_with()
+    self.io.stop.assert_not_awaited()
     self.assertIsNone(self.robot._run)
 
   async def test_stop_clears_bindings_and_closes_transport_after_run_stops(self) -> None:
@@ -143,7 +142,7 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.robot.stop()
 
     self.protocol_run.stop.assert_awaited_once_with()
-    self.io.stop.assert_awaited_once_with()
+    self.io.stop.assert_not_awaited()
     self.assertIsNone(self.robot._run)
     self.assertIsNone(self.robot._labware)
     self.assertIsNone(self.robot.software_version)
@@ -164,9 +163,9 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.robot._labware, registry)
     self.io.stop.assert_not_awaited()
 
-    await self.robot.stop()
+    await self.robot._stop_run()
 
-    self.io.stop.assert_awaited_once_with()
+    self.io.stop.assert_not_awaited()
     self.assertIsNone(self.robot._run)
     self.assertEqual(self.robot.pipettes, [])
 
@@ -182,10 +181,10 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.robot._run, self.protocol_run)
     self.io.stop.assert_not_awaited()
 
-    await self.robot.stop()
+    await self.robot._stop_run()
 
     self.assertIsNone(self.robot._run)
-    self.io.stop.assert_awaited_once_with()
+    self.io.stop.assert_not_awaited()
 
   async def test_reconnect_invalidates_old_pipette_and_labware_bindings(self) -> None:
     await self.robot.setup(skip_home=True)

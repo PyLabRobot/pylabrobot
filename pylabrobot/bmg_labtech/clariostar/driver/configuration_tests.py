@@ -1,11 +1,14 @@
 """Configuration tests: the INIT reply recorded from a CLARIOstar Plus, decoded and declared."""
 
 import json
+import logging
 import os
 import tempfile
 import unittest
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
+
+import pytest
 
 from pylabrobot.bmg_labtech.clariostar.driver import configuration as configuration_module
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
@@ -31,6 +34,8 @@ from pylabrobot.bmg_labtech.clariostar.driver.parameter_table import (
   SIGNED_PARAMETERS,
 )
 from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload, ftdi_wrap_payload
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 INIT_PAYLOAD = ftdi_extract_payload(INIT_REPLY)
 
@@ -96,8 +101,20 @@ class DecodeTests(unittest.TestCase):
     self.assertIsNone(configuration.monochromator_slides)
     self.assertIsNone(configuration.linear_variable_filters)
     complete = decoded()
-    for field in ("spectrometer", "temperature_controller", "pumps", "barcode_readers"):
-      self.assertEqual(getattr(configuration, field), getattr(complete, field), field)
+    self.assertEqual(
+      (
+        configuration.spectrometer,
+        configuration.temperature_controller,
+        configuration.pumps,
+        configuration.barcode_readers,
+      ),
+      (
+        complete.spectrometer,
+        complete.temperature_controller,
+        complete.pumps,
+        complete.barcode_readers,
+      ),
+    )
     self.assertTrue(configuration.temperature_controller)
 
   def test_an_unreadable_slide_position_is_left_out(self):
@@ -113,13 +130,13 @@ class DecodeTests(unittest.TestCase):
       DeviceConfiguration().update_from_init_reply(INIT_PAYLOAD[:-5])
 
 
-class DriverTests(unittest.IsolatedAsyncioTestCase):
+class TestDriver(AnyioTestBase):
   async def test_initialize_reads_the_configuration(self):
     io = FakeFTDI()
     io.replies = [INIT_REPLY, STATUS_IDLE]
     driver = make_driver(io)
     await driver.initialize()
-    self.assertEqual(driver.configuration.model, "CLARIOstarPlus")
+    assert driver.configuration.model == "CLARIOstarPlus"
 
   async def test_parameters_agreeing_with_init_do_not_warn(self):
     io = FakeFTDI()
@@ -130,20 +147,23 @@ class DriverTests(unittest.IsolatedAsyncioTestCase):
       await driver.discover()
     warning.assert_not_called()
 
-  async def test_parameters_disagreeing_with_init_warn(self):
+  async def test_parameters_disagreeing_with_init_warn(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     driver.configuration.firmware_version = "1.34"
-    with self.assertLogs(master_module.logger, "WARNING") as logs:
+    with caplog.at_level(logging.WARNING, logger=master_module.logger.name):
       await driver.discover()
-    self.assertIn(
-      "firmware versions disagree: INIT reply 1.34, stored parameters 1.35",
-      logs.output[0],
+    assert (
+      "firmware versions disagree: INIT reply 1.34, stored parameters 1.35"
+      in caplog.records[0].getMessage()
     )
 
 
-class ParametersTests(unittest.IsolatedAsyncioTestCase):
+class TestParameters(AnyioTestBase):
   def make_driver(self, replies_of_parameters: int = 1):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, PARAMETERS_REPLY] * replies_of_parameters
@@ -151,51 +171,51 @@ class ParametersTests(unittest.IsolatedAsyncioTestCase):
 
   def test_the_parameter_table_keys_and_addresses(self):
     keys = [key for key, _, _ in PARAMETER_TABLE]
-    self.assertEqual(len(keys), len(set(keys)))
+    assert len(keys) == len(set(keys))
     owners: Dict[int, List[str]] = {}
     for key, address, size in PARAMETER_TABLE:
-      self.assertLessEqual(address + size, 256, key)
+      assert address + size <= 256, key
       for byte in range(address, address + size):
         owners.setdefault(byte, []).append(key)
     for address in SERIAL_NUMBER_ADDRESSES:
-      self.assertNotIn(address, owners)
-    self.assertEqual([byte for byte, owner in owners.items() if len(owner) > 1], [])
-    self.assertLessEqual(set(SIGNED_PARAMETERS), set(keys))
+      assert address not in owners
+    assert [byte for byte, owner in owners.items() if len(owner) > 1] == []
+    assert set(SIGNED_PARAMETERS) <= set(keys)
 
   async def test_request_parameters_from_real_reply(self):
     driver, io = self.make_driver()
     parameters = await driver.request_parameters()
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME, PARAMETERS_FRAME])
-    self.assertEqual(parameters["firmware_version"], 1350)
-    self.assertEqual(parameters["fluorescence_measurement_channel_count"], 1)
-    self.assertEqual(parameters["fluorescence_auto_gain_level_1_photomultiplier_tube_1"], 494)
-    self.assertEqual(parameters["top_bottom_slide_offset"], -5)
-    self.assertEqual(parameters["x_transport_lock_position"], -168)
-    self.assertEqual(parameters["temperature_sensor_1_offset"], 20)
-    self.assertNotIn("serial_number", parameters)
-    self.assertNotIn("project_number", parameters)
+    assert io.written == [STATUS_QUERY_FRAME, PARAMETERS_FRAME]
+    assert parameters["firmware_version"] == 1350
+    assert parameters["fluorescence_measurement_channel_count"] == 1
+    assert parameters["fluorescence_auto_gain_level_1_photomultiplier_tube_1"] == 494
+    assert parameters["top_bottom_slide_offset"] == -5
+    assert parameters["x_transport_lock_position"] == -168
+    assert parameters["temperature_sensor_1_offset"] == 20
+    assert "serial_number" not in parameters
+    assert "project_number" not in parameters
 
   async def test_convenience_methods(self):
     driver, _ = self.make_driver(replies_of_parameters=4)
-    self.assertTrue(await driver.request_absorbance_available())
-    self.assertEqual(await driver.request_time_resolved_fluorescence_channels(), 1)
-    self.assertFalse(await driver.request_extended_temperature_range())
-    self.assertFalse(await driver.request_well_1536_plates_supported())
+    assert await driver.request_absorbance_available()
+    assert await driver.request_time_resolved_fluorescence_channels() == 1
+    assert not await driver.request_extended_temperature_range()
+    assert not await driver.request_well_1536_plates_supported()
 
   async def test_configuration_from_parameters(self):
     driver, _ = self.make_driver()
     c = DeviceConfiguration()
     c.update_from_parameters(await driver.request_parameters())
-    self.assertEqual((c.fluorescence_channels, c.luminescence_channels), (1, 1))
-    self.assertEqual(c.time_resolved_fluorescence_channels, 1)
-    self.assertTrue(c.absorbance_available)
-    self.assertTrue(c.bottom_measurement_available)
-    self.assertFalse(c.alpha_screen_available)
-    self.assertFalse(c.fluorescence_polarization_available)
-    self.assertFalse(c.fluorescence_polarization_ultraviolet_available)
-    self.assertFalse(c.extended_temperature_range)
-    self.assertFalse(c.high_speed_shaking_allowed)
-    self.assertFalse(c.well_1536_plates_supported)
+    assert (c.fluorescence_channels, c.luminescence_channels) == (1, 1)
+    assert c.time_resolved_fluorescence_channels == 1
+    assert c.absorbance_available
+    assert c.bottom_measurement_available
+    assert not c.alpha_screen_available
+    assert not c.fluorescence_polarization_available
+    assert not c.fluorescence_polarization_ultraviolet_available
+    assert not c.extended_temperature_range
+    assert not c.high_speed_shaking_allowed
+    assert not c.well_1536_plates_supported
 
   async def test_discover_reads_the_serial_number_and_checks_the_link(self):
     # Not a reader's reply: the recorded one, its serial cleaned to zeros, given made-up ones.
@@ -218,33 +238,29 @@ class ParametersTests(unittest.IsolatedAsyncioTestCase):
       driver = make_driver(io)
       driver.configuration = decoded()
       with (
-        self.subTest(link=link),
         patch.object(io, "serialize", return_value={"vid": 0x0403, "pid": 0xBB68, **link}),
         patch.object(master_module.logger, "warning") as warning,
       ):
         await driver.discover()
-        self.assertEqual(driver.configuration.serial_number, expected)
+        assert driver.configuration.serial_number == expected
         mismatch = any("serial number" in str(call.args[0]) for call in warning.call_args_list)
-        self.assertEqual(mismatch, warns)
+        assert mismatch == warns
 
   async def test_other_reply_is_not_decoded(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, FIRMWARE_INFO_REPLY]
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await make_driver(io).request_parameters()
 
 
-# The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
-class DeclaredConfigurationTests(unittest.IsolatedAsyncioTestCase):
-  def setUp(self):
-    self.directory = tempfile.TemporaryDirectory()
-    self.path = os.path.join(self.directory.name, "clariostar.json")
+class TestDeclaredConfiguration(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self.directory = stack.enter_context(tempfile.TemporaryDirectory())
+    self.path = os.path.join(self.directory, "clariostar.json")
     driver = make_driver(FakeFTDI())
     driver.configuration = decoded()
     driver.save_configuration(self.path)
-
-  def tearDown(self):
-    self.directory.cleanup()
 
   def declared_driver(self):
     driver = make_driver(FakeFTDI())
@@ -266,12 +282,12 @@ class DeclaredConfigurationTests(unittest.IsolatedAsyncioTestCase):
     saved["device"]["stacker_connected"] = True
     with open(self.path, "w") as f:
       json.dump(saved, f)
-    with self.assertRaises(RuntimeError) as ctx:
+    with pytest.raises(RuntimeError) as ctx:
       self.declared_driver()._check_declared_configuration()
-    self.assertIn("stacker_connected: declared True, reader False", str(ctx.exception))
+    assert "stacker_connected: declared True, reader False" in str(ctx.value)
 
   def test_nothing_read_cannot_be_saved(self):
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       make_driver(FakeFTDI()).save_configuration(self.path)
 
 

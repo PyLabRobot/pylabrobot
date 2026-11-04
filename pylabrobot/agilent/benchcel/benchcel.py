@@ -77,12 +77,15 @@ Manual notes from Agilent G5400-90003A that matter for automation:
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
+import inspect
 import logging
 import struct
 from typing import Callable, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import evented_operation, resource_reference
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources import Coordinate, Plate, PlateHolder, Resource, ResourceStack, Rotation
@@ -554,7 +557,7 @@ DEFAULT_PORT = 7612
 NUM_STACKERS = 4
 
 
-class BenchCel4R(Resource):
+class BenchCel4R(Resource, HasLifespan):
   """Agilent BenchCel 4R microplate handler.
 
   The BenchCel is a sequential ("stacking access") storage device: each of its four stackers is a
@@ -590,7 +593,7 @@ class BenchCel4R(Resource):
       host: IP address or DNS name of the BenchCel Ethernet interface.
       port: TCP port. Defaults to 7612, as observed in VWorks captures.
       timeout: Default command timeout in seconds.
-      read_poll_timeout: Per-read timeout used while assembling framed replies.
+      read_poll_timeout: Legacy read polling interval; framing uses the command timeout.
       loading_tray_teachpoint_id: Teachpoint target ID used as the transfer
         (loading/unloading) point by :meth:`downstack` and :meth:`upstack`.
         There is no fixed loading position on the
@@ -623,11 +626,9 @@ class BenchCel4R(Resource):
       human_readable_device_name="Agilent BenchCel 4R",
       host=host,
       port=port,
-      read_timeout=read_poll_timeout,
       write_timeout=timeout,
       source_ip=source_ip,
     )
-    self._lock = asyncio.Lock()
     self._rx_buffer = bytearray()
     self._stacks: List[ResourceStack] = []
 
@@ -641,6 +642,9 @@ class BenchCel4R(Resource):
       category=category,
       model=model,
     )
+    HasLifespan.__init__(self)
+    self._transport_stack: Optional[AsyncExitStackWithShielding] = None
+    self._lock = anyio.Lock()
 
     self.loading_tray = PlateHolder(
       name=f"{name}_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
@@ -657,15 +661,27 @@ class BenchCel4R(Resource):
     for stack in self._stacks:
       self.assign_child_resource(stack, location=None)
 
-  async def setup(self) -> None:
-    """Open the TCP connection to the BenchCel."""
+  async def _enter_transport(self, stack: AsyncExitStackWithShielding, timeout: float) -> None:
+    """Bound connection entry while keeping the timeout scope outside the Socket lifespan."""
+    entry_scope = stack.enter_context(anyio.fail_after(timeout))
+    await stack.enter_async_context(self.io.lifespan())
+    entry_scope.deadline = float("inf")
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Own the BenchCel Socket connection for this resource lifespan."""
+    await super()._enter_lifespan(stack)
     logger.info("[benchcel] connecting to %s:%d", self.host, self.port)
-    await asyncio.wait_for(self.io.setup(), timeout=self.timeout)
+    transport_stack = AsyncExitStackWithShielding()
+    stack.callback(self._clear_transport_stack, transport_stack)
+    await stack.enter_async_context(transport_stack)
+    self._transport_stack = transport_stack
+    await self._enter_transport(transport_stack, self.timeout)
     logger.info("[benchcel] connected to %s:%d", self.host, self.port)
 
-  async def stop(self) -> None:
-    """Close the TCP connection. Safe to call even if never set up."""
-    await self.io.stop()
+  def _clear_transport_stack(self, transport_stack: AsyncExitStackWithShielding) -> None:
+    """Forget the nested transport owner after the parent lifespan exits."""
+    if self._transport_stack is transport_stack:
+      self._transport_stack = None
     self._rx_buffer.clear()
     logger.info("[benchcel] disconnected from %s:%d", self.host, self.port)
 
@@ -678,27 +694,22 @@ class BenchCel4R(Resource):
 
   async def _read_frame(self, *, timeout: Optional[float] = None) -> Frame:
     effective_timeout = self.timeout if timeout is None else timeout
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + effective_timeout
+    try:
+      with anyio.fail_after(effective_timeout):
+        while True:
+          frame = parse_frame_from_buffer(self._rx_buffer)
+          if frame is not None:
+            logger.debug("[benchcel] <<< %s raw=%s", frame, frame.hex())
+            return frame
 
-    while True:
-      frame = parse_frame_from_buffer(self._rx_buffer)
-      if frame is not None:
-        logger.debug("[benchcel] <<< %s raw=%s", frame, frame.hex())
-        return frame
-
-      remaining = deadline - loop.time()
-      if remaining <= 0:
-        raise BenchCelTimeoutError(f"timed out after {effective_timeout}s waiting for frame")
-
-      try:
-        chunk = await self.io.read(4096, timeout=min(self.read_poll_timeout, remaining))
-      except TimeoutError:
-        continue
-      if not chunk:
-        raise BenchCelProtocolError("socket closed while waiting for frame")
-      logger.debug("[benchcel] <<< chunk %d bytes: %s", len(chunk), chunk.hex())
-      self._rx_buffer.extend(chunk)
+          try:
+            chunk = await self.io.read(4096)
+          except anyio.EndOfStream as exc:
+            raise BenchCelProtocolError("socket closed while waiting for frame") from exc
+          logger.debug("[benchcel] <<< chunk %d bytes: %s", len(chunk), chunk.hex())
+          self._rx_buffer.extend(chunk)
+    except TimeoutError as exc:
+      raise BenchCelTimeoutError(f"timed out after {effective_timeout}s waiting for frame") from exc
 
   async def _read_until(
     self,
@@ -707,19 +718,22 @@ class BenchCel4R(Resource):
     timeout: Optional[float] = None,
   ) -> Frame:
     effective_timeout = self.timeout if timeout is None else timeout
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + effective_timeout
-    while True:
-      remaining = deadline - loop.time()
-      if remaining <= 0:
-        raise BenchCelTimeoutError(
-          f"timed out after {effective_timeout}s waiting for matching frame"
-        )
-      frame = await self._read_frame(timeout=remaining)
-      if frame.command_id == CMD_ERROR:
-        raise BenchCelDeviceError(parse_error_frame(frame), frame)
-      if predicate(frame):
-        return frame
+    try:
+      with anyio.fail_after(effective_timeout):
+        while True:
+          frame = await self._read_frame(timeout=effective_timeout)
+          if frame.command_id == CMD_ERROR:
+            raise BenchCelDeviceError(parse_error_frame(frame), frame)
+          if predicate(frame):
+            return frame
+    except BenchCelTimeoutError as exc:
+      raise BenchCelTimeoutError(
+        f"timed out after {effective_timeout}s waiting for matching frame"
+      ) from exc
+    except TimeoutError as exc:
+      raise BenchCelTimeoutError(
+        f"timed out after {effective_timeout}s waiting for matching frame"
+      ) from exc
 
   async def _wait_for_ack_payload(
     self,
@@ -747,11 +761,19 @@ class BenchCel4R(Resource):
     *,
     ack_payload: Optional[bytes] = None,
     timeout: Optional[float] = None,
+    on_success: Optional[Callable[[], None]] = None,
   ) -> Frame:
-    await self._write_frame(frame, timeout=timeout)
-    if ack_payload is None:
-      return await self._wait_for_command_ack(frame.command_id, timeout=timeout)
-    return await self._wait_for_ack_payload(ack_payload, timeout=timeout)
+    await anyio.lowlevel.checkpoint()
+    with anyio.CancelScope(shield=True):
+      await self._write_frame(frame, timeout=timeout)
+      if ack_payload is None:
+        response = await self._wait_for_command_ack(frame.command_id, timeout=timeout)
+      else:
+        response = await self._wait_for_ack_payload(ack_payload, timeout=timeout)
+      if on_success is not None:
+        on_success()
+    await anyio.lowlevel.checkpoint()
+    return response
 
   async def _send_frame(
     self,
@@ -795,29 +817,26 @@ class BenchCel4R(Resource):
       except (BenchCelProtocolError, BenchCelTimeoutError, OSError, ConnectionError):
         pass
 
-      loop = asyncio.get_running_loop()
-      deadline = loop.time() + timeout
-      while loop.time() < deadline:
-        try:
-          await self.io.stop()
-        except Exception:  # pragma: no cover - defensive cleanup
-          pass
-        self._rx_buffer.clear()
-        try:
-          await asyncio.wait_for(self.io.setup(), timeout=min(self.timeout, 5.0))
-          await self._write_frame(Frame(CMD_GENERAL_STATUS), timeout=2.0)
-          await self._read_until(lambda f: f.command_id == CMD_GENERAL_STATUS, timeout=2.0)
-          logger.info("[benchcel] motors homed")
-          return
-        except (
-          BenchCelProtocolError,
-          BenchCelTimeoutError,
-          TimeoutError,
-          OSError,
-          ConnectionError,
-          asyncio.TimeoutError,
-        ):
-          await asyncio.sleep(2.0)
+      with anyio.move_on_after(timeout):
+        while True:
+          if self._transport_stack is None:
+            raise RuntimeError("Cannot reconnect BenchCel transport outside an active lifespan")
+          self._rx_buffer.clear()
+          try:
+            with anyio.fail_after(min(self.timeout, 5.0)):
+              await self.io.reconnect()
+            await self._write_frame(Frame(CMD_GENERAL_STATUS), timeout=2.0)
+            await self._read_until(lambda f: f.command_id == CMD_GENERAL_STATUS, timeout=2.0)
+            logger.info("[benchcel] motors homed")
+            return
+          except (
+            BenchCelProtocolError,
+            BenchCelTimeoutError,
+            TimeoutError,
+            OSError,
+            ConnectionError,
+          ):
+            await anyio.sleep(2.0)
       raise BenchCelTimeoutError(f"home-motors: device not responsive within {timeout}s")
 
   async def _send_home_command(self, *, timeout: float = 15.0) -> Frame:
@@ -1050,6 +1069,10 @@ class BenchCel4R(Resource):
     if not isinstance(plate, Plate):
       raise TypeError(f"Top item in stack {source.name!r} is not a Plate")
 
+    def commit_transfer() -> None:
+      plate.unassign()
+      destination.assign_child_resource(plate)
+
     async with self._lock:
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_ROBOT_GRIPPER, b"\x01"),
@@ -1062,9 +1085,8 @@ class BenchCel4R(Resource):
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_PLACE, _target_payload(_stacker_index(destination_stacker))),
         timeout=timeout,
+        on_success=commit_transfer,
       )
-    plate.unassign()
-    destination.assign_child_resource(plate)
     logger.info(
       "[benchcel] moved %s from stacker %d to stacker %d",
       plate.name,
@@ -1102,17 +1124,18 @@ class BenchCel4R(Resource):
       # sends a 0x02 error, then still echoes 0x9f; consume through the echo so
       # the stream is not left out of sync, and raise the error afterwards.
       error: Optional[str] = None
-      loop = asyncio.get_running_loop()
-      deadline = loop.time() + timeout
-      while True:
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-          raise BenchCelTimeoutError(f"timed out after {timeout}s waiting for 0x9f settings commit")
-        frame = await self._read_frame(timeout=remaining)
-        if frame.command_id == CMD_ERROR:
-          error = parse_error_frame(frame)
-        elif frame.command_id == CMD_SETTINGS_COMMIT:
-          break
+      try:
+        with anyio.fail_after(timeout):
+          while True:
+            frame = await self._read_frame(timeout=timeout)
+            if frame.command_id == CMD_ERROR:
+              error = parse_error_frame(frame)
+            elif frame.command_id == CMD_SETTINGS_COMMIT:
+              break
+      except TimeoutError:
+        raise BenchCelTimeoutError(
+          f"timed out after {timeout}s waiting for 0x9f settings commit"
+        ) from None
       if error is not None:
         raise BenchCelDeviceError(error, Frame(CMD_ERROR, error.encode("ascii", "replace")))
     self.labware_settings = settings
@@ -1275,6 +1298,11 @@ class BenchCel4R(Resource):
       raise LoadingTrayOccupiedError(
         f"Loading tray already holds {self.loading_tray.resource.name!r}"
       )
+
+    def commit_transfer() -> None:
+      plate.unassign()
+      self.loading_tray.assign_child_resource(plate)
+
     async with self._lock:
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_ROBOT_GRIPPER, b"\x01"),
@@ -1287,9 +1315,8 @@ class BenchCel4R(Resource):
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_PLACE, _target_payload(destination_target)),
         timeout=timeout,
+        on_success=commit_transfer,
       )
-    plate.unassign()
-    self.loading_tray.assign_child_resource(plate)
     logger.info("[benchcel] downstacked %s from stacker %d", plate.name, source_stacker)
     return plate
 
@@ -1312,6 +1339,11 @@ class BenchCel4R(Resource):
     if not isinstance(plate, Plate):
       raise TypeError(f"Resource {plate.name!r} on the BenchCel loading tray is not a Plate")
     destination_stacker = self._stack_to_stacker(stack)
+
+    def commit_transfer() -> None:
+      plate.unassign()
+      stack.assign_child_resource(plate)
+
     async with self._lock:
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_ROBOT_GRIPPER, b"\x01"),
@@ -1324,7 +1356,12 @@ class BenchCel4R(Resource):
       await self._send_frame_expect_ack_no_lock(
         Frame(CMD_PLACE, _target_payload(_stacker_index(destination_stacker))),
         timeout=timeout,
+        on_success=commit_transfer,
       )
-    plate.unassign()
-    stack.assign_child_resource(plate)
     logger.info("[benchcel] upstacked %s onto stacker %d", plate.name, destination_stacker)
+
+
+_constructor_signature = inspect.signature(BenchCel4R.__init__)
+BenchCel4R.__signature__ = _constructor_signature.replace(  # type: ignore[attr-defined]
+  parameters=tuple(_constructor_signature.parameters.values())[1:]
+)

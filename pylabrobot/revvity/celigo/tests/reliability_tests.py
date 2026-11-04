@@ -9,6 +9,8 @@ from types import SimpleNamespace
 from typing import Tuple
 from unittest.mock import AsyncMock, patch
 
+import anyio
+
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.revvity.celigo.celigo import (
   _MAX_RESPONSE_PAYLOAD_BYTES,
@@ -20,9 +22,8 @@ from pylabrobot.revvity.celigo.celigo import (
 )
 from pylabrobot.revvity.celigo.config import Calibrated2DPolynomialTransform, CeligoHardwareConfig
 from pylabrobot.revvity.celigo.galvo import dac_count_to_volts
-from pylabrobot.revvity.celigo.motion import _decode_oem_response
+from pylabrobot.revvity.celigo.motion import StepperMotor, _decode_oem_response
 from pylabrobot.revvity.celigo.tests.helpers import (
-  make_calibration_config,
   make_celigo,
   make_galvo_config,
   make_linear_axis_config,
@@ -58,6 +59,17 @@ class TestOemResponse(unittest.TestCase):
 
 
 class TestMotorReliability(unittest.IsolatedAsyncioTestCase):
+  async def test_ready_status_request_is_bounded_by_move_timeout(self):
+    driver = make_celigo()
+
+    async def stalled(*_args, **_kwargs):
+      await anyio.sleep_forever()
+
+    with patch.object(driver.motor_controller, "send_command", stalled):
+      with anyio.fail_after(0.2):
+        with self.assertRaisesRegex(TimeoutError, "motor 1 not ready"):
+          await StepperMotor(driver.motor_controller, 1).wait_until_ready(0.02)
+
   async def test_public_z_move_converts_millimeters_to_internal_ticks(self):
     driver = make_celigo(
       hardware=CeligoHardwareConfig(
@@ -403,7 +415,7 @@ class TestResponseValidation(unittest.IsolatedAsyncioTestCase):
     header[10], header[11] = _fletcher16(header, 10)
     reads = 0
 
-    async def read_exact(_count, _reply_timeout):
+    async def read_exact(_count):
       nonlocal reads
       reads += 1
       return bytes(header)
@@ -412,7 +424,7 @@ class TestResponseValidation(unittest.IsolatedAsyncioTestCase):
       patch.object(driver, "_read_exact_bytes", read_exact),
       self.assertRaisesRegex(CeligoError, "maximum"),
     ):
-      await driver._read_controller_response(23, 7, 0.1)
+      await driver._read_controller_response(23, 7)
     self.assertEqual(reads, 1)
 
   async def test_galvo_busy_bytes_match_vendor_semantics(self):
@@ -476,6 +488,7 @@ class TestResponseValidation(unittest.IsolatedAsyncioTestCase):
 
     driver = make_celigo()
     io = BlockingReadIO()
+    driver.reply_timeout = 0.02
     with patch.object(driver, "io", io):
       command = asyncio.create_task(driver.send_command(23))
       await read_started.wait()
@@ -686,186 +699,11 @@ class TestSelfTest(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class _LifecycleIO:
-  def __init__(self):
-    self.stopped = False
-
-  async def setup(self):
-    return None
-
-  async def set_baudrate(self, _baudrate):
-    return None
-
-  async def set_line_property(self, *_args):
-    return None
-
-  async def set_latency_timer(self, _latency):
-    return None
-
-  async def usb_purge_rx_buffer(self):
-    return None
-
-  async def usb_purge_tx_buffer(self):
-    return None
-
-  async def stop(self):
-    self.stopped = True
-
-
-class _LifecycleCamera:
-  def __init__(self):
-    self.is_open = False
-    self.width = 2464
-    self.height = 2056
-    self.exposure_ms = 1.0
-    self.gain = 1.0
-    self.setup_calls = 0
-    self.stop_calls = 0
-    self.format_calls = []
-
-  async def setup(self):
-    self.setup_calls += 1
-    self.is_open = True
-
-  async def stop(self):
-    self.stop_calls += 1
-    self.is_open = False
-
-  async def set_frame_format(self, width, height, x_offset=None, y_offset=None):
-    self.format_calls.append((width, height, x_offset, y_offset))
-    self.width = width
-    self.height = height
-    return width, height
-
-
 @dataclass(frozen=True)
 class _UsbDevice:
   bus: int
   address: int
   port_numbers: Tuple[int, ...]
-
-
-class TestLifecycleReliability(unittest.IsolatedAsyncioTestCase):
-  async def test_setup_owns_camera_and_applies_calibrated_geometry(self):
-    celigo = make_celigo()
-    io = _LifecycleIO()
-    camera = _LifecycleCamera()
-    celigo.config.calibration = make_calibration_config(
-      image_width_pixels=2048,
-      image_height_pixels=2048,
-    )
-    celigo.baudrate = 230400
-    celigo.latency_ms = 2
-    celigo.controller_info = None
-    celigo.config.hardware = CeligoHardwareConfig()
-    celigo._connected = False
-    initialization_calls = 0
-    homing_calls = 0
-
-    async def no_op(*_args, **_kwargs):
-      return None
-
-    async def status():
-      return ControllerStatus(0, 0)
-
-    async def identity():
-      return ControllerInfo(1, (1, 3, 0), 256)
-
-    async def track_hardware_initialization():
-      nonlocal initialization_calls
-      initialization_calls += 1
-
-    async def track_homing():
-      nonlocal homing_calls
-      homing_calls += 1
-
-    with patch.multiple(
-      celigo,
-      io=io,
-      camera=camera,
-      abort_controller_operation=no_op,
-      request_controller_status=status,
-      request_controller_info=identity,
-      _initialize_hardware=track_hardware_initialization,
-      _initialize_safe_outputs=no_op,
-      home_imaging_axes=track_homing,
-    ):
-      await celigo.setup()
-      self.assertEqual(initialization_calls, 1)
-      self.assertEqual(homing_calls, 1)
-      self.assertEqual(camera.setup_calls, 1)
-      self.assertEqual(camera.format_calls, [(2048, 2048, None, None)])
-      self.assertEqual((camera.width, camera.height), (2048, 2048))
-      self.assertTrue(camera.is_open)
-      self.assertTrue(celigo._connected)
-      await celigo.stop()
-    self.assertEqual(camera.stop_calls, 1)
-    self.assertFalse(camera.is_open)
-
-  async def test_normal_stop_aborts_and_clears_outputs_before_transport_close(self):
-    celigo = make_celigo()
-    io = _LifecycleIO()
-    celigo._connected = True
-    operations = []
-
-    async def abort_controller_operation():
-      operations.append("abort_controller_operation")
-
-    async def safe_outputs():
-      operations.append("safe_outputs")
-
-    with patch.multiple(
-      celigo,
-      io=io,
-      abort_controller_operation=abort_controller_operation,
-      _initialize_safe_outputs=safe_outputs,
-    ):
-      await celigo.stop()
-    self.assertEqual(operations, ["abort_controller_operation", "safe_outputs"])
-    self.assertTrue(io.stopped)
-
-  async def test_setup_closes_transport_when_identity_fails(self):
-    celigo = make_celigo()
-    io = _LifecycleIO()
-    celigo.baudrate = 230400
-    celigo.latency_ms = 2
-    celigo.controller_info = None
-
-    async def status():
-      return ControllerStatus(0, 0)
-
-    async def identity():
-      raise CeligoError("simulated identity failure")
-
-    async def abort_controller_operation():
-      return None
-
-    with (
-      patch.multiple(
-        celigo,
-        io=io,
-        request_controller_status=status,
-        request_controller_info=identity,
-        abort_controller_operation=abort_controller_operation,
-      ),
-      self.assertRaisesRegex(CeligoError, "identity failure"),
-    ):
-      await celigo.setup()
-    self.assertTrue(io.stopped)
-
-  async def test_stop_closes_transport_when_camera_stop_fails(self):
-    class FailingCamera:
-      async def stop(self):
-        raise RuntimeError("simulated camera failure")
-
-    celigo = make_celigo()
-    io = _LifecycleIO()
-    with (
-      patch.multiple(celigo, io=io, camera=FailingCamera()),
-      self.assertRaisesRegex(RuntimeError, "camera failure"),
-    ):
-      await celigo.stop()
-    self.assertTrue(io.stopped)
 
 
 class TestFtdiTopologySelection(unittest.TestCase):

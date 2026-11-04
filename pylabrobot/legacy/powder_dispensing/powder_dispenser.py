@@ -12,11 +12,14 @@ class PowderDispenser(Machine):
   into containers such as mtp's placed on a deck.
 
   Here's an example of how to use this class:
+  >>> from pylabrobot.resources import Powder
   >>> pd = PowderDispenser(backend=YourPowderDispenserBackend())
-  >>> pd.setup()
-  >>> result = pd.dispense_powder(plate["A1"], powders='NaCl', amount=0.005)
+  >>> async with pd:
+  ...   result = await pd.dispense(
+  ...     resources=plate["A1"], powders=Powder("NaCl"), amounts=0.005
+  ...   )
   >>> print(result)
-  {'actual_amount': 0.005012, ...}
+  [{'actual_amount': 0.005012, ...}]
   """
 
   def __init__(

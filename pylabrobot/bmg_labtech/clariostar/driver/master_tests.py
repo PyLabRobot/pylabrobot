@@ -2,10 +2,14 @@
 
 import gzip
 import json
+import logging
 import os
+import re
 import unittest
 from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver.errors import (
@@ -18,8 +22,10 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   ftdi_extract_payload,
 )
 from pylabrobot.bmg_labtech.transport import ftdi_interface as ftdi_interface_module
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # Frames this driver exchanged with a CLARIOstar Plus (FTDI, firmware 1.35) on its first runs.
 STATUS_QUERY_FRAME = bytes.fromhex("0200090c800000970d")
@@ -111,15 +117,17 @@ class FakeFTDI(FTDI):
   Subclasses ``FTDI`` so the driver takes it as one, without opening a device.
   """
 
-  # No super().__init__(): FTDI.__init__ checks for the FTDI libraries.
+  # No FTDI.__init__(): FTDI.__init__ checks for the FTDI libraries.
   def __init__(self, chunk: int = 25) -> None:
+    HasLifespan.__init__(self)
     self.written: List[bytes] = []
     self.replies: List[bytes] = []
     self.purges = 0
     self._pending = b""
     self._chunk = chunk
 
-  async def setup(self) -> None: ...
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    return None
 
   def serialize(self) -> dict:
     return {"vid": 0x0403, "pid": 0xBB68, "device_id": None}
@@ -129,8 +137,6 @@ class FakeFTDI(FTDI):
   async def set_line_property(self, bits: int, stopbits: int, parity: int) -> None: ...
 
   async def set_latency_timer(self, latency: int) -> None: ...
-
-  async def stop(self) -> None: ...
 
   async def usb_purge_rx_buffer(self) -> None:
     self.purges += 1
@@ -162,25 +168,24 @@ def make_driver(io: FakeFTDI) -> CLARIOstarDriver:
   return driver
 
 
-# The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
-class UseIOTests(unittest.IsolatedAsyncioTestCase):
+class TestUseIO(AnyioTestBase):
   def test_io_type_sets_use_io(self):
-    self.assertEqual(CLARIOstarDriver(io=FakeFTDI()).use_io, "ftdi")
-    self.assertEqual(CLARIOstarDriver(io=MagicMock(spec=USB)).use_io, "usb")
-    self.assertEqual(CLARIOstarDriver(use_io="usb", io=MagicMock(spec=USB)).use_io, "usb")
+    assert CLARIOstarDriver(io=FakeFTDI()).use_io == "ftdi"
+    assert CLARIOstarDriver(io=MagicMock(spec=USB)).use_io == "usb"
+    assert CLARIOstarDriver(use_io="usb", io=MagicMock(spec=USB)).use_io == "usb"
 
   def test_mismatched_use_io_and_io_rejected(self):
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       CLARIOstarDriver(use_io="usb", io=FakeFTDI())
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       CLARIOstarDriver(use_io="ftdi", io=MagicMock(spec=USB))
 
   def test_other_io_rejected(self):
-    with self.assertRaises(TypeError):
+    with pytest.raises(TypeError):
       CLARIOstarDriver(io=MagicMock())  # type: ignore[arg-type]
 
   def test_unknown_use_io_rejected(self):
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       CLARIOstarDriver(use_io="serial", io=FakeFTDI())  # type: ignore[arg-type]
 
 
@@ -235,27 +240,27 @@ class SessionReadsFTDI(FakeFTDI):
     return b""
 
 
-class ExchangeTests(unittest.IsolatedAsyncioTestCase):
+class TestExchange(AnyioTestBase):
   async def test_reply_split_into_single_bytes(self):
     io = FakeFTDI(chunk=1)
     io.replies = [STATUS_PLATE_DETECTED]
     status = await make_driver(io).request_status()
-    self.assertTrue(status.plate_detected)
+    assert status.plate_detected
 
   async def test_leading_garbage_is_dropped(self):
     io = FakeFTDI()
     # Not a reader's reply: no garbage before a reply is recorded; two bytes stand in for it.
     io.replies = [b"\x0d\x00" + STATUS_IDLE]
     status = await make_driver(io).request_status()
-    self.assertFalse(status.busy)
+    assert not status.busy
 
   async def test_truncated_reply_is_retried_after_purge(self):
     io = FakeFTDI()
     io.replies = [STATUS_TRUNCATED, STATUS_IDLE]
     status = await make_driver(io).request_status()
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME])
-    self.assertEqual(io.purges, 1)
-    self.assertFalse(status.busy)
+    assert io.written == [STATUS_QUERY_FRAME, STATUS_QUERY_FRAME]
+    assert io.purges == 1
+    assert not status.busy
 
   async def test_a_long_read_does_not_count_as_silence(self):
     # As the reader answered a spectrum page's first request: the read of the rest blocked
@@ -268,49 +273,49 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(SessionReadsFTDI(reads, clock))
     driver._ftdi._packet_read_timeout = CLARIOstarDriver._PACKET_READ_TIMEOUT
     driver._ftdi._frame_stall_timeout = CLARIOstarDriver._FRAME_STALL_TIMEOUT
-    with patch.object(ftdi_interface_module.time, "time", side_effect=lambda: clock[0]):
+    with patch.object(ftdi_interface_module.anyio, "current_time", side_effect=lambda: clock[0]):
       frame = await driver._ftdi._read_frame()
-    self.assertEqual(frame, b"".join(data for _, data in reads))
-    self.assertGreaterEqual(clock[0], reads[-1][0] + 2.0)  # 2 s of silence after the last bytes
+    assert frame == b"".join(data for _, data in reads)
+    assert clock[0] >= reads[-1][0] + 2.0  # 2 s of silence after the last bytes
 
   async def test_no_reply_raises_after_retries(self):
     io = FakeFTDI()
-    with self.assertRaises(FrameError):
+    with pytest.raises(FrameError):
       await make_driver(io).request_status(retries=2)
-    self.assertEqual(len(io.written), 2)
+    assert len(io.written) == 2
 
   def test_default_read_timeout_is_checked_on_assignment(self):
     driver = make_driver(FakeFTDI())
     driver.default_read_timeout = 60.0
-    self.assertEqual(driver.default_read_timeout, 60.0)
-    with self.assertRaises(ValueError):
+    assert driver.default_read_timeout == 60.0
+    with pytest.raises(ValueError):
       driver.default_read_timeout = 0
 
   async def test_writing_stored_parameters_is_refused(self):
     io = FakeFTDI()
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await make_driver(io).send_command(
         CLARIOstarDriver.CommandFamily.SET_PARAMETER,
         CLARIOstarDriver.Command.SET_PARAMETER_WORD,
         parameters=b"\x12\x00\x00\x04\x19",
       )
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
   async def test_command_byte_rules(self):
     driver = make_driver(FakeFTDI())
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await driver.send_command(driver.CommandFamily.STATUS, 0x00)
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await driver.send_command(driver.CommandFamily.DRAWER)
 
 
-class FirmwareTests(unittest.IsolatedAsyncioTestCase):
+class TestFirmware(AnyioTestBase):
   async def test_discover_applies_the_stored_parameters(self):
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     await driver.discover()
-    self.assertEqual(driver.configuration.extended_temperature_range, False)
+    assert driver.configuration.extended_temperature_range is False
 
   async def test_discover_reads_the_firmware_build_date(self):
     io = FakeFTDI()
@@ -319,28 +324,35 @@ class FirmwareTests(unittest.IsolatedAsyncioTestCase):
     driver.configuration.model = "CLARIOstarPlus"
     driver.configuration.firmware_build = 1
     await driver.discover()
-    self.assertEqual(io.written[-1], FIRMWARE_INFO_FRAME)
+    assert io.written[-1] == FIRMWARE_INFO_FRAME
     build_date = driver.configuration.firmware_build_date
-    self.assertRegex(build_date or "", r"^\d{4}-\d{2}-\d{2}$")
-    self.assertIn(f"Firmware: None (build 1, built {build_date})", driver.format_setup_summary())
+    assert re.match(r"^\d{4}-\d{2}-\d{2}$", build_date or "")
+    assert f"Firmware: None (build 1, built {build_date})" in driver.format_setup_summary()
 
-  async def test_a_reply_without_a_build_date_warns(self):
+  async def test_a_reply_without_a_build_date_warns(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, PARAMETERS_REPLY]
     driver = make_driver(io)
-    with self.assertLogs(master_module.logger, "WARNING") as logs:
+    with caplog.at_level(logging.WARNING, logger=master_module.logger.name):
       await driver.discover()
-    self.assertTrue(any("firmware build date not read" in line for line in logs.output))
-    self.assertIsNone(driver.configuration.firmware_build_date)
+    assert any("firmware build date not read" in r.getMessage() for r in caplog.records)
+    assert driver.configuration.firmware_build_date is None
 
-  def test_unconfirmed_firmware_warns(self):
+  def test_unconfirmed_firmware_warns(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     driver = make_driver(FakeFTDI())
     driver.configuration.firmware_version = "9.99"
-    with self.assertLogs(master_module.logger, "WARNING"):
+    with caplog.at_level(logging.WARNING, logger=master_module.logger.name):
       driver._check_firmware_compatibility()
+    assert len(caplog.records) >= 1
 
 
-class WhenIdleTests(unittest.IsolatedAsyncioTestCase):
+class TestWhenIdle(AnyioTestBase):
   async def test_command_waits_until_the_device_is_idle(self):
     io = FakeFTDI()
     io.replies = [
@@ -353,9 +365,8 @@ class WhenIdleTests(unittest.IsolatedAsyncioTestCase):
     ]
     driver = make_driver(io)
     await driver.discover()
-    self.assertEqual(
-      io.written,
-      [STATUS_QUERY_FRAME] * 3 + [PARAMETERS_FRAME, STATUS_QUERY_FRAME, FIRMWARE_INFO_FRAME],
+    assert io.written == (
+      [STATUS_QUERY_FRAME] * 3 + [PARAMETERS_FRAME, STATUS_QUERY_FRAME, FIRMWARE_INFO_FRAME]
     )
 
   async def test_when_idle_false_sends_at_once(self):
@@ -365,10 +376,10 @@ class WhenIdleTests(unittest.IsolatedAsyncioTestCase):
     await make_driver(io).send_command(
       payload[0], payload[1], parameters=payload[2:], when_idle=False
     )
-    self.assertEqual(io.written, [PARAMETERS_FRAME])
+    assert io.written == [PARAMETERS_FRAME]
 
 
-class RefusedTests(unittest.IsolatedAsyncioTestCase):
+class TestRefused(AnyioTestBase):
   def test_quit_codes_from_real_refusals(self):
     expected = {
       "refused_busy": 202,
@@ -378,44 +389,47 @@ class RefusedTests(unittest.IsolatedAsyncioTestCase):
     }
     refused_temperature = parse_quit_codes(ftdi_extract_payload(REFUSED_TEMPERATURE))
     assert refused_temperature is not None
-    self.assertEqual(refused_temperature[0], 110)
+    assert refused_temperature[0] == 110
     for name, code in expected.items():
       quit_codes = parse_quit_codes(ftdi_extract_payload(REFUSED[name][1]))
       assert quit_codes is not None, name
-      self.assertEqual(quit_codes[0], code, name)
+      assert quit_codes[0] == code, name
 
   def test_accepted_replies_have_no_quit_codes(self):
     for reply in (STATUS_IDLE, STATUS_BUSY, STATUS_DRAWER_OPEN, FIRMWARE_INFO_REPLY, INIT_REPLY):
-      self.assertIsNone(parse_quit_codes(ftdi_extract_payload(reply)))
+      assert parse_quit_codes(ftdi_extract_payload(reply)) is None
 
   async def test_refused_command_raises_with_quit_codes(self):
     sent, received = REFUSED["refused_no_results"]
     payload = ftdi_extract_payload(sent)
     io = FakeFTDI()
     io.replies = [STATUS_IDLE, received]
-    with self.assertRaises(CommandRefusedError) as ctx:
+    with pytest.raises(CommandRefusedError) as ctx:
       await make_driver(io).send_command(payload[0], payload[1], parameters=payload[2:])
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME, sent])
-    self.assertEqual(ctx.exception.quit_codes, (213, 0, 0, 0, 0))
-    self.assertIn("quit code 213", str(ctx.exception))
+    assert io.written == [STATUS_QUERY_FRAME, sent]
+    assert ctx.value.quit_codes == (213, 0, 0, 0, 0)
+    assert "quit code 213" in str(ctx.value)
 
 
-class StatusRefusalAndWarningTests(unittest.IsolatedAsyncioTestCase):
+class TestStatusRefusalAndWarning(AnyioTestBase):
   async def test_refused_status_raises(self):
     io = FakeFTDI()
     io.replies = [STATUS_NOT_INITIALIZED]
-    with self.assertRaises(CommandRefusedError) as ctx:
+    with pytest.raises(CommandRefusedError) as ctx:
       await make_driver(io).request_status()
-    self.assertEqual(ctx.exception.quit_codes[0], 201)
-    self.assertIn("not initialized", str(ctx.exception))
+    assert ctx.value.quit_codes[0] == 201
+    assert "not initialized" in str(ctx.value)
 
   async def test_refused_status_while_polling_raises(self):
     io = FakeFTDI()
     io.replies = [STATUS_NOT_INITIALIZED]
-    with self.assertRaises(CommandRefusedError):
+    with pytest.raises(CommandRefusedError):
       await make_driver(io).discover()
 
-  async def test_warning_is_logged_once_and_not_raised(self):
+  async def test_warning_is_logged_once_and_not_raised(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     io = FakeFTDI()
     io.replies = [
       STATUS_WARNING,
@@ -426,36 +440,37 @@ class StatusRefusalAndWarningTests(unittest.IsolatedAsyncioTestCase):
       FIRMWARE_INFO_REPLY,
     ]
     driver = make_driver(io)
-    with self.assertLogs(master_module.logger, "WARNING") as logs:
+    with caplog.at_level(logging.WARNING, logger=master_module.logger.name):
       await driver.discover()
-    warnings = [r for r in logs.output if "device warning" in r]
-    self.assertEqual(len(warnings), 1)
-    self.assertIn("quit code 250", warnings[0])
+    warnings = [r.getMessage() for r in caplog.records if "device warning" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "quit code 250" in warnings[0]
 
   def test_line_error_codes_are_named(self):
     for code in (1, 2, 3):
       error = CommandRefusedError(b"\x80", (code, 0, 0, 0, 0))
-      self.assertIn("the reader received a frame", str(error))
+      assert "the reader received a frame" in str(error)
 
 
-class SetupTests(unittest.IsolatedAsyncioTestCase):
+class TestSetup(AnyioTestBase):
   async def setup_and_return_written(self, replies: List[bytes]) -> List[bytes]:
     io = FakeFTDI()
     io.replies = replies
     driver = make_driver(io)
     driver.discover = AsyncMock()  # type: ignore[method-assign]
-    await driver.setup()
-    self.assertEqual(io.purges, 1)
+    driver._shut_down = AsyncMock()  # type: ignore[method-assign]
+    async with driver:
+      assert io.purges == 1
     return io.written
 
   async def test_setup_initializes_an_initialized_reader(self):
     written = await self.setup_and_return_written(
       [INIT_REPLY, STATUS_BUSY, STATUS_IDLE, STATUS_IDLE]
     )
-    self.assertEqual(written, [INIT_FRAME] + [STATUS_QUERY_FRAME] * 3)
+    assert written == [INIT_FRAME] + [STATUS_QUERY_FRAME] * 3
 
   async def test_motors_still_off_after_init_raises(self):
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await self.setup_and_return_written([INIT_REPLY, STATUS_MOTORS_OFF, STATUS_MOTORS_OFF])
 
   async def test_malformed_init_reply_is_not_resent(self):
@@ -464,15 +479,15 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
     io.replies = [INIT_REPLY[:100], STATUS_BUSY, STATUS_IDLE]
     driver = make_driver(io)
     await driver.initialize()
-    self.assertEqual(io.written, [INIT_FRAME] + [STATUS_QUERY_FRAME] * 2)
-    self.assertEqual(io.purges, 1)
-    self.assertIsNone(driver.configuration.model)  # the configuration stays unread
+    assert io.written == [INIT_FRAME] + [STATUS_QUERY_FRAME] * 2
+    assert io.purges == 1
+    assert driver.configuration.model is None  # the configuration stays unread
 
 
-class USBTests(unittest.IsolatedAsyncioTestCase):
+class TestUSB(AnyioTestBase):
   def make_usb_driver(self) -> "tuple[CLARIOstarDriver, MagicMock]":
     io = MagicMock(spec=USB)
-    io.setup = AsyncMock()
+    io.lifespan.return_value = AsyncMock()
     io.write = AsyncMock()
     io.read = AsyncMock(side_effect=TimeoutError)
     io.drain = AsyncMock()
@@ -482,19 +497,20 @@ class USBTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_enables_bulk_protocol_and_sets_clock(self):
     driver, io = self.make_usb_driver()
-    await driver._usb_setup()
+    async with AsyncExitStackWithShielding() as stack:
+      await driver._enter_usb_lifespan(stack)
     enable, clock = io.ctrl_transfer.call_args_list
-    self.assertEqual(enable.args, (0x22, 0x8B, 0, 0, b"\x01"))
-    self.assertEqual(clock.args[:4], (0x22, 0x88, 0, 0))
-    self.assertEqual(clock.args[4][:4], b"\x00\x00\x00\x00")
-    self.assertEqual(len(clock.args[4]), 8)
+    assert enable.args == (0x22, 0x8B, 0, 0, b"\x01")
+    assert clock.args[:4] == (0x22, 0x88, 0, 0)
+    assert clock.args[4][:4] == b"\x00\x00\x00\x00"
+    assert len(clock.args[4]) == 8
 
   async def test_status_query_packet_and_retry_on_silence(self):
     driver, io = self.make_usb_driver()
-    with self.assertRaises(FrameError):
+    with pytest.raises(FrameError):
       await driver.request_status(retries=2)
     sent = [call.args[0] for call in io.write.call_args_list]
-    self.assertEqual(sent, [bytes.fromhex("000c010000000180")] * 2)
+    assert sent == [bytes.fromhex("000c010000000180")] * 2
     io.drain.assert_awaited_once()
 
 

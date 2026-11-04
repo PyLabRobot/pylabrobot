@@ -1,5 +1,6 @@
 """Host Celigo operations and shared device, job, and image services."""
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.revvity.celigo.grpc.limits import MAX_MESSAGE_BYTES
 from pylabrobot.revvity.celigo.grpc.servicer import CeligoServicer
 from pylabrobot.revvity.celigo.grpc.session import CeligoSession
@@ -21,17 +22,12 @@ class CeligoServer(DeviceServer):
     image_rpc.add_ImageServiceServicer_to_server(images.ImageService(session), self.server)
     rpc.add_CeligoServiceServicer_to_server(CeligoServicer(session), self.server)
 
-  async def start(self) -> None:
-    """Recover durable records before accepting requests; never replay interrupted work."""
-    try:
-      await self.session.open()
-      await super().start()
-    except BaseException:
-      await self.stop()
-      raise
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Recover durable records before accepting requests; never replay interrupted work.
 
-  async def stop(self) -> None:
-    """Stop accepting commands, finish in-flight work, and close the owned store."""
-    self.session.closing = True
-    await super().stop()
-    await self.session.stop()
+    On exit, commands are refused first, then the transport stops, and then the session finishes
+    in-flight work and closes its store.
+    """
+    await stack.enter_async_context(self.session.lifespan())
+    await super()._enter_lifespan(stack)
+    stack.callback(self.session.refuse_commands)

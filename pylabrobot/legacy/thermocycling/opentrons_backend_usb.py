@@ -4,6 +4,10 @@
 import asyncio
 from typing import List, Optional
 
+import anyio
+import sniffio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import (
   BlockStatus,
@@ -59,7 +63,7 @@ async def wait_for_block_target(driver) -> None:
         raise RuntimeError(f"Thermocycler hardware error: {e}")
       print(f"Temperature check failed (attempt {attempt + 1}), retrying: {e}")
     attempt += 1
-    await asyncio.sleep(1.0)
+    await anyio.sleep(1.0)
   else:
     raise TimeoutError(f"Temperature did not reach target within {max_attempts} seconds")
 
@@ -111,6 +115,49 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
     self._current_cycle_index = None
     self._total_step_count = None
     self._current_step_index = None
+
+  def _clear_lifespan_state(self) -> None:
+    """Clear state owned by one driver lifespan."""
+    self._driver = None
+    self._current_protocol = None
+    self._loop = None
+    self._clear_cycle_counters()
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    port: Optional[str] = None,
+  ) -> None:
+    """Acquire and own the asyncio-only Opentrons OEM driver."""
+    await super()._enter_lifespan(stack)
+    if sniffio.current_async_library() != "asyncio":
+      raise RuntimeError("The Opentrons thermocycler OEM driver requires the asyncio backend")
+
+    stack.callback(self._clear_lifespan_state)
+    self._loop = asyncio.get_running_loop()
+
+    if port is None:
+      ports = await anyio.to_thread.run_sync(
+        serial.tools.list_ports.comports, abandon_on_cancel=False
+      )
+      opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
+      if len(opentrons_ports) == 0:
+        raise RuntimeError(
+          f"No Opentrons Thermocycler found with supported VID:PID pairs: {self.SUPPORTED_USB_IDS}"
+        )
+      if len(opentrons_ports) > 1:
+        available_ports = [p.device for p in opentrons_ports]
+        raise RuntimeError(
+          f"Multiple Opentrons Thermocyclers found: {available_ports}. Please specify the port explicitly."
+        )
+      port = opentrons_ports[0].device
+
+    driver = await ThermocyclerDriverFactory.create(port, self._loop)
+    self._driver = driver
+    stack.push_shielded_async_callback(driver.disconnect)
+    stack.push_shielded_async_callback(driver.deactivate_lid)
+    stack.push_shielded_async_callback(driver.deactivate_block)
 
   async def _execute_cycle_step(
     self,
@@ -187,35 +234,6 @@ class OpentronsThermocyclerUSBBackend(ThermocyclerBackend):
       self._clear_cycle_counters()
 
     self._current_protocol = protocol
-
-  async def setup(self, port: Optional[str] = None):
-    """Setup the USB connection to the thermocycler."""
-    if self._loop is None:
-      self._loop = asyncio.get_event_loop()
-
-    if port is None:
-      ports = serial.tools.list_ports.comports()
-      opentrons_ports = [p for p in ports if (p.vid, p.pid) in self.SUPPORTED_USB_IDS]
-      if len(opentrons_ports) == 0:
-        raise RuntimeError(
-          f"No Opentrons Thermocycler found with supported VID:PID pairs: {self.SUPPORTED_USB_IDS}"
-        )
-      elif len(opentrons_ports) > 1:
-        available_ports = [p.device for p in opentrons_ports]
-        raise RuntimeError(
-          f"Multiple Opentrons Thermocyclers found: {available_ports}. Please specify the port explicitly."
-        )
-      else:
-        port = opentrons_ports[0].device
-
-    self._driver = await ThermocyclerDriverFactory.create(port, self._loop)
-
-  async def stop(self):
-    if self._driver is not None:
-      await self.deactivate_block()
-      await self.deactivate_lid()
-      await self._driver.disconnect()
-      self._driver = None
 
   async def open_lid(self):
     assert self._driver is not None

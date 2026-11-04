@@ -6,12 +6,13 @@
 cycle it belongs to and when the cycle was due.
 """
 
-import asyncio
 import contextvars
 import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, TypeVar
+
+import anyio
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,11 @@ async def sleep_until(due: float) -> None:
 
   Args:
     due: the time to wait for, in seconds on the running loop's clock
-      (`asyncio.get_running_loop().time()`, monotonic).
+      (`anyio.current_time()`, monotonic).
   """
-  loop = asyncio.get_running_loop()
-  await asyncio.sleep(max(0.0, due - loop.time()))
-  while loop.time() < due:  # a timer may fire up to the clock's resolution early
-    await asyncio.sleep(due - loop.time())
+  await anyio.sleep(max(0.0, due - anyio.current_time()))
+  while anyio.current_time() < due:  # a timer may fire up to the clock's resolution early
+    await anyio.sleep(due - anyio.current_time())
 
 
 def get_current_cycle() -> Dict[str, Any]:
@@ -86,14 +86,13 @@ async def run_cycles(
     raise ValueError(f"cycles must be at least 1, not {cycles}")
   if late not in ("run", "skip"):
     raise ValueError(f"late must be 'run' or 'skip', not {late!r}")
-  loop = asyncio.get_running_loop()
-  first_due = loop.time()
+  first_due = anyio.current_time()
   run_start = datetime.now(timezone.utc)
   returned: List[Optional[T]] = [None] * cycles
   logger.debug("run_cycles: %d cycles, cycle time %.1f s, late=%s", cycles, cycle_time, late)
   for cycle in range(cycles):
     due = first_due + cycle * cycle_time
-    lateness = loop.time() - due
+    lateness = anyio.current_time() - due
     if cycle > 0 and lateness > 0:
       logger.warning(
         "cycle %d of %d %s %.3f s late: the cycle before ran past its due time",
@@ -105,7 +104,7 @@ async def run_cycles(
       if late == "skip":
         continue
     await sleep_until(due)
-    started = loop.time()
+    started = anyio.current_time()
     logger.debug("cycle %d of %d starts %.3f s after its due time", cycle, cycles, started - due)
     token = _current_cycle.set(
       {
@@ -129,7 +128,7 @@ async def run_cycles(
       "cycle %d of %d took %.1f s of its %.1f s cycle time",
       cycle,
       cycles,
-      loop.time() - started,
+      anyio.current_time() - started,
       cycle_time,
     )
   return returned

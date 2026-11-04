@@ -1,8 +1,16 @@
-import unittest
-from typing import Any, List, Optional
+# mypy: disable-error-code="assignment,method-assign,override"
 
+import unittest
+from typing import Any, List, Optional, TypeVar, cast, overload
+
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.io.usb import USB
 from pylabrobot.legacy.liquid_handling import LiquidHandler
 from pylabrobot.legacy.liquid_handling.standard import Drop, Pickup
+from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -16,13 +24,21 @@ from pylabrobot.resources import (
   set_tip_tracking,
 )
 from pylabrobot.resources.hamilton import VantageDeck
+from pylabrobot.testing.concurrency import AnyioTestBase
 
+from .hamilton_base_lifecycle_tests import (
+  RecordingReplyRouter,
+  RecordingUSB,
+  exception_messages,
+)
 from .vantage_backend import (
   VantageBackend,
   VantageFirmwareError,
   parse_vantage_fw_string,
   vantage_response_string_to_error,
 )
+
+T = TypeVar("T")
 
 PICKUP_TIP_FORMAT = {
   "xp": "[int]",
@@ -206,6 +222,252 @@ class TestVantageResponseParsing(unittest.TestCase):
     )
 
 
+class RecordingVantageBackend(VantageBackend):
+  """Record the Vantage initialization protocol while using the real base lifespan."""
+
+  def __init__(self, fail_at: Optional[str] = None, block_at: Optional[str] = None) -> None:
+    super().__init__(read_timeout=1, packet_read_timeout=1)
+    self.events: list[str] = []
+    io = RecordingUSB(self.events)
+    self.io = cast(USB, io)
+    self._reply_router = RecordingReplyRouter(io, cast(Any, self), self.events)
+    self.fail_at = fail_at
+    self.block_at = block_at
+    self.block_started = anyio.Event()
+    self.set_deck(VantageDeck(size=1.3))
+    self.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+
+  @overload
+  async def _record(self, event: str) -> None: ...
+
+  @overload
+  async def _record(self, event: str, result: T) -> T: ...
+
+  async def _record(self, event: str, result: Any = None) -> Any:
+    self.events.append(event)
+    if event == self.fail_at:
+      raise RuntimeError(f"{event} failed")
+    if event == self.block_at:
+      self.block_started.set()
+      await anyio.sleep_forever()
+    return result
+
+  async def query_tip_presence(self) -> list[bool]:
+    return await self._record("pip.tip_presence", [False] * 8)
+
+  async def arm_request_instrument_initialization_status(self) -> bool:
+    return await self._record("arm.status", False)
+
+  async def arm_pre_initialize(self) -> None:
+    await self._record("arm.initialize")
+
+  async def pip_request_initialization_status(self) -> bool:
+    return await self._record("pip.status", False)
+
+  async def pip_initialize(self, **kwargs: Any) -> None:
+    await self._record("pip.initialize")
+
+  async def loading_cover_request_initialization_status(self) -> bool:
+    return await self._record("cover.status", False)
+
+  async def loading_cover_initialize(self) -> None:
+    await self._record("cover.initialize")
+
+  async def core96_request_initialization_status(self) -> bool:
+    return await self._record("core96.status", False)
+
+  async def core96_initialize(self, **kwargs: Any) -> None:
+    await self._record("core96.initialize")
+
+  async def ipg_request_initialization_status(self) -> bool:
+    return await self._record("ipg.status", False)
+
+  async def ipg_initialize(self) -> None:
+    await self._record("ipg.initialize")
+
+  async def ipg_get_parking_status(self) -> bool:
+    return await self._record("ipg.parking_status", False)
+
+  async def ipg_park(self) -> None:
+    await self._record("ipg.park")
+
+
+class TestVantageTiming(AnyioTestBase):
+  async def test_disco_mode_sleeps_after_each_of_69_led_updates(self, monkeypatch) -> None:
+    backend = VantageBackend()
+    events: list[tuple[str, float]] = []
+
+    async def set_led_color(
+      mode: str,
+      intensity: int,
+      white: int,
+      red: int,
+      green: int,
+      blue: int,
+      uv: int,
+    ) -> None:
+      assert mode == "on"
+      assert (intensity, white, uv) == (100, 0, 0)
+      assert all(30 <= value <= 100 for value in (red, green, blue))
+      events.append(("led", float(red + green + blue)))
+
+    async def sleep(duration: float) -> None:
+      events.append(("sleep", duration))
+
+    backend.set_led_color = set_led_color
+    monkeypatch.setattr(anyio, "sleep", sleep)
+    await backend.disco_mode()
+
+    assert len(events) == 138
+    assert events[::2] == [event for event in events if event[0] == "led"]
+    assert events[1::2] == [("sleep", 0.1)] * 69
+
+  async def test_russian_roulette_waits_five_seconds_before_reset(self, monkeypatch) -> None:
+    backend = VantageBackend()
+    events: list[tuple[str, tuple[Any, ...]]] = []
+
+    async def set_led_color(*args: Any, **kwargs: Any) -> None:
+      events.append(("led", (args, kwargs)))
+
+    async def sleep(duration: float) -> None:
+      events.append(("sleep", (duration,)))
+
+    backend.set_led_color = set_led_color
+    monkeypatch.setattr("builtins.input", lambda prompt: "yes")
+    monkeypatch.setattr("random.randint", lambda start, end: 6)
+    monkeypatch.setattr(anyio, "sleep", sleep)
+    await backend.russian_roulette()
+
+    assert events == [
+      (
+        "led",
+        (
+          ("on",),
+          {"intensity": 100, "white": 100, "red": 100, "green": 0, "blue": 0, "uv": 100},
+        ),
+      ),
+      ("sleep", (5,)),
+      (
+        "led",
+        (
+          ("on",),
+          {
+            "intensity": 100,
+            "white": 100,
+            "red": 100,
+            "green": 100,
+            "blue": 100,
+            "uv": 0,
+          },
+        ),
+      ),
+    ]
+
+
+class TestVantageLifecycle(AnyioTestBase):
+  async def test_lifespan_preserves_setup_transcript_and_publishes_channels(self) -> None:
+    backend = RecordingVantageBackend()
+
+    async with backend:
+      assert backend.num_channels == 8
+      assert [
+        event for event in backend.events if "." in event and not event.startswith("reader")
+      ] == [
+        "transport.enter",
+        "pip.tip_presence",
+        "arm.status",
+        "arm.initialize",
+        "pip.status",
+        "pip.initialize",
+        "cover.status",
+        "cover.initialize",
+        "core96.status",
+        "core96.initialize",
+        "ipg.status",
+        "ipg.initialize",
+        "ipg.parking_status",
+        "ipg.park",
+      ]
+
+    assert (
+      backend.events.index("reader.stop")
+      < backend.events.index("reader.exit")
+      < backend.events.index("transport.exit")
+    )
+
+  async def test_setup_options_are_forwarded_with_false_defaults(self) -> None:
+    backend = RecordingVantageBackend()
+    async with backend.lifespan(skip_loading_cover=True, skip_core96=True, skip_ipg=True):
+      pass
+
+    assert "cover.initialize" not in backend.events
+    assert "core96.initialize" not in backend.events
+    assert not any(event.startswith("ipg.") for event in backend.events)
+
+  @pytest.mark.parametrize(
+    "kwargs",
+    [
+      {"unknown": False},
+      {"skip_loading_cover": 1},
+      {"skip_core96": None},
+      {"skip_ipg": "false"},
+    ],
+  )
+  async def test_invalid_options_fail_before_transport_entry(self, kwargs: dict[str, Any]) -> None:
+    backend = RecordingVantageBackend()
+    with pytest.raises(TypeError):
+      async with backend.lifespan(**kwargs):
+        pytest.fail("invalid entry reached the body")
+    assert "transport.enter" not in backend.events
+
+  @pytest.mark.parametrize("phase", ["pip.tip_presence", "pip.initialize", "ipg.park"])
+  async def test_firmware_failure_at_each_initialization_phase_cleans_up(self, phase: str) -> None:
+    backend = RecordingVantageBackend(fail_at=phase)
+    with pytest.raises(BaseException) as error_info:
+      async with backend:
+        pytest.fail("failed entry reached the body")
+
+    assert f"{phase} failed" in exception_messages(error_info.value)
+    assert (
+      backend.events.index("reader.stop")
+      < backend.events.index("reader.exit")
+      < backend.events.index("transport.exit")
+    )
+    with pytest.raises(RuntimeError, match="num_channels is not set"):
+      _ = backend.num_channels
+
+  async def test_cancellation_during_entry_cleans_up_transport(self) -> None:
+    backend = RecordingVantageBackend(block_at="pip.initialize")
+
+    async def enter() -> None:
+      async with backend:
+        pytest.fail("cancelled entry reached the body")
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(enter)
+      await backend.block_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert (
+      backend.events.index("reader.stop")
+      < backend.events.index("reader.exit")
+      < backend.events.index("transport.exit")
+    )
+    assert not backend.is_active
+
+  async def test_sequential_reuse_repeats_setup_and_resets_channels(self) -> None:
+    backend = RecordingVantageBackend()
+    for _ in range(2):
+      async with backend:
+        assert backend.num_channels == 8
+      with pytest.raises(RuntimeError, match="num_channels is not set"):
+        _ = backend.num_channels
+
+    assert backend.events.count("pip.tip_presence") == 2
+    assert backend.events.count("transport.enter") == 2
+    assert backend.events.count("transport.exit") == 2
+
+
 class VantageCommandCatcher(VantageBackend):
   """Mock backend for Vantage that catches commands and saves them instead of sending them to the
   machine."""
@@ -214,12 +476,22 @@ class VantageCommandCatcher(VantageBackend):
     super().__init__()
     self.commands = []
 
-  async def setup(self) -> None:  # type: ignore
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, **backend_kwargs: Any
+  ) -> None:
+    if backend_kwargs:
+      raise TypeError("VantageCommandCatcher does not accept lifespan options")
+    self._validate_lifespan_context()
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
     self._num_arms = 1
     self._head96_installed = True
+    stack.callback(self._reset_setup_state)
+
+  def _reset_setup_state(self) -> None:
+    self.setup_finished = False
+    self._num_channels = None
 
   async def send_command(
     self,
@@ -238,8 +510,25 @@ class VantageCommandCatcher(VantageBackend):
     )
     self.commands.append(cmd)
 
-  async def stop(self):
-    self.stop_finished = True
+
+class TestVantageCommandCatcherLifecycle(AnyioTestBase):
+  async def test_command_catcher_is_resource_free_and_reusable(self) -> None:
+    backend = VantageCommandCatcher()
+    backend.set_deck(VantageDeck(size=1.3))
+    backend.set_heads({index: TipTracker(thing=f"channel {index}") for index in range(8)})
+    events: list[str] = []
+    io = RecordingUSB(events)
+    backend.io = cast(USB, io)
+    router = RecordingReplyRouter(io, cast(Any, backend), events)
+    backend._reply_router = router
+
+    for _ in range(2):
+      async with backend:
+        assert backend.setup_finished
+        assert backend.num_channels == 8
+      assert not backend.setup_finished
+      assert events == []
+      assert router.run_count == 0
 
 
 class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):

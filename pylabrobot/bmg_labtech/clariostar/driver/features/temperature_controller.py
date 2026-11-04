@@ -1,9 +1,9 @@
 """The temperature controller: heats the plate chamber from below and above."""
 
-import asyncio
 import logging
-import time
 from typing import TYPE_CHECKING, Literal, Optional, Tuple
+
+import anyio
 
 if TYPE_CHECKING:
   from ..master import CLARIOstarDriver, CLARIOstarStatus
@@ -123,11 +123,11 @@ class TemperatureController:
     timeout = self.default_sensor_timeout if timeout is None else timeout
     status = await self._driver.request_status()
     await self._start_monitoring_if_off(status)
-    deadline = time.monotonic() + timeout
+    deadline = anyio.current_time() + timeout
     while status.temperature_bottom is None or status.temperature_top is None:
-      if time.monotonic() >= deadline:
+      if anyio.current_time() >= deadline:
         raise TimeoutError(f"the temperature sensors did not report within {timeout} s")
-      await asyncio.sleep(self._driver.default_poll_interval)
+      await anyio.sleep(self._driver.default_poll_interval)
       status = await self._driver.request_status()
     if sensor == "bottom":
       return status.temperature_bottom
@@ -152,14 +152,14 @@ class TemperatureController:
       raise RuntimeError("no target temperature set; call `start_temperature_control` first")
     tolerance = self.default_temperature_tolerance if tolerance is None else tolerance
     timeout = self.default_temperature_timeout if timeout is None else timeout
-    deadline = time.monotonic() + timeout
+    deadline = anyio.current_time() + timeout
     while True:
       temperature = await self.measure_temperature()
       if abs(temperature - self.target_temperature) <= tolerance:
         logger.info("%.1f C reached (target %.1f C)", temperature, self.target_temperature)
         return temperature
-      if time.monotonic() >= deadline:
+      if anyio.current_time() >= deadline:
         raise TimeoutError(
           f"{temperature} C after {timeout} s, target {self.target_temperature} +/- {tolerance}"
         )
-      await asyncio.sleep(self.default_poll_interval)
+      await anyio.sleep(self.default_poll_interval)

@@ -23,6 +23,7 @@ PreciseFlex
     PreciseFlexVision
     PreciseFlexConfiguration
     PreciseFlexCartesianPose
+    PreciseFlexPose
     WorkEnvelope
     MotionProfile
     PreciseFlexAxis

@@ -1,7 +1,6 @@
 """Translate Celigo gRPC requests into instrument-session operations."""
 
-import asyncio
-
+import anyio
 import grpc
 from google.protobuf.empty_pb2 import Empty
 
@@ -41,7 +40,7 @@ class CeligoServicer(rpc.CeligoServiceServicer):
     """Compile an inspectable plan without blocking RPC handling or opening hardware."""
     async with translate_rpc_errors(context):
       require_device(request.device_id, self.session.device_id)
-      plan = await asyncio.to_thread(
+      plan = await anyio.to_thread.run_sync(
         self.session.build_scan_plan,
         decode_scan_specification(request.specification),
         decode_estimate_model(request.estimate_model),

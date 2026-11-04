@@ -62,6 +62,7 @@ def test_fixed_trash_rejects_invalid_server_version() -> None:
 class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
   """Tests for setup and stop"""
 
+  @patch("ot_api.requestor.post")
   @patch("ot_api.runs.create")
   @patch("ot_api.health.home")
   @patch("ot_api.lh.add_mounted_pipettes")
@@ -76,6 +77,7 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
     mock_add_mounted_pipettes,
     mock_home,
     mock_create,
+    mock_post,
   ):
     mock_create.return_value = "run-id"
     mock_add_mounted_pipettes.return_value = (
@@ -88,7 +90,12 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
 
     self.backend = OpentronsOT2Backend(host="localhost", port=1338)
     self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
-    await self.lh.setup()
+    try:
+      with self.assertWarns(DeprecationWarning):
+        await self.lh.setup()
+    finally:
+      await self.lh.stop()
+    mock_post.assert_called_once_with("/runs/run-id/cancel")
 
   def test_serialize(self):
     serialized = OpentronsOT2Backend(host="localhost", port=1337).serialize()
@@ -120,6 +127,10 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     mock_home,
     mock_create,
   ):
+    self.request_post_patcher = patch("ot_api.requestor.post")
+    self.mock_request_post = self.request_post_patcher.start()
+    self.addCleanup(self.request_post_patcher.stop)
+
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
     mock_add_mounted_pipettes.return_value = (
@@ -132,12 +143,17 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     self.backend = OpentronsOT2Backend(host="localhost", port=1338)
     self.deck = OTDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    await self.lh.setup()
+    with self.assertWarns(DeprecationWarning):
+      await self.lh.setup()
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
     self.plate = celltreat_96_wellplate_350uL_Fb(name="plate")
     self.deck.assign_child_at_slot(self.plate, slot=11)
+
+  async def asyncTearDown(self):
+    await self.lh.stop()
+    self.mock_request_post.assert_called_once_with("/runs/run-id/cancel")
 
   @patch("ot_api.lh.pick_up_tip")
   @patch("ot_api.labware.define")
@@ -230,11 +246,10 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(result, [{"id": "tempdeck"}])
 
   @patch("ot_api.run_id", "run-id", create=True)
-  @patch("ot_api.requestor.post")
-  async def test_stop_cancels_active_run_and_clears_pipettes(self, mock_post):
+  async def test_stop_cancels_active_run_and_clears_pipettes(self):
     """stop() cancels the active run through the requestor and clears mounted pipettes."""
-    await self.backend.stop()
-    mock_post.assert_called_once_with("/runs/run-id/cancel")
+    await self.lh.stop()
+    self.mock_request_post.assert_called_once_with("/runs/run-id/cancel")
     self.assertIsNone(self.backend.left_pipette)
     self.assertIsNone(self.backend.right_pipette)
 

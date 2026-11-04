@@ -33,8 +33,8 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
       {"data": {"status": "running"}},
       {"data": {"status": "succeeded"}},
     ]
-    with patch("pylabrobot.opentrons.run.time") as clock:
-      clock.monotonic.side_effect = [0, 100]
+    with patch("pylabrobot.opentrons.run.anyio.current_time") as clock:
+      clock.side_effect = [0, 100]
       await self.protocol_run.execute("aspirate", {"volume": 1000, "flowRate": 5})
     self.assertEqual(self.io.request.await_count, 3)
 
@@ -43,8 +43,8 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
       {"data": {"id": "slow"}},
       {"data": {"status": "running"}},
     ]
-    with patch("pylabrobot.opentrons.run.time") as clock:
-      clock.monotonic.side_effect = [0, 3]
+    with patch("pylabrobot.opentrons.run.anyio.current_time") as clock:
+      clock.side_effect = [0, 3]
       with self.assertRaises(OpentronsCommandTimeout):
         await self.protocol_run.execute("home", {}, timeout=2)
 
@@ -94,8 +94,8 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
       {"data": {"id": "slow-command"}},
       {"data": {"status": "running"}},
     ]
-    with patch("pylabrobot.opentrons.run.time") as clock:
-      clock.monotonic.side_effect = [0, 34]
+    with patch("pylabrobot.opentrons.run.anyio.current_time") as clock:
+      clock.side_effect = [0, 34]
       with self.assertRaises(OpentronsCommandTimeout) as raised:
         await self.protocol_run.aspirate_in_place("pipette", 10, 3)
     self.assertEqual(raised.exception.run_id, "run")
@@ -169,8 +169,8 @@ class OpentronsRunTests(unittest.IsolatedAsyncioTestCase):
       {},
       {"data": {"id": "run", "status": "stop-requested"}},
     ]
-    with patch("pylabrobot.opentrons.run.time") as clock:
-      clock.monotonic.side_effect = [0, 34]
+    with patch("pylabrobot.opentrons.run.anyio.current_time") as clock:
+      clock.side_effect = [0, 34]
       with self.assertRaisesRegex(OpentronsError, "Timed out waiting for run run to stop"):
         await self.protocol_run.stop()
     self.assertTrue(self.protocol_run.active)

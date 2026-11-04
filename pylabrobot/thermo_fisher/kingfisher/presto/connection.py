@@ -1,12 +1,18 @@
 """Presto XML framing and response routing over PyLabRobot HID."""
 
-import asyncio
 import logging
 import math
 import xml.etree.ElementTree as ET
+from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Optional
 
+import anyio
+import anyio.abc
+import anyio.lowlevel
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.hid import HID
 
 logger = logging.getLogger(__name__)
@@ -151,7 +157,39 @@ class XMLMessages:
     return messages
 
 
-class PrestoConnection:
+@dataclass
+class _PendingWaiter:
+  """One command or rotation waiter signaled by the reader or session failure."""
+
+  event: anyio.Event
+  result: Optional[ET.Element] = None
+  error: Optional[PrestoError] = None
+  done: bool = False
+
+  def set_result(self, element: ET.Element) -> None:
+    """Record a terminal XML element and wake the waiting caller."""
+    if not self.done:
+      self.done = True
+      self.result = element
+      self.event.set()
+
+  def set_exception(self, error: PrestoError) -> None:
+    """Record a failure and wake the waiting caller."""
+    if not self.done:
+      self.done = True
+      self.error = error
+      self.event.set()
+
+  async def wait(self) -> ET.Element:
+    """Wait for the response or raise the recorded failure."""
+    await self.event.wait()
+    if self.error is not None:
+      raise self.error
+    assert self.result is not None
+    return self.result
+
+
+class PrestoConnection(HasLifespan):
   """Serialize commands and independently deliver every instrument event.
 
   A timeout or cancellation during a command invalidates the session. Reconnect
@@ -161,121 +199,140 @@ class PrestoConnection:
 
   def __init__(self, io: HID, on_event: Callable[[ET.Element], None], timeout: float) -> None:
     """Configure the transport, event observer and command deadline."""
+    super().__init__()
     if not math.isfinite(timeout) or timeout <= 0:
       raise ValueError("timeout must be positive and finite")
     self.io = io
     self.timeout = timeout
     self._on_event = on_event
-    self._read_task: Optional[asyncio.Task[None]] = None
-    self._pending: Optional[asyncio.Future[ET.Element]] = None
+    self._open = False
+    self._reader_running = False
+    self._pending: Optional[_PendingWaiter] = None
     self._pending_name: Optional[str] = None
-    self._terminal: Optional[asyncio.Future[ET.Element]] = None
-    self._closed: Optional[asyncio.Future[None]] = None
+    self._terminal: Optional[_PendingWaiter] = None
     self._failure: Optional[PrestoError] = None
     self._raise_on_error = True
-    self._events: asyncio.Queue[ET.Element] = asyncio.Queue()
-    self._commands = asyncio.Lock()
-    self._writes = asyncio.Lock()
+    self._events: deque[ET.Element] = deque()
+    self._event_ready = anyio.Event()
+    self._commands = anyio.Lock()
+    self._writes = anyio.Lock()
+    self._command_in_progress = False
 
   def check_open(self) -> None:
     """Refuse commands outside a healthy session."""
     if self._failure is not None:
       raise self._failure
-    if self._read_task is None or self._read_task.done():
+    if not self._open or not self._reader_running:
       raise PrestoError("Call setup() before using the Presto")
 
   def _fail(self, error: PrestoError) -> None:
     """Wake every pending operation and event consumer on terminal I/O failure."""
     self._failure = error
-    for future in (self._pending, self._terminal):
-      if future is not None and not future.done():
-        future.set_exception(error)
-    if self._closed is not None and not self._closed.done():
-      self._closed.set_result(None)
+    for waiter in (self._pending, self._terminal):
+      if waiter is not None:
+        waiter.set_exception(error)
+    self._event_ready.set()
 
-  async def _read_loop(self) -> None:
+  async def _read_loop(self, reader_scope: anyio.CancelScope) -> None:
     """Decode length-prefixed HID packets and route responses and events."""
     messages = XMLMessages()
     try:
-      while self._failure is None:
-        # HID shares one worker for reads/writes. Short reads bound write/abort latency.
-        raw = await self.io.read(size=64, timeout=100)
-        if not raw:
-          await asyncio.sleep(0)
-          continue
-        length = raw[0]
-        if length > 63 or length > len(raw) - 1:
-          raise PrestoError(f"Invalid HID payload length {length} in {len(raw)}-byte report")
-        for element in messages.feed(raw[1 : 1 + length]):
-          if element.tag == "Res":
-            if element.get("name") != self._pending_name:
-              logger.debug("Ignoring unmatched response %s", element.get("name"))
-              continue
-            target = self._terminal if self._terminal is not None else self._pending
-            if target is not None and not target.done():
-              if element.get("ok", "false").lower() != "true" and (
-                self._raise_on_error or self._terminal is not None
-              ):
-                target.set_exception(response_error(element))
-              elif self._terminal is None:
-                target.set_result(element)
-          else:
-            self._on_event(element)
-            self._events.put_nowait(element)
-            if self._terminal is not None and not self._terminal.done():
-              if element.get("name") in ("Ready", "Aborted", "Error"):
-                self._terminal.set_result(element)
-    except asyncio.CancelledError:
+      with reader_scope:
+        while self._failure is None and self._open:
+          # HID.read polls with a short internal worker timeout and yields until a report arrives.
+          raw = await self.io.read(size=64)
+          if not raw:
+            await anyio.sleep(0)
+            continue
+          length = raw[0]
+          if length > 63 or length > len(raw) - 1:
+            raise PrestoError(f"Invalid HID payload length {length} in {len(raw)}-byte report")
+          for element in messages.feed(raw[1 : 1 + length]):
+            if element.tag == "Res":
+              if element.get("name") != self._pending_name:
+                logger.debug("Ignoring unmatched response %s", element.get("name"))
+                continue
+              target = self._terminal if self._terminal is not None else self._pending
+              if target is not None and not target.done:
+                if element.get("ok", "false").lower() != "true" and (
+                  self._raise_on_error or self._terminal is not None
+                ):
+                  target.set_exception(response_error(element))
+                elif self._terminal is None:
+                  target.set_result(element)
+            else:
+              self._on_event(element)
+              self._events.append(element)
+              self._event_ready.set()
+              if self._terminal is not None and not self._terminal.done:
+                if element.get("name") in ("Ready", "Aborted", "Error"):
+                  self._terminal.set_result(element)
+    except anyio.get_cancelled_exc_class():
       raise
     except Exception as error:
+      if not self._open:
+        return
       logger.error("Presto reader failed: %s", error)
       self._fail(PrestoError(f"Presto connection failed: {error}"))
-
-  async def setup(self) -> None:
-    """Open HID and begin a fresh session with empty event and response state."""
-    if self._read_task is not None:
-      self.check_open()
-      return
-    await self.io.setup()
-    self._failure = None
-    self._events = asyncio.Queue()
-    self._closed = asyncio.get_running_loop().create_future()
-    self._read_task = asyncio.create_task(self._read_loop())
-
-  async def stop(self) -> None:
-    """Wake waiters, cancel the reader, and close HID, including failed sessions."""
-    self._fail(PrestoError("Presto connection closed"))
-    task, self._read_task = self._read_task, None
-    try:
-      if task is not None:
-        task.cancel()
-        try:
-          await task
-        except asyncio.CancelledError:
-          pass
     finally:
-      await self.io.stop()
-      async with self._commands:
-        pass  # Pending callers have observed closure before another session opens.
+      self._reader_running = False
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Open HID and begin a fresh session with empty event and response state."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self.io.lifespan())
+    self._failure = None
+    self._pending = None
+    self._pending_name = None
+    self._terminal = None
+    self._events = deque()
+    self._event_ready = anyio.Event()
+    self._commands = anyio.Lock()
+    self._writes = anyio.Lock()
+    self._command_in_progress = False
+    self._open = True
+    self._reader_running = True
+    stack.push_shielded_async_callback(self._wait_for_commands)
+    group = await stack.enter_task_group()
+    reader_scope = anyio.CancelScope(shield=True)
+    group.start_soon(self._read_loop, reader_scope)
+    stack.callback(self._stop_reader, reader_scope, group)
+
+  def _stop_reader(self, reader_scope: anyio.CancelScope, group: anyio.abc.TaskGroup) -> None:
+    """Wake waiters and cancel the background reader before its task group joins."""
+    self._open = False
+    self._fail(PrestoError("Presto connection closed"))
+    reader_scope.shield = False
+    reader_scope.cancel()
+    group.cancel_scope.cancel()
+
+  async def _wait_for_commands(self) -> None:
+    """Ensure pending callers have observed closure before another session opens."""
+    async with self._commands:
+      pass
+
+  async def _write_payload_locked(self, payload: bytes, *, check_session: bool = True) -> None:
+    """Write a complete XML command as zero-padded 64-byte output reports while holding _writes."""
+    if not payload.endswith(b"\n"):
+      payload += b"\n"
+    for offset in range(0, len(payload), 63):
+      if check_session and self._failure is not None:
+        raise self._failure
+      chunk = payload[offset : offset + 63]
+      report = bytes([len(chunk)]) + chunk.ljust(63, b"\x00")
+      written = await self.io.write(report, report_id=b"\x00")
+      if written != 65:
+        raise OSError(f"Short HID output report write: {written} of 65 bytes")
 
   async def _write_payload(self, payload: bytes, *, check_session: bool = True) -> None:
     """Write a complete XML command as zero-padded 64-byte output reports."""
     async with self._writes:
-      if not payload.endswith(b"\n"):
-        payload += b"\n"
-      for offset in range(0, len(payload), 63):
-        if check_session and self._failure is not None:
-          raise self._failure
-        chunk = payload[offset : offset + 63]
-        report = bytes([len(chunk)]) + chunk.ljust(63, b"\x00")
-        written = await self.io.write(report, report_id=b"\x00")
-        if written != 65:
-          raise OSError(f"Short HID output report write: {written} of 65 bytes")
+      await self._write_payload_locked(payload, check_session=check_session)
 
-  async def _exchange(self, payload: bytes, future: asyncio.Future[ET.Element]) -> ET.Element:
+  async def _exchange(self, payload: bytes, waiter: _PendingWaiter) -> ET.Element:
     """Include both transmission and response wait in the command deadline."""
     await self._write_payload(payload)
-    return await future
+    return await waiter.wait()
 
   async def command(
     self, payload: bytes, *, terminal: bool = False, raise_on_error: bool = True
@@ -286,20 +343,22 @@ class PrestoConnection:
       raise ValueError("Command must have a name")
     async with self._commands:
       self.check_open()
-      future: asyncio.Future[ET.Element] = asyncio.get_running_loop().create_future()
+      waiter = _PendingWaiter(anyio.Event())
+      self._command_in_progress = True
       self._pending_name = name
       self._raise_on_error = raise_on_error
       if terminal:
-        self._terminal = future
+        self._terminal = waiter
       else:
-        self._pending = future
+        self._pending = waiter
       try:
-        return await asyncio.wait_for(self._exchange(payload, future), timeout=self.timeout)
-      except asyncio.TimeoutError as error:
+        with anyio.fail_after(self.timeout):
+          return await self._exchange(payload, waiter)
+      except TimeoutError as error:
         failure = PrestoError(f"Timeout waiting for {name}; reconnect before continuing")
         self._fail(failure)
         raise failure from error
-      except asyncio.CancelledError:
+      except anyio.get_cancelled_exc_class():
         self._fail(PrestoError(f"{name} was cancelled; reconnect before continuing"))
         raise
       except OSError as error:
@@ -307,38 +366,37 @@ class PrestoConnection:
         self._fail(failure)
         raise failure from error
       finally:
-        if not future.done():
-          future.cancel()
-        elif not future.cancelled():
-          future.exception()  # Retrieve failures even when transmission failed first.
-        self._pending = None
-        self._terminal = None
+        self._command_in_progress = False
+        if self._pending is waiter:
+          self._pending = None
+        if self._terminal is waiter:
+          self._terminal = None
         self._pending_name = None
 
   async def disconnect(self) -> None:
     """Send Disconnect without requiring the optional response."""
-    if self._commands.locked():
+    if self._command_in_progress:
       return
     async with self._commands:
       self.check_open()
-      await asyncio.wait_for(self._write_payload(command_xml("Disconnect")), self.timeout)
+      with anyio.fail_after(self.timeout):
+        await self._write_payload(command_xml("Disconnect"))
 
   async def get_event(self) -> ET.Element:
     """Return the next event, or raise promptly when the connection closes."""
     self.check_open()
-    assert self._closed is not None
-    receive = asyncio.create_task(self._events.get())
-    try:
-      done, _ = await asyncio.wait((receive, self._closed), return_when=asyncio.FIRST_COMPLETED)
-      if receive in done:
-        return receive.result()
+    await anyio.lowlevel.checkpoint()
+    while not self._events and self._failure is None and self._open:
+      ready = self._event_ready
+      await ready.wait()
+      if self._event_ready is ready and not self._events and self._failure is None and self._open:
+        self._event_ready = anyio.Event()
+    if self._failure is not None or not self._open:
       raise self._failure or PrestoError("Presto connection closed")
-    finally:
-      receive.cancel()
-      try:
-        await receive
-      except asyncio.CancelledError:
-        pass
+    element = self._events.popleft()
+    if not self._events and self._failure is None and self._open:
+      self._event_ready = anyio.Event()
+    return element
 
   async def abort(self) -> None:
     """Send the two-phase abort independently of a pending command.
@@ -346,8 +404,13 @@ class PrestoConnection:
     The feature payload is two bytes; HID supplies the unnumbered report ID.
     A fresh session is required afterwards to discard interrupted replies.
     """
-    if self._read_task is None:
+    if not self._open:
       raise PrestoError("Call setup() before using the Presto")
     self._fail(PrestoError("Presto aborted; stop() and setup() before continuing"))
-    await asyncio.wait_for(self.io.send_feature_report(b"\x01\x00"), self.timeout)
-    await asyncio.wait_for(self._write_payload(b"\x1b\n", check_session=False), self.timeout)
+    with anyio.CancelScope(shield=True):
+      async with self._writes:
+        with anyio.fail_after(self.timeout):
+          await self.io.send_feature_report(b"\x01\x00")
+        with anyio.fail_after(self.timeout):
+          await self._write_payload_locked(b"\x1b\n", check_session=False)
+    await anyio.lowlevel.checkpoint_if_cancelled()

@@ -14,7 +14,6 @@ IDs directly.
 
 from __future__ import annotations
 
-import asyncio
 import enum
 import functools
 import logging
@@ -45,6 +44,9 @@ from typing import (
   cast,
 )
 
+import anyio
+
+from pylabrobot.concurrency import SiblingTaskErrors, non_cancelling_task_group
 from pylabrobot.hamilton.liquid_class_resolver import (
   ASPIRATE_CLASS_ATTRIBUTES,
   DISPENSE_CLASS_ATTRIBUTES,
@@ -77,7 +79,7 @@ from pylabrobot.resources.errors import (
 )
 from pylabrobot.resources.hamilton import HamiltonTip, PrepDeck, TipSize
 from pylabrobot.resources.hamilton.core_grippers import HamiltonCoreGrippers
-from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+from pylabrobot.resources.n_channel_pipettes import NChannelPipette, TipMountingShaft
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_state import (
   VolumeTransferIntent,
@@ -907,12 +909,13 @@ class PipetteChannel:
     try:
       yield
     finally:
-      try:
-        await self._driver.send_command(PrepCmd.PrepZDriveSetPwm(dest=self.zdrive, value=held))
-      except Exception:
-        logger.warning(
-          "could not put channel %d's Z drive PWM back to %d", self.index, held, exc_info=True
-        )
+      with anyio.CancelScope(shield=True):
+        try:
+          await self._driver.send_command(PrepCmd.PrepZDriveSetPwm(dest=self.zdrive, value=held))
+        except Exception:
+          logger.warning(
+            "could not put channel %d's Z drive PWM back to %d", self.index, held, exc_info=True
+          )
 
   @asynccontextmanager
   async def clld_detection(self, detect_mode: int, sensitivity: int) -> AsyncIterator[None]:
@@ -935,7 +938,8 @@ class PipetteChannel:
     try:
       yield
     finally:
-      await self._driver.send_command(PrepCmd.PrepChannelStopCLldDetection(dest=self.calibration))
+      with anyio.CancelScope(shield=True):
+        await self._driver.send_command(PrepCmd.PrepChannelStopCLldDetection(dest=self.calibration))
 
   async def request_clld_detected(self) -> bool:
     """Request whether this channel's cLLD detected since its detection was last started.
@@ -1283,8 +1287,6 @@ class Pipettes:
 
   async def _on_stop(self):
     """Nothing to undo: the tips a channel carries are resources on its shaft, and stopping moves none."""
-
-  async def stop(self) -> None:
     self.setup_finished = False
 
   # -- addressing ----------------------------------------------------------------------------------
@@ -1359,10 +1361,11 @@ class Pipettes:
     """
     if not self.resources:
       return
-    try:
-      await self.request_locations()
-    except Exception:
-      logger.warning("could not read where the channels stopped; their model is stale")
+    with anyio.CancelScope(shield=True):
+      try:
+        await self.request_locations()
+      except Exception:
+        logger.warning("could not read where the channels stopped; their model is stale")
 
   async def request_firmware_version(self, channel: int) -> Optional[str]:
     """Firmware version string for pipettor channel (0=rearmost)."""
@@ -1639,9 +1642,8 @@ class Pipettes:
     Returns:
       The offset from the resource's corner to the point the positions refer to.
     """
-    stated = getattr(resource, "reference_point", None)
-    if isinstance(stated, Coordinate):
-      return stated
+    if isinstance(resource, NChannelPipette) and isinstance(resource.reference_point, Coordinate):
+      return resource.reference_point
     c = self.configuration
     anchor = resource.get_anchor(
       x=c.x_reference_anchor, y=c.y_reference_anchor, z=c.z_reference_anchor
@@ -2242,12 +2244,14 @@ class Pipettes:
     for channel in use_channels:
       self.channels[channel]._require_ddrive()
     if self._driver._second_io is not None:
-      await asyncio.gather(
-        *(
-          self._empty_tip(channel, position, flow_rate, reset_dispensing_drive_after, i > 0)
-          for i, channel in enumerate(use_channels)
-        )
-      )
+      try:
+        async with non_cancelling_task_group() as tg:
+          for i, channel in enumerate(use_channels):
+            tg.start_soon(
+              self._empty_tip, channel, position, flow_rate, reset_dispensing_drive_after, i > 0
+            )
+      except SiblingTaskErrors as error:
+        raise error.exceptions[0]
     else:
       for channel in use_channels:
         await self._empty_tip(channel, position, flow_rate, reset_dispensing_drive_after, False)
@@ -2644,18 +2648,19 @@ class Pipettes:
         set_.append(drive)
       yield
     finally:
-      for drive in set_:
-        try:
-          await self._driver.send_command(
-            PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=self.default_z_acceleration)
-          )
-        except Exception:
-          logger.warning(
-            "could not put the Z drive acceleration at %s back to %s mm/s2",
-            drive,
-            self.default_z_acceleration,
-            exc_info=True,
-          )
+      with anyio.CancelScope(shield=True):
+        for drive in set_:
+          try:
+            await self._driver.send_command(
+              PrepCmd.PrepZDriveSetAcceleration(dest=drive, value=self.default_z_acceleration)
+            )
+          except Exception:
+            logger.warning(
+              "could not put the Z drive acceleration at %s back to %s mm/s2",
+              drive,
+              self.default_z_acceleration,
+              exc_info=True,
+            )
 
   async def _unchecked_fw_move_z_absolute(self, zs: Dict[int, float], speed: float) -> None:
     """Send `ChannelXYZCoordinator.MoveZAbsolute` without checks.
@@ -2915,11 +2920,12 @@ class Pipettes:
         via_lane=via_lane,
       )
     finally:
-      try:
-        if self._driver is not None and restore_x is not None:
-          await self._driver.set_x_speed_scale(restore_x)
-      finally:
-        await self._record_where_they_stopped()
+      with anyio.CancelScope(shield=True):
+        try:
+          if self._driver is not None and restore_x is not None:
+            await self._driver.set_x_speed_scale(restore_x)
+        finally:
+          await self._record_where_they_stopped()
 
   async def move_to_location(
     self,
@@ -3681,7 +3687,17 @@ class Pipettes:
 
       try:
         if parallel:
-          heights = await asyncio.gather(*(seek(*search) for search in searches))
+          heights: List[Optional[float]] = [None] * len(searches)
+
+          async def _seek_into(idx: int, search: Tuple[int, float, float, float, bool]) -> None:
+            heights[idx] = await seek(*search)
+
+          try:
+            async with non_cancelling_task_group() as tg:
+              for idx, search in enumerate(searches):
+                tg.start_soon(_seek_into, idx, search)
+          except SiblingTaskErrors as error:
+            raise error.exceptions[0]
         else:
           heights = [await seek(*search) for search in searches]
       finally:
@@ -3712,7 +3728,7 @@ class Pipettes:
   async def _after(delay: float, search: Awaitable[_T]) -> _T:
     """Run `search` once `delay` seconds have passed, so gathered searches set off in a cascade."""
     if delay > 0:
-      await asyncio.sleep(delay)
+      await anyio.sleep(delay)
     return await search
 
   async def _probe_batch_floors(
@@ -3789,13 +3805,21 @@ class Pipettes:
       try:
         if parallel:
           rank = {channel: i for i, channel in enumerate(sorted(batch.channels))}
-          results = await asyncio.gather(
-            *(
-              self._after(rank[search[0]] * self.ztouch_cascade_interval, seek(*search))
-              for search in searches
-            ),
-            return_exceptions=True,
-          )
+          results: List[Union[Optional[float], BaseException]] = [None] * len(searches)
+
+          async def _seek_floor_into(idx: int, search: Tuple[int, float, float, float, bool]) -> None:
+            try:
+              results[idx] = await self._after(
+                rank[search[0]] * self.ztouch_cascade_interval, seek(*search)
+              )
+            except BaseException as exc:
+              if isinstance(exc, anyio.get_cancelled_exc_class()):
+                raise
+              results[idx] = exc
+
+          async with non_cancelling_task_group() as tg:
+            for idx, search in enumerate(searches):
+              tg.start_soon(_seek_floor_into, idx, search)
         else:
           results = [await seek(*search) for search in searches]
       finally:
@@ -3976,7 +4000,8 @@ class Pipettes:
         results.append(await func(batch))
     except BaseException:
       # A firmware error, a cancellation, an interrupt: the channels come up before it goes on.
-      await self.move_to_safe_z()
+      with anyio.CancelScope(shield=True):
+        await self.move_to_safe_z()
       raise
     return results
 
@@ -4585,7 +4610,7 @@ class Pipettes:
         if picked_up[ch]:
           self._mount_tip(ch, tip)
       # What a channel carries moves its Z window, and the device answers the new one.
-      with suppress(Exception):  # in a finally: never mask what went wrong above
+      with anyio.CancelScope(shield=True), suppress(Exception):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
       # Read once the tips are on the model: Z is reported at their bottom.
       await self._record_where_they_stopped()
@@ -4855,7 +4880,7 @@ class Pipettes:
         if released is not None and isinstance(dest, TipSpot) and dest.tracks_tips:
           dest.assign_tip(released)
       # What a channel carries moves its Z window, and the device answers the new one.
-      with suppress(Exception):  # in a finally: never mask what went wrong above
+      with anyio.CancelScope(shield=True), suppress(Exception):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
       # Read once the tips are off the model: Z is reported at the shafts' ends again.
       await self._record_where_they_stopped()
@@ -5100,7 +5125,7 @@ class Pipettes:
         self._release_tip(ch)
     finally:
       # What a channel carries moves its Z window, and the device answers the new one.
-      with suppress(Exception):  # in a finally: never mask what went wrong above
+      with anyio.CancelScope(shield=True), suppress(Exception):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
       await self._record_where_they_stopped()
 
@@ -7641,7 +7666,7 @@ class Pipettes:
     """
     if self.deck is None:
       raise RuntimeError("no deck to measure from; have you called `prep.setup()`?")
-    block = getattr(self.deck, "calibration_block", None)
+    block = self.deck.calibration_block if isinstance(self.deck, PrepDeck) else None
     if block is None:
       raise RuntimeError("this deck carries no calibration block")
     modelled = block.get_location_wrt(self.deck, "c", "c", "t")
@@ -7759,7 +7784,7 @@ class Pipettes:
     """
     if self.deck is None:
       raise RuntimeError("no deck to measure from; have you called `prep.setup()`?")
-    holders = getattr(self.deck, "spots", None)
+    holders = self.deck.spots if isinstance(self.deck, PrepDeck) else None
     if not holders:
       raise RuntimeError("this deck carries no resource holders")
 

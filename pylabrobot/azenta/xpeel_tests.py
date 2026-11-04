@@ -1,51 +1,325 @@
-import unittest
-from typing import Tuple
-from unittest.mock import AsyncMock
+from typing import Any, Awaitable, Callable, List, Optional, Union, cast
 
-from pylabrobot.azenta.xpeel import HAS_SERIAL, XPeel
+import anyio
+import pytest
 
+from pylabrobot.azenta.xpeel import XPeel
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.io.serial import Serial
+from pylabrobot.testing.concurrency import AnyioTestBase
 
-def _xpeel(*lines: bytes) -> Tuple[XPeel, AsyncMock]:
-  """An XPeel and its serial port, which answers with `lines`, one per readline."""
-  xpeel = XPeel(port="/dev/null")
-  io = AsyncMock()
-  io.readline = AsyncMock(side_effect=list(lines))
-  xpeel.io = io
-  return xpeel, io
+LineEffect = Union[bytes, Callable[[], Awaitable[bytes]]]
 
 
-@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
-class TestXPeelRequestStatus(unittest.IsolatedAsyncioTestCase):
+class FakeSerialIO(HasLifespan):
+  """Replay XPeel lines and record serial lifecycle and wire events."""
+
+  def __init__(
+    self,
+    lines: Optional[List[LineEffect]] = None,
+    events: Optional[List[str]] = None,
+    exit_error: Optional[BaseException] = None,
+    block_entry: Optional[anyio.Event] = None,
+  ) -> None:
+    super().__init__()
+    self.lines = list(lines or [])
+    self.events = events if events is not None else []
+    self.exit_error = exit_error
+    self.block_entry = block_entry
+    self.writes: List[bytes] = []
+    self.reset_count = 0
+    self.cancel_after_reset: Optional[anyio.CancelScope] = None
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("FakeSerialIO does not accept lifespan options")
+    await super()._enter_lifespan(stack)
+    self.events.append("serial.enter")
+    stack.push_shielded_async_callback(self._close)
+    if self.block_entry is not None:
+      self.block_entry.set()
+      await anyio.sleep_forever()
+
+  async def _close(self) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.events.append("serial.exit")
+    if self.exit_error is not None:
+      raise self.exit_error
+
+  async def reset_input_buffer(self) -> None:
+    self.reset_count += 1
+    self.events.append("serial.reset_input")
+    if self.cancel_after_reset is not None:
+      self.cancel_after_reset.cancel()
+
+  async def write(self, data: bytes) -> None:
+    self.writes.append(data)
+    self.events.append(f"write:{data!r}")
+
+  async def readline(self) -> bytes:
+    await anyio.lowlevel.checkpoint()
+    if not self.lines:
+      return b""
+    effect = self.lines.pop(0)
+    return await effect() if callable(effect) else effect
+
+
+def make_device(
+  lines: Optional[List[LineEffect]] = None,
+  events: Optional[List[str]] = None,
+  exit_error: Optional[BaseException] = None,
+  block_entry: Optional[anyio.Event] = None,
+  timeout: float = 0.02,
+) -> tuple[XPeel, FakeSerialIO]:
+  """Build an XPeel backed by a hardware-free serial transport."""
+  device = XPeel("FAKE", timeout=timeout)
+  fake_io = FakeSerialIO(lines, events, exit_error, block_entry)
+  device.io = cast(Serial, fake_io)
+  return device, fake_io
+
+
+def delayed_line(
+  line: bytes,
+  started: anyio.Event,
+  release: anyio.Event,
+  events: Optional[List[str]] = None,
+) -> Callable[[], Awaitable[bytes]]:
+  """Return one line only after the test releases its response boundary."""
+
+  async def read_delayed_line() -> bytes:
+    started.set()
+    await release.wait()
+    if events is not None:
+      events.append("ready.completed")
+    return line
+
+  return read_delayed_line
+
+
+async def _enter_and_wait(device: XPeel) -> None:
+  async with device:
+    pytest.fail("cancelled entry reached the body")
+
+
+class TestXPeelProtocol(AnyioTestBase):
+  async def test_command_adds_terminator_and_resets_input(self) -> None:
+    device, fake_io = make_device([b"version:1.2\r\n"])
+
+    assert await device.send_command("*version") == ["version:1.2"]
+    assert fake_io.writes == [b"*version\r\n"]
+    assert fake_io.reset_count == 1
+
+  async def test_ack_only_command_stops_after_ack(self) -> None:
+    device, fake_io = make_device([b"*ack\r\n", b"unused\r\n"])
+
+    assert await device.send_command("*moveout", expect_ack=True) == ["*ack"]
+    assert len(fake_io.lines) == 1
+
+  async def test_ack_and_ready_command_waits_for_ready_and_describes_error(self) -> None:
+    device, _ = make_device([b"*ack\r\n", b"*ready:4\r\n"])
+
+    assert await device.send_command("*sealcheck", wait_for_ready=True) == [
+      "*ack",
+      "*ready:4 [Seal not removed]",
+    ]
+
+  async def test_command_timeout_returns_responses_received_so_far(self) -> None:
+    device, _ = make_device([b"*ack\r\n"], timeout=0)
+
+    assert await device.send_command("*reset", wait_for_ready=True) == []
+
+  async def test_status_and_error_parsing(self) -> None:
+    device, _ = make_device([b"*stat:0,20,52\r\n"])
+
+    assert await device.request_status() == (0, 20, 52)
+    assert XPeel.parse_ready_line("*ready:51") == (
+      51,
+      "Emergency stop: cover open or hardware problem",
+    )
+    assert XPeel.describe_error(999) == "Unknown error code 999"
+    assert XPeel.parse_ready_line("not-ready") is None
+
+
+class TestXPeelLifecycle(AnyioTestBase):
+  def test_uses_managed_lifecycle_methods(self) -> None:
+    assert XPeel.__aenter__ is HasLifespan.__aenter__
+    assert XPeel.__aexit__ is HasLifespan.__aexit__
+    assert XPeel.setup is HasLifespan.setup
+    assert XPeel.stop is HasLifespan.stop
+
+  async def test_normal_exit_closes_serial(self) -> None:
+    events: List[str] = []
+    device, _ = make_device(events=events)
+
+    async with device:
+      events.append("body")
+
+    assert events == ["serial.enter", "body", "serial.exit"]
+    assert not device.is_active
+
+  async def test_entry_cancellation_closes_serial(self) -> None:
+    events: List[str] = []
+    entry_started = anyio.Event()
+    device, _ = make_device(events=events, block_entry=entry_started)
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(_enter_and_wait, device)
+      await entry_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert events == ["serial.enter", "serial.exit"]
+    assert not device.is_active
+
+  async def test_body_cancellation_closes_serial_before_propagating(self) -> None:
+    events: List[str] = []
+    body_started = anyio.Event()
+    device, _ = make_device(events=events)
+
+    async def use_device() -> None:
+      try:
+        async with device:
+          body_started.set()
+          await anyio.sleep_forever()
+      except anyio.get_cancelled_exc_class():
+        events.append("cancelled")
+        raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(use_device)
+      await body_started.wait()
+      task_group.cancel_scope.cancel()
+
+    assert events == ["serial.enter", "serial.exit", "cancelled"]
+    assert not device.is_active
+
+  async def test_sequential_reuse_opens_and_closes_twice(self) -> None:
+    events: List[str] = []
+    device, _ = make_device(events=events)
+
+    async with device:
+      pass
+    async with device:
+      pass
+
+    assert events == ["serial.enter", "serial.exit", "serial.enter", "serial.exit"]
+
+  async def test_serial_close_failure_propagates(self) -> None:
+    events: List[str] = []
+    failure = RuntimeError("serial close failed")
+    device, _ = make_device(events=events, exit_error=failure)
+
+    with pytest.raises(RuntimeError) as error_info:
+      async with device:
+        pass
+
+    assert error_info.value is failure
+    assert events == ["serial.enter", "serial.exit"]
+    assert not device.is_active
+
+  async def test_rejects_unknown_lifespan_options_before_serial_entry(self) -> None:
+    events: List[str] = []
+    device, _ = make_device(events=events)
+
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+      async with device.lifespan(unknown=True):
+        pytest.fail("invalid entry reached the body")
+
+    assert events == []
+
+
+class TestXPeelTransactions(AnyioTestBase):
+  async def test_concurrent_commands_do_not_reset_or_write_before_prior_ready(self) -> None:
+    first_response_started = anyio.Event()
+    release_first_response = anyio.Event()
+    device, fake_io = make_device(
+      [
+        b"*ack\r\n",
+        delayed_line(b"*ready:00,00,00\r\n", first_response_started, release_first_response),
+        b"*ack\r\n",
+        b"*ready:00,00,00\r\n",
+      ]
+    )
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(device.move_conveyor_out)
+      await first_response_started.wait()
+      task_group.start_soon(device.move_conveyor_in)
+      await anyio.sleep(0)
+      assert fake_io.writes == [b"*moveout\r\n"]
+      assert fake_io.reset_count == 1
+      release_first_response.set()
+
+    assert fake_io.writes == [b"*moveout\r\n", b"*movein\r\n"]
+    assert fake_io.reset_count == 2
+
+  async def test_pre_write_cancellation_does_not_write(self) -> None:
+    device, fake_io = make_device([b"version:1.2\r\n"])
+
+    with anyio.CancelScope() as scope:
+      fake_io.cancel_after_reset = scope
+      await device.send_command("*version")
+
+    assert scope.cancel_called
+    assert fake_io.reset_count == 1
+    assert fake_io.writes == []
+
+  async def test_cancellation_after_motion_write_reconciles_ready_before_propagating(self) -> None:
+    events: List[str] = []
+    response_started = anyio.Event()
+    release_response = anyio.Event()
+    device, fake_io = make_device(
+      [
+        b"*ack\r\n",
+        delayed_line(b"*ready:00,00,00\r\n", response_started, release_response, events),
+      ],
+      events=events,
+    )
+
+    async def move() -> None:
+      try:
+        await device.move_conveyor_out()
+      except anyio.get_cancelled_exc_class():
+        events.append("cancelled")
+        raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(move)
+      await response_started.wait()
+      task_group.cancel_scope.cancel()
+      with anyio.CancelScope(shield=True):
+        await anyio.sleep(0)
+        assert "cancelled" not in events
+        release_response.set()
+
+    assert events[-2:] == ["ready.completed", "cancelled"]
+    assert fake_io.writes == [b"*moveout\r\n"]
+
+
+class TestXPeelRequestStatus(AnyioTestBase):
   async def test_returns_the_three_error_codes(self) -> None:
-    xpeel, io = _xpeel(b"*ready:00,00,00\r\n")
+    xpeel, io = make_device([b"*ready:00,00,00\r\n"])
 
-    self.assertEqual(await xpeel.request_status(), (0, 0, 0))
-    io.write.assert_awaited_once_with(b"*stat\r\n")
+    assert await xpeel.request_status() == (0, 0, 0)
+    assert io.writes == [b"*stat\r\n"]
 
   async def test_returns_nonzero_error_codes(self) -> None:
-    xpeel, _ = _xpeel(b"*ready:07,20,00\r\n")
+    xpeel, _ = make_device([b"*ready:07,20,00\r\n"])
 
-    self.assertEqual(await xpeel.request_status(), (7, 20, 0))
+    assert await xpeel.request_status() == (7, 20, 0)
 
 
-@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
-class TestXPeelPeel(unittest.IsolatedAsyncioTestCase):
+class TestXPeelPeel(AnyioTestBase):
   async def test_sends_the_adhere_time_as_a_code(self) -> None:
     for adhere_time, code in ((2.5, 1), (5.0, 2), (7.5, 3), (10.0, 4)):
-      with self.subTest(adhere_time=adhere_time):
-        xpeel, io = _xpeel(b"*ack\r\n", b"*ready:00,00,00\r\n")
+      xpeel, io = make_device([b"*ack\r\n", b"*ready:00,00,00\r\n"])
 
-        await xpeel.peel(begin_location=0, fast=False, adhere_time=adhere_time)
+      await xpeel.peel(begin_location=0, fast=False, adhere_time=adhere_time)
 
-        io.write.assert_awaited_once_with(f"*xpeel:4{code}\r\n".encode("ascii"))
+      assert io.writes == [f"*xpeel:4{code}\r\n".encode("ascii")]
 
   async def test_rejects_an_unsupported_adhere_time(self) -> None:
-    xpeel, io = _xpeel()
+    xpeel, io = make_device()
 
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await xpeel.peel(adhere_time=3.0)
-    io.write.assert_not_awaited()
-
-
-if __name__ == "__main__":
-  unittest.main()
+    assert io.writes == []

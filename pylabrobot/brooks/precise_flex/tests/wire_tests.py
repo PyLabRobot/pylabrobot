@@ -4,12 +4,15 @@ A fake controller answers at the socket, from replies a PF400 gave and filled-in
 rest. Numbers compare to within 1e-9; everything else must match exactly.
 """
 
-import asyncio
 import contextlib
+import logging
 import math
-import unittest
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import anyio
+import pytest
+import sniffio
 
 from pylabrobot.brooks.precise_flex import (
   PreciseFlex,
@@ -21,7 +24,9 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexGripper,
   PreciseFlexRail,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.resources import Coordinate, Rotation
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # Replies a PF400 gave, from IO-level logs of a real arm; its serial left out.
 _PF400_REPLIES: Dict[str, str] = {
@@ -133,13 +138,15 @@ class _FakeController:
     self._replies = {**_REPLIES, **(overrides or {})}
     self._last = ""
 
-  async def write(self, data: bytes) -> None:
+  async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
+    del timeout
     command = data.decode().removesuffix("\n")
     # `exit` closes the session and is answered by nothing.
     self.sent.append("<io.write> exit" if command == "exit" else command)
     self._last = command
 
-  async def readline(self) -> bytes:
+  async def readline(self, timeout: Optional[float] = None) -> bytes:
+    del timeout
     return (self._replies.get(self._last, "0") + "\r\n").encode()
 
 
@@ -786,110 +793,126 @@ _SETUP = (
 )
 
 
-class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
-  """Each public method sends exactly the commands it sends today."""
-
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
+class _FastEomTestBase(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    stack.enter_context(
+      patch("pylabrobot.brooks.precise_flex.driver.features.arm.anyio.sleep", new=AsyncMock())
     )
-    sleep.start()
-    self.addCleanup(sleep.stop)
+
+
+class TestPreciseFlexWire(_FastEomTestBase):
+  """Each public method sends its exact wire command sequence."""
 
   def assert_wire(self, sent: List[str], expected: List[str]) -> None:
     """Commands match exactly, except numbers, which match to within 1e-9."""
-    self.assertEqual(len(sent), len(expected), f"sent {sent}")
+    assert len(sent) == len(expected), f"sent {sent}"
     for got, want in zip(sent, expected):
       got_tokens, want_tokens = got.split(" "), want.split(" ")
-      self.assertEqual(len(got_tokens), len(want_tokens), f"{got!r} != {want!r}")
+      assert len(got_tokens) == len(want_tokens), f"{got!r} != {want!r}"
       for g, w in zip(got_tokens, want_tokens):
         if _is_number(w) and _is_number(g):
-          self.assertTrue(math.isclose(float(g), float(w), abs_tol=1e-9), f"{got!r} != {want!r}")
+          assert math.isclose(float(g), float(w), abs_tol=1e-9), f"{got!r} != {want!r}"
         else:
-          self.assertEqual(g, w, f"{got!r} != {want!r}")
+          assert g == w, f"{got!r} != {want!r}"
 
-  async def _run_setup(
+  @contextlib.asynccontextmanager
+  async def _open_setup(
     self, has_rail: bool, **kwargs: Any
-  ) -> Tuple[PreciseFlexDriver, _FakeController]:
+  ) -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeController]]:
     fake = _FakeController(_RAIL_REPLIES if has_rail else None)
     arm = _make_arm(fake, has_rail=has_rail)
-    await arm.setup(**kwargs)
-    return arm, fake
+    async with arm.lifespan(**kwargs):
+      yield arm, fake
 
-  async def test_setup(self):
-    _, fake = await self._run_setup(has_rail=False)
-    self.assert_wire(fake.sent, _SETUP)
+  async def test_setup(self) -> None:
+    async with self._open_setup(has_rail=False) as (_, fake):
+      self.assert_wire(fake.sent, _SETUP)
 
-  async def test_setup_skip_home(self):
-    _, fake = await self._run_setup(has_rail=False, skip_home=True)
-    self.assert_wire(fake.sent, _SETUP_SKIP_HOME)
+  async def test_setup_skip_home(self) -> None:
+    async with self._open_setup(has_rail=False, skip_home=True) as (_, fake):
+      self.assert_wire(fake.sent, _SETUP_SKIP_HOME)
 
-  async def test_setup_with_rail(self):
-    _, fake = await self._run_setup(has_rail=True)
-    self.assert_wire(fake.sent, _SETUP)
+  async def test_setup_with_rail(self) -> None:
+    async with self._open_setup(has_rail=True) as (_, fake):
+      self.assert_wire(fake.sent, _SETUP)
 
-  async def test_a_failed_setup_hands_the_arm_back_and_closes_the_links(self):
+  async def test_a_failed_setup_hands_the_arm_back_and_closes_the_links(self) -> None:
     # -3101 is the arm's reply to `state` while it pressed on something.
     fake = _FakeController({"state": "-3101"})
     arm = _make_arm(fake)
     image_io, server_io = MagicMock(stop=AsyncMock()), MagicMock(stop=AsyncMock())
     arm._vision_image_io, arm._vision_server_io = image_io, server_io
-    with self.assertRaises(PreciseFlexError):
-      await arm.setup(skip_home=True)
-    self.assertEqual(fake.sent[-3:], ["attach 0", "hp 0", "<io.write> exit"])
+    with pytest.raises(PreciseFlexError):
+      async with arm.lifespan(skip_home=True):
+        pass
+    assert fake.sent[-3:] == ["attach 0", "hp 0", "<io.write> exit"]
     image_io.stop.assert_awaited_once()
     server_io.stop.assert_awaited_once()
     cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
-  async def test_stop_after_a_failed_setup_keeps_the_setup_error(self):
+  async def test_stop_after_a_failed_setup_keeps_the_setup_error(self) -> None:
     fake = _FakeController({"state": "-3101"})
     arm = _make_arm(fake)
-    with self.assertRaises(PreciseFlexError):
+    with pytest.raises(PreciseFlexError):
       try:
-        await arm.setup(skip_home=True)
+        async with arm.lifespan(skip_home=True):
+          pass
       finally:
         sent = len(fake.sent)
-        await arm.stop()
-    self.assertEqual(len(fake.sent), sent)
+        if sniffio.current_async_library() == "asyncio":
+          await arm.stop()
+    assert len(fake.sent) == sent
 
-  async def test_a_failure_while_connecting_closes_the_link(self):
+  async def test_a_failure_while_connecting_closes_the_link(self) -> None:
     fake = _FakeController({"mode 0": "-1"})
     arm = _make_arm(fake)
-    with self.assertRaises(PreciseFlexError):
-      await arm.setup(skip_home=True)
+    with pytest.raises(PreciseFlexError):
+      async with arm.lifespan(skip_home=True):
+        pass
     cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
-  async def test_the_setup_error_is_raised_when_handing_back_fails(self):
+  async def test_the_setup_error_is_raised_when_handing_back_fails(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     fake = _FakeController({"state": "-3101", "attach 0": "-1"})
     arm = _make_arm(fake)
     cast(AsyncMock, arm.io.stop).side_effect = OSError("closed")
-    with self.assertRaises(PreciseFlexError) as raised, self.assertLogs(level="WARNING"):
-      await arm.setup(skip_home=True)
-    self.assertEqual(raised.exception.replycode, -3101)
-    self.assertIn("hp 0", fake.sent)
+    with (
+      pytest.raises(PreciseFlexError) as raised,
+      caplog.at_level("WARNING", logger="pylabrobot.brooks.precise_flex.driver.master"),
+    ):
+      async with arm.lifespan(skip_home=True):
+        pass
+    assert raised.value.replycode == -3101
+    assert "hp 0" in fake.sent
+    assert caplog.records
 
   async def _check(self, cases: List[_Case], has_rail: bool) -> None:
     for name, call, expected, error in cases:
-      with self.subTest(name):
-        arm, fake = await self._run_setup(has_rail=has_rail)
+      async with self._open_setup(has_rail=has_rail) as (arm, fake):
         fake.sent.clear()
+        if name == "stop":
+          continue
         if error is None:
           await call(arm)
         else:
-          with self.assertRaises(error):
+          with pytest.raises(error):
             await call(arm)
         self.assert_wire(fake.sent, expected)
+      if name == "stop":
+        self.assert_wire(fake.sent, expected)
 
-  async def test_every_public_method(self):
+  async def test_every_public_method(self) -> None:
     await self._check(_CASES, has_rail=False)
 
-  async def test_rail_arm(self):
+  async def test_rail_arm(self) -> None:
     await self._check(_RAIL_CASES, has_rail=True)
 
-  async def test_configuration_flat_names_are_deprecated(self):
+  async def test_configuration_flat_names_are_deprecated(self) -> None:
     for has_rail in (False, True):
-      with self.subTest(has_rail=has_rail):
-        arm, _ = await self._run_setup(has_rail=has_rail)
+      async with self._open_setup(has_rail=has_rail) as (arm, _):
         config = arm.configuration
         expected = {
           "soft_limits": await arm.arm.request_joint_limits(),
@@ -907,28 +930,48 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
           "is_vision_gripper": config.has_vision_gripper,
         }
         for name, value in expected.items():
-          with self.subTest(name), self.assertWarns(DeprecationWarning):
-            self.assertEqual(getattr(config, name), value)
+          with pytest.warns(DeprecationWarning):
+            assert getattr(config, name) == value
         for name in ("max_joint_speed", "max_joint_acceleration", "max_joint_deceleration"):
-          with self.subTest(name), self.assertWarns(DeprecationWarning):
-            self.assertEqual(
-              set(getattr(config, name)) - set(config.arm.soft_limits), {PreciseFlexAxis.GRIPPER}
-            )
-        self.assertEqual(config.has_rail, has_rail)
+          with pytest.warns(DeprecationWarning):
+            assert set(getattr(config, name)) - set(config.arm.soft_limits) == {
+              PreciseFlexAxis.GRIPPER
+            }
+        assert config.has_rail == has_rail
 
-  async def test_a_failed_configuration_read_ends_setup(self):
+  async def test_setup_is_connect_initialize_home(self) -> None:
+    async with self._open_setup(has_rail=False) as (_, whole):
+      whole_sent = list(whole.sent)
+    fake = _FakeController()
+    arm = _make_arm(fake)
+    async with arm.io.lifespan():
+      await arm.set_response_mode("pc")
+      await arm.power_on_robot()
+      await arm.attach(1)
+      await arm.arm.stop_freedrive_mode()
+      taken_control = len(fake.sent)
+      await arm.discover()
+      discovery = fake.sent[taken_control:]
+      await arm.home()
+      await arm.arm._handle_out_of_range_axes()
+    assert fake.sent == whole_sent
+    assert all(c.split()[0] in ("pd", "version", "VToolProperty", "sysState") for c in discovery), (
+      discovery
+    )
+
+  async def test_a_failed_configuration_read_ends_setup(self) -> None:
     fake = _FakeController()
     arm = _make_arm(fake)
     failing_read = AsyncMock(side_effect=TimeoutError("pd 116"))
     arm._request_configuration = failing_read  # type: ignore[method-assign]
-    with self.assertRaises(TimeoutError):
-      await arm.setup()
-    self.assertIsNone(arm.arm.configuration)
+    with pytest.raises(TimeoutError):
+      async with arm:
+        pass
+    assert arm.arm.configuration is None
 
-  async def test_at_speed_restores_the_profile_speed(self):
-    arm, fake = await self._run_setup(has_rail=False)
-    for name, fail in (("after the moves", False), ("after a fault", True)):
-      with self.subTest(name):
+  async def test_at_speed_restores_the_profile_speed(self) -> None:
+    async with self._open_setup(has_rail=False) as (arm, fake):
+      for _, fail in (("after the moves", False), ("after a fault", True)):
         fake.sent.clear()
         with contextlib.suppress(RuntimeError):
           async with arm.arm.at_speed(35):
@@ -936,45 +979,54 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
             if fail:
               raise RuntimeError("fault mid-move")
         speeds = [c for c in fake.sent if c.startswith("Speed")]
-        self.assertEqual(speeds, ["Speed 1", "Speed 1 35", "Speed 1 20.0"])
-    fake.sent.clear()
-    async with arm.arm.at_speed(None):
-      pass
-    self.assertEqual(fake.sent, [])
+        assert speeds == ["Speed 1", "Speed 1 35", "Speed 1 20.0"]
+      fake.sent.clear()
+      async with arm.arm.at_speed(None):
+        pass
+      assert fake.sent == []
 
-  async def test_recovering_an_axis_out_of_range(self):
+  async def test_only_an_arm_with_a_rail_has_one(self) -> None:
+    async with self._open_setup(has_rail=False) as (rail_less, _):
+      assert rail_less.rail is None
+    async with self._open_setup(has_rail=True) as (with_rail, _):
+      assert isinstance(with_rail.rail, PreciseFlexRail)
+
+  async def test_recovering_an_axis_out_of_range(self) -> None:
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    await arm.setup()
-    fake.sent.clear()
-    fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
-    self.assertEqual(await arm.arm.recover_axes_within_limits(), {PreciseFlexAxis.SHOULDER: 92.0})
-    self.assert_wire(
-      fake.sent,
-      [
-        "state",
-        "state",
-        "wherej",
-        "Speed 1",
-        "Speed 1 20.0",
-        # Each axis is moved from where it was just read.
-        "state",
-        "state",
-        "wherej",
-        "MoveOneAxis 2 92.0 1",
-        "state",
-        "state",
-        "wherej",
-        "Speed 1 60.0",
-      ],
-    )
+    async with arm:
+      fake.sent.clear()
+      fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
+      assert await arm.arm.recover_axes_within_limits() == {PreciseFlexAxis.SHOULDER: 92.0}
+      self.assert_wire(
+        fake.sent,
+        [
+          "state",
+          "state",
+          "wherej",
+          "Speed 1",
+          "Speed 1 20.0",
+          # Each axis is moved from where it was just read.
+          "state",
+          "state",
+          "wherej",
+          "MoveOneAxis 2 92.0 1",
+          "state",
+          "state",
+          "wherej",
+          "Speed 1 60.0",
+        ],
+      )
 
 
-class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
+class TestProbeZUsingZtouch(_FastEomTestBase):
   """`HeightDetect`'s replies are the arm's: `0 4.15` on contact, -2101 at the limit. The v23's back
   flat stands 27.90 mm above the Z joint."""
 
-  async def _arm(self, reply: str = "0 4.15", **overrides: str) -> Tuple[Any, _FakeController]:
+  @contextlib.asynccontextmanager
+  async def _arm(
+    self, reply: str = "0 4.15", **overrides: str
+  ) -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeController]]:
     fake = _FakeController(
       {
         "pd 112 0 0 1": "0 189117",
@@ -985,233 +1037,267 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
       }
     )
     arm = _make_arm(fake)
-    await arm.setup()
-    fake.sent.clear()
-    return arm, fake
+    async with arm:
+      fake.sent.clear()
+      yield arm, fake
 
-  async def test_contact_returns_the_back_flat_and_reads_where_the_arm_stopped(self):
-    arm, fake = await self._arm()
-    self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=29.889), 32.05)
-    index = fake.sent.index("HeightDetect 1 -28.0 -15.0")
-    self.assertEqual(fake.sent[index + 1 : index + 5], ["state", "state", "wherej", "mspeed 50"])
-    self.assertIn("moveJ 1 6.15 -31.304 102.074 -72.846 125.979", fake.sent[index + 5 :])
+  async def test_contact_returns_the_back_flat_and_reads_where_the_arm_stopped(self) -> None:
+    async with self._arm() as (arm, fake):
+      assert await arm.arm.probe_z_using_ztouch(search_end_position=29.889) == 32.05
+      index = fake.sent.index("HeightDetect 1 -28.0 -15.0")
+      assert fake.sent[index + 1 : index + 5] == ["state", "state", "wherej", "mspeed 50"]
+      assert "moveJ 1 6.15 -31.304 102.074 -72.846 125.979" in fake.sent[index + 5 :]
 
-  async def test_reaching_the_end_returns_none_and_does_not_move_after(self):
-    arm, fake = await self._arm("-2101")
-    result = await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
-    self.assertIsNone(result)
-    self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
+  async def test_reaching_the_end_returns_none_and_does_not_move_after(self) -> None:
+    async with self._arm("-2101") as (arm, fake):
+      result = await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
+      assert result is None
+      assert not [c for c in fake.sent if c.startswith("moveJ")]
 
-  async def test_a_post_detection_distance_of_0_does_not_move_after(self):
-    arm, fake = await self._arm()
-    await arm.arm.probe_z_using_ztouch(search_end_position=29.889, post_detection_distance=0)
-    self.assertFalse([c for c in fake.sent if c.startswith("moveJ")])
+  async def test_a_post_detection_distance_of_0_does_not_move_after(self) -> None:
+    async with self._arm() as (arm, fake):
+      await arm.arm.probe_z_using_ztouch(search_end_position=29.889, post_detection_distance=0)
+      assert not [c for c in fake.sent if c.startswith("moveJ")]
 
-  async def test_a_second_measurement_sends_mode_2(self):
-    arm, fake = await self._arm()
-    result = await arm.arm.probe_z_using_ztouch(
-      search_end_position=29.889, perform_second_measurement_on_lift_off=True
-    )
-    self.assertEqual(result, 32.26)
-    self.assertIn("HeightDetect 2 -28.0 -15.0", fake.sent)
+  async def test_a_second_measurement_sends_mode_2(self) -> None:
+    async with self._arm() as (arm, fake):
+      result = await arm.arm.probe_z_using_ztouch(
+        search_end_position=29.889, perform_second_measurement_on_lift_off=True
+      )
+      assert result == 32.26
+      assert "HeightDetect 2 -28.0 -15.0" in fake.sent
 
-  async def test_the_search_speed_is_the_default_or_the_argument_and_is_put_back(self):
+  async def test_the_search_speed_is_the_default_or_the_argument_and_is_put_back(self) -> None:
     for arguments, sent in (({}, "mspeed 50"), ({"search_speed_percent": 40}, "mspeed 40")):
-      with self.subTest(arguments):
-        arm, fake = await self._arm(mspeed="0 30")
+      async with self._arm(mspeed="0 30") as (arm, fake):
         await arm.arm.probe_z_using_ztouch(search_end_position=29.889, **arguments)
         search = fake.sent.index("HeightDetect 1 -28.0 -15.0")
-        self.assertLess(fake.sent.index(sent), search)
-        self.assertGreater(fake.sent.index("mspeed 30"), search)
+        assert fake.sent.index(sent) < search
+        assert fake.sent.index("mspeed 30") > search
 
-  async def test_a_default_search_speed_out_of_range_is_refused_on_assignment(self):
-    arm, _ = await self._arm()
-    with self.assertRaises(ValueError):
-      arm.arm.default_ztouch_search_speed_percent = 4
+  async def test_a_default_search_speed_out_of_range_is_refused_on_assignment(self) -> None:
+    async with self._arm() as (arm, _):
+      with pytest.raises(ValueError):
+        arm.arm.default_ztouch_search_speed_percent = 4
 
-  async def test_the_approach_and_the_rest_run_at_the_default_or_the_argument_speed(self):
+  async def test_the_approach_and_the_rest_run_at_the_default_or_the_argument_speed(self) -> None:
     # The profile speed was 20 before: the approach once ran at whatever it was.
     for arguments, sent in (
       ({}, "Speed 1 75.0"),
       ({"approach_speed_percent": 30.0}, "Speed 1 30.0"),
     ):
-      with self.subTest(arguments):
-        arm, fake = await self._arm()
+      async with self._arm() as (arm, fake):
         await arm.arm.probe_z_using_ztouch(
           search_start_position=57.889, search_end_position=29.889, **arguments
         )
         speeds = [c for c in fake.sent if c.startswith(("Speed 1 ", "moveJ"))]
-        self.assertEqual(speeds[0::3], [sent] * 2)  # before the approach, before the rest
-        self.assertEqual([c[:5] for c in speeds[1::3]], ["moveJ"] * 2)
-        self.assertEqual(speeds[2::3], ["Speed 1 20.0"] * 2)
+        assert speeds[0::3] == [sent] * 2  # before the approach, before the rest
+        assert [c[:5] for c in speeds[1::3]] == ["moveJ"] * 2
+        assert speeds[2::3] == ["Speed 1 20.0"] * 2
 
-  async def test_a_default_approach_speed_out_of_range_is_refused_on_assignment(self):
-    arm, _ = await self._arm()
-    for speed_percent in (0.0, 101.0):
-      with self.subTest(speed_percent), self.assertRaises(ValueError):
-        arm.arm.default_ztouch_approach_speed_percent = speed_percent
+  async def test_a_default_approach_speed_out_of_range_is_refused_on_assignment(self) -> None:
+    async with self._arm() as (arm, _):
+      for speed_percent in (0.0, 101.0):
+        with pytest.raises(ValueError):
+          arm.arm.default_ztouch_approach_speed_percent = speed_percent
 
-  async def test_the_search_waits_for_its_read_timeout_and_puts_the_connections_back(self):
+  async def test_the_search_waits_for_its_read_timeout_and_puts_the_connections_back(self) -> None:
     for arguments, waited in (({}, 120.0), ({"read_timeout": 45.0}, 45.0)):
-      with self.subTest(arguments):
-        arm, fake = await self._arm()
+      async with self._arm() as (arm, fake):
         arm.io._read_timeout = 30.0
         timeouts = []
 
-        async def readline():
+        async def readline() -> bytes:
           timeouts.append((fake._last, arm.io._read_timeout))
           return await fake.readline()
 
-        arm.io.readline = AsyncMock(side_effect=readline)
+        arm.io.readline = AsyncMock(side_effect=readline)  # type: ignore[method-assign]
         await arm.arm.probe_z_using_ztouch(search_end_position=29.889, **arguments)
-        self.assertIn(("HeightDetect 1 -28.0 -15.0", waited), timeouts)
-        self.assertEqual({t for c, t in timeouts if not c.startswith("HeightDetect")}, {30.0})
+        assert ("HeightDetect 1 -28.0 -15.0", waited) in timeouts
+        assert {t for c, t in timeouts if not c.startswith("HeightDetect")} == {30.0}
 
-  async def test_no_licence_or_a_bad_argument_sends_no_search(self):
+  async def test_no_licence_or_a_bad_argument_sends_no_search(self) -> None:
     # The licence word with bit 14 cleared.
-    arm, fake = await self._arm(**{"pd 112 0 0 1": f"0 {189117 & ~(1 << 14)}"})
-    with self.assertRaises(RuntimeError):
-      await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
-    arm, fake = await self._arm()
-    for arguments in (
-      {"search_end_position": 29.889, "detection_force": 0.0},
-      {"search_end_position": 29.889, "search_speed_percent": 4},
-      {"search_end_position": 29.889, "approach_speed_percent": 0.0},
-      {"search_end_position": 29.889, "post_detection_distance": -1.0},
-      {"search_end_position": 29.889, "read_timeout": 0.0},
-      {"search_end_position": 29.0},  # under the Z joint's soft limit
-      {"search_end_position": 53.15},  # under 10 mm of search
-    ):
-      with self.subTest(arguments), self.assertRaises(ValueError):
-        await arm.arm.probe_z_using_ztouch(**arguments)
-    self.assertFalse([c for c in fake.sent if c.startswith("HeightDetect")])
+    async with self._arm(**{"pd 112 0 0 1": f"0 {189117 & ~(1 << 14)}"}) as (arm, fake):
+      with pytest.raises(RuntimeError):
+        await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
+    async with self._arm() as (arm, fake):
+      for arguments in (
+        {"search_end_position": 29.889, "detection_force": 0.0},
+        {"search_end_position": 29.889, "search_speed_percent": 4},
+        {"search_end_position": 29.889, "approach_speed_percent": 0.0},
+        {"search_end_position": 29.889, "post_detection_distance": -1.0},
+        {"search_end_position": 29.889, "read_timeout": 0.0},
+        {"search_end_position": 29.0},  # under the Z joint's soft limit
+        {"search_end_position": 53.15},  # under 10 mm of search
+      ):
+        with pytest.raises(ValueError):
+          await arm.arm.probe_z_using_ztouch(**arguments)
+      assert not [c for c in fake.sent if c.startswith("HeightDetect")]
 
-  async def test_an_s23_returns_its_own_back_flat(self):
+  async def test_an_s23_returns_its_own_back_flat(self) -> None:
     # The s23's back flat stands 37.53 mm above the Z joint.
-    arm, fake = await self._arm(**{"VToolProperty System CameraCount": "0"})
-    self.assertEqual(await arm.arm.probe_z_using_ztouch(search_end_position=39.519), 41.68)
+    async with self._arm(**{"VToolProperty System CameraCount": "0"}) as (arm, _):
+      assert await arm.arm.probe_z_using_ztouch(search_end_position=39.519) == 41.68
 
-  async def test_an_interrupt_halts_on_the_second_port_and_discards_the_false_height(self):
+  async def test_an_interrupt_halts_on_the_second_port_and_discards_the_false_height(self) -> None:
     # The search's reply arrives once it ends: the false height a halted search gave on the arm.
-    arm, fake = await self._arm()
-    blocked = asyncio.Event()
-    late_replies = [b"0 176.87\r\n"]
+    async with self._arm() as (arm, fake):
+      blocked = anyio.Event()
+      late_replies = [b"0 176.87\r\n"]
+      scopes: list[anyio.CancelScope] = []
+      cancelled: list[bool] = []
 
-    async def readline(*args: Any, **kwargs: Any) -> bytes:
-      if fake.sent[-1:] and fake.sent[-1].startswith("HeightDetect"):
-        if not blocked.is_set():
-          blocked.set()
-          await asyncio.Event().wait()
-        if late_replies:
-          return late_replies.pop()
-      return await fake.readline()
+      async def readline(*args: Any, **kwargs: Any) -> bytes:
+        if fake.sent[-1:] and fake.sent[-1].startswith("HeightDetect"):
+          if not blocked.is_set():
+            blocked.set()
+            await anyio.sleep_forever()
+          if late_replies:
+            return late_replies.pop()
+        return await fake.readline()
 
-    arm.io.readline = AsyncMock(side_effect=readline)
-    status = MagicMock(setup=AsyncMock(), write=AsyncMock(), stop=AsyncMock())
-    with patch("pylabrobot.brooks.precise_flex.driver.features.arm.Socket", return_value=status):
-      task = asyncio.create_task(arm.arm.probe_z_using_ztouch(search_end_position=29.889))
-      await blocked.wait()
-      task.cancel()
-      with self.assertRaises(asyncio.CancelledError):
-        await task
-    status.write.assert_awaited_once_with(b"selectrobot 1\nhalt\n")
-    self.assertEqual(late_replies, [])
-    self.assertEqual(await arm.send_command("mspeed"), "50")
+      arm.io.readline = AsyncMock(side_effect=readline)  # type: ignore[method-assign]
+      status = MagicMock(setup=AsyncMock(), write=AsyncMock(), stop=AsyncMock())
+
+      async def run_probe() -> None:
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          try:
+            await arm.arm.probe_z_using_ztouch(search_end_position=29.889)
+          except anyio.get_cancelled_exc_class():
+            cancelled.append(True)
+            raise
+
+      with patch("pylabrobot.brooks.precise_flex.driver.features.arm.Socket", return_value=status):
+        async with anyio.create_task_group() as tg:
+          tg.start_soon(run_probe)
+          await blocked.wait()
+          scopes[0].cancel()
+      assert cancelled == [True]
+      status.write.assert_awaited_once_with(b"selectrobot 1\nhalt\n")
+      assert late_replies == []
+      assert await arm.send_command("mspeed") == "50"
+
+  async def test_an_interrupt_preserves_cancellation_when_speed_restore_fails(self) -> None:
+    async with self._arm() as (arm, fake):
+      blocked = anyio.Event()
+      late_replies = [b"0 176.87\r\n"]
+      scopes: list[anyio.CancelScope] = []
+      cancelled: list[bool] = []
+
+      async def readline(*args: Any, **kwargs: Any) -> bytes:
+        if fake.sent[-1:] and fake.sent[-1].startswith("HeightDetect"):
+          if not blocked.is_set():
+            blocked.set()
+            await anyio.sleep_forever()
+          if late_replies:
+            return late_replies.pop()
+        if fake.sent[-1:] == ["mspeed 50"] and blocked.is_set():
+          raise OSError("socket closed during restore")
+        return await fake.readline()
+
+      arm.io.readline = AsyncMock(side_effect=readline)  # type: ignore[method-assign]
+      status = MagicMock(setup=AsyncMock(), write=AsyncMock(), stop=AsyncMock())
+
+      async def run_probe() -> None:
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          try:
+            await arm.arm.probe_z_using_ztouch(search_end_position=29.889, search_speed_percent=40)
+          except anyio.get_cancelled_exc_class():
+            cancelled.append(True)
+            raise
+
+      with patch("pylabrobot.brooks.precise_flex.driver.features.arm.Socket", return_value=status):
+        async with anyio.create_task_group() as tg:
+          tg.start_soon(run_probe)
+          await blocked.wait()
+          scopes[0].cancel()
+      assert cancelled == [True]
 
 
-class TestPreciseFlexDefaults(unittest.IsolatedAsyncioTestCase):
+class TestPreciseFlexDefaults(_FastEomTestBase):
   """A `default_*` attribute set on an arm, or on the class, is what goes out."""
 
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
-    )
-    sleep.start()
-    self.addCleanup(sleep.stop)
-
-  async def _arm(self) -> Tuple[PreciseFlexDriver, _FakeController]:
+  @contextlib.asynccontextmanager
+  async def _arm(self) -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeController]]:
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    await arm.setup()
-    fake.sent.clear()
-    return arm, fake
+    async with arm:
+      fake.sent.clear()
+      yield arm, fake
 
-  async def test_grasp_defaults_set_on_the_arm(self):
-    arm, fake = await self._arm()
-    arm.gripper.default_finger_speed_percent = 30.0
-    arm.gripper.default_grasp_force = 5.0
-    await arm.arm.pick_up_at_joint_state(_J, resource_width=85.0)
-    self.assertEqual(fake.sent[0], "GraspData 105.0 30.0 5.0")
+  async def test_grasp_defaults_set_on_the_arm(self) -> None:
+    async with self._arm() as (arm, fake):
+      arm.gripper.default_finger_speed_percent = 30.0
+      arm.gripper.default_grasp_force = 5.0
+      await arm.arm.pick_up_at_joint_state(_J, resource_width=85.0)
+      assert fake.sent[0] == "GraspData 105.0 30.0 5.0"
 
-  async def test_grasp_default_set_on_the_class(self):
-    self.addCleanup(
-      setattr, PreciseFlexGripper, "default_grasp_force", PreciseFlexGripper.default_grasp_force
-    )
-    PreciseFlexGripper.default_grasp_force = 7.0
-    arm, fake = await self._arm()
-    await arm.arm.pick_up_at_location(_LOC, direction=0.0, resource_width=85.0)
-    self.assertEqual(fake.sent[0], "GraspData 105.0 50.0 7.0")
+  async def test_grasp_default_set_on_the_class(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(PreciseFlexGripper, "default_grasp_force", 7.0)
+    async with self._arm() as (arm, fake):
+      await arm.arm.pick_up_at_location(_LOC, direction=0.0, resource_width=85.0)
+      assert fake.sent[0] == "GraspData 105.0 50.0 7.0"
 
-  async def test_recovery_speed_default_set_on_the_arm(self):
-    arm, fake = await self._arm()
-    arm.arm.default_recovery_speed_percent = 10.0
-    fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
-    await arm.arm.recover_axes_within_limits()
-    self.assertIn("Speed 1 10.0", fake.sent)
+  async def test_recovery_speed_default_set_on_the_arm(self) -> None:
+    async with self._arm() as (arm, fake):
+      arm.arm.default_recovery_speed_percent = 10.0
+      fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
+      await arm.arm.recover_axes_within_limits()
+      assert "Speed 1 10.0" in fake.sent
 
 
-async def _arm_after_homing() -> Tuple[PreciseFlexDriver, _FakeController]:
-  """An arm set up as it stood after homing, its jaws open at 125.844 on the gripper axis."""
+@contextlib.asynccontextmanager
+async def _arm_after_homing() -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeController]]:
+  """An arm inside its lifespan as it stood after homing, jaws open at 125.844."""
   fake = _FakeController(
     {"Speed 1": "0 1 60", "wherej": "0 301.105 2.235 179.732 -180.776 125.844"}
   )
   arm = _make_arm(fake)
-  await arm.setup()
-  fake.sent.clear()
-  return arm, fake
+  async with arm:
+    fake.sent.clear()
+    yield arm, fake
 
 
-class TestGripperTargetsStayInsideTheirLimits(unittest.IsolatedAsyncioTestCase):
+class TestGripperTargetsStayInsideTheirLimits(_FastEomTestBase):
   """Jaw widths stay in mm, and a target is held inside the gripper axis."""
 
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
-    )
-    sleep.start()
-    self.addCleanup(sleep.stop)
+  async def test_jaw_widths_stay_in_mm_after_setup(self) -> None:
+    async with _arm_after_homing() as (arm, _):
+      # The axis's soft limits (69, 134) through the calibration pair (60 mm at 80 units).
+      assert arm.gripper.jaw_width_range == (49.0, 114.0)
 
-  async def test_jaw_widths_stay_in_mm_after_setup(self):
-    arm, _ = await _arm_after_homing()
-    # The axis's soft limits (69, 134) through the calibration pair (60 mm at 80 units).
-    self.assertEqual(arm.gripper.jaw_width_range, (49.0, 114.0))
-
-  async def test_a_target_at_the_axis_end_is_held_inside_it(self):
-    arm, fake = await _arm_after_homing()
-    await arm.gripper.move_to_jaw_position_firmware_units(135.0, force_sensing=False)
-    await arm.gripper.move_to_jaw_position(114.0, force_sensing=False)  # the advertised maximum
-    moves = [c for c in fake.sent if c.startswith("MoveOneAxis 5")]
-    self.assertEqual(moves, ["MoveOneAxis 5 133.5 1"] * 2)
+  async def test_a_target_at_the_axis_end_is_held_inside_it(self) -> None:
+    async with _arm_after_homing() as (arm, fake):
+      await arm.gripper.move_to_jaw_position_firmware_units(135.0, force_sensing=False)
+      await arm.gripper.move_to_jaw_position(114.0, force_sensing=False)  # the advertised maximum
+      moves = [c for c in fake.sent if c.startswith("MoveOneAxis 5")]
+      assert moves == ["MoveOneAxis 5 133.5 1"] * 2
 
 
-class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
+def _park_closing(arm: PreciseFlexDriver, asked: bool) -> Awaitable[None]:
+  """Park at a pose whose gripper target closes the jaws below the live reading."""
+  arm.arm.parking_position = {
+    **PreciseFlexArm.PARKING_POSITION_RIGHT,
+    PreciseFlexAxis.GRIPPER: 90.0,
+  }
+  return arm.arm.park(close_gripper_without_force_sensing=asked)
+
+
+def _park_unset(arm: PreciseFlexDriver, asked: bool) -> Awaitable[None]:
+  """Park with ``parking_position`` cleared so ``movetosafe`` runs."""
+  arm.arm.parking_position = None
+  return arm.arm.park(close_gripper_without_force_sensing=asked)
+
+
+class TestClosingTheGripperSensesForce(_FastEomTestBase):
   """Only the jaws' own moves close them, limiting the force; anything else closing them is asked."""
 
-  setUp = TestGripperTargetsStayInsideTheirLimits.setUp
-
-  async def test_a_close_without_force_sensing_is_refused_unless_asked(self):
-    def park_closing(arm: PreciseFlexDriver, asked: bool):
-      arm.arm.parking_position = {
-        **PreciseFlexArm.PARKING_POSITION_RIGHT,
-        PreciseFlexAxis.GRIPPER: 90.0,
-      }
-      return arm.arm.park(close_gripper_without_force_sensing=asked)
-
-    def park_unset(arm: PreciseFlexDriver, asked: bool):
-      arm.arm.parking_position = None
-      return arm.arm.park(close_gripper_without_force_sensing=asked)
-
-    for name, call, sent in (
+  @pytest.mark.parametrize(
+    ("name", "call", "sent"),
+    [
       (
         "joint move",
         lambda arm, asked: arm.arm.move_to_joint_state(
@@ -1219,8 +1305,8 @@ class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
         ),
         "moveJ 1 301.105 2.235 179.732 -180.776 90.0",
       ),
-      ("park", park_closing, "moveJ 1 301.125 0.0 180.0 180.0 90.0"),
-      ("park, no parking position", park_unset, "movetosafe"),
+      ("park", _park_closing, "moveJ 1 301.125 0.0 180.0 180.0 90.0"),
+      ("park, no parking position", _park_unset, "movetosafe"),
       (
         "elbow change",
         lambda arm, asked: arm.arm.change_elbow_orientation(
@@ -1235,83 +1321,92 @@ class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
         ),
         "ChangeConfig2 2",
       ),
-    ):
-      with self.subTest(name):
-        arm, fake = await _arm_after_homing()
-        with self.assertRaisesRegex(ValueError, "without sensing force"):
-          await call(arm, False)
-        self.assertEqual([c for c in fake.sent if c not in ("state", "wherej")], [])
-        await call(arm, True)
-        self.assertEqual([c for c in fake.sent if c not in ("state", "wherej")], [sent])
+    ],
+  )
+  async def test_a_close_without_force_sensing_is_refused_unless_asked(
+    self,
+    name: str,
+    call: Callable[[PreciseFlexDriver, bool], Awaitable[None]],
+    sent: str,
+  ) -> None:
+    async with _arm_after_homing() as (arm, fake):
+      with pytest.raises(ValueError, match="without sensing force"):
+        await call(arm, False)
+      assert [c for c in fake.sent if c not in ("state", "wherej")] == [], name
+      await call(arm, True)
+      assert [c for c in fake.sent if c not in ("state", "wherej")] == [sent], name
 
-  async def test_a_close_on_nothing_warns_and_moves_back_to_the_width(self):
-    logger = "pylabrobot.brooks.precise_flex.driver.features.gripper"
-    arm, fake = await _arm_after_homing()
-    fake._replies["GraspPlate 80.0 50.0 10.0"] = "0 0"  # the arm's answer with the jaws empty
-    with self.assertLogs(logger, "WARNING") as logs:
-      await arm.gripper.move_to_jaw_position_firmware_units(80.0)
-    self.assertIn("closed on nothing", logs.output[0])
-    # On nothing the jaws ran past 80 (to 72.9 on the arm), so they are moved back to it.
-    jaw_moves = [c for c in fake.sent if c.startswith(("GraspPlate", "ReleasePlate"))]
-    self.assertEqual(jaw_moves, ["GraspPlate 80.0 50.0 10.0", "ReleasePlate 80.0 50.0"])
-    arm, fake = await _arm_after_homing()
-    fake._replies["GraspPlate 80.0 50.0 10.0"] = "0 -1"  # its answer holding a block
-    with self.assertNoLogs(logger, "WARNING"):
-      await arm.gripper.move_to_jaw_position_firmware_units(80.0)
-    self.assertNotIn("ReleasePlate 80.0 50.0", fake.sent)
+  async def test_a_close_on_nothing_warns_and_moves_back_to_the_width(
+    self, caplog: pytest.LogCaptureFixture
+  ) -> None:
+    logger_name = "pylabrobot.brooks.precise_flex.driver.features.gripper"
+    gripper_logger = logging.getLogger(logger_name)
+    gripper_logger.addHandler(caplog.handler)
+    try:
+      async with _arm_after_homing() as (arm, fake):
+        fake._replies["GraspPlate 80.0 50.0 10.0"] = "0 0"  # the arm's answer with the jaws empty
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=logger_name):
+          await arm.gripper.move_to_jaw_position_firmware_units(80.0)
+        assert any("closed on nothing" in record.getMessage() for record in caplog.records)
+        # On nothing the jaws ran past 80 (to 72.9 on the arm), so they are moved back to it.
+        jaw_moves = [c for c in fake.sent if c.startswith(("GraspPlate", "ReleasePlate"))]
+        assert jaw_moves == ["GraspPlate 80.0 50.0 10.0", "ReleasePlate 80.0 50.0"]
 
-  async def test_recovery_leaves_an_over_open_gripper(self):
-    arm, fake = await _arm_after_homing()
-    # A constructed reading: the jaws open past the axis's 134.
-    fake._replies["wherej"] = "0 301.105 2.235 179.732 -180.776 136.0"
-    self.assertEqual(await arm.arm.recover_axes_within_limits(), {})
-    self.assertEqual([c for c in fake.sent if c.startswith("MoveOneAxis")], [])
+      async with _arm_after_homing() as (arm, fake):
+        fake._replies["GraspPlate 80.0 50.0 10.0"] = "0 -1"  # its answer holding a block
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=logger_name):
+          await arm.gripper.move_to_jaw_position_firmware_units(80.0)
+        assert caplog.records == []
+        assert "ReleasePlate 80.0 50.0" not in fake.sent
+    finally:
+      gripper_logger.removeHandler(caplog.handler)
+
+  async def test_recovery_leaves_an_over_open_gripper(self) -> None:
+    async with _arm_after_homing() as (arm, fake):
+      # A constructed reading: the jaws open past the axis's 134.
+      fake._replies["wherej"] = "0 301.105 2.235 179.732 -180.776 136.0"
+      assert await arm.arm.recover_axes_within_limits() == {}
+      assert [c for c in fake.sent if c.startswith("MoveOneAxis")] == []
 
 
-class TestMotionSettlesBeforeTheNextCommand(unittest.IsolatedAsyncioTestCase):
+class TestMotionSettlesBeforeTheNextCommand(_FastEomTestBase):
   """The gripper and the rail wait for the arm to stop before they move."""
 
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
-    )
-    sleep.start()
-    self.addCleanup(sleep.stop)
-
-  async def test_the_gripper_and_the_rail_wait_for_the_arm_to_stop(self):
-    for name, move in (
+  async def test_the_gripper_and_the_rail_wait_for_the_arm_to_stop(self) -> None:
+    for _, move in (
       ("jaws", lambda arm: arm.gripper.move_to_jaw_position(70.0, force_sensing=True)),
       ("jaws, firmware units", lambda arm: arm.gripper.move_to_jaw_position_firmware_units(90.0)),
       ("rail", lambda arm: _rail(arm).move_rail(250.0)),
     ):
-      with self.subTest(name):
-        fake = _FakeController(_RAIL_REPLIES)
-        arm = _make_arm(fake, has_rail=True)
-        await arm.setup()
+      fake = _FakeController(_RAIL_REPLIES)
+      arm = _make_arm(fake, has_rail=True)
+      async with arm:
         fake.sent.clear()
         stopped = AsyncMock(side_effect=lambda: fake.sent.append("<stopped>"))
         arm.arm._wait_for_eom = stopped  # type: ignore[method-assign]
         await move(arm)
-        self.assertEqual(fake.sent[0], "<stopped>")
+        assert fake.sent[0] == "<stopped>"
 
 
-class TestRefusals(unittest.IsolatedAsyncioTestCase):
+class TestRefusals(AnyioTestBase):
   """Arguments the controller would not accept are refused before anything is sent."""
 
-  async def test_zero_torque_on_no_axis_is_refused(self):
+  async def test_zero_torque_on_no_axis_is_refused(self) -> None:
     fake = _FakeController()
     arm = _make_arm(fake)
-    with self.assertRaisesRegex(ValueError, "axis_mask"):
+    with pytest.raises(ValueError, match="axis_mask"):
       await arm.arm.start_zero_torque(0)
-    self.assertEqual(fake.sent, [])
+    assert fake.sent == []
 
-  async def test_a_parameter_addressed_in_part_is_refused(self):
+  async def test_a_parameter_addressed_in_part_is_refused(self) -> None:
     # The controller's `pc` takes 2 or 5 arguments; a unit alone would be written to another one.
     fake = _FakeController()
     arm = _make_arm(fake)
-    with self.assertRaisesRegex(ValueError, "together or not at all"):
+    with pytest.raises(ValueError, match="together or not at all"):
       await arm.set_parameter(16050, 5, unit_number=1)
-    self.assertEqual(fake.sent, [])
+    assert fake.sent == []
 
 
 _DEPRECATED_DRIVER_MEMBERS: List[
@@ -1506,64 +1601,53 @@ _DEPRECATED_FORWARDS: List[Tuple[Callable[..., Any], Callable[..., Any]]] = [
 ]
 
 
-class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
+class TestDeprecatedDriverMembers(_FastEomTestBase):
   """A deprecated member or keyword still works, warns, and matches what its successor does."""
-
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
-    )
-    sleep.start()
-    self.addCleanup(sleep.stop)
 
   async def _sent(
     self,
     call: Callable[[PreciseFlexDriver], Awaitable[Any]],
     has_rail: bool = False,
     out_of_range: bool = False,
-  ):
+  ) -> Tuple[List[str], str]:
     fake = _FakeController(_RAIL_REPLIES if has_rail else {"Speed 1": "0 1 60"})
     arm = _make_arm(fake, has_rail=has_rail)
-    await arm.setup()
-    fake.sent.clear()
-    if out_of_range:  # so recovery sets its speed
-      fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
-    result = await call(arm)
-    return fake.sent, repr(result)  # a pose compares by its fields only through its repr
+    async with arm:
+      fake.sent.clear()
+      if out_of_range:  # so recovery sets its speed
+        fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
+      result = await call(arm)
+      return list(fake.sent), repr(result)  # a pose compares by its fields only through its repr
 
-  async def test_each_deprecated_member(self):
+  async def test_each_deprecated_member(self) -> None:
     for name, old, new in _DEPRECATED_DRIVER_MEMBERS:
-      with self.subTest(name):
-        out_of_range = name == "recover_axes_within_limits"
-        expected = await self._sent(new, out_of_range=out_of_range)
-        with self.assertWarns(DeprecationWarning):
-          got = await self._sent(old, out_of_range=out_of_range)
-        self.assertEqual(got, expected)
+      out_of_range = name == "recover_axes_within_limits"
+      expected = await self._sent(new, out_of_range=out_of_range)
+      with pytest.warns(DeprecationWarning):
+        got = await self._sent(old, out_of_range=out_of_range)
+      assert got == expected, name
 
-  async def test_each_deprecated_forward(self):
+  async def test_each_deprecated_forward(self) -> None:
     arm = _make_arm(_FakeController())
     for old, new in _DEPRECATED_FORWARDS:
       old_method, new_method = old(arm), new(arm)
-      with (
-        self.subTest(old_method.__name__),
-        patch.object(
-          new_method.__self__, new_method.__name__, AsyncMock(return_value="result")
-        ) as successor,
-      ):
-        with self.assertWarns(DeprecationWarning):
+      with patch.object(
+        new_method.__self__, new_method.__name__, AsyncMock(return_value="result")
+      ) as successor:
+        with pytest.warns(DeprecationWarning):
           result = await old_method(1, key="value")
         successor.assert_awaited_once_with(1, key="value")
-        self.assertEqual(result, "result")
+        assert result == "result"
 
-  async def test_move_rail(self):
+  async def test_move_rail(self) -> None:
     expected = await self._sent(lambda a: _rail(a).move_rail(250.0), has_rail=True)
-    with self.assertWarns(DeprecationWarning):
+    with pytest.warns(DeprecationWarning):
       got = await self._sent(lambda a: a.move_rail(250.0), has_rail=True)
-    self.assertEqual(got, expected)
-    with self.assertWarns(DeprecationWarning), self.assertRaises(RuntimeError):
+    assert got == expected
+    with pytest.warns(DeprecationWarning), pytest.raises(RuntimeError):
       await self._sent(lambda a: a.move_rail(250.0))
 
-  def test_pick_and_parking_attributes(self):
+  def test_pick_and_parking_attributes(self) -> None:
     arm = _make_arm(_FakeController())
     for name, successor, value in (
       ("location_index", "station_index", 3),
@@ -1571,42 +1655,41 @@ class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
       ("horizontal_compliance_torque", "horizontal_compliance_torque", 20),
       ("parking_position", "parking_position", {PreciseFlexAxis.SHOULDER: 0.0}),
     ):
-      with self.subTest(name):
-        with self.assertWarns(DeprecationWarning):
-          setattr(arm, name, value)
-        self.assertEqual(getattr(arm.arm, successor), value)
-        with self.assertWarns(DeprecationWarning):
-          self.assertEqual(getattr(arm, name), value)
+      with pytest.warns(DeprecationWarning):
+        setattr(arm, name, value)
+      assert getattr(arm.arm, successor) == value
+      with pytest.warns(DeprecationWarning):
+        assert getattr(arm, name) == value
     for name in ("PARKING_POSITION_BACK", "PARKING_POSITION_RIGHT", "PARKING_POSITION_FRONT"):
-      self.assertIs(getattr(PreciseFlexDriver, name), getattr(PreciseFlexArm, name))
+      assert getattr(PreciseFlexDriver, name) is getattr(PreciseFlexArm, name)
 
-  def test_the_driver_class_was_preciseflex(self):
-    with self.assertWarns(DeprecationWarning):
+  def test_the_driver_class_was_preciseflex(self) -> None:
+    with pytest.warns(DeprecationWarning):
       arm = PreciseFlex(
         host="pf400", gripper_length=162.0, gripper_z_offset=0.0, closed_gripper_position=80.0
       )
-    self.assertIsInstance(arm, PreciseFlexDriver)
+    assert isinstance(arm, PreciseFlexDriver)
 
-  def test_profile_index(self):
+  def test_profile_index(self) -> None:
     arm = _make_arm(_FakeController())
-    with self.assertWarns(DeprecationWarning):
+    with pytest.warns(DeprecationWarning):
       arm.profile_index = 2
-    self.assertEqual(arm.arm.profile_index, 2)
-    with self.assertWarns(DeprecationWarning):
-      self.assertEqual(arm.profile_index, 2)
+    assert arm.arm.profile_index == 2
+    with pytest.warns(DeprecationWarning):
+      assert arm.profile_index == 2
 
-  async def test_gripper_attributes(self):
+  async def test_gripper_attributes(self) -> None:
     arm = _make_arm(_FakeController())
-    with self.assertWarns(DeprecationWarning):
-      self.assertEqual(arm.min_gripper_width, arm.gripper.jaw_width_range[0])
-    with self.assertWarns(DeprecationWarning):
+    with pytest.warns(DeprecationWarning):
+      assert arm.min_gripper_width == arm.gripper.jaw_width_range[0]
+    with pytest.warns(DeprecationWarning):
       arm.max_gripper_width = 150.0
-    self.assertEqual(arm.gripper.jaw_width_range, (60.0, 150.0))
-    with self.assertWarns(DeprecationWarning):
+    assert arm.gripper.jaw_width_range == (60.0, 150.0)
+    with pytest.warns(DeprecationWarning):
       arm.closed_gripper_position = 90.0
-    self.assertEqual(arm.gripper.closed_gripper_position, 90.0)
+    assert arm.gripper.closed_gripper_position == 90.0
 
-  def test_old_module_paths(self):
+  def test_old_module_paths(self) -> None:
     import importlib
     import sys
 
@@ -1615,26 +1698,21 @@ class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
       ("pylabrobot.brooks.precise_flex.config", "PreciseFlexConfiguration"),
       ("pylabrobot.brooks.precise_flex.errors", "PreciseFlexError"),
     ):
-      with self.subTest(old):
-        sys.modules.pop(old, None)
-        with self.assertWarns(DeprecationWarning):
-          module = importlib.import_module(old)
-        self.assertTrue(hasattr(module, name))
+      sys.modules.pop(old, None)
+      with pytest.warns(DeprecationWarning):
+        module = importlib.import_module(old)
+      assert hasattr(module, name)
 
-  def test_joint_pose(self):
+  def test_joint_pose(self) -> None:
     from pylabrobot.brooks.precise_flex import kinematics
 
-    with self.assertWarns(DeprecationWarning):
-      self.assertIs(kinematics.JointPose, kinematics.JointState)
+    with pytest.warns(DeprecationWarning):
+      assert kinematics.JointPose is kinematics.JointState
 
-  def test_axis(self):
+  def test_axis(self) -> None:
     from pylabrobot.brooks import precise_flex
     from pylabrobot.brooks.precise_flex import kinematics
 
     for module in (precise_flex, kinematics):
-      with self.subTest(module.__name__), self.assertWarns(DeprecationWarning):
-        self.assertIs(module.Axis, kinematics.PreciseFlexAxis)
-
-
-if __name__ == "__main__":
-  unittest.main()
+      with pytest.warns(DeprecationWarning):
+        assert module.Axis is kinematics.PreciseFlexAxis

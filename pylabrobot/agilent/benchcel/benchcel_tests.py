@@ -1,9 +1,11 @@
-import asyncio
 import struct
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock
+from typing import Any, Awaitable, Callable, Optional, Union, cast
+
+import anyio
+import pytest
 
 from pylabrobot.agilent.benchcel import (
   BenchCel4R,
@@ -27,9 +29,12 @@ from pylabrobot.agilent.benchcel.benchcel import (
   split_frames,
 )
 from pylabrobot.agilent.benchcel.stacks import benchcel_4r_stacks
-from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.io.socket import Socket
+from pylabrobot.resources import Coordinate, PlateHolder, cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 TEST_TEACHPOINT = Teachpoint(
   theta=89.99874114990234,
@@ -45,44 +50,112 @@ TEST_TEACHPOINT = Teachpoint(
 )
 
 
-class _FakeWriter:
-  def __init__(self) -> None:
+ReadEffect = Union[bytes, BaseException, Callable[[], Awaitable[bytes]]]
+
+
+class _FakeSocket(HasLifespan):
+  """Native fake Socket lifecycle with queued reads and captured writes."""
+
+  def __init__(
+    self,
+    chunks: list[ReadEffect],
+    *,
+    events: Optional[list[str]] = None,
+    entry_error: Optional[BaseException] = None,
+    exit_error: Optional[BaseException] = None,
+    retain_cancel_scope: bool = False,
+  ) -> None:
+    super().__init__()
     self.sent = bytearray()
-    self.closed = False
-
-  def write(self, data: bytes) -> None:
-    self.sent.extend(data)
-
-  async def drain(self) -> None:
-    return None
-
-  def close(self) -> None:
-    self.closed = True
-
-  async def wait_closed(self) -> None:
-    return None
-
-
-class _FakeReader:
-  def __init__(self, chunks: list[bytes]) -> None:
+    self.events = events if events is not None else []
+    self.entry_error = entry_error
+    self.exit_error = exit_error
+    self.retain_cancel_scope = retain_cancel_scope
+    self.setup_calls = 0
+    self.stop_calls = 0
+    self.reconnect_calls = 0
     self._chunks = list(chunks)
 
-  async def read(self, num_bytes: int) -> bytes:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("_FakeSocket does not accept lifespan options")
+    self.setup_calls += 1
+    self.events.append("socket.enter")
+    stack.push_shielded_async_callback(self._close)
+    if self.retain_cancel_scope:
+      stack.enter_context(anyio.CancelScope())
+    if self.entry_error is not None:
+      raise self.entry_error
+
+  async def _close(self) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.stop_calls += 1
+    self.events.append("socket.exit")
+    if self.exit_error is not None:
+      raise self.exit_error
+
+  async def reconnect(self) -> None:
+    if not self.is_active:
+      raise RuntimeError("reconnect outside socket lifespan")
+    self.reconnect_calls += 1
+    self.events.append("socket.reconnect")
+    await anyio.lowlevel.checkpoint()
+
+  async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.sent.extend(data)
+    self.events.append(f"write:{data.hex()}")
+
+  async def read(self, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
+    await anyio.lowlevel.checkpoint()
     if not self._chunks:
       return b""
-    chunk = self._chunks.pop(0)
+    effect = self._chunks.pop(0)
+    if isinstance(effect, BaseException):
+      raise effect
+    chunk = await effect() if callable(effect) else effect
     if len(chunk) > num_bytes:
       self._chunks.insert(0, chunk[num_bytes:])
       return chunk[:num_bytes]
     return chunk
 
 
-def _make_backend(chunks: list[bytes]) -> tuple[BenchCel4R, _FakeWriter]:
-  backend = BenchCel4R(name="benchcel", host="ignored", port=0, timeout=1.0, read_poll_timeout=0.01)
-  writer = _FakeWriter()
-  backend.io._writer = writer  # type: ignore[assignment]
-  backend.io._reader = _FakeReader(chunks)  # type: ignore[assignment]
-  return backend, writer
+class _SlowSocket(_FakeSocket):
+  """Socket double whose entry never completes without cancellation."""
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    await anyio.sleep_forever()
+
+
+class _SlowFirstReconnectSocket(_FakeSocket):
+  """Socket double whose first reconnect times out before a successful retry."""
+
+  async def reconnect(self) -> None:
+    await super().reconnect()
+    if self.reconnect_calls == 1:
+      await anyio.sleep_forever()
+
+
+def _make_backend(
+  chunks: list[ReadEffect],
+  *,
+  events: Optional[list[str]] = None,
+  entry_error: Optional[BaseException] = None,
+  exit_error: Optional[BaseException] = None,
+  stacks: Optional[list[ResourceStack]] = None,
+) -> tuple[BenchCel4R, _FakeSocket]:
+  backend = BenchCel4R(
+    name="benchcel",
+    host="ignored",
+    port=0,
+    timeout=1.0,
+    read_poll_timeout=0.01,
+    stacks=stacks,
+  )
+  socket = _FakeSocket(chunks, events=events, entry_error=entry_error, exit_error=exit_error)
+  backend.io = cast(Socket, socket)
+  return backend, socket
 
 
 def _sensor_payload(stacker_index: int = 2) -> bytes:
@@ -99,6 +172,34 @@ def _sensor_payload(stacker_index: int = 2) -> bytes:
     0,
     1,
   )
+
+
+class _AnyioTestCase(AnyioTestBase):
+  """AnyIO test base retaining unittest assertion helpers used by this module."""
+
+  def assertAlmostEqual(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertAlmostEqual(*args, **kwargs)
+
+  def assertEqual(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertEqual(*args, **kwargs)
+
+  def assertIs(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIs(*args, **kwargs)
+
+  def assertIsNone(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertIsNone(*args, **kwargs)
+
+  def assertNotIn(self, *args: Any, **kwargs: Any) -> None:
+    self._assertions.assertNotIn(*args, **kwargs)
+
+  def assertRaises(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertRaises(*args, **kwargs)
+
+  def assertRaisesRegex(self, *args: Any, **kwargs: Any) -> Any:
+    return self._assertions.assertRaisesRegex(*args, **kwargs)
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    self._assertions = unittest.TestCase()
 
 
 class BenchCelFrameTests(unittest.TestCase):
@@ -298,16 +399,6 @@ class BenchCelLabwareSettingsTests(unittest.TestCase):
 
 
 class BenchCelFactoryTests(unittest.TestCase):
-  def setUp(self):
-    # Constructing the backend creates ``asyncio.Lock``/``Socket`` objects, which on Python 3.9
-    # bind to the current event loop at init time; ensure one exists for these synchronous tests.
-    self._loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(self._loop)
-
-  def tearDown(self):
-    asyncio.set_event_loop(None)
-    self._loop.close()
-
   def test_factory_creates_device_with_four_stacks(self):
     benchcel = BenchCel4R(name="bc", host="192.168.0.100")
     self.assertIsInstance(benchcel, BenchCel4R)
@@ -325,7 +416,19 @@ class BenchCelFactoryTests(unittest.TestCase):
     self.assertAlmostEqual(benchcel.labware_settings.stacking_thickness, 42.54)
 
 
-class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
+class TestBenchCelWire(_AnyioTestCase):
+  async def test_split_frame_uses_caller_deadline_without_per_read_timeout(self) -> None:
+    """A delayed frame can span chunks without passing a transport timeout."""
+    backend, socket = _make_backend([b"\x69", b"\x01\x00\x48"])
+    original_read = socket.read
+
+    async def read_without_timeout(num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
+      assert timeout is None
+      return await original_read(num_bytes)
+
+    socket.read = read_without_timeout  # type: ignore[method-assign]
+    assert await backend._read_frame(timeout=0.1) == Frame(0x69, b"\x48")
+
   async def test_lower_level_home_command_writes_expected_frame(self):
     backend, writer = _make_backend([b"\x69", b"\x01\x00\x48"])
     ack = await backend._send_home_command()
@@ -333,19 +436,72 @@ class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(ack, Frame(0x69, b"\x48"))
 
   async def test_home_reconnects_and_confirms_status(self):
+    events: list[str] = []
+    backend, socket = _make_backend(
+      [Frame(0x69, b"\x47").to_bytes(), Frame(0x87).to_bytes()], events=events
+    )
+
+    async with backend:
+      await backend.home()
+      events.append("body")
+
+    assert socket.sent.hex() == "47010001870000"
+    assert socket.setup_calls == 1
+    assert socket.stop_calls == 1
+    assert socket.reconnect_calls == 1
+    assert events == [
+      "socket.enter",
+      "write:47010001",
+      "socket.reconnect",
+      "write:870000",
+      "body",
+      "socket.exit",
+    ]
+
+  async def test_home_reconnects_with_socket_cancel_scope(self) -> None:
     backend, _ = _make_backend([])
-    backend._write_frame = AsyncMock()  # type: ignore[method-assign]
-    backend._wait_for_command_ack = AsyncMock()  # type: ignore[method-assign]
-    backend.io.stop = AsyncMock()  # type: ignore[method-assign]
-    backend.io.setup = AsyncMock()  # type: ignore[method-assign]
-    backend._read_until = AsyncMock(return_value=Frame(0x87))  # type: ignore[method-assign]
+    socket = _FakeSocket(
+      [Frame(0x69, b"\x47").to_bytes(), Frame(0x87).to_bytes()],
+      retain_cancel_scope=True,
+    )
+    backend.io = cast(Socket, socket)
 
-    await backend.home()
+    async with backend:
+      await backend.home()
 
-    first_frame = backend._write_frame.await_args_list[0].args[0]
-    self.assertEqual(first_frame, Frame(0x47, b"\x01"))
-    backend.io.stop.assert_awaited_once()
-    backend.io.setup.assert_awaited_once()
+    assert socket.setup_calls == 1
+    assert socket.stop_calls == 1
+    assert socket.reconnect_calls == 1
+
+  async def test_home_retries_after_reconnect_timeout_with_socket_cancel_scope(self) -> None:
+    backend, _ = _make_backend([])
+    backend.timeout = 0.01
+    socket = _SlowFirstReconnectSocket(
+      [Frame(0x69, b"\x47").to_bytes(), Frame(0x87).to_bytes()],
+      retain_cancel_scope=True,
+    )
+    backend.io = cast(Socket, socket)
+
+    async with backend:
+      await backend.home(timeout=4.0)
+
+    assert socket.setup_calls == 1
+    assert socket.stop_calls == 1
+    assert socket.reconnect_calls == 2
+
+  async def test_home_timeout_interrupts_stalled_status_poll(self) -> None:
+    async def stalled_status() -> bytes:
+      await anyio.sleep_forever()
+      raise AssertionError("unreachable")
+
+    backend, socket = _make_backend([Frame(0x69, b"\x47").to_bytes(), stalled_status])
+    async with backend:
+      with anyio.fail_after(0.3):
+        with pytest.raises(TimeoutError, match="home-motors: device not responsive"):
+          await backend.home(timeout=0.02)
+
+    assert socket.reconnect_calls == 1
+    assert socket.stop_calls == 1
 
   async def test_move_to_stacker_writes_expected_frame(self):
     backend, writer = _make_backend([Frame(0x69, b"\x65").to_bytes()])
@@ -425,7 +581,241 @@ class BenchCelWireTests(unittest.IsolatedAsyncioTestCase):
     )
 
 
-class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
+class TestBenchCelLifecycle(AnyioTestBase):
+  def test_uses_managed_lifecycle_methods(self) -> None:
+    assert BenchCel4R.__aenter__ is HasLifespan.__aenter__
+    assert BenchCel4R.__aexit__ is HasLifespan.__aexit__
+    assert BenchCel4R.setup is HasLifespan.setup
+    assert BenchCel4R.stop is HasLifespan.stop
+
+  async def test_lifespan_rejects_options_before_opening_socket(self) -> None:
+    backend, socket = _make_backend([])
+
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+      async with backend.lifespan(home=True):
+        pytest.fail("invalid lifespan options reached body")
+
+    assert socket.setup_calls == 0
+    assert not backend.is_active
+
+  async def test_socket_entry_failure_rolls_back(self) -> None:
+    failure = RuntimeError("socket entry failed")
+    backend, socket = _make_backend([], entry_error=failure)
+
+    with pytest.raises(RuntimeError) as error_info:
+      async with backend:
+        pytest.fail("failed socket entry reached body")
+
+    assert error_info.value is failure
+    assert socket.setup_calls == 1
+    assert socket.stop_calls == 1
+    assert not backend.is_active
+
+  async def test_entry_timeout_scope_outlives_socket_cancel_scope(self) -> None:
+    backend, _ = _make_backend([])
+    socket = _FakeSocket([], retain_cancel_scope=True)
+    backend.io = cast(Socket, socket)
+
+    async with backend:
+      assert socket.is_active
+
+    assert socket.stop_calls == 1
+    assert not backend.is_active
+
+  async def test_socket_entry_timeout_closes_socket(self) -> None:
+    backend, _ = _make_backend([])
+    backend.timeout = 0.01
+    socket = _SlowSocket([], retain_cancel_scope=True)
+    backend.io = cast(Socket, socket)
+
+    with pytest.raises(TimeoutError):
+      async with backend:
+        pytest.fail("timed-out socket entry reached body")
+
+    assert socket.stop_calls == 1
+    assert not backend.is_active
+
+  async def test_body_cancellation_closes_socket_before_propagating(self) -> None:
+    events: list[str] = []
+    backend, _ = _make_backend([], events=events)
+
+    async def use_backend() -> None:
+      try:
+        async with backend:
+          events.append("body")
+          await anyio.sleep_forever()
+      except anyio.get_cancelled_exc_class():
+        events.append("cancelled")
+        raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(use_backend)
+      while "body" not in events:
+        await anyio.lowlevel.checkpoint()
+      task_group.cancel_scope.cancel()
+
+    assert events == ["socket.enter", "body", "socket.exit", "cancelled"]
+    assert not backend.is_active
+
+  async def test_sequential_reuse_opens_and_closes_socket_twice(self) -> None:
+    backend, socket = _make_backend([])
+
+    async with backend:
+      assert backend.is_active
+    async with backend:
+      assert backend.is_active
+
+    assert socket.setup_calls == 2
+    assert socket.stop_calls == 2
+    assert not backend.is_active
+
+  async def test_socket_close_failure_propagates_after_deactivation(self) -> None:
+    failure = RuntimeError("socket close failed")
+    backend, socket = _make_backend([], exit_error=failure)
+
+    with pytest.raises(RuntimeError) as error_info:
+      async with backend:
+        pass
+
+    assert error_info.value is failure
+    assert socket.stop_calls == 1
+    assert not backend.is_active
+
+
+def _make_transfer(
+  operation: str,
+  blocked_command: int,
+) -> tuple[
+  BenchCel4R,
+  _FakeSocket,
+  Plate,
+  ResourceStack | PlateHolder,
+  ResourceStack | PlateHolder,
+  anyio.Event,
+  anyio.Event,
+]:
+  stacks = benchcel_4r_stacks()
+  started = anyio.Event()
+  release = anyio.Event()
+
+  async def blocked_ack() -> bytes:
+    started.set()
+    await release.wait()
+    return Frame(0x69, bytes([blocked_command])).to_bytes()
+
+  effects: list[ReadEffect] = [Frame(0x69, b"\x6a").to_bytes()]
+  effects.append(blocked_ack if blocked_command == 0x62 else Frame(0x69, b"\x62").to_bytes())
+  if blocked_command == 0x63:
+    effects.append(blocked_ack)
+  backend, socket = _make_backend(effects, stacks=stacks)
+  backend.loading_tray_teachpoint_id = 0x1E
+  plate = cor_96_wellplate_360uL_Fb("plate")
+  source: ResourceStack | PlateHolder
+  destination: ResourceStack | PlateHolder
+  if operation == "upstack":
+    source = backend.loading_tray
+    destination = stacks[0]
+    backend.loading_tray.assign_child_resource(plate)
+  else:
+    source = stacks[0]
+    destination = backend.loading_tray if operation == "downstack" else stacks[1]
+    stacks[0].assign_child_resource(plate)
+  return backend, socket, plate, source, destination, started, release
+
+
+async def _run_transfer(backend: BenchCel4R, operation: str) -> None:
+  if operation == "downstack":
+    await backend.downstack(backend.stacks[0])
+  elif operation == "upstack":
+    await backend.upstack(backend.stacks[0])
+  else:
+    await backend.move_plate_between_stacks(backend.stacks[0], backend.stacks[1])
+
+
+class TestBenchCelTransferCancellation(AnyioTestBase):
+  @pytest.mark.parametrize("operation", ["downstack", "upstack", "move"])
+  async def test_cancellation_during_pick_reconciles_ack_without_model_commit(
+    self, operation: str
+  ) -> None:
+    backend, socket, plate, source, destination, started, release = _make_transfer(operation, 0x62)
+    cancelled = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def transfer() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          await _run_transfer(backend, operation)
+        except anyio.get_cancelled_exc_class():
+          cancelled.set()
+          raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(transfer)
+      await started.wait()
+      scopes[0].cancel()
+      await anyio.lowlevel.checkpoint()
+      assert not cancelled.is_set()
+      release.set()
+
+    assert plate.parent is source
+    assert plate.parent is not destination
+    assert split_frames(bytes(socket.sent)) == [
+      Frame(0x6A, b"\x01"),
+      Frame(0x62, b"\x01" + (b"\x1e" if operation == "upstack" else b"\x00") + b"\x00\x01"),
+    ]
+
+  @pytest.mark.parametrize("operation", ["downstack", "upstack", "move"])
+  async def test_cancellation_during_place_reconciles_ack_then_commits_model(
+    self, operation: str
+  ) -> None:
+    backend, socket, plate, source, destination, started, release = _make_transfer(operation, 0x63)
+    cancelled = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+
+    async def transfer() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        try:
+          await _run_transfer(backend, operation)
+        except anyio.get_cancelled_exc_class():
+          cancelled.set()
+          raise
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(transfer)
+      await started.wait()
+      scopes[0].cancel()
+      await anyio.lowlevel.checkpoint()
+      assert not cancelled.is_set()
+      assert plate.parent is source
+      release.set()
+
+    assert cancelled.is_set()
+    assert plate.parent is destination
+    assert [frame.command_id for frame in split_frames(bytes(socket.sent))] == [0x6A, 0x62, 0x63]
+
+  @pytest.mark.parametrize("operation", ["downstack", "upstack", "move"])
+  async def test_model_commit_waits_for_place_terminal_success(self, operation: str) -> None:
+    backend, _, plate, source, destination, started, release = _make_transfer(operation, 0x63)
+    completed = anyio.Event()
+
+    async def transfer() -> None:
+      await _run_transfer(backend, operation)
+      completed.set()
+
+    async with anyio.create_task_group() as task_group:
+      task_group.start_soon(transfer)
+      await started.wait()
+      assert plate.parent is source
+      assert plate.parent is not destination
+      assert not completed.is_set()
+      release.set()
+
+    assert plate.parent is destination
+
+
+class TestBenchCelStackerMapping(_AnyioTestCase):
   async def test_transfers_require_a_configured_teachpoint(self):
     stacks = benchcel_4r_stacks()
     # No loading_tray_teachpoint_id.
@@ -452,6 +842,8 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
 
     async def fake_send(frame: Frame, **kwargs) -> Frame:
       sent.append(frame)
+      if kwargs.get("on_success") is not None:
+        kwargs["on_success"]()
       return Frame(0x69, kwargs.get("ack_payload") or bytes([frame.command_id]))
 
     backend._send_frame_expect_ack_no_lock = fake_send  # type: ignore[method-assign]
@@ -481,6 +873,8 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
 
     async def fake_send(frame: Frame, **kwargs) -> Frame:
       sent.append(frame)
+      if kwargs.get("on_success") is not None:
+        kwargs["on_success"]()
       return Frame(0x69, kwargs.get("ack_payload") or bytes([frame.command_id]))
 
     backend._send_frame_expect_ack_no_lock = fake_send  # type: ignore[method-assign]
@@ -510,6 +904,8 @@ class BenchCelStackerMappingTests(unittest.IsolatedAsyncioTestCase):
 
     async def fake_send(frame: Frame, **kwargs) -> Frame:
       sent.append(frame)
+      if kwargs.get("on_success") is not None:
+        kwargs["on_success"]()
       return Frame(0x69, kwargs.get("ack_payload") or bytes([frame.command_id]))
 
     backend._send_frame_expect_ack_no_lock = fake_send  # type: ignore[method-assign]

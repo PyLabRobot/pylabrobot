@@ -1,11 +1,11 @@
 """Galvo mirror control for the Celigo image cytometer."""
 
-import asyncio
 import math
 import struct
-import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
+
+import anyio
 
 from pylabrobot.revvity.celigo.config import Calibrated2DPolynomialTransform, GalvoConfig
 from pylabrobot.revvity.celigo.coordinates import sample_offset_mm_to_galvo_offset_mm
@@ -264,7 +264,7 @@ class Galvo:
       if struct.unpack_from(">H", response, 0)[0] != 0:
         raise CeligoError(f"{axis.upper()} galvo did not settle")
       if axis_config.big_move_delay:
-        await asyncio.sleep(axis_config.big_move_delay)
+        await anyio.sleep(axis_config.big_move_delay)
     return hardware_voltage
 
   async def move_both(
@@ -281,30 +281,45 @@ class Galvo:
     )
     if not math.isfinite(post_move_delay) or post_move_delay < 0:
       raise CeligoError("Galvo configuration has an invalid post-move delay")
-    x_hardware_voltage = await self.move_single(
-      "x",
-      x_logical_voltage,
-      wait_until_settled=False,
-      timeout=timeout,
-    )
-    y_hardware_voltage = await self.move_single(
-      "y",
-      y_logical_voltage,
-      wait_until_settled=False,
-      timeout=timeout,
-    )
-    if wait_until_settled:
-      deadline = time.monotonic() + timeout
+    await anyio.lowlevel.checkpoint()
+    try:
+      with anyio.CancelScope(shield=True):
+        x_hardware_voltage = await self.move_single(
+          "x",
+          x_logical_voltage,
+          wait_until_settled=False,
+          timeout=timeout,
+        )
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        y_hardware_voltage = await self.move_single(
+          "y",
+          y_logical_voltage,
+          wait_until_settled=False,
+          timeout=timeout,
+        )
+      if wait_until_settled:
+        await self._wait_until_settled(timeout)
+        if post_move_delay:
+          await anyio.sleep(post_move_delay)
+    except anyio.get_cancelled_exc_class():
+      # At least one dispatch may have committed; query the existing status until idle.
+      with anyio.CancelScope(shield=True):
+        await self._wait_until_settled(timeout)
+      raise
+    return x_hardware_voltage, y_hardware_voltage
+
+  async def _wait_until_settled(self, timeout: float) -> None:
+    """Use the controller's finite status path to reconcile galvo motion."""
+    with anyio.move_on_after(timeout if timeout > 0 else self._celigo.reply_timeout * 2):
       while True:
         status = await self.request_controller_status()
         if not status.x_busy and not status.y_busy:
+          return
+        if timeout <= 0:
           break
-        if time.monotonic() >= deadline:
-          raise TimeoutError(f"Galvos did not settle within {timeout:g} seconds")
-        await asyncio.sleep(0.005)
-      if post_move_delay:
-        await asyncio.sleep(post_move_delay)
-    return x_hardware_voltage, y_hardware_voltage
+        await anyio.sleep(0.005)
+    raise TimeoutError(f"Galvos did not settle within {timeout:g} seconds")
 
   async def home(
     self,

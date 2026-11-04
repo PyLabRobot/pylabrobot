@@ -46,9 +46,12 @@ Note: Once physically installed on the system it is recommended that you level t
 7. Loosen the two fixing screws until the iSWAP is fixed in position but can still be rotated about the X Axis (left to right) of the machine.
 8. Manually position the X-Arm in the center of the machine and the iSWAP in the middle of the X-Arm.
 9. Remove any labware below the iSWAP.
-10. Power on the machine and verify there are no errors when calling `lh.setup()`.
+10. Power on the machine and verify there are no errors when starting the machine session below.
 
 This code is most easily run in a Jupyter notebook so that you can send the other commands whenever you are ready.
+This adjustment intentionally spans the operator steps below.
+
+Deprecated asyncio/Jupyter compatibility: this cross-cell session uses `setup()` and must run the matching `stop()` cell before re-running setup, switching event loops, or closing the notebook.
 
 ```python
 from pylabrobot.hamilton.liquid_handlers.star import STAR
@@ -108,3 +111,9 @@ await star.driver.iswap.initialize_z_axis()  # firmware command "R0ZI"
 ```
 
 18. Check/Reteach all iSWAP locations in your programs.
+
+Always stop the cross-cell session:
+
+```python
+await star.stop()
+```

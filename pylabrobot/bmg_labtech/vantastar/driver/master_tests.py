@@ -1,10 +1,13 @@
 """Tests for the VANTAstar driver: its commands against the bytes Voyager sent to the reader, and
 its command flows against the reader's captured replies, through a fake USB link."""
 
+import logging
 import unittest
 from collections import deque
 from dataclasses import replace
 from typing import Any, Callable, Deque, Dict, List, Optional
+
+import pytest
 
 from pylabrobot.bmg_labtech.protocol.errors import FrameError
 from pylabrobot.bmg_labtech.protocol.framing import (
@@ -37,7 +40,9 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   STATUS_NOT_INITIALIZED,
   load_flows,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.usb import USB
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # Commands Voyager sent: an absorbance read (96 wells, 600 nm, 22 flashes, 0.5 s settling) and
 # fluorescence reads (excitation 365/8, emission 400/10, dichroic 382.0 nm, 20 flashes, 0.5 s
@@ -220,24 +225,29 @@ class FakeUSB(USB):
     Args:
       respond: returns the reply payload to a command payload.
     """
+    HasLifespan.__init__(self)
     self.respond = respond
     self.commands: List[bytes] = []
+    self.closed = False
     self._to_host: Deque[bytes] = deque()
     self._continuations: List[bytes] = []
     self._receiving: Optional[bytearray] = None
     self._receiving_length = 0
 
-  async def setup(self, empty_buffer: bool = True) -> None:
-    """Do nothing: there is no device to open."""
-
-  async def stop(self) -> None:
-    """Do nothing: there is no device to close."""
+  async def _enter_lifespan(
+    self, stack: AsyncExitStackWithShielding, *, empty_buffer: bool = True
+  ) -> None:
+    """Do nothing on entry; record when the lifespan exits."""
+    await HasLifespan._enter_lifespan(self, stack)
+    self.closed = False
+    stack.callback(setattr, self, "closed", True)
 
   async def drain(self, *args, **kwargs) -> None:
     """Do nothing: there is no device buffer to empty."""
 
-  def ctrl_transfer(self, *args, **kwargs) -> None:  # type: ignore[override]
+  async def ctrl_transfer(self, *args, **kwargs) -> bytearray:  # type: ignore[override]
     """Take a vendor request and do nothing."""
+    return bytearray()
 
   def serialize(self) -> dict:
     """The link as a serialized USB, with the reader's serial number."""
@@ -596,16 +606,11 @@ class RecordedReader:
     return self._next(self.replies[payload])
 
 
-class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
+class TestRecordedFlow(AnyioTestBase):
   """Reads through the recorded replies (``load_flows``): the driver requests the data as Voyager
   did."""
 
-  flows: Dict[str, Any]
-
-  @classmethod
-  def setUpClass(cls):
-    """Load the recorded reads once for all the tests."""
-    cls.flows = load_flows()
+  flows: Dict[str, Any] = load_flows()
 
   def make(self, name: str):
     """A driver answering as the reader did in the recorded read ``name``, and that read's RUN
@@ -618,51 +623,48 @@ class RecordedFlowTests(unittest.IsolatedAsyncioTestCase):
     calibration values, then releases the block."""
     driver, run = self.make("absorbance_spectrum")
     blocks = await driver.run_absorbance_spectrum(run, timeout=10)
-    self.assertEqual([b.well for b in blocks], [(1, 1), (6, 1), (12, 1), (12, 8), (6, 8), (1, 8)])
+    assert [b.well for b in blocks] == [(1, 1), (6, 1), (12, 1), (12, 8), (6, 8), (1, 8)]
     requests = [c.hex() for c in commands(driver) if c[:2] == bytes([0x05, 0x02])]
-    self.assertEqual(
-      requests,
-      [
-        "0502010100010001",  # A1 with the calibration values
-        "0502060100018001",
-        "05020c0100018001",
-        "05020c0800018001",
-        "0502060800018001",
-        "0502010800018001",
-      ],
-    )
+    assert requests == [
+      "0502010100010001",  # A1 with the calibration values
+      "0502060100018001",
+      "05020c0100018001",
+      "05020c0800018001",
+      "0502060800018001",
+      "0502010800018001",
+    ]
     # Fetched part by part, the block is released after the last well.
     sent = commands(driver)
     release = sent.index(bytes.fromhex("2d0100010000"))
-    self.assertGreater(release, sent.index(bytes.fromhex("0502010800018001")))
+    assert release > sent.index(bytes.fromhex("0502010800018001"))
 
   async def test_kinetic_read_returns_every_cycle(self):
     """A kinetic read returns one complete block per cycle, the cycles starting 10 s apart."""
     driver, run = self.make("absorbance_kinetic")
     blocks = await driver.run_blocks(run, timeout=10)
-    self.assertEqual([b.cycle for b in blocks], [1, 2, 3, 4, 5, 6])
-    self.assertEqual([b.start_time for b in blocks], [0, 10, 20, 30, 40, 50])
-    self.assertTrue(all(b.complete for b in blocks))
+    assert [b.cycle for b in blocks] == [1, 2, 3, 4, 5, 6]
+    assert [b.start_time for b in blocks] == [0, 10, 20, 30, 40, 50]
+    assert all(b.complete for b in blocks)
 
   async def test_emission_spectrum_is_one_block(self):
     """An emission spectrum returns one complete block of 201 points for its 3 wells, fetched as the
     next new block."""
     driver, run = self.make("emission_spectrum")
     data = await driver.run_measurement(run, timeout=10)
-    self.assertEqual((data.chromatics, data.wells), ((201,), 3))
-    self.assertTrue(data.complete)
+    assert (data.chromatics, data.wells) == ((201,), 3)
+    assert data.complete
     requests = [c for c in commands(driver) if c[:2] == bytes([0x05, 0x02])]
-    self.assertEqual(requests[-1], VALUES_NEXT_NEW_BLOCK)
+    assert requests[-1] == VALUES_NEXT_NEW_BLOCK
 
   async def test_timeout_stops_the_run(self):
     """A read that runs past its timeout raises TimeoutError and sends STOP."""
     driver, run = self.make("absorbance_kinetic")
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await driver.run_blocks(run, timeout=0)
-    self.assertIn(STOP, commands(driver))
+    assert STOP in commands(driver)
 
 
-class RobustnessTests(unittest.IsolatedAsyncioTestCase):
+class TestRobustness(AnyioTestBase):
   """The driver's handling of malformed replies, device errors and warnings, and the well mask's
   size limit."""
 
@@ -680,50 +682,49 @@ class RobustnessTests(unittest.IsolatedAsyncioTestCase):
       io._continuations[1] = packet[:3] + (3).to_bytes(4, "big") + packet[7:]
 
     io._receive = renumber  # type: ignore[method-assign]
-    with self.assertRaises(FrameError):
+    with pytest.raises(FrameError):
       await driver.exchange(bytes([0x80]))
 
   async def test_status_with_the_error_bit_raises(self):
     """A status reply with the device-error bit raises DeviceError."""
     error = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x40]) + STATUS_IDLE[2:]
     driver = make_driver(lambda p: error)
-    with self.assertRaises(DeviceError):
+    with pytest.raises(DeviceError):
       await driver.request_status()
 
   async def test_status_of_a_reader_not_initialized_is_read(self):
     """The refused status reply of a reader not yet initialized is parsed as any other."""
     driver = make_driver(lambda p: STATUS_NOT_INITIALIZED)
     status = await driver.request_status()
-    self.assertFalse(status.busy)
+    assert not status.busy
 
   async def test_stop_closes_the_connection_after_a_device_error(self):
-    """Stopping closes the connection even when the status reply reports a device error."""
+    """Exiting the lifespan closes the connection even when the status reply reports a device error."""
     error = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x40]) + STATUS_IDLE[2:]
-    driver = make_driver(lambda p: error)
-    closed = []
+    replies = deque([STATUS_IDLE, HARDWARE_INFO, STATUS_IDLE])
+    driver = make_driver(lambda p: replies.popleft() if replies else error)
+    with pytest.raises(DeviceError):
+      async with driver:
+        pass
+    assert isinstance(driver.io, FakeUSB)
+    assert driver.io.closed
 
-    async def close() -> None:
-      """Record that the connection was closed."""
-      closed.append(True)
-
-    driver._usb_close = close  # type: ignore[method-assign]
-    with self.assertRaises(DeviceError):
-      await driver.stop()
-    self.assertEqual(closed, [True])
-
-  def test_a_warning_that_clears_is_logged_again(self):
+  def test_a_warning_that_clears_is_logged_again(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
     """A warning is logged once while it lasts, and again after a reply without it."""
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     driver = make_driver(lambda p: b"")
     warning = bytes([STATUS_IDLE[0], STATUS_IDLE[1] | 0x80]) + STATUS_IDLE[2:]
-    with self.assertLogs("pylabrobot.bmg_labtech.vantastar.driver.master", "WARNING") as logs:
+    with caplog.at_level(logging.WARNING, logger="pylabrobot.bmg_labtech.vantastar.driver.master"):
       for reply in (warning, warning, STATUS_IDLE, warning):
         driver._check_reply(bytes([0x80]), reply)
-    self.assertEqual(len(logs.records), 2)
+    assert len(caplog.records) == 2
 
   def test_well_mask_holds_up_to_384_wells(self):
     """The well mask covers a 384-well plate and refuses a 1536-well one."""
-    self.assertEqual(len(encode_well_mask(24, 16)), 48)
-    with self.assertRaises(ValueError):
+    assert len(encode_well_mask(24, 16)) == 48
+    with pytest.raises(ValueError):
       encode_well_mask(48, 32)
 
 
@@ -755,7 +756,7 @@ class StatusTests(unittest.TestCase):
     self.assertEqual(cm.exception.quit_codes, (201, 0, 0, 0, 0))
 
 
-class FlowTests(unittest.IsolatedAsyncioTestCase):
+class TestFlow(AnyioTestBase):
   """The driver's command flows against the reader's replies: initializing, the drawer, shaking, the
   incubator, an absorbance read and a gain and focus adjustment."""
 
@@ -764,8 +765,8 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     replies = deque([STATUS_IDLE, HARDWARE_INFO, STATUS_INIT_RUNNING, STATUS_IDLE])
     driver = make_driver(lambda p: replies.popleft())
     await driver.initialize()
-    self.assertEqual(commands(driver)[:2], [bytes([0x80]), INIT])
-    self.assertEqual(driver.discover().serial_number, "0421-000446")
+    assert commands(driver)[:2] == [bytes([0x80]), INIT]
+    assert driver.discover().serial_number == "0421-000446"
 
   async def test_measurement(self):
     """A 96-well absorbance read requests the well list and the timing, polls the block status,
@@ -791,22 +792,19 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
 
     driver = make_driver(respond)
     data = await driver.run_measurement(RUN_ABSORBANCE[1:], timeout=10)
-    self.assertTrue(data.complete)
-    self.assertEqual(data.wells, 96)
+    assert data.complete
+    assert data.wells == 96
     sent = [c for c in commands(driver) if c[0] != 0x80]
-    self.assertEqual(
-      sent,
-      [
-        RUN_ABSORBANCE,
-        VALUES_WELL_LIST,
-        VALUES_TIME_DATA,
-        MW_BLOCK_STATUS,
-        MW_BLOCK_STATUS,
-        VALUES_CURRENT_BLOCK,
-        MW_BLOCK_STATUS,
-        VALUES_NEXT_NEW_BLOCK,
-      ],
-    )
+    assert sent == [
+      RUN_ABSORBANCE,
+      VALUES_WELL_LIST,
+      VALUES_TIME_DATA,
+      MW_BLOCK_STATUS,
+      MW_BLOCK_STATUS,
+      VALUES_CURRENT_BLOCK,
+      MW_BLOCK_STATUS,
+      VALUES_NEXT_NEW_BLOCK,
+    ]
 
   async def test_gain_and_focus(self):
     """A gain and focus adjustment returns the gain and focal height of the reader's gain data."""
@@ -817,7 +815,7 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
 
     driver = make_driver(respond)
     result = await driver.adjust_gain_and_focus(GAIN_PLATE[1:])
-    self.assertEqual((result.gain, result.focal_height, result.well), (2904, 3.0, "H1"))
+    assert (result.gain, result.focal_height, result.well) == (2904, 3.0, "H1")
 
   async def test_z_profile(self):
     """A z-profile sends the gain and focus adjustment and returns the focus curve of the reply;
@@ -826,10 +824,10 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
       lambda p: GAIN_DATA_GAIN_AND_FOCUS if p == VALUES_GAIN_DATA else STATUS_IDLE
     )
     data = await driver.measure_z_profile(GAIN_PLATE_GAIN_AND_FOCUS[1:])
-    self.assertEqual((data.gain, data.peak_focal_height, len(data.z_profile)), (600, 6.25, 70))
-    self.assertIn(GAIN_PLATE_GAIN_AND_FOCUS, commands(driver))
+    assert (data.gain, data.peak_focal_height, len(data.z_profile)) == (600, 6.25, 70)
+    assert GAIN_PLATE_GAIN_AND_FOCUS in commands(driver)
     driver = make_driver(lambda p: GAIN_DATA_GAIN if p == VALUES_GAIN_DATA else STATUS_IDLE)
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await driver.measure_z_profile(GAIN_PLATE_GAIN[1:])
 
   async def test_estimate_run_time(self):
@@ -837,11 +835,11 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     the run time the reader expects; nothing else is sent after it."""
     driver = make_driver(lambda p: RUN_REPLY if p[0] == CommandId.RUN else STATUS_IDLE)
     fields = driver.build_absorbance_run([450], flashes=22, settling_time=0.5)
-    self.assertEqual(await driver.estimate_run_time(fields), 95)
+    assert await driver.estimate_run_time(fields) == 95
     run = commands(driver)[-1]
-    self.assertEqual(run[0], CommandId.RUN)
-    self.assertEqual(run[67], 0x03)  # WellPlateModeKinetic and CalcTimeOnly
-    self.assertEqual(run[1:67] + run[68:], fields[:66] + fields[67:])
+    assert run[0] == CommandId.RUN
+    assert run[67] == 0x03  # WellPlateModeKinetic and CalcTimeOnly
+    assert run[1:67] + run[68:] == fields[:66] + fields[67:]
 
 
 if __name__ == "__main__":

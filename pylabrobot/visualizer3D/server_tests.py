@@ -9,16 +9,18 @@ import os
 import shutil
 import socket
 import tempfile
-import threading
 import unittest
 import unittest.mock
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
+import anyio
+import pytest
 import websockets
 from websockets.typing import Origin
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.resources import does_volume_tracking, set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
@@ -27,34 +29,55 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.testing import AnyioTestBase
 from pylabrobot.visualizer3D.demo import build_facility, declare_channel_access, star_of
 from pylabrobot.visualizer3D.facility import Facility
 from pylabrobot.visualizer3D.server import Viewer3D
 
+_USED_PORTS: set[int] = set()
+
 
 def free_ports(count: int) -> List[int]:
   """Distinct ports nothing on this machine listens on, so two suites can run at once."""
-  sockets = [socket.socket() for _ in range(count)]
+  sockets: List[socket.socket] = []
+  ports: List[int] = []
   try:
-    for sock in sockets:
+    while len(ports) < count:
+      sock = socket.socket()
+      sockets.append(sock)
       sock.bind(("127.0.0.1", 0))
-    return [sock.getsockname()[1] for sock in sockets]
+      port = sock.getsockname()[1]
+      if port not in _USED_PORTS:
+        _USED_PORTS.add(port)
+        ports.append(port)
+    return ports
   finally:
     for sock in sockets:
       sock.close()
 
 
+async def _can_rebind_closed_listen_port() -> bool:
+  (port,) = free_ports(1)
+  sock = socket.socket()
+  sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  sock.bind(("127.0.0.1", port))
+  sock.listen(1)
+  await anyio.sleep(0.05)
+  sock.close()
+  probe = socket.socket()
+  probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  try:
+    probe.bind(("127.0.0.1", port))
+    return True
+  except OSError:
+    return False
+  finally:
+    probe.close()
+
+
 def empty_facility() -> Facility:
   """A facility with nothing in it, of a size every test here can place things in."""
   return Facility(name="facility", size_x=1000, size_y=1000, size_z=500)
-
-
-def track_volumes(test: unittest.TestCase) -> None:
-  """Turn volume tracking on for one test and put it back after."""
-  # It is global: left on, it breaks every other suite that aspirates from a well it never filled.
-  was_tracking = does_volume_tracking()
-  set_volume_tracking(True)
-  test.addCleanup(set_volume_tracking, was_tracking)
 
 
 FS_PORT, WS_PORT = free_ports(2)
@@ -68,19 +91,34 @@ MESH_FILE = os.path.join(
 )
 
 
-class StateChannelTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
-    track_volumes(self)
+class _ViewerAsyncTestCase(AnyioTestBase):
+  _anyio_backends = ["asyncio"]
+  _stack: AsyncExitStackWithShielding
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self._stack = stack
+
+  def track_volumes(self) -> None:
+    """Turn volume tracking on for one test and put it back after."""
+    # It is global: left on, it breaks every other suite that aspirates from a well it never filled.
+    was_tracking = does_volume_tracking()
+    set_volume_tracking(True)
+    self._stack.callback(set_volume_tracking, was_tracking)
+
+
+class TestStateChannel(_ViewerAsyncTestCase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self.track_volumes()
     self.facility = empty_facility()
     self.plate = cor_96_wellplate_360uL_Fb(name="plate")
     self.facility.assign_child_resource(self.plate, location=Coordinate(10, 10, 0))
+    fs_port, ws_port = free_ports(2)
     self.viewer = Viewer3D(
-      self.facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT, name="tests"
+      self.facility, open_browser=False, fs_port=fs_port, ws_port=ws_port, name="tests"
     )
-    await self.viewer.start()
-
-  async def asyncTearDown(self):
-    await self.viewer.stop()
+    await stack.enter_async_context(self.viewer)
 
   async def connect(self):
     """Open a client and take the scene and the snapshot it is greeted with."""
@@ -102,9 +140,9 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
   async def test_snapshot_names_every_publishing_resource(self):
     ws, scene, snapshot = await self.connect()
     try:
-      self.assertIn("plate_well_A1", snapshot["of"])
-      self.assertEqual(len(snapshot["of"]), 96)  # the wells; the plate itself publishes nothing
-      self.assertIn("plate_well_A1", scene["instances"]["names"])
+      assert "plate_well_A1" in snapshot["of"]
+      assert len(snapshot["of"]) == 96  # the wells; the plate itself publishes nothing
+      assert "plate_well_A1" in scene["instances"]["names"]
     finally:
       await ws.close()
 
@@ -113,8 +151,8 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     resource, so carrying it here would give every resource a state of its own."""
     ws, _, snapshot = await self.connect()
     try:
-      self.assertEqual(snapshot["locations"], {})
-      self.assertEqual(len(snapshot["states"]), 1)  # every empty well; the plate publishes nothing
+      assert snapshot["locations"] == {}
+      assert len(snapshot["states"]) == 1  # every empty well; the plate publishes nothing
     finally:
       await ws.close()
 
@@ -126,8 +164,8 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     ws, _, snapshot = await self.connect()
     try:
       spots = [spot.name for spot in rack.get_all_items()]
-      self.assertEqual(len({snapshot["of"][name] for name in spots}), 1)
-      self.assertEqual(len(snapshot["states"]), 3)  # the wells, the spots and the tips
+      assert len({snapshot["of"][name] for name in spots}) == 1
+      assert len(snapshot["states"]) == 3  # the wells, the spots and the tips
     finally:
       await ws.close()
 
@@ -141,8 +179,8 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     ws, _, snapshot = await self.connect()
     try:
       state = snapshot["states"][snapshot["of"][tip.name]]
-      self.assertEqual(state["volume"], 30.0)
-      self.assertEqual(state["max_volume"], tip.maximal_volume)
+      assert state["volume"] == 30.0
+      assert state["max_volume"] == tip.maximal_volume
     finally:
       await ws.close()
 
@@ -155,8 +193,8 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     try:
       tip.tracker.set_volume(12.5)
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertEqual(update["states"][update["of"][tip.name]]["volume"], 12.5)
+      assert update is not None
+      assert update["states"][update["of"][tip.name]]["volume"] == 12.5
     finally:
       await ws.close()
 
@@ -165,8 +203,8 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     try:
       self.plate.get_item("A1").tracker.set_volume(150.0)
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["plate_well_A1"])
+      assert update is not None
+      assert list(update["of"]) == ["plate_well_A1"]
     finally:
       await ws.close()
 
@@ -179,12 +217,12 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       for well in self.plate.get_all_items():
         well.tracker.set_volume(100.0)
       update = await self.next_state(first)
-      self.assertIsNotNone(update)
-      self.assertEqual(len(update["of"]), 96)
-      self.assertEqual(update["locations"], {})
+      assert update is not None
+      assert len(update["of"]) == 96
+      assert update["locations"] == {}
       second, _, snapshot = await self.connect()
       try:
-        self.assertEqual(snapshot["locations"], {})
+        assert snapshot["locations"] == {}
       finally:
         await second.close()
     finally:
@@ -194,13 +232,13 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     ws, _, _ = await self.connect()
     try:
       self.plate.get_item("A1").tracker.set_volume(150.0)
-      self.assertIsNotNone(await self.next_state(ws))
+      assert await self.next_state(ws) is not None
       # A sentinel changed in the same batch: the message it arrives in is the one A1 would be in.
       self.plate.get_item("A1").tracker.set_volume(150.0)
       self.plate.get_item("B1").tracker.set_volume(10.0)
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["plate_well_B1"])
+      assert update is not None
+      assert list(update["of"]) == ["plate_well_B1"]
     finally:
       await ws.close()
 
@@ -209,12 +247,12 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     ws, _, _ = await self.connect()
     try:
       self.plate.get_item("A1").tracker.set_volume(150.0)
-      self.assertIsNotNone(await self.next_state(ws))
+      assert await self.next_state(ws) is not None
       self.plate.get_item("A1").tracker.set_volume(150.04)
       self.plate.get_item("B1").tracker.set_volume(10.0)
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["plate_well_B1"])
+      assert update is not None
+      assert list(update["of"]) == ["plate_well_B1"]
     finally:
       await ws.close()
 
@@ -227,13 +265,13 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     try:
       self.plate.unassign()
       await self.next_of(ws, "scene")
-      self.assertIsNotNone(await self.next_state(ws))  # the snapshot after the rebuild
-      self.assertEqual(self.plate.get_item("A1")._resource_state_updated_callbacks, [])
+      assert await self.next_state(ws) is not None  # the snapshot after the rebuild
+      assert self.plate.get_item("A1")._resource_state_updated_callbacks == []
       self.plate.get_item("A1").tracker.set_volume(150.0)
       kept.get_item("A1").tracker.set_volume(150.0)
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertEqual(list(update["of"]), ["kept_well_A1"])
+      assert update is not None
+      assert list(update["of"]) == ["kept_well_A1"]
     finally:
       await ws.close()
 
@@ -246,7 +284,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       await self.next_state(first)
       second, _, snapshot = await self.connect()
       try:
-        self.assertEqual(len(snapshot["of"]), 96)
+        assert len(snapshot["of"]) == 96
       finally:
         await second.close()
     finally:
@@ -258,9 +296,9 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     try:
       self.plate.location = Coordinate(400, 300, 0)
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertIn("plate", update["of"])
-      self.assertEqual(update["locations"]["plate"]["x"], 400)
+      assert update is not None
+      assert "plate" in update["of"]
+      assert update["locations"]["plate"]["x"] == 400
     finally:
       await ws.close()
 
@@ -271,11 +309,11 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       kept = self.plate.location
       assert kept is not None
       self.plate.location = Coordinate(400, 300, 0)
-      self.assertEqual((await self.next_state(ws))["locations"]["plate"]["x"], 400)
+      assert (await self.next_state(ws))["locations"]["plate"]["x"] == 400
       self.plate.location = kept
       update = await self.next_state(ws)
-      self.assertIsNotNone(update)
-      self.assertEqual(update["locations"]["plate"]["x"], kept.x)
+      assert update is not None
+      assert update["locations"]["plate"]["x"] == kept.x
     finally:
       await ws.close()
 
@@ -293,12 +331,12 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       holder.assign_child_resource(self.plate, location=Coordinate(5, 5, 50))
       states, moves = await self.next_of(ws, "moves")
       for state in states:
-        self.assertNotIn("plate", state.get("locations", {}), state)
+        assert "plate" not in state.get("locations", {}), state
       moved = {move["name"]: move for move in moves["moves"]}
-      self.assertIn("plate", moved)
-      self.assertEqual(moved["plate"]["parent"], "holder")
-      self.assertEqual(moved["plate"]["location"], {"x": 5.0, "y": 5.0, "z": 50.0})
-      self.assertEqual(self.viewer.rebuilds, 0)
+      assert "plate" in moved
+      assert moved["plate"]["parent"] == "holder"
+      assert moved["plate"]["location"] == {"x": 5.0, "y": 5.0, "z": 50.0}
+      assert self.viewer.rebuilds == 0
     finally:
       await ws.close()
 
@@ -314,7 +352,7 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
       second, scene, _ = await self.connect()
       try:
         names = scene["instances"]["names"]
-        self.assertEqual(names[scene["instances"]["parent"][names.index("plate")]], "holder")
+        assert names[scene["instances"]["parent"][names.index("plate")]] == "holder"
       finally:
         await second.close()
     finally:
@@ -335,14 +373,15 @@ class CommandFailed(Exception):
   """What a held aspirate raises when it is told to fail."""
 
 
-class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
+class TestSimulatedAspirate(_ViewerAsyncTestCase):
   """A mounted tip's liquid on the simulated STAR, as the info panel reads it: committed."""
 
-  async def asyncSetUp(self):
-    track_volumes(self)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self.track_volumes()
     facility = build_facility()
     self.star = star_of(facility)
-    await self.star.setup()
+    await stack.enter_async_context(self.star)
     declare_channel_access(self.star)
     assert self.star.pipettes is not None
     self.pipettes = self.star.pipettes
@@ -354,8 +393,7 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
     self.rack = rack
     fs_port, ws_port = free_ports(2)
     self.viewer = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
-    await self.viewer.start()
-    self.addAsyncCleanup(self.viewer.stop)
+    await stack.enter_async_context(self.viewer)
     self.drawing = asyncio.Event()
     self.release = asyncio.Event()
 
@@ -372,7 +410,7 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
 
     patcher = unittest.mock.patch.object(self.pipettes, "_aspirate_in_one_move", held)
     patcher.start()
-    self.addCleanup(patcher.stop)
+    self._stack.callback(patcher.stop)
 
   async def told(self, ws, name: str, quiet: float = 0.5) -> List[Dict[str, Any]]:
     """Every state a client is told for `name` until the server stays quiet for `quiet` s."""
@@ -425,9 +463,9 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
       self.release.set()
       await ws.close()
     drawn = round(tip.tracker.volume, 1)
-    self.assertGreater(drawn, 0)
-    self.assertEqual([(s["volume"], s["pending_volume"]) for s in during], [(0, drawn)])
-    self.assertEqual([s["volume"] for s in after], [drawn])
+    assert drawn > 0
+    assert [(s["volume"], s["pending_volume"]) for s in during] == [(0, drawn)]
+    assert [s["volume"] for s in after] == [drawn]
 
   async def test_a_failed_aspirate_leaves_a_mounted_tip_told_what_it_held(self):
     """A failed command rolls the tip's booking back, and the client is told it was: the last
@@ -437,61 +475,59 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
     try:
       tip, during, aspirating = await self.aspirate_held(ws)
       self.release.set()
-      with self.assertRaises(CommandFailed):
+      with pytest.raises(CommandFailed):
         await aspirating
       after = await self.told(ws, tip.name)
     finally:
       self.release.set()
       await ws.close()
-    self.assertEqual(tip.tracker.volume, 0)
-    self.assertGreater(during[-1]["pending_volume"], 0)
-    self.assertEqual([s["volume"] for s in during + after], [0] * len(during + after))
-    self.assertTrue(after, "the rollback told the client nothing")
-    self.assertEqual((after[-1]["volume"], after[-1]["pending_volume"]), (0, 0))
+    assert tip.tracker.volume == 0
+    assert during[-1]["pending_volume"] > 0
+    assert [s["volume"] for s in during + after] == [0] * len(during + after)
+    assert after, "the rollback told the client nothing"
+    assert (after[-1]["volume"], after[-1]["pending_volume"]) == (0, 0)
 
 
-class FileServerTests(unittest.IsolatedAsyncioTestCase):
+class TestFileServer(_ViewerAsyncTestCase):
   """The file server keeps quiet about what is not its fault."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     self.facility = empty_facility()
-    self.viewer = Viewer3D(self.facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    await self.viewer.start()
-
-  async def asyncTearDown(self):
-    await self.viewer.stop()
+    fs_port, ws_port = free_ports(2)
+    self.viewer = Viewer3D(self.facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    await stack.enter_async_context(self.viewer)
 
   async def test_static_files_are_kept_and_revalidated_while_the_page_is_not(self):
     """Every response said `no-store`, so a browser fetched three megabytes of scripts and
     models on every reload. The page carries this run's token and stays uncached; the rest is
     revalidated, and an unchanged file is answered 304 with no body."""
     base = f"http://127.0.0.1:{self.viewer.fs_port}"
-    page = await asyncio.to_thread(urllib.request.urlopen, f"{base}/")
-    self.assertEqual(page.headers["Cache-Control"], "no-store")
-    script = await asyncio.to_thread(urllib.request.urlopen, f"{base}/vendor/three.core.min.js")
-    self.assertEqual(script.headers["Cache-Control"], "no-cache")
+    page = await anyio.to_thread.run_sync(urllib.request.urlopen, f"{base}/")
+    assert page.headers["Cache-Control"] == "no-store"
+    script = await anyio.to_thread.run_sync(
+      urllib.request.urlopen, f"{base}/vendor/three.core.min.js"
+    )
+    assert script.headers["Cache-Control"] == "no-cache"
     again = urllib.request.Request(
       f"{base}/vendor/three.core.min.js",
       headers={"If-Modified-Since": script.headers["Last-Modified"]},
     )
-    with self.assertRaises(urllib.error.HTTPError) as unchanged:
-      await asyncio.to_thread(urllib.request.urlopen, again)
-    self.assertEqual(unchanged.exception.code, 304)
+    with pytest.raises(urllib.error.HTTPError) as unchanged:
+      await anyio.to_thread.run_sync(urllib.request.urlopen, again)
+    assert unchanged.value.code == 304
 
   async def test_the_name_in_the_header_is_text_not_markup(self):
     fs_port, ws_port = free_ports(2)
     viewer = Viewer3D(
       empty_facility(), open_browser=False, fs_port=fs_port, ws_port=ws_port, name="<b>run</b>"
     )
-    await viewer.start()
-    try:
-      page = await asyncio.to_thread(
+    async with viewer:
+      page = await anyio.to_thread.run_sync(
         lambda: urllib.request.urlopen(f"http://127.0.0.1:{viewer.fs_port}/").read().decode()
       )
-    finally:
-      await viewer.stop()
-    self.assertIn("&lt;b&gt;run&lt;/b&gt;", page)
-    self.assertNotIn("<b>run</b>", page)
+    assert "&lt;b&gt;run&lt;/b&gt;" in page
+    assert "<b>run</b>" not in page
 
   async def test_an_idle_connection_is_closed(self):
     """Keep-alive with no timeout held a thread per connection for as long as the other end liked:
@@ -499,17 +535,14 @@ class FileServerTests(unittest.IsolatedAsyncioTestCase):
     fs_port, ws_port = free_ports(2)
     viewer = Viewer3D(empty_facility(), open_browser=False, fs_port=fs_port, ws_port=ws_port)
     viewer.FS_TIMEOUT_S = 0.2
-    await viewer.start()
 
     def idle() -> bytes:
       with socket.create_connection(("127.0.0.1", viewer.fs_port)) as sock:
         sock.settimeout(5)
         return sock.recv(1)  # nothing is sent, so only the server closing returns
 
-    try:
-      self.assertEqual(await asyncio.to_thread(idle), b"")
-    finally:
-      await viewer.stop()
+    async with viewer:
+      assert await anyio.to_thread.run_sync(idle) == b""
 
   async def test_a_download_abandoned_by_the_browser_prints_no_traceback(self):
     """A page left mid-download closes its end of the socket, which the threaded server used to
@@ -521,60 +554,82 @@ class FileServerTests(unittest.IsolatedAsyncioTestCase):
         sock.sendall(b"GET /vendor/three.webgpu.min.js HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
         sock.recv(1024)  # the start of the body, then gone
 
-    def request_threads() -> int:
-      return sum(thread.name.startswith("Thread-") for thread in threading.enumerate())
-
-    idle = request_threads()
     with contextlib.redirect_stderr(captured):
-      await asyncio.to_thread(abandon)
-      # The request thread ends once its write fails, having reported by then or not at all.
-      deadline = asyncio.get_running_loop().time() + 5
-      while request_threads() > idle and asyncio.get_running_loop().time() < deadline:
-        await asyncio.sleep(0.02)
-    self.assertEqual(captured.getvalue(), "")
+      await anyio.to_thread.run_sync(abandon)
+      # The request's worker ends once its write fails, having reported by then or not at all.
+      with anyio.move_on_after(5):
+        while self.viewer._active_file_requests:
+          await anyio.sleep(0.02)
+    assert captured.getvalue() == ""
 
 
-class LifecycleTests(unittest.IsolatedAsyncioTestCase):
+class TestLifecycle(_ViewerAsyncTestCase):
   """A stopped viewer gives its ports back."""
+
+  async def test_viewer_supports_managed_lifespan_and_reentry(self):
+    assert issubclass(Viewer3D, HasLifespan)
+    facility = empty_facility()
+    part = Resource(name="part", size_x=10, size_y=10, size_z=10)
+    facility.assign_child_resource(part, location=Coordinate(0, 0, 0))
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    async with viewer:
+      assert viewer.is_active
+      assert len(part._resource_state_updated_callbacks) == 1
+    assert not viewer.is_active
+    assert len(part._resource_state_updated_callbacks) == 0
+    viewer.fs_port, viewer.ws_port = free_ports(2)
+    async with viewer:
+      assert viewer.is_active
+      assert len(part._resource_state_updated_callbacks) == 1
+    assert not viewer.is_active
+    assert len(part._resource_state_updated_callbacks) == 0
 
   async def test_a_viewer_started_after_another_stopped_binds_the_same_ports(self):
     """`stop` used to close the file server and leave the websocket server listening, so the next
     viewer in the same process found its port taken and moved up: the ports drifted by one on
     every restart, and a page served by the earlier viewer kept its stale token forever."""
     facility = empty_facility()
-    first = Viewer3D(facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    await first.start()
-    self.assertEqual((first.fs_port, first.ws_port), (FS_PORT, WS_PORT))
-    await first.stop()
-    second = Viewer3D(facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    await second.start()
-    try:
-      self.assertEqual((second.fs_port, second.ws_port), (FS_PORT, WS_PORT))
-    finally:
-      await second.stop()
+    fs_port, ws_port = free_ports(2)
+    first = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    async with first:
+      assert (first.fs_port, first.ws_port) == (fs_port, ws_port)
+      assert first._httpd is not None
+      assert first._ws_server is not None
+      assert first._ws_server.is_serving()
+      fs_server = first._httpd
+      ws_server = first._ws_server
+    assert first._httpd is None
+    assert first._ws_server is None
+    assert fs_server.socket.fileno() == -1
+    assert not ws_server.is_serving()
+    if await _can_rebind_closed_listen_port():
+      second = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+      async with second:
+        assert (second.fs_port, second.ws_port) == (fs_port, ws_port)
 
   async def test_stop_does_not_hold_the_loop(self):
     """Shutting the file server down waited on its serving thread's half-second poll from the
     loop's own thread, so everything else on the loop stood still for that long."""
     facility = empty_facility()
-    viewer = Viewer3D(facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    viewer.FS_POLL_S = 0.5  # a shutdown that waits on the loop would then hold it this long
-    await viewer.start()
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
     loop = asyncio.get_running_loop()
-    ticks = [loop.time()]
+    ticks: List[float] = []
 
     async def tick() -> None:
       while True:
-        await asyncio.sleep(0.02)
+        await anyio.sleep(0.02)
         ticks.append(loop.time())
 
     ticking = asyncio.ensure_future(tick())
     try:
-      await viewer.stop()
+      async with viewer:
+        ticks.append(loop.time())
     finally:
       ticks.append(loop.time())  # a loop held until here shows as one long gap
       ticking.cancel()
-    self.assertLess(max(b - a for a, b in zip(ticks, ticks[1:])), 0.2)
+    assert max(b - a for a, b in zip(ticks, ticks[1:])) < 0.2
 
   async def test_a_stopped_viewer_no_longer_listens_to_the_tree(self):
     """`stop` used to leave every state and assignment callback in place, so a stopped viewer
@@ -584,57 +639,56 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
     part = Resource(name="part", size_x=10, size_y=10, size_z=10)
     facility.assign_child_resource(part, location=Coordinate(0, 0, 0))
     before = len(part._resource_state_updated_callbacks)
-    viewer = Viewer3D(facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    self.assertEqual(len(part._resource_state_updated_callbacks), before + 1)
-    await viewer.start()
-    await viewer.stop()
-    self.assertEqual(len(part._resource_state_updated_callbacks), before)
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    assert len(part._resource_state_updated_callbacks) == before
+    async with viewer:
+      assert len(part._resource_state_updated_callbacks) == before + 1
+    assert len(part._resource_state_updated_callbacks) == before
     part.location = Coordinate(1, 2, 3)
     late = Resource(name="late", size_x=10, size_y=10, size_z=10)
     facility.assign_child_resource(late, location=Coordinate(0, 0, 0))
-    self.assertEqual(len(late._resource_state_updated_callbacks), 0)
+    assert len(late._resource_state_updated_callbacks) == 0
 
   async def test_a_resource_put_back_is_listened_to_once(self):
     """Every assignment subscribed the resource again, so a tip picked up and put back twenty
     times carried twenty-one callbacks and its every change was serialized twenty-one times."""
     facility = empty_facility()
     part = Resource(name="part", size_x=10, size_y=10, size_z=10)
-    viewer = Viewer3D(facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    await viewer.start()
-    try:
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    async with viewer:
       for _ in range(20):
         facility.assign_child_resource(part, location=Coordinate(0, 0, 0))
         facility.unassign_child_resource(part)
       facility.assign_child_resource(part, location=Coordinate(0, 0, 0))
-      self.assertEqual(len(part._resource_state_updated_callbacks), 1)
-    finally:
-      await viewer.stop()
+      assert len(part._resource_state_updated_callbacks) == 1
 
 
-class BindTests(unittest.IsolatedAsyncioTestCase):
+class TestBind(_ViewerAsyncTestCase):
   """A port that is taken is walked past; any other bind failure is raised at once."""
 
   async def test_a_host_that_cannot_be_bound_is_raised_at_once(self):
     """Every bind error used to read as a taken port, so an address this machine does not have
     walked up through all sixty-five thousand ports, took seconds, and then overflowed."""
     facility = empty_facility()
+    fs_port, ws_port = free_ports(2)
     viewer = Viewer3D(
-      facility, host="203.0.113.1", open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT
+      facility, host="203.0.113.1", open_browser=False, fs_port=fs_port, ws_port=ws_port
     )
-    with self.assertRaises(OSError):
-      await viewer.start()
-    self.assertEqual(viewer.ws_port, WS_PORT)
+    with pytest.raises(OSError):
+      async with viewer:
+        pass
+    assert viewer.ws_port == ws_port
 
   async def test_an_ipv6_host_serves_both_ports(self):
     """The file server was bound as IPv4 whatever the host, so `::1` bound the websocket and then
     hung forever walking ports for a file server that could never bind one."""
     facility = empty_facility()
-    viewer = Viewer3D(facility, host="::1", open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    await viewer.start()
-    try:
-      self.assertEqual((viewer.fs_port, viewer.ws_port), (FS_PORT, WS_PORT))
-    finally:
-      await viewer.stop()
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(facility, host="::1", open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    async with viewer:
+      assert (viewer.fs_port, viewer.ws_port) == (fs_port, ws_port)
 
 
 class AbandonedLoopTests(unittest.TestCase):
@@ -651,7 +705,7 @@ class AbandonedLoopTests(unittest.TestCase):
     async def start_and_forget() -> None:
       # Its ports stay bound in this process: nothing can stop it once its loop has gone.
       fs_port, ws_port = free_ports(2)
-      await Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port).start()
+      await Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port).__aenter__()
 
     asyncio.run(start_and_forget())
     part.location = Coordinate(1, 2, 3)
@@ -660,7 +714,7 @@ class AbandonedLoopTests(unittest.TestCase):
     self.assertIs(late.parent, facility)
 
 
-class RebuildTests(unittest.IsolatedAsyncioTestCase):
+class TestRebuild(_ViewerAsyncTestCase):
   """A scene rebuilt from reused models is the scene it was."""
 
   async def test_a_tree_changed_with_nobody_watching_costs_no_rebuild(self):
@@ -669,22 +723,20 @@ class RebuildTests(unittest.IsolatedAsyncioTestCase):
     of a deck laid out before the page was opened. The next client is greeted with a scene built
     for it then, and it holds what was assigned meanwhile."""
     facility = empty_facility()
-    viewer = Viewer3D(facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT)
-    await viewer.start()
-    try:
+    fs_port, ws_port = free_ports(2)
+    viewer = Viewer3D(facility, open_browser=False, fs_port=fs_port, ws_port=ws_port)
+    async with viewer:
       facility.assign_child_resource(
         Resource(name="late", size_x=10, size_y=10, size_z=10), location=Coordinate(0, 0, 0)
       )
       # Twice the debounce: the rebuild the assignment scheduled has had its chance to run.
-      await asyncio.sleep(2 * Viewer3D.SCENE_DEBOUNCE_S)
-      self.assertEqual(viewer.rebuilds, 0)
+      await anyio.sleep(2 * Viewer3D.SCENE_DEBOUNCE_S)
+      assert viewer.rebuilds == 0
       async with websockets.connect(
         viewer.ws_url, origin=Origin(f"http://127.0.0.1:{viewer.fs_port}")
       ) as ws:
         scene = json.loads(await asyncio.wait_for(ws.recv(), 5))["data"]
-        self.assertIn("late", scene["instances"]["names"])
-    finally:
-      await viewer.stop()
+        assert "late" in scene["instances"]["names"]
 
   async def test_a_model_given_a_mesh_does_not_split_on_the_next_build(self):
     """Registering meshes used to write into the interned model dicts, so on the next build the
@@ -699,8 +751,8 @@ class RebuildTests(unittest.IsolatedAsyncioTestCase):
     viewer = Viewer3D(facility, open_browser=False)
     first = viewer._scene_message(rebuild=True)
     second = viewer._scene_message(rebuild=True)
-    self.assertEqual(len(first["models"]), 2)  # the facility and the one part they all share
-    self.assertEqual(second["models"], first["models"])
+    assert len(first["models"]) == 2  # the facility and the one part they all share
+    assert second["models"] == first["models"]
 
 
 class MeshTests(unittest.TestCase):
@@ -758,16 +810,14 @@ class MeshTests(unittest.TestCase):
         self.assertIsNone(meshes[escaping], escaping)
 
 
-class WaitForBrowserTests(unittest.IsolatedAsyncioTestCase):
+class TestWaitForBrowser(_ViewerAsyncTestCase):
   """A simulated run is over in milliseconds: it waits for a page that is drawing, or none sees it."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     fs_port, ws_port = free_ports(2)
     self.viewer = Viewer3D(empty_facility(), open_browser=False, fs_port=fs_port, ws_port=ws_port)
-    await self.viewer.start()
-
-  async def asyncTearDown(self):
-    await self.viewer.stop()
+    await stack.enter_async_context(self.viewer)
 
   async def say_hello(self, **data: Any) -> None:
     with contextlib.redirect_stdout(io.StringIO()):
@@ -777,42 +827,41 @@ class WaitForBrowserTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_the_wait_ends_when_a_page_says_it_is_drawing(self):
     waiting = asyncio.ensure_future(self.viewer.wait_for_browser(timeout=5))
-    await asyncio.sleep(0.1)
-    self.assertFalse(waiting.done())
+    await anyio.sleep(0.1)
+    assert not waiting.done()
     await self.say_hello(backend="WebGL2")
     await asyncio.wait_for(waiting, 1)
 
   async def test_a_page_that_could_not_draw_does_not_end_the_wait(self):
     await self.say_hello(backend=None, error="this browser offers neither WebGPU nor WebGL2")
-    with self.assertRaises(asyncio.TimeoutError):
+    with pytest.raises(TimeoutError):
       await self.viewer.wait_for_browser(timeout=0.2)
 
   async def test_waiting_before_start_is_refused(self):
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await Viewer3D(empty_facility(), open_browser=False).wait_for_browser(timeout=0.1)
 
 
-class AccessTests(unittest.IsolatedAsyncioTestCase):
+class TestAccess(_ViewerAsyncTestCase):
   """Only the page this viewer served, reached by a name this machine answers to, may watch."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     self.facility = empty_facility()
+    fs_port, ws_port = free_ports(2)
     self.viewer = Viewer3D(
-      self.facility, open_browser=False, fs_port=FS_PORT, ws_port=WS_PORT, name="tests"
+      self.facility, open_browser=False, fs_port=fs_port, ws_port=ws_port, name="tests"
     )
-    await self.viewer.start()
-
-  async def asyncTearDown(self):
-    await self.viewer.stop()
+    await stack.enter_async_context(self.viewer)
 
   def ws(self, token: Optional[str]) -> str:
     query = "" if token is None else f"?token={token}"
     return f"ws://127.0.0.1:{self.viewer.ws_port}/{query}"
 
   async def assert_refused(self, url: str, **kwargs):
-    with self.assertRaises(websockets.InvalidStatus) as refused:
+    with pytest.raises(websockets.InvalidStatus) as refused:
       await websockets.connect(url, **kwargs)
-    self.assertEqual(refused.exception.response.status_code, 403)
+    assert refused.value.response.status_code == 403
 
   async def test_a_websocket_without_the_token_is_refused(self):
     await self.assert_refused(self.ws(None))
@@ -831,7 +880,7 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
       ws = await websockets.connect(
         self.ws(self.viewer.token), origin=Origin(origin), max_size=None
       )
-      self.assertEqual(json.loads(await ws.recv())["event"], "scene")
+      assert json.loads(await ws.recv())["event"] == "scene"
       await ws.close()
 
   def get(self, host: str) -> int:
@@ -847,22 +896,21 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
   async def test_the_page_is_not_served_to_a_rebound_name(self):
     """DNS rebinding points a hostile name at 127.0.0.1, which would make its page same-origin
     with ours and let it read the token out of the HTML."""
-    self.assertEqual(await asyncio.to_thread(self.get, "attacker.example:1338"), 403)
+    assert await anyio.to_thread.run_sync(self.get, "attacker.example:1338") == 403
 
   async def test_the_page_is_served_to_a_known_name_without_the_token(self):
-    """The page used to carry the token, so anyone who could reach the file server, a LAN peer
-    for one, could watch. Only the link the viewer prints carries it, in a fragment."""
+    """Only the link the viewer prints carries the token, in a fragment."""
     for host in ("127.0.0.1:1338", "localhost:1338", "[::1]:1338"):
-      self.assertEqual(await asyncio.to_thread(self.get, host), 200, host)
-    page = await asyncio.to_thread(
+      assert await anyio.to_thread.run_sync(self.get, host) == 200, host
+    page = await anyio.to_thread.run_sync(
       lambda: urllib.request.urlopen(f"http://127.0.0.1:{self.viewer.fs_port}/").read().decode()
     )
-    self.assertNotIn(self.viewer.token, page)
-    self.assertNotIn("{{", page)
-    self.assertTrue(self.viewer.url.endswith(f"/#token={self.viewer.token}"))
+    assert self.viewer.token not in page
+    assert "{{" not in page
+    assert self.viewer.url.endswith(f"/#token={self.viewer.token}")
 
   async def test_a_socket_is_heard_once(self):
-    """Every hello was kept and printed, so one socket could grow the list and flood the output."""
+    """Only the first hello on a socket is kept and printed."""
     hello = json.dumps({"event": "hello", "data": {"backend": "WebGL2"}})
     printed = io.StringIO()
     with contextlib.redirect_stdout(printed):
@@ -871,14 +919,10 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
           await ws.send(hello)
         await ws.send("not json")
         await (await ws.ping())  # answered once everything sent before it has been read
-    self.assertEqual(len(self.viewer.clients_seen), 1)
-    self.assertEqual(printed.getvalue().count("a browser connected"), 1)
+    assert len(self.viewer.clients_seen) == 1
+    assert printed.getvalue().count("a browser connected") == 1
 
   async def test_a_token_from_another_run_is_refused(self):
     """A page served by an earlier run keeps that run's token, and it must not open this one."""
     other = Viewer3D(self.facility, open_browser=False)
     await self.assert_refused(self.ws(other.token))
-
-
-if __name__ == "__main__":
-  unittest.main()

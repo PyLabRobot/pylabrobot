@@ -4,29 +4,35 @@ Reached as `driver.arm`. Reads the joint state, moves in joint space and in Cart
 one guarded path, and brings out-of-range axes back inside their soft limits.
 """
 
-import asyncio
 import contextlib
 import dataclasses
 import logging
 import math
 import sys
-import time
+from contextvars import ContextVar
+from functools import wraps
 from typing import (
   TYPE_CHECKING,
   AsyncIterator,
   Awaitable,
   Callable,
   ClassVar,
+  Concatenate,
   Dict,
   List,
   Literal,
   NamedTuple,
   Optional,
+  ParamSpec,
   Sequence,
   Tuple,
+  TypeVar,
   cast,
 )
 
+import anyio
+
+from pylabrobot.concurrency import HasLifespan
 from pylabrobot.events import coordinate_reference, evented_operation
 from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
@@ -83,6 +89,21 @@ _ZTOUCH_MINIMUM_SEARCH_SPEED_PERCENT = 5
 # How near the column the gripper may be sent, in mm, seen from above; and how near the base plate,
 # seen from above or from its top face, whichever is further.
 _COLUMN_CLEARANCE = 5.0
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def _admitted_motion(
+  method: Callable[Concatenate["PreciseFlexArm", _P], Awaitable[_R]],
+) -> Callable[Concatenate["PreciseFlexArm", _P], Awaitable[_R]]:
+  """Hold finite-motion admission for one public operation, including nested calls."""
+
+  @wraps(method)
+  async def wrapper(self: "PreciseFlexArm", *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    async with self._driver._motion_admission():
+      return await method(self, *args, **kwargs)
+
+  return cast(Callable[Concatenate["PreciseFlexArm", _P], Awaitable[_R]], wrapper)
 
 
 def _snap_to_current(
@@ -241,8 +262,8 @@ class PreciseFlexArm:
     """
     self._driver = driver
     self.configuration: Optional[PreciseFlexArmConfiguration] = None
-    # What models the arm: the carriage on the column and the two links. None until setup hangs
-    # them, which it does only for a driver given a base plate.
+    # What models the arm: the carriage on the column and the two links. None until lifespan entry
+    # hangs them, which it does only for a driver given a base plate.
     self.resource: Optional[Resource] = None
     self.link_1: Optional[LinkBody] = None
     self.link_2: Optional[LinkBody] = None
@@ -250,6 +271,9 @@ class PreciseFlexArm:
     self.station_index: int = 1
     self.horizontal_compliance: bool = False
     self.horizontal_compliance_torque: int = 0
+    self._nonblocking_motion_callback: ContextVar[Optional[Callable[[], None]]] = ContextVar(
+      "precise_flex_nonblocking_motion_callback", default=None
+    )
 
   # -- joint state ---------------------------------------------------------------------------------
 
@@ -293,19 +317,37 @@ class PreciseFlexArm:
       OperationInterrupted: on a user interrupt (the arm is halted and the connection kept).
     """
     # On interrupt, `halt` stops the move and the link is resynchronised and kept. It is sent
-    # outside `_io_lock`: an emergency halt must not wait on another caller's read.
+    # outside `_command_lock`: an emergency halt must not wait on another caller's read.
     async with halt_on_interrupt(lambda: halt_and_resync(self._driver.io, b"halt")):
-      deadline = time.monotonic() + timeout
-      stopped = 0
-      while True:
-        # Compared as text: a stale reply after an interrupted command is not a stop, nor a crash.
-        state = await self.request_state()
-        stopped = stopped + 1 if state in _STOPPED_MOTION_STATES else 0
-        if stopped == 2:
-          return
-        if time.monotonic() > deadline:
-          raise TimeoutError(f"motion did not stop within {timeout:.0f}s (state={state})")
-        await asyncio.sleep(poll_interval)
+      state = ""
+      # A zero timeout still permits up to two samples and one poll interval. Allow one second for
+      # the reads, but cap the interval allowance so this probe always has a finite deadline.
+      poll_timeout = timeout if timeout > 0 else 1.0 + min(max(poll_interval, 0.0), 1.0)
+      with anyio.move_on_after(poll_timeout) as scope:
+
+        async def sample() -> str:
+          try:
+            return await self._driver.send_command("state", read_deadline=scope.deadline)
+          except TimeoutError as exc:
+            if scope.cancel_called or anyio.current_time() >= scope.deadline:
+              raise TimeoutError(
+                f"motion did not stop within {timeout:.0f}s (state={state})"
+              ) from exc
+            raise
+
+        stopped = 0
+        while True:
+          # Compared as text: a stale reply after an interrupted command is not a stop, nor a crash.
+          state = await sample()
+          await anyio.lowlevel.checkpoint_if_cancelled()
+          stopped = stopped + 1 if state in _STOPPED_MOTION_STATES else 0
+          if stopped == 2:
+            return
+          if timeout <= 0 and stopped == 0:
+            raise TimeoutError(f"motion did not stop within {timeout:.0f}s (state={state})")
+          await anyio.sleep(poll_interval)
+      if scope.cancel_called:
+        raise TimeoutError(f"motion did not stop within {timeout:.0f}s (state={state})")
 
   def update_joint_state(self, joints: JointState) -> None:
     """Stand the resources that model the arm where every joint is.
@@ -347,16 +389,30 @@ class PreciseFlexArm:
     )
     return joints
 
-  async def _request_joint_state_after_move(self) -> None:
+  async def _request_joint_state_after_move(
+    self, *, nonblocking_motion_dispatched: bool = False
+  ) -> None:
     """Wait for the arm to stop and read where it did, on a move's success and its failure alike.
 
     Called from a move's ``finally``. After an accepted move a failure of the read is raised: the
     controller answers a fault during the motion (a collision, a stall) on the next command. After
     a failed move it is logged and swallowed, so it does not replace the move's own error. An
-    interrupt is passed on.
+    interrupt avoids post-cancel wire reads, halting first if a non-blocking motion command already
+    committed on the controller before the interrupt arrived.
     """
-    # The move's own error, while this runs in its `finally`.
-    move_failed = sys.exc_info()[1] is not None
+    active_exc = sys.exc_info()[1]
+    if isinstance(
+      active_exc, (anyio.get_cancelled_exc_class(), OperationInterrupted, KeyboardInterrupt)
+    ):
+      if nonblocking_motion_dispatched and not isinstance(active_exc, OperationInterrupted):
+        with anyio.CancelScope(shield=True):
+          await halt_and_resync(self._driver.io, b"halt")
+        if isinstance(active_exc, KeyboardInterrupt):
+          raise OperationInterrupted(
+            "operation halted by interrupt; device stopped, connection alive"
+          ) from active_exc
+      return
+    move_failed = active_exc is not None
     try:
       await self.request_joint_state()
     except OperationInterrupted:
@@ -390,14 +446,34 @@ class PreciseFlexArm:
 
   # -- motion primitives ---------------------------------------------------------------------------
 
+  async def _send_nonblocking_motion_command(self, command: str) -> None:
+    """Send a command that starts asynchronous controller motion, recording commit immediately."""
+    previous_callback = self._driver._command_reconciled_callback.get()
+    motion_callback = self._nonblocking_motion_callback.get()
+
+    def mark_reconciled(reconciled_command: str) -> None:
+      if reconciled_command == command and motion_callback is not None:
+        motion_callback()
+      if previous_callback is not None:
+        previous_callback(reconciled_command)
+
+    token = self._driver._command_reconciled_callback.set(mark_reconciled)
+    try:
+      await self._driver.send_command(command)
+      if motion_callback is not None:
+        motion_callback()
+    finally:
+      self._driver._command_reconciled_callback.reset(token)
+
   async def _unchecked_fw_move_j(self, profile_index: int, joint_coords: JointState) -> None:
     """Move the robot using joint coordinates, handling rail configuration. Raw moveJ - the
     out-of-range guard lives in the caller (``_guarded_move``), not in this primitive."""
+    self._driver._reject_motion_during_freedrive_scope()
     angles_str = " ".join(str(joint_coords[axis]) for axis in self._WIRE_ORDER)
     if self._driver._has_rail:
       # The rail's value goes last, and the line has always ended with a space after it.
       angles_str += f" {joint_coords[PreciseFlexAxis.RAIL]} "
-    await self._driver.send_command(f"moveJ {profile_index} {angles_str}")
+    await self._send_nonblocking_motion_command(f"moveJ {profile_index} {angles_str}")
 
   async def _unchecked_fw_move_one_axis(self, axis: PreciseFlexAxis, position: float) -> None:
     """Move a single axis to an absolute position (firmware ``MoveOneAxis``).
@@ -405,7 +481,10 @@ class PreciseFlexArm:
     The controller blocks a normal move while an axis is out of range, but allows a single-axis
     move heading back into range. Does not wait for the motion to complete.
     """
-    await self._driver.send_command(f"MoveOneAxis {int(axis)} {position} {self.profile_index}")
+    self._driver._reject_motion_during_freedrive_scope()
+    await self._send_nonblocking_motion_command(
+      f"MoveOneAxis {int(axis)} {position} {self.profile_index}"
+    )
 
   async def _unchecked_fw_set_joint_angles(
     self,
@@ -839,24 +918,45 @@ class PreciseFlexArm:
       yield
       return
     prior = await self._request_speed()
-    await self._set_speed(speed_percent)
+    speed_changed = False
+    previous_callback = self._driver._command_reconciled_callback.get()
+
+    def mark_speed_changed(command: str) -> None:
+      nonlocal speed_changed
+      speed_changed = True
+      if previous_callback is not None:
+        previous_callback(command)
+
     try:
+      token = self._driver._command_reconciled_callback.set(mark_speed_changed)
+      try:
+        await self._set_speed(speed_percent)
+        speed_changed = True
+      finally:
+        self._driver._command_reconciled_callback.reset(token)
       yield
     finally:
-      try:
-        await self._set_speed(prior)
-      except Exception:
-        # Raising here replaces the move's own error, so say plainly what the arm is left at.
-        logger.error(
-          "[PreciseFlex %s] could not restore profile speed to %s; the arm is still at %s",
-          self._driver.io._host,
-          prior,
-          speed_percent,
-        )
-        raise
+      if speed_changed:
+        active_exc = sys.exc_info()[1]
+        try:
+          with anyio.CancelScope(shield=True):
+            await self._set_speed(prior)
+        except Exception:
+          # Raising here replaces the move's own error, so say plainly what the arm is left at.
+          logger.error(
+            "[PreciseFlex %s] could not restore profile speed to %s; the arm is still at %s",
+            self._driver.io._host,
+            prior,
+            speed_percent,
+          )
+          if not isinstance(
+            active_exc, (anyio.get_cancelled_exc_class(), OperationInterrupted, KeyboardInterrupt)
+          ):
+            raise
 
   # -- brakes, torque and freedrive ----------------------------------------------------------------
 
+  @_admitted_motion
   async def release_brake(self, axis: int) -> None:
     """Release the axis brake.
 
@@ -867,8 +967,10 @@ class PreciseFlexArm:
     Args:
       axis: The number of the axis whose brake should be released.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     await self._driver.send_command(f"releaseBrake {axis}")
 
+  @_admitted_motion
   async def reengage_brake(self, axis: int) -> None:
     """Re-engage the axis brake.
 
@@ -878,12 +980,15 @@ class PreciseFlexArm:
     Args:
       axis: The number of the axis whose brake should be set.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     await self._driver.send_command(f"setBrake {axis}")
 
   async def _unchecked_fw_start_zero_torque(self, axis_mask: int) -> None:
     """Place the axes of ``axis_mask`` in zero torque mode. Nothing is guarded."""
+    self._driver._reject_motion_during_freedrive_scope()
     await self._driver.send_command(f"zeroTorque 1 {axis_mask}")
 
+  @_admitted_motion
   async def start_zero_torque(self, axis_mask: int = 1) -> None:
     """Place axes of the selected robot in zero torque mode.
 
@@ -896,13 +1001,30 @@ class PreciseFlexArm:
     Raises:
       ValueError: If ``axis_mask`` names no axis.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if axis_mask <= 0:
       raise ValueError(f"axis_mask must be greater than 0, is {axis_mask}")
     await self._unchecked_fw_start_zero_torque(axis_mask)
 
+  @_admitted_motion
   async def stop_zero_torque(self) -> None:
     """Take the entire robot out of zero torque mode."""
+    self._driver._reject_motion_during_freedrive_scope()
     await self._driver.send_command("zeroTorque 0")
+
+  async def _stop_freedrive_command(self) -> None:
+    """Send and reconcile the all-axis freedrive exit command without adding events."""
+    command = "freemode -1"
+
+    def mark_reconciled(reconciled_command: str) -> None:
+      if reconciled_command == command:
+        self._driver._freedrive_active = False
+
+    token = self._driver._command_reconciled_callback.set(mark_reconciled)
+    try:
+      await self._driver.send_command(command)
+    finally:
+      self._driver._command_reconciled_callback.reset(token)
 
   @evented_operation(
     "precise_flex.start_freedrive",
@@ -911,14 +1033,8 @@ class PreciseFlexArm:
       "free_axes": [int(axis) for axis in free_axes] if free_axes is not None else None,
     },
   )
-  async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None) -> None:
-    """Enter freedrive mode, allowing manual movement of the specified joints.
-
-    The robot must be attached to enter free mode.
-
-    Args:
-      free_axes: List of joint indices to free. Use [0] for all axes.
-    """
+  async def _start_freedrive_transition(self, free_axes: Optional[List[int]] = None) -> None:
+    """Enter freedrive while the caller holds the transition lock."""
     if free_axes is None:
       # The positioning axes that exist: freemode on an absent rail returns -2800.
       free_axes = [
@@ -929,16 +1045,95 @@ class PreciseFlexArm:
       ]
       if self._driver.rail is not None:
         free_axes.append(PreciseFlexAxis.RAIL)
-    for axis in free_axes:
-      await self._driver.send_command(f"freemode {axis}")
+    entered_freedrive = False
+    try:
+      for axis in free_axes:
+        command = f"freemode {axis}"
+
+        def mark_reconciled(reconciled_command: str) -> None:
+          nonlocal entered_freedrive
+          if reconciled_command == command:
+            entered_freedrive = True
+            self._driver._freedrive_active = True
+
+        token = self._driver._command_reconciled_callback.set(mark_reconciled)
+        try:
+          await self._driver.send_command(command)
+        finally:
+          self._driver._command_reconciled_callback.reset(token)
+    except BaseException:
+      if entered_freedrive:
+        with anyio.CancelScope(shield=True):
+          await self._stop_freedrive_command()
+      raise
 
   @evented_operation(
     "precise_flex.stop_freedrive",
     lambda self: {"device": self._driver._controller_reference()},
   )
+  async def _stop_freedrive_transition(self) -> None:
+    """Exit freedrive while the caller holds the transition lock."""
+    await self._stop_freedrive_command()
+
+  async def start_freedrive_mode(self, free_axes: Optional[List[int]] = None) -> None:
+    """Enter durable freedrive mode, allowing manual movement of the specified joints.
+
+    The robot must be attached to enter free mode.
+
+    Args:
+      free_axes: List of joint indices to free. Use [0] for all axes.
+    """
+    async with self._driver._freedrive_transition_lock:
+      if self._driver._freedrive_scope_token is not None:
+        raise RuntimeError("Cannot start freedrive while a freedrive scope is active")
+      await self._start_freedrive_transition(free_axes)
+
   async def stop_freedrive_mode(self) -> None:
-    """Exit freedrive mode for all axes."""
-    await self._driver.send_command("freemode -1")
+    """Exit durable freedrive mode for all axes."""
+    async with self._driver._freedrive_transition_lock:
+      if self._driver._freedrive_scope_token is not None:
+        raise RuntimeError("Cannot stop freedrive while a freedrive scope is active")
+      await self._stop_freedrive_transition()
+
+  @contextlib.asynccontextmanager
+  async def freedrive(self, free_axes: Optional[List[int]] = None) -> AsyncIterator[None]:
+    """Enable freedrive for the lifetime of this context."""
+    token = object()
+    async with self._driver._freedrive_transition_lock:
+      if not self._driver.is_active:
+        raise RuntimeError("Freedrive scopes require an active PreciseFlex lifespan")
+      if self._driver._freedrive_scope_token is not None:
+        raise RuntimeError("Freedrive is already scoped")
+      if self._driver._freedrive_active:
+        raise RuntimeError("Freedrive is already active")
+      self._driver._freedrive_scope_token = token
+      try:
+        await self._start_freedrive_transition(free_axes)
+      except BaseException:
+        self._driver._freedrive_scope_token = None
+        raise
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._driver._freedrive_transition_lock:
+          if self._driver._freedrive_scope_token is token:
+            try:
+              await self._stop_freedrive_transition()
+            finally:
+              self._driver._freedrive_scope_token = None
+
+  async def _force_stop_freedrive(self) -> None:
+    """Force tracked freedrive off before detach and invalidate scope ownership."""
+    async with self._driver._freedrive_transition_lock:
+      try:
+        if self._driver._freedrive_active or self._driver._freedrive_scope_token is not None:
+          await self._stop_freedrive_transition()
+      finally:
+        self._driver._freedrive_active = False
+        self._driver._freedrive_scope_token = None
 
   @evented_operation(
     "precise_flex.halt",
@@ -1460,6 +1655,7 @@ class PreciseFlexArm:
             f"{_COLUMN_CLEARANCE} mm kept clear of it"
           )
 
+  @_admitted_motion
   async def recover_axes_within_limits(
     self,
     speed_percent: Optional[float] = None,
@@ -1491,6 +1687,7 @@ class PreciseFlexArm:
       never auto-recovered (see :attr:`_RECOVERY_ORDER`), nor a gripper open past its limit:
       bringing it in would close the jaws without sensing force.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if speed_percent is None:
       speed_percent = self.default_recovery_speed_percent
     joints = await self.request_joint_state()
@@ -1498,9 +1695,23 @@ class PreciseFlexArm:
     if not outside:
       return {}
     prior_speed = await self._request_speed()
-    await self._set_speed(speed_percent)
     recovered: Dict[PreciseFlexAxis, float] = {}
+    speed_changed = False
+    previous_callback = self._driver._command_reconciled_callback.get()
+
+    def mark_speed_changed(command: str) -> None:
+      nonlocal speed_changed
+      speed_changed = True
+      if previous_callback is not None:
+        previous_callback(command)
+
     try:
+      token = self._driver._command_reconciled_callback.set(mark_speed_changed)
+      try:
+        await self._set_speed(speed_percent)
+        speed_changed = True
+      finally:
+        self._driver._command_reconciled_callback.reset(token)
       for axis in self._RECOVERY_ORDER:
         if axis not in outside:
           continue
@@ -1533,7 +1744,20 @@ class PreciseFlexArm:
         )
         recovered[axis] = target
     finally:
-      await self._set_speed(prior_speed)  # don't leave the profile at the slow recovery speed
+      # Don't leave the profile at the slow recovery speed when motion is interrupted.
+      if speed_changed:
+        active_exc = sys.exc_info()[1]
+        try:
+          with anyio.CancelScope(shield=True):
+            await self._set_speed(prior_speed)
+        except Exception:
+          logger.error(
+            "[PreciseFlex %s] could not restore profile speed to %s after recovery",
+            self._driver.io._host,
+            prior_speed,
+          )
+          if active_exc is None:
+            raise
     return recovered
 
   async def _handle_out_of_range_axes(self) -> None:
@@ -1607,11 +1831,19 @@ class PreciseFlexArm:
           self._assert_within_soft_limits(start, target)
         self._check_path_reachable(start, target)
         start = target
+      dispatched = False
+
+      def mark_dispatched() -> None:
+        nonlocal dispatched
+        dispatched = True
+
+      token = self._nonblocking_motion_callback.set(mark_dispatched)
       try:
         await unchecked_fw_move(targets)
       finally:
+        self._nonblocking_motion_callback.reset(token)
         # A move returns once accepted: this waits for the arm to stop, then reads where it did.
-        await self._request_joint_state_after_move()
+        await self._request_joint_state_after_move(nonblocking_motion_dispatched=dispatched)
 
     try:
       await attempt()
@@ -1640,12 +1872,14 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.move_to_joint_position",
-    lambda self, joint_state, speed_percent=None, close_gripper_without_force_sensing=False: {
+    lambda self, joint_state, speed_percent=None, *, close_gripper_without_force_sensing=False: {
       "device": self._driver._controller_reference(),
       "target_joint_position": _joint_state_reference(joint_state),
       "speed_percent": speed_percent,
+      "close_gripper_without_force_sensing": close_gripper_without_force_sensing,
     },
   )
+  @_admitted_motion
   async def move_to_joint_state(
     self,
     joint_state: JointState,
@@ -1666,6 +1900,7 @@ class PreciseFlexArm:
     Raises:
       ValueError: If the move would close the jaws, unless asked.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if speed_percent is not None:
       await self._set_speed(speed_percent)
 
@@ -1713,6 +1948,7 @@ class PreciseFlexArm:
       "speed_percent": speed_percent,
     },
   )
+  @_admitted_motion
   async def move_to_location(
     self,
     location: Coordinate,
@@ -1735,6 +1971,7 @@ class PreciseFlexArm:
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if speed_percent is not None:
       await self._set_speed(speed_percent)
 
@@ -1805,6 +2042,7 @@ class PreciseFlexArm:
       "blend": blend,
     },
   )
+  @_admitted_motion
   async def move_through_cartesian_poses(
     self,
     poses: Sequence[PreciseFlexCartesianPose],
@@ -1830,20 +2068,36 @@ class PreciseFlexArm:
         ``-1`` so the controller may blend through intermediate waypoints instead of stopping
         at each one. The original profile is restored after the final waypoint is reached.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if not poses:
       return
     if speed_percent is not None:
       await self._set_speed(speed_percent)
 
     profile_index = self.profile_index
-    blended: List[MotionProfile] = []
+    original_profile: Optional[MotionProfile] = None
+    profile_changed = False
 
     async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
-      if blend:
-        original_profile = await self.request_motion_profile_values(profile_index)
-        if original_profile.in_range != BLEND_IN_RANGE:
-          await self.set_motion_profile_values(*original_profile._replace(in_range=BLEND_IN_RANGE))
-          blended.append(original_profile)
+      nonlocal original_profile, profile_changed
+      if blend and not profile_changed:
+        queried_profile = await self.request_motion_profile_values(profile_index)
+        if queried_profile.in_range != BLEND_IN_RANGE:
+          original_profile = queried_profile
+          previous_callback = self._driver._command_reconciled_callback.get()
+
+          def mark_profile_changed(command: str) -> None:
+            nonlocal profile_changed
+            profile_changed = True
+            if previous_callback is not None:
+              previous_callback(command)
+
+          token = self._driver._command_reconciled_callback.set(mark_profile_changed)
+          try:
+            await self.set_motion_profile_values(*queried_profile._replace(in_range=BLEND_IN_RANGE))
+            profile_changed = True
+          finally:
+            self._driver._command_reconciled_callback.reset(token)
       for target in targets:
         await self._unchecked_fw_move_j(profile_index=profile_index, joint_coords=target)
 
@@ -1852,10 +2106,21 @@ class PreciseFlexArm:
         lambda current: self._plan_cartesian_pose_route(poses, current), unchecked_fw_move
       )
     finally:
-      # Restored once the read after the route has let queued motion settle: restoring InRange
-      # mid-move would change the in-flight blend.
-      for original_profile in blended:
-        await self.set_motion_profile_values(*original_profile)
+      # Restored once the read after the route (or interrupt halt) has let queued motion settle:
+      # restoring InRange mid-move would change the in-flight blend.
+      if profile_changed and original_profile is not None:
+        active_exc = sys.exc_info()[1]
+        try:
+          with anyio.CancelScope(shield=True):
+            await self.set_motion_profile_values(*original_profile)
+        except Exception:
+          logger.error(
+            "[PreciseFlex %s] could not restore motion profile %s",
+            self._driver.io._host,
+            profile_index,
+          )
+          if active_exc is None:
+            raise
 
   async def _unchecked_fw_request_cartesian_destination(
     self, mode: int = 0
@@ -1935,8 +2200,10 @@ class PreciseFlexArm:
 
   async def _unchecked_fw_change_elbow_orientation(self, grip_mode: int) -> None:
     """Change righty to lefty or back through the customizable locations. Nothing is guarded."""
+    self._driver._reject_motion_during_freedrive_scope()
     await self._driver.send_command(f"ChangeConfig {grip_mode}")
 
+  @_admitted_motion
   async def change_elbow_orientation(
     self, grip_mode: int = 0, *, close_gripper_without_force_sensing: bool = False
   ) -> None:
@@ -1948,14 +2215,15 @@ class PreciseFlexArm:
 
     Args:
       grip_mode: Gripper control mode.
-      0 = do not change gripper (default)
-      1 = open gripper
-      2 = close gripper, by position: refused unless asked
+        0 = do not change gripper (default)
+        1 = open gripper
+        2 = close gripper, by position: refused unless asked
       close_gripper_without_force_sensing: allow ``grip_mode=2``.
 
     Raises:
       ValueError: If ``grip_mode`` is 2, unless asked.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if grip_mode == 2 and not close_gripper_without_force_sensing:
       raise ValueError(
         "grip_mode=2 closes the gripper without sensing force; pass "
@@ -1965,8 +2233,10 @@ class PreciseFlexArm:
 
   async def _unchecked_fw_change_elbow_orientation_by_algorithm(self, grip_mode: int) -> None:
     """Change righty to lefty or back by the controller's algorithm. Nothing is guarded."""
+    self._driver._reject_motion_during_freedrive_scope()
     await self._driver.send_command(f"ChangeConfig2 {grip_mode}")
 
+  @_admitted_motion
   async def change_elbow_orientation_by_algorithm(
     self, grip_mode: int = 0, *, close_gripper_without_force_sensing: bool = False
   ) -> None:
@@ -1978,14 +2248,15 @@ class PreciseFlexArm:
 
     Args:
       grip_mode: Gripper control mode.
-      0 = do not change gripper (default)
-      1 = open gripper
-      2 = close gripper, by position: refused unless asked
+        0 = do not change gripper (default)
+        1 = open gripper
+        2 = close gripper, by position: refused unless asked
       close_gripper_without_force_sensing: allow ``grip_mode=2``.
 
     Raises:
       ValueError: If ``grip_mode`` is 2, unless asked.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if grip_mode == 2 and not close_gripper_without_force_sensing:
       raise ValueError(
         "grip_mode=2 closes the gripper without sensing force; pass "
@@ -2005,6 +2276,7 @@ class PreciseFlexArm:
     Raises:
       PreciseFlexError: If the controller answers that the gripper closed on nothing.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     ret_code = await self._driver.send_command(
       f"pickplate {self.station_index} {horizontal_compliance_int} "
@@ -2015,6 +2287,7 @@ class PreciseFlexArm:
 
   async def _unchecked_fw_place_plate(self) -> None:
     """Send ``placeplate`` for the station. Nothing is guarded."""
+    self._driver._reject_motion_during_freedrive_scope()
     horizontal_compliance_int = 1 if self.horizontal_compliance else 0
     await self._driver.send_command(
       f"placeplate {self.station_index} {horizontal_compliance_int} "
@@ -2063,6 +2336,7 @@ class PreciseFlexArm:
       ),
     },
   )
+  @_admitted_motion
   async def pick_up_at_joint_state(
     self,
     joint_state: JointState,
@@ -2079,6 +2353,7 @@ class PreciseFlexArm:
         ``default_finger_speed_percent`` when None.
       grasp_force: Grasp force in Newtons. ``default_grasp_force`` when None.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if finger_speed_percent is None:
       finger_speed_percent = self._driver.gripper.default_finger_speed_percent
     if grasp_force is None:
@@ -2106,6 +2381,7 @@ class PreciseFlexArm:
       "resource_width": float(resource_width),
     },
   )
+  @_admitted_motion
   async def drop_at_joint_state(
     self,
     joint_state: JointState,
@@ -2117,6 +2393,7 @@ class PreciseFlexArm:
       joint_state: Joint state to drop at.
       resource_width: Width of the held resource, in mm.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] drop: joints=%s, resource_width_mm=%s",
       self._driver.io._host,
@@ -2149,6 +2426,7 @@ class PreciseFlexArm:
       ),
     },
   )
+  @_admitted_motion
   async def pick_up_at_location(
     self,
     location: Coordinate,
@@ -2174,6 +2452,7 @@ class PreciseFlexArm:
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if finger_speed_percent is None:
       finger_speed_percent = self._driver.gripper.default_finger_speed_percent
     if grasp_force is None:
@@ -2222,6 +2501,7 @@ class PreciseFlexArm:
       "resource_width": float(resource_width),
     },
   )
+  @_admitted_motion
   async def drop_at_location(
     self,
     location: Coordinate,
@@ -2242,6 +2522,7 @@ class PreciseFlexArm:
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     logger.info(
       "[PreciseFlex %s] drop: x=%s, y=%s, z=%s, direction=%s, resource_width_mm=%s",
       self._driver.io._host,
@@ -2310,7 +2591,8 @@ class PreciseFlexArm:
 
   async def _unchecked_fw_park(self) -> None:
     """Move to the controller's own safe position (``movetosafe``). Nothing is guarded."""
-    await self._driver.send_command("movetosafe")
+    self._driver._reject_motion_during_freedrive_scope()
+    await self._send_nonblocking_motion_command("movetosafe")
 
   def _check_ztouch_search_speed(self, speed_percent: int) -> None:
     """Raise unless a ZTouch search may run at this system speed."""
@@ -2373,11 +2655,15 @@ class PreciseFlexArm:
     Returns:
       The Z joint where it worked out the contact was, in mm.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     io = self._driver.io
     usual_timeout, io._read_timeout = io._read_timeout, read_timeout
     try:
       return float(
-        await self._driver.send_command(f"HeightDetect {quick_mode} {search_limit} {maximum_force}")
+        await self._driver.send_command(
+          f"HeightDetect {quick_mode} {search_limit} {maximum_force}",
+          shield_reply=False,
+        )
       )
     finally:
       io._read_timeout = usual_timeout
@@ -2393,15 +2679,26 @@ class PreciseFlexArm:
       host=self._driver.io._host,
       port=_STATUS_PORT,
     )
+    if (
+      isinstance(status, HasLifespan)
+      and type(status).setup is HasLifespan.setup
+      and "setup" not in status.__dict__
+    ):
+      try:
+        async with status:
+          await status.write(b"selectrobot 1\nhalt\n")
+      except Exception:  # without the halt the arm still stops at the search's checked end
+        logger.warning("[PreciseFlex %s] could not halt the search", self._driver.io._host)
+    else:
+      try:
+        await status.setup()
+        await status.write(b"selectrobot 1\nhalt\n")
+      except Exception:  # without the halt the arm still stops at the search's checked end
+        logger.warning("[PreciseFlex %s] could not halt the search", self._driver.io._host)
+      finally:
+        await status.stop()
     try:
-      await status.setup()
-      await status.write(b"selectrobot 1\nhalt\n")
-    except Exception:  # without the halt the arm still stops at the search's checked end
-      logger.warning("[PreciseFlex %s] could not halt the search", self._driver.io._host)
-    finally:
-      await status.stop()
-    try:
-      async with self._driver._io_lock:
+      async with self._driver._command_lock:
         await self._driver.io.readline()
     except TimeoutError:
       logger.warning(
@@ -2419,6 +2716,7 @@ class PreciseFlexArm:
       "perform_second_measurement_on_lift_off": perform_second_measurement_on_lift_off,
     },
   )
+  @_admitted_motion
   async def probe_z_using_ztouch(
     self,
     *,
@@ -2465,6 +2763,7 @@ class PreciseFlexArm:
       OperationInterrupted: On a user interrupt; the arm is halted and rises by itself.
       TimeoutError: If the search outlasts `read_timeout`. It is then stopped.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     offset = self._get_back_flat_above_z_joint()
     if detection_force <= 0:
       raise ValueError(f"detection_force must be above 0 N, is {detection_force}")
@@ -2512,26 +2811,55 @@ class PreciseFlexArm:
 
     async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
       limit = round(end - start, 3)
-      async with halt_on_interrupt(self._stop_ztouch_search):
-        try:
+      try:
+        async with halt_on_interrupt(self._stop_ztouch_search):
           contact[0] = await self._unchecked_fw_probe_z_using_ztouch(
             quick_mode=quick_mode,
             search_limit=limit,
             maximum_force=-float(detection_force),
             read_timeout=read_timeout,
           )
-        except TimeoutError:
+      except TimeoutError:
+        with anyio.CancelScope(shield=True):
           await self._stop_ztouch_search()
+        raise
+      except PreciseFlexError as error:
+        if error.replycode != _ZTOUCH_NOTHING_MET:
           raise
-        except PreciseFlexError as error:
-          if error.replycode != _ZTOUCH_NOTHING_MET:
-            raise
 
-    await self.set_monitor_speed(search_speed_percent)
+    speed_changed = False
+    previous_callback = self._driver._command_reconciled_callback.get()
+
+    def mark_speed_changed(command: str) -> None:
+      nonlocal speed_changed
+      if command == f"mspeed {search_speed_percent}":
+        speed_changed = True
+      if previous_callback is not None:
+        previous_callback(command)
+
     try:
+      token = self._driver._command_reconciled_callback.set(mark_speed_changed)
+      try:
+        await self.set_monitor_speed(search_speed_percent)
+        speed_changed = True
+      finally:
+        self._driver._command_reconciled_callback.reset(token)
       await self._guarded_move(build_targets, unchecked_fw_move, retry_out_of_range=False)
     finally:
-      await self.set_monitor_speed(usual_speed)
+      active_exc = sys.exc_info()[1]
+      if speed_changed:
+        try:
+          with anyio.CancelScope(shield=True):
+            await self.set_monitor_speed(usual_speed)
+        except Exception:
+          if active_exc is None:
+            raise
+          logger.warning(
+            "[PreciseFlex %s] failed to restore monitor speed %s after ztouch probe",
+            self._driver.io._host,
+            usual_speed,
+            exc_info=True,
+          )
 
     pressed = None if contact[0] is None else round(contact[0] + offset, 2)
     if move_to_parking_position_after:
@@ -2545,10 +2873,12 @@ class PreciseFlexArm:
 
   @evented_operation(
     "precise_flex.park",
-    lambda self, close_gripper_without_force_sensing=False: {
-      "device": self._driver._controller_reference()
+    lambda self, *, close_gripper_without_force_sensing=False: {
+      "device": self._driver._controller_reference(),
+      "close_gripper_without_force_sensing": close_gripper_without_force_sensing,
     },
   )
+  @_admitted_motion
   async def park(self, *, close_gripper_without_force_sensing: bool = False) -> None:
     """Move to ``self.parking_position``; defaults at setup, reassignable at runtime.
 
@@ -2569,6 +2899,7 @@ class PreciseFlexArm:
     Raises:
       ValueError: If parking would close the jaws, unless asked.
     """
+    self._driver._reject_motion_during_freedrive_scope()
     if self.parking_position is None:
       if not close_gripper_without_force_sensing:
         raise ValueError(
@@ -2576,14 +2907,24 @@ class PreciseFlexArm:
           "sensing force; set parking_position, or pass close_gripper_without_force_sensing=True"
         )
       # Where the controller's own safe position is, the driver does not know: only read it after.
+      dispatched = False
+
+      def mark_dispatched() -> None:
+        nonlocal dispatched
+        dispatched = True
+
+      token = self._nonblocking_motion_callback.set(mark_dispatched)
       try:
         await self._unchecked_fw_park()
       finally:
-        await self._request_joint_state_after_move()
+        self._nonblocking_motion_callback.reset(token)
+        await self._request_joint_state_after_move(nonblocking_motion_dispatched=dispatched)
       return
     pose = self._parking_pose_with_default_z(self.parking_position)
     if self.resource is not None and PreciseFlexAxis.WRIST in pose:
       current = await self.request_joint_state()
+      if not close_gripper_without_force_sensing:
+        self._refuse_closing_the_gripper(current, {**current, **pose})
       low, high = self._get_soft_limits().get(PreciseFlexAxis.WRIST, (-math.inf, math.inf))
       written = pose[PreciseFlexAxis.WRIST]
       # As written first, then a full turn either way, the shorter first.

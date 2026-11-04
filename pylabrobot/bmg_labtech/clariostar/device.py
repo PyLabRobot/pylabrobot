@@ -3,6 +3,7 @@
 import os
 from typing import Literal, Optional, Union
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
@@ -86,7 +87,7 @@ class _CLARIOstarPlateHolder(PlateHolder):
     return super().unassign_child_resource(resource)
 
 
-class CLARIOstarDevice(Resource):
+class CLARIOstarDevice(Resource, HasLifespan):
   """The CLARIOstar as a resource: its plate holder, its drawer, and the driver that runs it.
 
   Build one with the `CLARIOstar` or `CLARIOstarPlus` factory. ``use_io`` picks how the reader is
@@ -136,6 +137,7 @@ class CLARIOstarDevice(Resource):
       category="device",
       model=model if model is not None else self.__class__.__name__,
     )
+    HasLifespan.__init__(self)
     self.driver: CLARIOstarDriver
     if simulation:
       if declared_configuration_json is None:
@@ -195,25 +197,25 @@ class CLARIOstarDevice(Resource):
     """Luminescence measurement, or None if the reader has none; known after `setup`."""
     return self.driver.luminescence
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    accept_plate_left_in_device: bool = False,
+  ) -> None:
     """Connect, initialize the reader (about 13 s), and check it is the model this device is.
 
     Raises:
-      RuntimeError: if the reader reports another model than the factory built.
+      RuntimeError: if the reader reports another model than the factory built, or on exit if a
+        plate is still in the reader unless `accept_plate_left_in_device`.
     """
-    await self.driver.setup()
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(
+      self.driver.lifespan(accept_plate_left_in_device=accept_plate_left_in_device)
+    )
     reported = self.driver.configuration.model
     if self.model in MODELS and reported is not None and reported != self.model:
       raise RuntimeError(f"{self.name} was built as a {self.model}, the reader is a {reported}")
-
-  async def stop(self, accept_plate_left_in_device: bool = False) -> None:
-    """Stop a running measurement, switch heating off, close the drawer, and disconnect.
-
-    Raises:
-      RuntimeError: if a plate is still in the reader, unless `accept_plate_left_in_device`; the
-        drawer is opened and the reader stays connected.
-    """
-    await self.driver.stop(accept_plate_left_in_device=accept_plate_left_in_device)
 
 
 def CLARIOstar(

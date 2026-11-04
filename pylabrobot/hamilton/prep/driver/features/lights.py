@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import random
 from typing import TYPE_CHECKING, Callable, Dict, Optional, Sequence, Tuple, Union
+
+import anyio
 
 from .. import prep_commands as PrepCmd
 
@@ -49,10 +50,19 @@ COLORS: Dict[str, Tuple[int, int, int, int]] = {
 GAMMA = 2.2
 
 
-def _log_animation_end(task: "asyncio.Task[None]") -> None:
-  """Say what became of an animation: a background task's error is otherwise never seen."""
-  if not task.cancelled() and task.exception() is not None:
-    logger.error("the deck light animation stopped: %s", task.exception())
+class _Animation:
+  """State for one running deck-light animation."""
+
+  def __init__(self) -> None:
+    self.scope = anyio.CancelScope()
+    self.done = anyio.Event()
+    self.handing_over = False
+
+  def done_running(self) -> bool:
+    return self.done.is_set()
+
+  def cancel(self) -> None:
+    self.scope.cancel()
 
 
 def as_wrgb(color: Color) -> Tuple[int, int, int, int]:
@@ -152,9 +162,7 @@ class Lights:
       driver: the driver to send commands through.
     """
     self._driver = driver
-    self._animation: Optional["asyncio.Task[None]"] = None
-    # Whether the animation being cancelled is making way for a colour this light is about to set.
-    self._handing_over = False
+    self._animation: Optional[_Animation] = None
     # What a command uses when it names nothing. Set them to change what this light does.
     self.default_brightness: float = 100.0
     # How long one colour stands before the next, while an animation runs. A set takes about a
@@ -198,8 +206,8 @@ class Lights:
     The light stays at the colour it reached, for whoever stopped it to set the next one. An
     animation cancelled by anything else darkens the deck instead, since nobody is coming.
     """
-    if self._animation is not None and not self._animation.done():
-      self._handing_over = True
+    if self._animation is not None and not self._animation.done_running():
+      self._animation.handing_over = True
       self._animation.cancel()
     self._animation = None
 
@@ -241,31 +249,36 @@ class Lights:
   # Animation
   # ----------------------------------------
 
-  async def _run(self, frame: Frame, duration: Optional[float]) -> None:
+  async def _run(self, anim: _Animation, frame: Frame, duration: Optional[float]) -> None:
     """Show an animation off the clock, not off a frame count, until its time is up.
 
     A frame the light already stands at is not sent again, so a held colour costs one command.
     """
-    loop = asyncio.get_running_loop()
-    started = loop.time()
+    started = anyio.current_time()
     showing: Optional[Tuple[Color, float]] = None
     try:
-      while duration is None or loop.time() - started < duration:
-        shown = frame(loop.time() - started)
-        if shown != showing:
-          await self._set(*shown)
-          showing = shown
-        await asyncio.sleep(self.default_animation_step)
-    except asyncio.CancelledError:
-      # Cancelled from outside - a stopped protocol, an interrupted notebook, a loop shutting down.
-      # Nobody is coming to set a colour, so the deck is darkened rather than left standing at the
-      # frame this stopped on. The darkening goes out on its own, since a cancelled task cannot
-      # wait for it.
-      if not self._handing_over:
-        asyncio.ensure_future(self._set("off"))
-      self._handing_over = False
+      with anim.scope:
+        while duration is None or anyio.current_time() - started < duration:
+          shown = frame(anyio.current_time() - started)
+          if shown != showing:
+            await self._set(*shown)
+            showing = shown
+          await anyio.sleep(self.default_animation_step)
+      if not anim.handing_over:
+        with anyio.CancelScope(shield=True):
+          await self._set("off")
+    except anyio.get_cancelled_exc_class():
+      if not anim.handing_over:
+        with anyio.CancelScope(shield=True):
+          try:
+            await self._set("off")
+          except Exception:
+            logger.debug("could not darken the deck light on cancellation", exc_info=True)
       raise
-    await self._set("off")
+    except Exception as exc:
+      logger.error("the deck light animation stopped: %s", exc)
+    finally:
+      anim.done.set()
 
   async def animate(self, frame: Frame, duration: Optional[float] = None) -> None:
     """Run an animation in the background, in place of the one running.
@@ -276,19 +289,19 @@ class Lights:
         light is turned off or set to something else.
     """
     self.stop_animation()
-    self._animation = asyncio.create_task(self._run(frame, duration))
-    self._animation.add_done_callback(_log_animation_end)
+    tg = self._driver._animation_tg
+    if tg is None:
+      raise RuntimeError("Driver lifespan is not active; call `setup()` or `async with` first.")
+    anim = _Animation()
+    self._animation = anim
+    tg.start_soon(self._run, anim, frame, duration)
 
   async def wait_for_animation(self) -> None:
     """Hold until the animation running has ended, if one is. A stopped animation is not waited on."""
     animation = self._animation
     if animation is None:
       return
-    try:
-      await animation
-    except asyncio.CancelledError:
-      if not animation.cancelled():
-        raise
+    await animation.done.wait()
 
   async def hold(self, color: Color, duration: float, brightness: Optional[float] = None) -> None:
     """Show a colour for a while, then darken. Holds until its time is up.
@@ -299,8 +312,11 @@ class Lights:
       brightness: how bright to make it look, 0 to 100, or None for `default_brightness`.
     """
     await self.set_color(color, brightness)
-    await asyncio.sleep(duration)
-    await self.turn_off()
+    try:
+      await anyio.sleep(duration)
+    finally:
+      with anyio.CancelScope(shield=True):
+        await self.turn_off()
 
   async def animate_error_pulse(
     self,

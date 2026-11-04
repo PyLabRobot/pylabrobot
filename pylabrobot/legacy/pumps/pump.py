@@ -1,10 +1,13 @@
-import asyncio
 from typing import Optional, Union
+
+import anyio
 
 from pylabrobot.legacy.machines.machine import Machine
 
 from .backend import PumpBackend
 from .calibration import PumpCalibration
+
+_PUMP_STOP_TIMEOUT = 30.0  # Allow the backend's finite command and transport wait to complete.
 
 
 class Pump(Machine):
@@ -46,7 +49,7 @@ class Pump(Machine):
       num_revolutions: number of revolutions to run
     """
 
-    self.backend.run_revolutions(num_revolutions=num_revolutions)
+    await self.backend.run_revolutions(num_revolutions=num_revolutions)
 
   async def run_continuously(self, speed: float):
     """Run continuously at a given speed. This method will return after the command has been sent,
@@ -58,7 +61,7 @@ class Pump(Machine):
       speed: speed in rpm/pump-specific units.
     """
 
-    self.backend.run_continuously(speed=speed)
+    await self.backend.run_continuously(speed=speed)
 
   async def run_for_duration(self, speed: Union[float, int], duration: Union[float, int]):
     """Run the pump at specified speed for the specified duration.
@@ -70,9 +73,14 @@ class Pump(Machine):
 
     if duration < 0:
       raise ValueError("Duration must be positive.")
-    await self.run_continuously(speed=speed)
-    await asyncio.sleep(duration)
-    await self.run_continuously(speed=0)
+    await anyio.lowlevel.checkpoint()
+    try:
+      await self.run_continuously(speed=speed)
+      await anyio.sleep(duration)
+    finally:
+      with anyio.CancelScope(shield=True):
+        with anyio.fail_after(_PUMP_STOP_TIMEOUT):
+          await self.run_continuously(speed=0)
 
   async def pump_volume(self, speed: Union[float, int], volume: Union[float, int]):
     """Run the pump at specified speed for the specified volume. Note that this function requires
@@ -98,4 +106,4 @@ class Pump(Machine):
 
   async def halt(self):
     """Halt the pump."""
-    self.backend.halt()
+    await self.backend.halt()

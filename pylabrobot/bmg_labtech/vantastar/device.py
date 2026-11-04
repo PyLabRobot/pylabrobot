@@ -2,6 +2,7 @@
 
 from typing import Any, Awaitable, Callable, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.usb import USB
 from pylabrobot.resources import Coordinate, PlateHolder, Resource
 
@@ -70,7 +71,7 @@ class _VANTAstarPlateHolder(PlateHolder):
     return super().unassign_child_resource(resource)
 
 
-class VANTAstarDevice(Resource):
+class VANTAstarDevice(Resource, HasLifespan):
   """The VANTAstar as a PyLabRobot resource: its plate holder, its features (``drawer``,
   ``absorbance``, ``fluorescence``, ``luminescence``, ``shaker``, ``temperature_controller``), and the driver
   that runs it.
@@ -105,6 +106,7 @@ class VANTAstarDevice(Resource):
       category="device",
       model="VANTAstar",
     )
+    HasLifespan.__init__(self)
     self.driver = VANTAstarDriver(device_id=device_id, io=io, name=name)
     self.plate_holder = _VANTAstarPlateHolder(f"{name}_plate_holder", self.driver.drawer)
     self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
@@ -157,9 +159,22 @@ class VANTAstarDevice(Resource):
     """The temperature controller (the incubator)."""
     return self.driver.temperature_controller
 
-  async def setup(self) -> None:
-    """Connect and initialize the reader (about 10 s)."""
-    await self.driver.setup()
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    accept_plate_left_in_device: bool = False,
+  ) -> None:
+    """Connect and initialize the reader (about 10 s), and close on exit.
+
+    Raises:
+      RuntimeError: on exit if a plate is still in the reader, unless
+        ``accept_plate_left_in_device``; the drawer is then open for it to be taken out.
+    """
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(
+      self.driver.lifespan(accept_plate_left_in_device=accept_plate_left_in_device)
+    )
 
   async def estimate_duration(self, read: Callable[[], Awaitable[Any]]) -> int:
     """The run time in s the reader expects for a read, without reading: ``read`` is called as
@@ -173,15 +188,6 @@ class VANTAstarDevice(Resource):
         focus adjustment), or as the read raises it (the drawer is open, no plate).
     """
     return await self.driver.estimate_duration(read)
-
-  async def stop(self, accept_plate_left_in_device: bool = False) -> None:
-    """Stop a running measurement, close the drawer, and disconnect.
-
-    Raises:
-      RuntimeError: if a plate is still in the reader, unless ``accept_plate_left_in_device``; the
-        drawer is then open for it to be taken out.
-    """
-    await self.driver.stop(accept_plate_left_in_device=accept_plate_left_in_device)
 
 
 def VANTAstar(

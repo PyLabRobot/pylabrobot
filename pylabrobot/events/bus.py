@@ -19,6 +19,7 @@ from typing import (
   Any,
   Awaitable,
   Callable,
+  ContextManager,
   Coroutine,
   Dict,
   Iterator,
@@ -99,6 +100,16 @@ class PLREvent:
       "context": self.context.copy(),
       "data": self.data.copy(),
     }
+
+
+@dataclass(frozen=True)
+class LifespanEventInfo:
+  """Names and payloads for a resource's separate entry and exit transitions."""
+
+  entry: str
+  exit: str
+  entry_data: Dict[str, Any]
+  exit_data: Optional[Dict[str, Any]] = None
 
 
 EventListener = Callable[[PLREvent], None]
@@ -306,6 +317,105 @@ def event_operation(
       completed_data_factory() if completed_data_factory is not None else operation_data
     )
     emit_event(f"{name}.completed", **completed_data)
+
+
+class _LifespanEventScope:
+  """Mark when a resource is active without owning its asynchronous lifespan."""
+
+  def __init__(self, info: Optional[LifespanEventInfo], enabled: bool) -> None:
+    self.info = info
+    self.enabled = enabled
+    self.active = False
+    self.body_error: Optional[BaseException] = None
+    self.entry_token: Optional[contextvars.Token[Dict[str, Any]]] = None
+    self.exit_token: Optional[contextvars.Token[Dict[str, Any]]] = None
+
+  @property
+  def lifespan_active(self) -> ContextManager[None]:
+    """Return the scope indicating successful entry through the active body."""
+    return self._active_scope()
+
+  @contextmanager
+  def _active_scope(self) -> Iterator[None]:
+    """Indicate successful entry and start exit when the active block ends."""
+    self.active = True
+    if self.enabled:
+      assert self.info is not None and self.entry_token is not None
+      emit_event(f"{self.info.entry}.completed", **self.info.entry_data)
+      _event_context.reset(self.entry_token)
+      self.entry_token = None
+    try:
+      yield
+    except BaseException as error:
+      self.body_error = error
+      raise
+    finally:
+      if self.enabled:
+        assert self.info is not None
+        data = self.info.exit_data if self.info.exit_data is not None else self.info.entry_data
+        self.exit_token = _event_context.set(
+          {
+            **_event_context.get(),
+            "operation": self.info.exit,
+            "operation_id": uuid.uuid4().hex,
+            **data,
+          }
+        )
+        emit_event(f"{self.info.exit}.started", **data)
+
+
+@contextmanager
+def lifespan_events(info: Optional[LifespanEventInfo]) -> Iterator[_LifespanEventScope]:
+  """Observe entry and exit around a nested lifespan and its active-body scope.
+
+  Place the owned lifespan inside this scope and its active body inside
+  ``lifespan_active``. Entry and exit failures are then attributed to their
+  respective transitions without manually entering or exiting the lifespan.
+  """
+  scope = _LifespanEventScope(info, info is not None and is_event_bus_active())
+  if scope.enabled:
+    assert info is not None
+    scope.entry_token = _event_context.set(
+      {
+        **_event_context.get(),
+        "operation": info.entry,
+        "operation_id": uuid.uuid4().hex,
+        **info.entry_data,
+      }
+    )
+    emit_event(f"{info.entry}.started", **info.entry_data)
+  try:
+    yield scope
+  except BaseException as error:
+    if scope.enabled:
+      assert info is not None
+      if scope.active:
+        data = info.exit_data if info.exit_data is not None else info.entry_data
+        if error is scope.body_error:
+          emit_event(f"{info.exit}.completed", **data)
+        else:
+          emit_event(
+            f"{info.exit}.failed", **data, error_type=type(error).__name__, error_message=str(error)
+          )
+      else:
+        emit_event(
+          f"{info.entry}.failed",
+          **info.entry_data,
+          error_type=type(error).__name__,
+          error_message=str(error),
+        )
+    raise
+  else:
+    if scope.enabled:
+      assert info is not None
+      if scope.active:
+        data = info.exit_data if info.exit_data is not None else info.entry_data
+        emit_event(f"{info.exit}.completed", **data)
+  finally:
+    if scope.exit_token is not None:
+      _event_context.reset(scope.exit_token)
+    if scope.entry_token is not None:
+      _event_context.reset(scope.entry_token)
 
 
 def evented_operation(

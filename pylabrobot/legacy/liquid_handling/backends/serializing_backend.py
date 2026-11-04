@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional, Union, cast
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -43,11 +44,14 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   ) -> Optional[dict]:
     raise NotImplementedError
 
-  async def setup(self):
-    await super().setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    self._validate_lifespan_context()
     await self.send_command(command="setup")
+    stack.push_shielded_async_callback(self._send_stop_command)
 
-  async def stop(self):
+  async def _send_stop_command(self) -> None:
+    """Send the command emitted during native lifespan cleanup."""
     await self.send_command(command="stop")
 
   def serialize(self) -> dict:

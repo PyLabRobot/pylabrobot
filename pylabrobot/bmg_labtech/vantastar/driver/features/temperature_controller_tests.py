@@ -4,6 +4,8 @@ reader."""
 import unittest
 from collections import deque
 
+import pytest
+
 from pylabrobot.bmg_labtech.vantastar.driver.master_tests import (
   INCUBATOR_OFF,
   INCUBATOR_ON_30,
@@ -15,9 +17,10 @@ from pylabrobot.bmg_labtech.vantastar.driver.responses_tests import (
   STATUS_AFTER_INCUBATOR_COMMAND,
   STATUS_HEATING,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-class TemperatureControllerTests(unittest.IsolatedAsyncioTestCase):
+class TestTemperatureController(AnyioTestBase):
   """Heating, stopping it and reading the temperature."""
 
   async def test_start_and_stop_send_the_incubator_commands(self):
@@ -26,12 +29,10 @@ class TemperatureControllerTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(lambda p: STATUS_IDLE)
     controller = driver.temperature_controller
     await controller.start_temperature_control(30)
-    self.assertEqual(controller.target_temperature, 30)
+    assert controller.target_temperature == 30
     await controller.stop_temperature_control()
-    self.assertIsNone(controller.target_temperature)
-    self.assertEqual(
-      [c for c in commands(driver) if c[0] == 0x06], [INCUBATOR_ON_30, INCUBATOR_OFF]
-    )
+    assert controller.target_temperature is None
+    assert [c for c in commands(driver) if c[0] == 0x06] == [INCUBATOR_ON_30, INCUBATOR_OFF]
 
   async def test_start_returns_once_temperatures_are_reported(self):
     """Starting returns only once a status reply reports temperatures again; the temperature is the
@@ -39,14 +40,14 @@ class TemperatureControllerTests(unittest.IsolatedAsyncioTestCase):
     replies = deque([STATUS_IDLE] + [STATUS_AFTER_INCUBATOR_COMMAND] * 3)
     driver = make_driver(lambda p: replies.popleft() if replies else STATUS_HEATING)
     await driver.temperature_controller.start_temperature_control(30)
-    self.assertEqual(len(replies), 0)
-    self.assertEqual(await driver.temperature_controller.measure_temperature(), 30.1)
+    assert len(replies) == 0
+    assert await driver.temperature_controller.measure_temperature() == 30.1
 
   async def test_start_times_out_without_temperatures(self):
     """Starting raises TimeoutError when no status reply reports temperatures."""
     driver = make_driver(lambda p: STATUS_AFTER_INCUBATOR_COMMAND)
     driver.temperature_controller.default_sensor_timeout = 0
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await driver.temperature_controller.start_temperature_control(30)
 
   async def test_wait_for_temperature(self):
@@ -55,15 +56,15 @@ class TemperatureControllerTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(lambda p: STATUS_HEATING)
     controller = driver.temperature_controller
     await controller.start_temperature_control(30)
-    self.assertEqual(await controller.wait_for_temperature(), 30.1)
+    assert await controller.wait_for_temperature() == 30.1
     await controller.start_temperature_control(35)
-    with self.assertRaises(TimeoutError):
+    with pytest.raises(TimeoutError):
       await controller.wait_for_temperature(timeout=0)
 
   async def test_wait_needs_a_target(self):
     """Waiting without a target raises RuntimeError."""
     driver = make_driver(lambda p: STATUS_IDLE)
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await driver.temperature_controller.wait_for_temperature()
 
 

@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, Literal, Optional
 
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.inheco.transport.sila import InhecoSiLAInterface, get_params
 from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
@@ -65,17 +66,16 @@ class SCILADrawerLoadingTray(ResourceHolder):
       logger.warning("drawer %d %s: %s", self._drawer_id, action, e)
 
 
-class SCILA(Resource):
+class SCILA(Resource, HasLifespan):
   """Inheco SCILA incubator: four drawers and temperature control, over SiLA.
 
   Owns the SiLA HTTP/SOAP connection and exposes the device's operations directly.
 
   Example:
     >>> from pylabrobot.inheco.scila import SCILA
-    >>> scila = SCILA(name="scila", scila_ip="169.254.1.117")
-    >>> await scila.setup()
-    >>> await scila.set_temperature(37.0)
-    >>> await scila.drawers[2].open()
+    >>> async with SCILA(name="scila", scila_ip="169.254.1.117") as scila:
+    ...   await scila.set_temperature(37.0)
+    ...   await scila.drawers[2].open()
   """
 
   def __init__(
@@ -96,6 +96,7 @@ class SCILA(Resource):
       size_z=size_z,
       model="Inheco SCILA",
     )
+    HasLifespan.__init__(self)
     self._sila_interface = InhecoSiLAInterface(client_ip=client_ip, machine_ip=scila_ip)
     self.gas_mixer_connected = gas_mixer_connected
 
@@ -115,14 +116,12 @@ class SCILA(Resource):
 
   # -- lifecycle --
 
-  async def setup(self) -> None:
-    await self._sila_interface.setup()
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    """Enter the SiLA transport lifespan and initialize the SCILA device."""
+    await super()._enter_lifespan(stack)
+    await stack.enter_async_context(self._sila_interface.lifespan())
     await self._reset_and_initialize()
     logger.info("[SCILA %s] connected", self._sila_interface.machine_ip)
-
-  async def stop(self) -> None:
-    await self._sila_interface.close()
-    logger.info("[SCILA %s] connection closed", self._sila_interface.machine_ip)
 
   async def send_command(self, command: str, **kwargs) -> Any:
     """Send a SiLA command and return the parsed response."""

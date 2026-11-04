@@ -1,8 +1,9 @@
 """The temperature controller: the incubator's heating and its temperature sensors."""
 
 import logging
-import time
 from typing import TYPE_CHECKING, Optional
+
+import anyio
 
 if TYPE_CHECKING:
   from ..master import VANTAstarDriver
@@ -104,7 +105,7 @@ class TemperatureController:
     target = self.target_temperature
     tolerance = self.default_temperature_tolerance if tolerance is None else tolerance
     timeout = self.default_temperature_timeout if timeout is None else timeout
-    start = time.monotonic()
+    start = anyio.current_time()
     status = await self._driver._wait_until_ready(
       timeout,
       self._driver.default_poll_interval,
@@ -115,6 +116,6 @@ class TemperatureController:
       "%.1f C reached (target %.1f C) after %.0f s",
       status.temperatures[0],
       target,
-      time.monotonic() - start,
+      anyio.current_time() - start,
     )
     return status.temperatures[0]

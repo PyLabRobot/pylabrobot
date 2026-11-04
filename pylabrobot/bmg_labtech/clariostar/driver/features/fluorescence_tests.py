@@ -7,12 +7,15 @@ bit 4, which it leaves clear in flying mode, enhanced dynamic range and a matrix
 import functools
 import gzip
 import json
+import logging
 import os
 import unittest
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from pylabrobot.bmg_labtech.clariostar.device import CLARIOstarPlus
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
@@ -49,6 +52,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
 )
 from pylabrobot.bmg_labtech.clariostar.driver.simulator import CLARIOstarSimulationFluorescence
 from pylabrobot.bmg_labtech.protocol.framing import ftdi_extract_payload, ftdi_wrap_payload
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.lib.fluorescence.channels import FluorescenceChannel
 from pylabrobot.lib.fluorescence.results import FluorescenceSpectrumResult
 from pylabrobot.lib.optics.filters import DichroicFilter, OpticalFilter
@@ -64,6 +68,7 @@ from pylabrobot.resources import (
   cor_96_wellplate_360uL_Fb,
   create_ordered_items_2d,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 # The default read: 485/15 to 528/20 nm, gain 1000, 8.5 mm, 10 flashes.
 BASELINE_RUN_FRAME = bytes.fromhex(
@@ -463,8 +468,7 @@ async def read(
   )
 
 
-# The driver's asyncio.Lock needs an event loop on Python 3.9: build drivers inside one.
-class RunParametersTests(unittest.IsolatedAsyncioTestCase):
+class TestRunParameters(AnyioTestBase):
   async def test_a_set_default_bandwidth_is_sent_and_checked(self):
     io = FakeFTDI()
     io.replies = [
@@ -475,7 +479,7 @@ class RunParametersTests(unittest.IsolatedAsyncioTestCase):
       TEMPERATURE_37_DATA_REPLY,
     ]
     feature = make_fluorescence(io, fluorescence_plate())
-    with self.assertRaises(ValueError):  # below `bandwidth_range`
+    with pytest.raises(ValueError):  # below `bandwidth_range`
       feature.default_emission_bandwidth = 7
     feature.default_emission_bandwidth = 100
     await feature.measure(
@@ -485,46 +489,41 @@ class RunParametersTests(unittest.IsolatedAsyncioTestCase):
       focal_height=GROUND_TRUTH_FOCAL_HEIGHT,
     )
     given = replace(BASELINE, emission_wavelength=600, emission_bandwidth=100)
-    self.assertEqual(  # emission 600 nm, 100 nm wide
-      ftdi_extract_payload(io.written[1]),
-      with_nominal_edges(EMISSION_BANDWIDTH_100_RUN_FRAME, [given]),
+    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(
+      EMISSION_BANDWIDTH_100_RUN_FRAME, [given]
     )
 
   async def test_ground_truth_reads_are_sent_with_nominal_band_edges(self):
     for name, (ground_truth, fluorescence_channel, arguments) in GROUND_TRUTH_READS.items():
-      with self.subTest(name):
-        io = FakeFTDI()
-        _, result = await read(
-          io,
-          TEMPERATURE_37_DATA_REPLY,
-          fluorescence_channel,
-          **{"measurement_settings": TEN_FLASHES, **arguments},
-        )
-        self.assertEqual(
-          ftdi_extract_payload(io.written[1]),
-          with_nominal_edges(ground_truth, [fluorescence_channel]),
-        )
-        # The result says what the read used: a filter's passband, or the monochromator's band.
-        excitation_filter, emission_filter = (
-          fluorescence_channel.excitation_filter,
-          fluorescence_channel.emission_filter,
-        )
-        self.assertEqual(
-          result.excitation_bandwidth,
-          excitation_filter.bandwidth
-          if isinstance(excitation_filter, OpticalFilter)
-          else fluorescence_channel.excitation_bandwidth or 15,
-        )
-        self.assertEqual(
-          result.emission_bandwidth,
-          emission_filter.bandwidth
-          if isinstance(emission_filter, OpticalFilter)
-          else fluorescence_channel.emission_bandwidth or 20,
-        )
-        self.assertEqual(result.gain, arguments.get("gain", 1000))
+      io = FakeFTDI()
+      _, result = await read(
+        io,
+        TEMPERATURE_37_DATA_REPLY,
+        fluorescence_channel,
+        **{"measurement_settings": TEN_FLASHES, **arguments},
+      )
+      assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(
+        ground_truth, [fluorescence_channel]
+      )
+      # The result says what the read used: a filter's passband, or the monochromator's band.
+      excitation_filter, emission_filter = (
+        fluorescence_channel.excitation_filter,
+        fluorescence_channel.emission_filter,
+      )
+      assert result.excitation_bandwidth == (
+        excitation_filter.bandwidth
+        if isinstance(excitation_filter, OpticalFilter)
+        else fluorescence_channel.excitation_bandwidth or 15
+      )
+      assert result.emission_bandwidth == (
+        emission_filter.bandwidth
+        if isinstance(emission_filter, OpticalFilter)
+        else fluorescence_channel.emission_bandwidth or 20
+      )
+      assert result.gain == arguments.get("gain", 1000)
 
 
-class ReadTests(unittest.IsolatedAsyncioTestCase):
+class TestRead(AnyioTestBase):
   async def test_counts_are_the_ground_truth(self):
     _, result = await read(FakeFTDI(), TEMPERATURE_37_DATA_REPLY)
     expected = {
@@ -532,15 +531,15 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       for row, values in enumerate(TEMPERATURE_37_GROUND_TRUTH)
       for column, value in enumerate(values)
     }
-    self.assertEqual(result.data, expected)
-    self.assertEqual((result.excitation_wavelength, result.emission_wavelength), (485, 528))
-    self.assertEqual(result.temperature, 37.0)
+    assert result.data == expected
+    assert (result.excitation_wavelength, result.emission_wavelength) == (485, 528)
+    assert result.temperature == 37.0
 
   async def test_saturated_wells_warn(self):
     with patch.object(measurement_module.logger, "warning") as warning:
       _, result = await read(FakeFTDI(), SATURATED_DATA_REPLY, gain=4000)
-    self.assertEqual(set(result.data.values()), {260000.0})
-    self.assertIn(96, warning.call_args.args)
+    assert set(result.data.values()) == {260000.0}
+    assert 96 in warning.call_args.args
 
   def test_a_reply_not_of_this_read_is_refused(self):
     reply = ftdi_extract_payload(TEMPERATURE_37_DATA_REPLY)
@@ -550,9 +549,8 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       (reply, 1, 95),
       (reply[:-4], 1, 96),  # Not a reader's reply: the last count cut off.
     ):
-      with self.subTest(fluorescence_channels=fluorescence_channels, wells=wells):
-        with self.assertRaises(ValueError):
-          make_fluorescence(FakeFTDI())._decode_data_reply(wrong, fluorescence_channels, wells)
+      with pytest.raises(ValueError):
+        make_fluorescence(FakeFTDI())._decode_data_reply(wrong, fluorescence_channels, wells)
 
   async def test_out_of_range_reads_send_nothing(self):
     io = FakeFTDI()
@@ -596,22 +594,19 @@ class ReadTests(unittest.IsolatedAsyncioTestCase):
       (BASELINE, dict(timeout=0)),
     ]
     for fluorescence_channel, arguments in refused:
-      with (
-        self.subTest(fluorescence_channel=fluorescence_channel, arguments=arguments),
-        self.assertRaises(ValueError),
-      ):
+      with pytest.raises(ValueError):
         await feature.measure(
           fluorescence_channel,
           **{"gain": 1000, "focal_height": GROUND_TRUTH_FOCAL_HEIGHT, **arguments},
         )
-    with self.assertRaises(ValueError) as raised:
+    with pytest.raises(ValueError) as raised:
       await feature.measure(replace(BASELINE, emission_wavelength=528.0), gain=fractional_gain)
-    self.assertIn("emission_wavelength", str(raised.exception))
-    self.assertIn("gain", str(raised.exception))
-    self.assertEqual(io.written, [])
+    assert "emission_wavelength" in str(raised.value)
+    assert "gain" in str(raised.value)
+    assert io.written == []
 
 
-class ExcitationAboveEmissionTests(unittest.IsolatedAsyncioTestCase):
+class TestExcitationAboveEmission(AnyioTestBase):
   async def test_a_read_is_sent_with_the_split_between_the_bands_and_warns(self):
     """No ground truth: excitation 600/15 nm above emission 500/20 nm; the split lies midway between
     the bands' facing edges, 510.0 and 592.5 nm: 551.2 nm."""
@@ -628,11 +623,11 @@ class ExcitationAboveEmissionTests(unittest.IsolatedAsyncioTestCase):
       int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
       for i in (2, 4, 6, 8, 10)
     ]
-    self.assertEqual(fields, [6075, 5925, 5512, 5100, 4900])
-    self.assertIn("excitation above emission", warning.call_args.args[1])
+    assert fields == [6075, 5925, 5512, 5100, 4900]
+    assert "excitation above emission" in warning.call_args.args[1]
 
 
-class SessionTests(unittest.IsolatedAsyncioTestCase):
+class TestSession(AnyioTestBase):
   async def test_column_1_as_the_reader_read_it(self):
     """Column 1 of an empty plate, 485/15 to 528/20 nm, gain 1000, as the reader answered: the RUN
     it ran, and its 8-well reply."""
@@ -644,11 +639,11 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     result = await make_fluorescence(io, plate).measure(
       BASELINE, wells=plate.get_items("A1:H1"), gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT
     )
-    self.assertEqual(io.written[1], bytes.fromhex(session["fluorescence_column_1_run"]))
-    self.assertEqual(list(result.data.values()), [68.0, 62.0, 72.0, 64.0, 67.0, 69.0, 67.0, 68.0])
+    assert io.written[1] == bytes.fromhex(session["fluorescence_column_1_run"])
+    assert list(result.data.values()) == [68.0, 62.0, 72.0, 64.0, 67.0, 69.0, 67.0, 68.0]
 
 
-class DefaultFocalHeightTests(unittest.IsolatedAsyncioTestCase):
+class TestDefaultFocalHeight(AnyioTestBase):
   async def read_column_1(self, plate: Plate, percent: Optional[float], **arguments) -> bytes:
     session = load_session_replies()
     io = FakeFTDI()
@@ -663,14 +658,10 @@ class DefaultFocalHeightTests(unittest.IsolatedAsyncioTestCase):
   async def test_none_reads_at_the_percent_of_the_well_depth_above_its_floor(self):
     # Corning 96 360 uL: the well at 3.03 mm, its floor 0.50 mm, its depth 10.67 mm.
     for percent, focal_height in ((None, 6.2), (50, 8.9), (0, 3.5), (100, 14.2)):
-      with self.subTest(percent=percent):
-        plate = cor_96_wellplate_360uL_Fb("plate")
-        self.assertEqual(
-          await self.read_column_1(plate, percent),
-          await self.read_column_1(
-            cor_96_wellplate_360uL_Fb("plate"), None, focal_height=focal_height
-          ),
-        )
+      plate = cor_96_wellplate_360uL_Fb("plate")
+      assert await self.read_column_1(plate, percent) == await self.read_column_1(
+        cor_96_wellplate_360uL_Fb("plate"), None, focal_height=focal_height
+      )
 
   async def test_the_result_carries_the_focal_height_read_at(self):
     session = load_session_replies()
@@ -681,22 +672,22 @@ class DefaultFocalHeightTests(unittest.IsolatedAsyncioTestCase):
     result = await make_fluorescence(io, plate).measure(
       BASELINE, wells=plate.get_items("A1:H1"), gain=1000
     )
-    self.assertEqual(result.focal_height, 6.2)  # a quarter up the well, as the RUN sent
+    assert result.focal_height == 6.2  # a quarter up the well, as the RUN sent
 
   async def test_the_percent_is_checked_when_set(self):
     feature = make_fluorescence(FakeFTDI(), cor_96_wellplate_360uL_Fb("plate"))
-    self.assertEqual(feature.default_focal_height_percent_of_well_depth, 25)
+    assert feature.default_focal_height_percent_of_well_depth == 25
     for refused in (-1, 100.5, "25", True):
-      with self.subTest(refused=refused), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         feature.default_focal_height_percent_of_well_depth = refused  # type: ignore[assignment]
-    self.assertEqual(feature.default_focal_height_percent_of_well_depth, 25)
+    assert feature.default_focal_height_percent_of_well_depth == 25
 
   async def test_a_well_without_a_floor_thickness_sends_nothing(self):
     io = FakeFTDI()
     feature = make_fluorescence(io, fluorescence_plate())
-    with self.assertRaisesRegex(ValueError, "floor thickness; give focal_height"):
+    with pytest.raises(ValueError, match="floor thickness; give focal_height"):
       await feature.measure(BASELINE, gain=1000)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
 @functools.lru_cache(maxsize=None)
@@ -736,7 +727,7 @@ async def read_ground_truth(
   )
 
 
-class BottomOpticTests(unittest.IsolatedAsyncioTestCase):
+class TestBottomOptic(AnyioTestBase):
   async def test_a_bottom_read_is_the_ground_truth(self):
     ground_truth = load_ground_truth()["bottom_optic"]
     io, result = await read_ground_truth(
@@ -745,10 +736,8 @@ class BottomOpticTests(unittest.IsolatedAsyncioTestCase):
       optic_position="bottom",
       measurement_settings=TEN_FLASHES,
     )
-    self.assertEqual(
-      ftdi_extract_payload(io.written[1]), with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
-    )
-    self.assertEqual(result.data, keyed_by_well(ground_truth["expected"]))
+    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
+    assert result.data == keyed_by_well(ground_truth["expected"])
 
   async def test_the_default_optic_position_is_read_with_and_checked(self):
     ground_truth = load_ground_truth()["bottom_optic"]
@@ -757,17 +746,15 @@ class BottomOpticTests(unittest.IsolatedAsyncioTestCase):
     io.replies.append(bytes.fromhex(ground_truth["reply"]))
     feature = make_fluorescence(io, fluorescence_plate())
     feature._driver.configuration.bottom_measurement_available = True
-    self.assertEqual(feature.default_optic_position, "top")
+    assert feature.default_optic_position == "top"
     feature.default_optic_position = "bottom"
     await feature.measure(
       BASELINE, measurement_settings=TEN_FLASHES, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT
     )
-    self.assertEqual(
-      ftdi_extract_payload(io.written[1]), with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
-    )
+    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(BOTTOM_RUN_FRAME, [BASELINE])
     feature._driver.configuration.bottom_measurement_available = False
     for refused in ("side", "bottom"):
-      with self.subTest(refused), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         feature.default_optic_position = refused  # type: ignore[assignment]
 
   async def test_no_bottom_optic_or_an_unknown_one_sends_nothing(self):
@@ -775,11 +762,11 @@ class BottomOpticTests(unittest.IsolatedAsyncioTestCase):
       io = FakeFTDI()
       feature = make_fluorescence(io, fluorescence_plate())
       feature._driver.configuration.bottom_measurement_available = available
-      with self.subTest(position), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure(  # type: ignore[call-overload]
           BASELINE, optic_position=position, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT
         )
-      self.assertEqual(io.written, [])
+      assert io.written == []
 
 
 DUAL_FLUORESCENCE_CHANNELS = [
@@ -793,7 +780,7 @@ DUAL_FLUORESCENCE_CHANNELS = [
 ]
 
 
-class FluorescenceChannelsTests(unittest.IsolatedAsyncioTestCase):
+class TestFluorescenceChannels(AnyioTestBase):
   async def test_two_fluorescence_channels_are_the_ground_truth(self):
     ground_truth = load_ground_truth()["two_fluorescence_channels"]
     io, results = await read_ground_truth(
@@ -802,13 +789,12 @@ class FluorescenceChannelsTests(unittest.IsolatedAsyncioTestCase):
       measurement_settings=TEN_FLASHES,
     )
     expected = with_nominal_edges(DUAL_RUN_FRAME, DUAL_FLUORESCENCE_CHANNELS)
-    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
-    self.assertEqual(
-      [result.data for result in results],
-      [keyed_by_well(grid) for grid in ground_truth["expected"]],
-    )
-    self.assertEqual([result.excitation_wavelength for result in results], [485, 610])
-    self.assertEqual([result.emission_bandwidth for result in results], [20, 50])
+    assert ftdi_extract_payload(io.written[1]) == expected
+    assert [result.data for result in results] == [
+      keyed_by_well(grid) for grid in ground_truth["expected"]
+    ]
+    assert [result.excitation_wavelength for result in results] == [485, 610]
+    assert [result.emission_bandwidth for result in results] == [20, 50]
 
   async def test_each_fluorescence_channel_is_sent_with_its_own_gain(self):
     ground_truth = load_ground_truth()["two_fluorescence_channels"]
@@ -823,8 +809,8 @@ class FluorescenceChannelsTests(unittest.IsolatedAsyncioTestCase):
     expected = bytearray(with_nominal_edges(DUAL_RUN_FRAME, DUAL_FLUORESCENCE_CHANNELS))
     second = len(expected) - 36
     expected[second : second + 2] = (1500).to_bytes(2, "big")
-    self.assertEqual(ftdi_extract_payload(io.written[1]), bytes(expected))
-    self.assertEqual([result.gain for result in results], [1000, 1500])
+    assert ftdi_extract_payload(io.written[1]) == bytes(expected)
+    assert [result.gain for result in results] == [1000, 1500]
 
   async def test_out_of_range_fluorescence_channels_send_nothing(self):
     io = FakeFTDI()
@@ -837,15 +823,12 @@ class FluorescenceChannelsTests(unittest.IsolatedAsyncioTestCase):
       (DUAL_FLUORESCENCE_CHANNELS, [1000, 4096]),
     ]
     for fluorescence_channels, gain in refused:
-      with (
-        self.subTest(fluorescence_channels=fluorescence_channels, gain=gain),
-        self.assertRaises(ValueError),
-      ):
+      with pytest.raises(ValueError):
         await feature.measure(fluorescence_channels, gain=gain)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-class FlyingModeTests(unittest.IsolatedAsyncioTestCase):
+class TestFlyingMode(AnyioTestBase):
   async def test_flying_mode_is_the_ground_truth(self):
     ground_truth = load_ground_truth()["flying_mode"]
     io, result = await read_ground_truth(
@@ -854,8 +837,8 @@ class FlyingModeTests(unittest.IsolatedAsyncioTestCase):
       measurement_settings=MeasurementSettings(settling_time=0, flashes=1),
     )
     expected = with_nominal_edges(FLYING_MODE_RUN_FRAME, [BASELINE])
-    self.assertEqual(ftdi_extract_payload(io.written[1]), without_equidistant_cycles(expected))
-    self.assertEqual(result.data, keyed_by_well(ground_truth["expected"]))
+    assert ftdi_extract_payload(io.written[1]) == without_equidistant_cycles(expected)
+    assert result.data == keyed_by_well(ground_truth["expected"])
 
   async def test_what_flying_mode_cannot_read_sends_nothing(self):
     io = FakeFTDI()
@@ -866,7 +849,7 @@ class FlyingModeTests(unittest.IsolatedAsyncioTestCase):
       (MeasurementSettings(settling_time=0.1, flashes=1), False),
       (MeasurementSettings(settling_time=0, flashes=1), True),
     ):
-      with self.subTest(settings=settings, enhanced=enhanced), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure(
           BASELINE,
           flying_mode=True,
@@ -875,10 +858,10 @@ class FlyingModeTests(unittest.IsolatedAsyncioTestCase):
           gain=1000,
           focal_height=GROUND_TRUTH_FOCAL_HEIGHT,
         )
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-class EnhancedDynamicRangeTests(unittest.IsolatedAsyncioTestCase):
+class TestEnhancedDynamicRange(AnyioTestBase):
   async def test_enhanced_dynamic_range_is_the_ground_truth(self):
     ground_truth = load_ground_truth()["enhanced_dynamic_range"]
     reply = bytes.fromhex(ground_truth["reply"])
@@ -887,18 +870,18 @@ class EnhancedDynamicRangeTests(unittest.IsolatedAsyncioTestCase):
         reply, enhanced_dynamic_range=True, measurement_settings=TEN_FLASHES
       )
     expected = with_nominal_edges(ENHANCED_DYNAMIC_RANGE_RUN_FRAME, [BASELINE])
-    self.assertEqual(ftdi_extract_payload(io.written[1]), without_equidistant_cycles(expected))
-    self.assertEqual(result.data, keyed_by_well(ground_truth["expected"]))
+    assert ftdi_extract_payload(io.written[1]) == without_equidistant_cycles(expected)
+    assert result.data == keyed_by_well(ground_truth["expected"])
     decode = make_fluorescence(FakeFTDI())._decode_data_reply
     _, ceiling, _ = decode(ftdi_extract_payload(reply), 1, 96)
-    self.assertEqual(ceiling, 700_000_000)
+    assert ceiling == 700_000_000
     warning.assert_not_called()  # 127,000 counts are far below its ceiling
 
   async def test_with_orbital_or_spiral_averaging_sends_nothing(self):
     io = FakeFTDI()
     feature = make_fluorescence(io, fluorescence_plate())
     for well_scan in ("orbital", "spiral"):
-      with self.subTest(well_scan), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure(
           BASELINE,
           enhanced_dynamic_range=True,
@@ -906,10 +889,10 @@ class EnhancedDynamicRangeTests(unittest.IsolatedAsyncioTestCase):
           gain=1000,
           focal_height=GROUND_TRUTH_FOCAL_HEIGHT,
         )
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-class MatrixTests(unittest.IsolatedAsyncioTestCase):
+class TestMatrix(AnyioTestBase):
   async def test_a_matrix_returns_every_point(self):
     plate = fluorescence_plate()
     io, result = await read_ground_truth(
@@ -921,18 +904,18 @@ class MatrixTests(unittest.IsolatedAsyncioTestCase):
       ),
     )
     expected = with_nominal_edges(MATRIX_RUN_FRAME, [BASELINE])
-    self.assertEqual(ftdi_extract_payload(io.written[1]), without_equidistant_cycles(expected))
+    assert ftdi_extract_payload(io.written[1]) == without_equidistant_cycles(expected)
     points = [145.0, 147.0, 142.0, 136.0, 144.0, 144.0, 137.0, 142.0, 139.0]
-    self.assertEqual(result.matrix_points, {"A1": points})
+    assert result.matrix_points == {"A1": points}
     # The plain mean: the driver's choice (the ground truth reads 141).
-    self.assertEqual(result.data, {"A1": sum(points) / 9})
+    assert result.data == {"A1": sum(points) / 9}
 
   async def test_a_matrix_of_several_wells_sends_nothing(self):
     io = FakeFTDI()
     plate = fluorescence_plate()
     feature = make_fluorescence(io, plate)
     settings = MeasurementSettings(well_scan="matrix", matrix_size=3)
-    with self.assertRaises(ValueError):  # no fluorescence matrix of several wells is verified
+    with pytest.raises(ValueError):  # no fluorescence matrix of several wells is verified
       await feature.measure(
         BASELINE,
         wells=plate.get_items("A1:B1"),
@@ -940,7 +923,7 @@ class MatrixTests(unittest.IsolatedAsyncioTestCase):
         gain=1000,
         focal_height=GROUND_TRUTH_FOCAL_HEIGHT,
       )
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
 def plate_384() -> Plate:
@@ -967,7 +950,7 @@ def plate_384() -> Plate:
   )
 
 
-class PlateTests(unittest.IsolatedAsyncioTestCase):
+class TestPlate(AnyioTestBase):
   async def test_384_wells_are_the_ground_truth(self):
     ground_truth = load_ground_truth()["plate_384"]
     io, result = await read_ground_truth(
@@ -976,10 +959,10 @@ class PlateTests(unittest.IsolatedAsyncioTestCase):
       focal_height=5.0,
       measurement_settings=TEN_FLASHES,
     )
-    self.assertEqual(
-      ftdi_extract_payload(io.written[1]), with_nominal_edges(PLATE_384_RUN_FRAME, [BASELINE])
+    assert ftdi_extract_payload(io.written[1]) == with_nominal_edges(
+      PLATE_384_RUN_FRAME, [BASELINE]
     )
-    self.assertEqual(result.data, keyed_by_well(ground_truth["expected"]))
+    assert result.data == keyed_by_well(ground_truth["expected"])
 
   async def test_a_single_well_as_the_reader_answered(self):
     io = FakeFTDI(chunk=4096)
@@ -993,8 +976,8 @@ class PlateTests(unittest.IsolatedAsyncioTestCase):
       focal_height=GROUND_TRUTH_FOCAL_HEIGHT,
     )
     expected = with_nominal_edges(SINGLE_WELL_RUN_FRAME, [BASELINE])
-    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
-    self.assertEqual(result.data, {"A1": 145.0})
+    assert ftdi_extract_payload(io.written[1]) == expected
+    assert result.data == {"A1": 145.0}
 
 
 # The spectra's fixed excitation or emission and their scans, as the ground truth reads them.
@@ -1039,7 +1022,7 @@ def count_data_requests(io: FakeFTDI) -> int:
   return sum(frame == DATA_FRAME for frame in io.written)
 
 
-class SpectrumTests(unittest.IsolatedAsyncioTestCase):
+class TestSpectrum(AnyioTestBase):
   async def measure(self, replies: List[bytes], arguments: Dict[str, Any]):
     """A spectrum of `SPECTRUM_WELLS` with `arguments` answered by `replies`; the io and the
     result."""
@@ -1065,16 +1048,16 @@ class SpectrumTests(unittest.IsolatedAsyncioTestCase):
       for wavelength in (400, 620)
     ]
     expected = with_nominal_edges(EXCITATION_SPECTRUM_RUN_FRAME, fluorescence_channels)
-    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
-    self.assertEqual(count_data_requests(io), 4)  # the page repeated after the last is not
-    self.assertEqual(list(result.data), SPECTRUM_WELLS)
-    self.assertEqual(list(result.data["A1"]), list(range(400, 621)))
-    self.assertEqual((result.excitation_wavelength, result.excitation_bandwidth), (None, 10))
-    self.assertEqual((result.emission_wavelength, result.emission_bandwidth), (800, 20))
-    self.assertEqual(result.gain, 1000)
+    assert ftdi_extract_payload(io.written[1]) == expected
+    assert count_data_requests(io) == 4  # the page repeated after the last is not
+    assert list(result.data) == SPECTRUM_WELLS
+    assert list(result.data["A1"]) == list(range(400, 621))
+    assert (result.excitation_wavelength, result.excitation_bandwidth) == (None, 10)
+    assert (result.emission_wavelength, result.emission_bandwidth) == (800, 20)
+    assert result.gain == 1000
     # The raw counts: the ground truth's are spectrally corrected.
-    self.assertEqual(counts_at(result, 400), {"A1": 41.0, "B1": 31.0, "C2": 22.0, "D2": 25.0})
-    self.assertEqual(list(counts_at(result, 620).values()), [46.0, 14.0, 17.0, 22.0])
+    assert counts_at(result, 400) == {"A1": 41.0, "B1": 31.0, "C2": 22.0, "D2": 25.0}
+    assert list(counts_at(result, 620).values()) == [46.0, 14.0, 17.0, 22.0]
 
   async def test_an_emission_spectrum_is_the_ground_truth(self):
     io, result = await self.measure(spectrum_replies("emission_spectrum"), EMISSION_SPECTRUM)
@@ -1088,15 +1071,15 @@ class SpectrumTests(unittest.IsolatedAsyncioTestCase):
       for wavelength in (500, 600)
     ]
     expected = with_nominal_edges(EMISSION_SPECTRUM_RUN_FRAME, fluorescence_channels)
-    self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
-    self.assertEqual(count_data_requests(io), 4)
-    self.assertEqual(list(result.data["A1"]), list(range(500, 601)))
-    self.assertEqual((result.excitation_wavelength, result.emission_wavelength), (400, None))
+    assert ftdi_extract_payload(io.written[1]) == expected
+    assert count_data_requests(io) == 4
+    assert list(result.data["A1"]) == list(range(500, 601))
+    assert (result.excitation_wavelength, result.emission_wavelength) == (400, None)
     assert isinstance(result, CLARIOstarFluorescenceSpectrumResult)
-    self.assertEqual(result.gain, 1000)
-    self.assertEqual(counts_at(result, 500), {"A1": 73.0, "B1": 49.0, "C2": 32.0, "D2": 30.0})
-    self.assertEqual(list(counts_at(result, 501).values()), [70.0, 40.0, 29.0, 24.0])
-    self.assertEqual(list(counts_at(result, 600).values()), [20.0, 31.0, 71.0, 62.0])
+    assert result.gain == 1000
+    assert counts_at(result, 500) == {"A1": 73.0, "B1": 49.0, "C2": 32.0, "D2": 30.0}
+    assert list(counts_at(result, 501).values()) == [70.0, 40.0, 29.0, 24.0]
+    assert list(counts_at(result, 600).values()) == [20.0, 31.0, 71.0, 62.0]
 
   def test_each_page_is_its_wells_whatever_its_place(self):
     plate = fluorescence_plate()
@@ -1104,9 +1087,9 @@ class SpectrumTests(unittest.IsolatedAsyncioTestCase):
     decode = make_fluorescence(FakeFTDI())._decode_spectrum_pages
     in_order = decode(pages, plate, SPECTRUM_WELLS, 101)
     # Not a reader's reply: the pages reversed, one missing, one repeated.
-    self.assertEqual(decode(pages[::-1], plate, SPECTRUM_WELLS, 101), in_order)
+    assert decode(pages[::-1], plate, SPECTRUM_WELLS, 101) == in_order
     for wrong in (pages[:3], [*pages, pages[3]]):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         decode(wrong, plate, SPECTRUM_WELLS, 101)
 
   def test_a_page_not_of_this_read_is_refused(self):
@@ -1119,7 +1102,7 @@ class SpectrumTests(unittest.IsolatedAsyncioTestCase):
       (pages[:-1] + [pages[-1][:-4]], 101),  # Not a reader's reply: the last count cut off.
       ([bytes(off_plate), *pages[1:]], 101),
     ):
-      with self.subTest(wavelengths=wavelengths), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         make_fluorescence(FakeFTDI())._decode_spectrum_pages(
           wrong, plate, SPECTRUM_WELLS, wavelengths
         )
@@ -1132,16 +1115,16 @@ class SpectrumTests(unittest.IsolatedAsyncioTestCase):
     short = replies[:first_page] + [replies[first_page][:200], STOP_REPLY]
     io, result = await self.measure(short + replies, EMISSION_SPECTRUM)
     runs = [frame for frame in io.written if ftdi_extract_payload(frame)[0] == 0x04]
-    self.assertEqual(len(runs), 2)
-    self.assertIn(STOP_FRAME, io.written)
-    self.assertEqual(count_data_requests(io), 5)
-    self.assertEqual(list(counts_at(result, 500).values()), [73.0, 49.0, 32.0, 30.0])
+    assert len(runs) == 2
+    assert STOP_FRAME in io.written
+    assert count_data_requests(io) == 5
+    assert list(counts_at(result, 500).values()) == [73.0, 49.0, 32.0, 30.0]
 
   async def test_a_run_ending_before_its_last_page_stops(self):
     replies = spectrum_replies("emission_spectrum")
     # Not a reader's reply: the run ending idle after three of its four pages.
     ended = replies[:13] + [replies[-1], STOP_REPLY]
-    with self.assertRaisesRegex(RuntimeError, "3 of 4 pages"):
+    with pytest.raises(RuntimeError, match="3 of 4 pages"):
       await self.measure(ended, EMISSION_SPECTRUM)
 
   async def test_out_of_range_spectra_send_nothing(self):
@@ -1169,14 +1152,14 @@ class SpectrumTests(unittest.IsolatedAsyncioTestCase):
       dict(EMISSION_SPECTRUM, measurement_settings=MeasurementSettings(bidirectional=False)),
     ]
     for arguments in refused:
-      with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure_spectrum(
           **{"gain": 1000, "focal_height": GROUND_TRUTH_FOCAL_HEIGHT, **arguments}
         )
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-class GatingTests(unittest.IsolatedAsyncioTestCase):
+class TestGating(AnyioTestBase):
   def build_with(self, fluorescence_channels: int):
     driver = make_driver(FakeFTDI())
     driver.configuration = decoded()
@@ -1185,10 +1168,10 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
     return driver
 
   def test_fluorescence_is_built_when_reported(self):
-    self.assertIsInstance(self.build_with(1).fluorescence, Fluorescence)
+    assert isinstance(self.build_with(1).fluorescence, Fluorescence)
 
   def test_no_fluorescence_is_not_built(self):
-    self.assertIsNone(self.build_with(0).fluorescence)
+    assert self.build_with(0).fluorescence is None
 
   def test_the_wavelength_limits_follow_the_photomultipliers(self):
     # (extended red, dual, crossed over): the highest wavelength and dichroic split.
@@ -1198,21 +1181,18 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
       ((True, False, False), (840, 760.0)),
       ((False, False, False), (740, 740.0)),
     ):
-      with self.subTest(photomultipliers=photomultipliers):
-        driver = make_driver(FakeFTDI())
-        driver.configuration = decoded()
-        driver.configuration.fluorescence_channels = 1
-        (
-          driver.configuration.extended_red_photomultiplier_tube,
-          driver.configuration.dual_photomultiplier_tubes,
-          driver.configuration.photomultiplier_tube_crossover,
-        ) = photomultipliers
-        driver._discover_features()
-        assert driver.fluorescence is not None
-        configuration = driver.fluorescence.configuration
-        self.assertEqual(
-          (configuration.wavelength_range[1], configuration.dichroic_range[1]), highest
-        )
+      driver = make_driver(FakeFTDI())
+      driver.configuration = decoded()
+      driver.configuration.fluorescence_channels = 1
+      (
+        driver.configuration.extended_red_photomultiplier_tube,
+        driver.configuration.dual_photomultiplier_tubes,
+        driver.configuration.photomultiplier_tube_crossover,
+      ) = photomultipliers
+      driver._discover_features()
+      assert driver.fluorescence is not None
+      configuration = driver.fluorescence.configuration
+      assert (configuration.wavelength_range[1], configuration.dichroic_range[1]) == highest
 
   def test_the_filter_slots_are_the_readers_slides(self):
     def slots(slides):
@@ -1226,17 +1206,15 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
         configuration.filter_slots_per_slide,
       )
 
-    self.assertEqual(slots(decoded().monochromator_slides), (4, 3, 4, 2))  # the reader read
+    assert slots(decoded().monochromator_slides) == (4, 3, 4, 2)  # the reader read
     one_each = {name: {1: "open", 2: "Ex 482-16"} for name in ("EX_SP", "EX_LP", "EM_SP", "EM_LP")}
-    self.assertEqual(
-      slots({**one_each, "BSP": {1: "open", 2: "LP 504", 3: "LP 560"}}), (2, 2, 2, 1)
-    )
+    assert slots({**one_each, "BSP": {1: "open", 2: "LP 504", 3: "LP 560"}}) == (2, 2, 2, 1)
     defaults = (4, 3, 4, 2)
-    self.assertEqual(slots(None), defaults)
-    self.assertEqual(slots(one_each), defaults)  # no dichroic slide
+    assert slots(None) == defaults
+    assert slots(one_each) == defaults  # no dichroic slide
     with patch.object(fluorescence.logger, "warning") as warning:
       uneven = {**one_each, "EM_LP": {1: "open", 2: "a", 3: "b"}, "BSP": {1: "open", 2: "c"}}
-      self.assertEqual(slots(uneven), defaults)
+      assert slots(uneven) == defaults
     warning.assert_called_once()
 
   async def test_without_a_monochromator_only_filters_read(self):
@@ -1244,19 +1222,19 @@ class GatingTests(unittest.IsolatedAsyncioTestCase):
     io = FakeFTDI()
     feature = make_fluorescence(io, fluorescence_plate())
     feature._driver.configuration.linear_variable_filters = False
-    with self.assertRaisesRegex(ValueError, "no monochromator"):
+    with pytest.raises(ValueError, match="no monochromator"):
       await feature.measure(BASELINE, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT)
-    with self.assertRaisesRegex(ValueError, "no monochromator"):
+    with pytest.raises(ValueError, match="no monochromator"):
       await feature.measure_spectrum(
         **EMISSION_SPECTRUM, gain=1000, focal_height=GROUND_TRUTH_FOCAL_HEIGHT
       )
-    self.assertEqual(io.written, [])
+    assert io.written == []
     through_filters = FluorescenceChannel(
       excitation_filter=EX_TR, dichroic_filter=LP_TR, emission_filter=EM_615_18
     )
-    self.assertEqual(feature._check_fluorescence_channel(through_filters), [])
+    assert feature._check_fluorescence_channel(through_filters) == []
     feature._driver.configuration.linear_variable_filters = None  # unknown: let through
-    self.assertEqual(feature._check_fluorescence_channel(BASELINE), [])
+    assert feature._check_fluorescence_channel(BASELINE) == []
 
 
 def load_filter_detection() -> List[Dict[str, Any]]:
@@ -1299,7 +1277,7 @@ def make_detecting_fluorescence(io: FakeFTDI) -> Fluorescence:
   return make_fluorescence(io)
 
 
-class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
+class TestFilterDetection(AnyioTestBase):
   async def test_detection_as_the_reader_answered(self):
     """The reader's filters: excitation 1, dichroic A and emission 5, every other position empty."""
     io = FakeFTDI(chunk=4096)
@@ -1307,15 +1285,15 @@ class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
     feature.excitation_filter_slide = ExcitationFilterSlide(4)  # a slide the detection replaces
     feature.excitation_filter_slide.register(OpticalFilter(3, "old"))
     excitation, dichroic, emission = await feature.detect_all_filters()
-    self.assertIs(feature.excitation_filter_slide, excitation)
-    self.assertIs(feature.dichroic_filter_slide, dichroic)
-    self.assertIs(feature.emission_filter_slide, emission)
-    self.assertEqual(excitation[1], OpticalFilter(1, passbands=((282.2, 371.8),)))
-    self.assertEqual(dichroic[1], DichroicFilter(1, transmission_bands=((421.8, None),)))
-    self.assertEqual(emission[1], OpticalFilter(1, passbands=((604.9, 623.2),)))
-    self.assertEqual(repr(excitation), "ExcitationFilterSlide(4 slots, {1: (unnamed)})")
-    self.assertEqual(repr(dichroic), "DichroicFilterSlide(3 slots, {1: (unnamed)})")
-    self.assertEqual(repr(emission), "EmissionFilterSlide(4 slots, {1: (unnamed)})")
+    assert feature.excitation_filter_slide is excitation
+    assert feature.dichroic_filter_slide is dichroic
+    assert feature.emission_filter_slide is emission
+    assert excitation[1] == OpticalFilter(1, passbands=((282.2, 371.8),))
+    assert dichroic[1] == DichroicFilter(1, transmission_bands=((421.8, None),))
+    assert emission[1] == OpticalFilter(1, passbands=((604.9, 623.2),))
+    assert repr(excitation) == "ExcitationFilterSlide(4 slots, {1: (unnamed)})"
+    assert repr(dichroic) == "DichroicFilterSlide(3 slots, {1: (unnamed)})"
+    assert repr(emission) == "EmissionFilterSlide(4 slots, {1: (unnamed)})"
     # Each position: status, `24`, status until data ready, `05 11` and `05 1b` without a status
     # before them (the reader still busy), status until idle.
     expected: List[bytes] = []
@@ -1324,8 +1302,8 @@ class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
       expected += [b"\x80", ftdi_extract_payload(bytes.fromhex(position["request"]))]
       expected += [b"\x80"] * polls + [bytes.fromhex("05110000000000")]
       expected += [bytes.fromhex("051b0000000000"), b"\x80"]
-    self.assertEqual([ftdi_extract_payload(frame) for frame in io.written], expected)
-    self.assertEqual(io.replies, [])
+    assert [ftdi_extract_payload(frame) for frame in io.written] == expected
+    assert io.replies == []
 
   def test_long_pass_and_short_pass_filters_are_decoded(self):
     """No long-pass or short-pass filter has ground truth: the replies are real results edited."""
@@ -1333,20 +1311,20 @@ class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
     long_pass = bytearray(detection_result("excitation", 1))
     long_pass[9:11] = bytes(2)
     result = decode_filter_result(bytes(long_pass), "excitation")
-    self.assertEqual(
-      Fluorescence._compute_optical_filter(1, result), OpticalFilter(1, passbands=((282.2, None),))
+    assert Fluorescence._compute_optical_filter(1, result) == OpticalFilter(
+      1, passbands=((282.2, None),)
     )
     long_pass[11:13] = bytes(2)
     result = decode_filter_result(bytes(long_pass), "excitation")
     with patch.object(fluorescence.logger, "warning") as warning:
-      self.assertEqual(Fluorescence._compute_optical_filter(1, result), OpticalFilter(1))
+      assert Fluorescence._compute_optical_filter(1, result) == OpticalFilter(1)
     warning.assert_called_once()  # a short-pass, its band not stated
     # Not a reader's reply: dichroic A's with its edge moved to the second.
     short_pass = bytearray(detection_result("dichroic", 1))
     short_pass[13:15], short_pass[11:13] = short_pass[11:13], bytes(2)
     result = decode_filter_result(bytes(short_pass), "dichroic")
     with patch.object(fluorescence.logger, "warning") as warning:
-      self.assertEqual(Fluorescence._compute_dichroic_filter(1, result), DichroicFilter(1))
+      assert Fluorescence._compute_dichroic_filter(1, result) == DichroicFilter(1)
     warning.assert_called_once()
 
   def test_a_reply_not_of_its_position_is_refused(self):
@@ -1355,7 +1333,7 @@ class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
       (reply, "emission"),
       (reply[:-9], "excitation"),  # Not a reader's reply: cut short.
     ):
-      with self.subTest(slide=slide, length=len(wrong)), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         decode_filter_result(wrong, slide)
 
   async def test_a_scan_ending_without_data_stops(self):
@@ -1365,10 +1343,10 @@ class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
     io.replies = [bytes.fromhex(first[0]), bytes.fromhex(first[1]), bytes.fromhex(first[0])]
     io.replies.append(STOP_REPLY)
     feature = make_fluorescence(io)
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await feature.detect_all_filters()
-    self.assertEqual(io.written[-1], STOP_FRAME)
-    self.assertIsNone(feature.excitation_filter_slide)
+    assert io.written[-1] == STOP_FRAME
+    assert feature.excitation_filter_slide is None
 
   async def test_no_spectrometer_or_extended_red_sends_nothing(self):
     for field in ("spectrometer", "absorbance_available", "extended_red_photomultiplier_tube"):
@@ -1381,9 +1359,9 @@ class FilterDetectionTests(unittest.IsolatedAsyncioTestCase):
         configuration.absorbance_available = False
       else:
         configuration.extended_red_photomultiplier_tube = False
-      with self.subTest(field), self.assertRaises(RuntimeError):
+      with pytest.raises(RuntimeError):
         await feature.detect_all_filters()
-      self.assertEqual(io.written, [])
+      assert io.written == []
 
 
 def make_detected_slides(fluorescence_feature: Fluorescence) -> None:
@@ -1426,7 +1404,7 @@ async def read_with_slides(io: FakeFTDI, fluorescence_channel: FluorescenceChann
   )
 
 
-class FilterSlideTests(unittest.IsolatedAsyncioTestCase):
+class TestFilterSlide(AnyioTestBase):
   async def test_slots_and_names_are_the_ground_truth(self):
     """The three filters' read by slot and by name; the one-filter reads by slot."""
     reads: Dict[str, Tuple[bytes, List[FluorescenceChannel]]] = {
@@ -1450,17 +1428,16 @@ class FilterSlideTests(unittest.IsolatedAsyncioTestCase):
     }
     for name, (ground_truth, fluorescence_channels) in reads.items():
       for fluorescence_channel in fluorescence_channels:
-        with self.subTest(name, fluorescence_channel=fluorescence_channel):
-          io = FakeFTDI()
-          _, result = await read_with_slides(
-            io, fluorescence_channel, measurement_settings=TEN_FLASHES
-          )
-          expected = with_nominal_edges(ground_truth, [fluorescence_channel])
-          self.assertEqual(ftdi_extract_payload(io.written[1]), expected)
-          if fluorescence_channel.excitation_filter is not None:
-            self.assertEqual(result.excitation_wavelength, (282.2 + 371.8) / 2)
-          if fluorescence_channel.emission_filter is not None:
-            self.assertEqual(result.emission_bandwidth, 623.2 - 604.9)
+        io = FakeFTDI()
+        _, result = await read_with_slides(
+          io, fluorescence_channel, measurement_settings=TEN_FLASHES
+        )
+        expected = with_nominal_edges(ground_truth, [fluorescence_channel])
+        assert ftdi_extract_payload(io.written[1]) == expected
+        if fluorescence_channel.excitation_filter is not None:
+          assert result.excitation_wavelength == (282.2 + 371.8) / 2
+        if fluorescence_channel.emission_filter is not None:
+          assert result.emission_bandwidth == 623.2 - 604.9
 
   async def test_every_slot_is_its_detection_position(self):
     """No RUN through slots 2 to 4 or dichroic B and C has ground truth: their RUN fields are the
@@ -1474,25 +1451,24 @@ class FilterSlideTests(unittest.IsolatedAsyncioTestCase):
     }
     for slot in range(1, 5):
       for dichroic in range(1, 4):
-        with self.subTest(slot=slot, dichroic=dichroic):
-          io = FakeFTDI()
-          await read_with_slides(
-            io,
-            FluorescenceChannel(
-              excitation_filter=slot, dichroic_filter=dichroic, emission_filter=slot
-            ),
-          )
-          payload = ftdi_extract_payload(io.written[1])
-          fluorescence_channel = len(payload) - 36
-          fields = [
-            int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
-            for i in (2, 4, 6, 8, 10)
-          ]
-          # The detection's words: two slits, EX_SP, EX_LP, BSP, EM_SP, EM_LP, ...
-          excitation = words[("excitation", slot)][2:4]
-          mirror = words[("dichroic", dichroic)][4]
-          emission = words[("emission", slot)][5:7]
-          self.assertEqual(fields, [*excitation, mirror, *emission])
+        io = FakeFTDI()
+        await read_with_slides(
+          io,
+          FluorescenceChannel(
+            excitation_filter=slot, dichroic_filter=dichroic, emission_filter=slot
+          ),
+        )
+        payload = ftdi_extract_payload(io.written[1])
+        fluorescence_channel = len(payload) - 36
+        fields = [
+          int.from_bytes(payload[fluorescence_channel + i : fluorescence_channel + i + 2], "big")
+          for i in (2, 4, 6, 8, 10)
+        ]
+        # The detection's words: two slits, EX_SP, EX_LP, BSP, EM_SP, EM_LP, ...
+        excitation = words[("excitation", slot)][2:4]
+        mirror = words[("dichroic", dichroic)][4]
+        emission = words[("emission", slot)][5:7]
+        assert fields == [*excitation, mirror, *emission]
 
   async def test_unknown_slots_and_names_send_nothing(self):
     io = FakeFTDI()
@@ -1500,7 +1476,7 @@ class FilterSlideTests(unittest.IsolatedAsyncioTestCase):
     unresolved = FluorescenceChannel(
       excitation_filter=1, dichroic_filter=LP_TR, emission_wavelength=528
     )
-    with self.assertRaisesRegex(ValueError, "detect_all_filters"):
+    with pytest.raises(ValueError, match="detect_all_filters"):
       await feature.measure(unresolved, gain=1000)
     make_detected_slides(feature)
     refused: List[Tuple[Union[OpticalFilter, int, str], Union[DichroicFilter, int, str]]] = [
@@ -1516,9 +1492,9 @@ class FilterSlideTests(unittest.IsolatedAsyncioTestCase):
         dichroic_filter=dichroic_filter,
         emission_wavelength=528,
       )
-      with self.subTest(fluorescence_channel=fluorescence_channel), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure(fluorescence_channel, gain=1000)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
 def load_z_profile_ground_truth() -> Dict[str, Any]:
@@ -1558,7 +1534,7 @@ async def run_z_profile(name: str, well: str, **arguments):
   return io, ground_truth, result
 
 
-class ZProfileTests(unittest.IsolatedAsyncioTestCase):
+class TestZProfile(AnyioTestBase):
   async def test_z_scans_are_sent_and_decoded_as_the_ground_truth(self):
     """A1 without a target and D6 to 90 %."""
     z_scans = {
@@ -1566,31 +1542,26 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
       "z_profile_with_gain_target": ("D6", 90, (10.3, 1968, "D6", 231622, 89.08, 43243)),
     }
     for name, (well, target, expected) in z_scans.items():
-      with self.subTest(name):
-        io, ground_truth, result = await run_z_profile(name, well, gain_target_percent=target)
-        self.assertEqual(
-          ftdi_extract_payload(io.written[1]),
-          with_nominal_z_scan_edges(bytes.fromhex(ground_truth["request"])),
-        )
-        self.assertEqual(
-          (
-            result.peak_focal_height,
-            result.gain,
-            result.well,
-            result.peak_counts,
-            result.peak_detector_percent,
-            result.average_signal,
-          ),
-          expected,
-        )
-        self.assertEqual(len(result.z_profile), 144)
-        self.assertEqual(result.z_profile[0][0], 15.0)
-        self.assertEqual(result.z_profile[-1][0], 0.7)
-        self.assertLessEqual(result.start_timestamp, result.end_timestamp)
-        self.assertIsNone(result.temperature)
-        # `05 05` follows the idle status without one of its own.
-        self.assertEqual(ftdi_extract_payload(io.written[-1]), bytes.fromhex("05050000000000"))
-        self.assertEqual(io.replies, [])
+      io, ground_truth, result = await run_z_profile(name, well, gain_target_percent=target)
+      assert ftdi_extract_payload(io.written[1]) == with_nominal_z_scan_edges(
+        bytes.fromhex(ground_truth["request"])
+      )
+      assert (
+        result.peak_focal_height,
+        result.gain,
+        result.well,
+        result.peak_counts,
+        result.peak_detector_percent,
+        result.average_signal,
+      ) == expected
+      assert len(result.z_profile) == 144
+      assert result.z_profile[0][0] == 15.0
+      assert result.z_profile[-1][0] == 0.7
+      assert result.start_timestamp <= result.end_timestamp
+      assert result.temperature is None
+      # `05 05` follows the idle status without one of its own.
+      assert ftdi_extract_payload(io.written[-1]) == bytes.fromhex("05050000000000")
+      assert io.replies == []
 
   async def test_a_bottom_z_scan_sets_the_optic_bit(self):
     """The bottom optic's z-scan differs from the top's only in the optic's bit, `04` -> `44`."""
@@ -1601,9 +1572,9 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
     top_request = ftdi_extract_payload(top.written[1])
     bottom_request = ftdi_extract_payload(bottom.written[1])
     differences = [i for i, (a, b) in enumerate(zip(top_request, bottom_request)) if a != b]
-    self.assertEqual(len(top_request), len(bottom_request))
-    self.assertEqual(len(differences), 1)
-    self.assertEqual((top_request[differences[0]], bottom_request[differences[0]]), (0x04, 0x44))
+    assert len(top_request) == len(bottom_request)
+    assert len(differences) == 1
+    assert (top_request[differences[0]], bottom_request[differences[0]]) == (0x04, 0x44)
 
   def test_a_height_below_0_is_decoded(self):
     """Not a reader's reply: the brightest-well search's result, last point and peak -0.60 mm."""
@@ -1620,8 +1591,8 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
     result = Fluorescence._decode_z_profile_result(
       bytes(reply), fluorescence_plate(), start_timestamp=now, end_timestamp=now
     )
-    self.assertEqual(result.z_profile[-1][0], -0.6)
-    self.assertEqual(result.peak_focal_height, -0.6)
+    assert result.z_profile[-1][0] == -0.6
+    assert result.peak_focal_height == -0.6
 
   def test_a_reply_not_of_this_plate_is_refused(self):
     """The brightest-well search's result, B11, cut short; then of column 13 (not a reply)."""
@@ -1631,7 +1602,7 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
     off_plate = bytearray(reply)
     off_plate[15] = 13
     for wrong in (reply[:-8], bytes(off_plate)):
-      with self.subTest(length=len(wrong)), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         Fluorescence._decode_z_profile_result(
           wrong, fluorescence_plate(), start_timestamp=datetime.now(), end_timestamp=datetime.now()
         )
@@ -1643,9 +1614,9 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
     replies = [bytes.fromhex(reply) for reply in ground_truth["replies"]]
     io.replies = [replies[0], replies[1], replies[0], STOP_REPLY]
     plate = fluorescence_plate()
-    with self.assertRaises(RuntimeError):
+    with pytest.raises(RuntimeError):
       await make_fluorescence(io, plate).measure_z_profile(BASELINE, well=plate.get_well("A1"))
-    self.assertEqual(io.written[-1], STOP_FRAME)
+    assert io.written[-1] == STOP_FRAME
 
   async def test_out_of_range_z_scans_send_nothing(self):
     io = FakeFTDI()
@@ -1667,36 +1638,28 @@ class ZProfileTests(unittest.IsolatedAsyncioTestCase):
       ),  # no slides
     ]
     for fluorescence_channel, arguments in refused:
-      with (
-        self.subTest(fluorescence_channel=fluorescence_channel, arguments=arguments),
-        self.assertRaises(ValueError),
-      ):
+      with pytest.raises(ValueError):
         await feature.measure_z_profile(
           fluorescence_channel, well=plate.get_well("A1"), **arguments
         )
     other = Plate("other", 127.8, 85.5, 14.0, ordered_items={})
-    with self.assertRaises(ValueError):
+    with pytest.raises(ValueError):
       await feature.measure_z_profile(BASELINE, well=other)  # type: ignore[arg-type]
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-async def simulated_reader():
-  """A set-up simulated CLARIOstar Plus with a Corning 96 plate in its drawer; the fluorescence
-  and the plate."""
-  reader = CLARIOstarPlus(simulation=True)
-  await reader.setup()
-  plate = cor_96_wellplate_360uL_Fb("plate")
-  await reader.drawer.open()
-  reader.plate_holder.assign_child_resource(plate)
-  await reader.drawer.close()
-  feature = reader.fluorescence
-  assert isinstance(feature, CLARIOstarSimulationFluorescence)
-  return feature, plate
-
-
-class SimulatedFluorescenceTests(unittest.IsolatedAsyncioTestCase):
-  async def asyncSetUp(self):
-    self.fluorescence, self.plate = await simulated_reader()
+class TestSimulatedFluorescence(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    reader = CLARIOstarPlus(simulation=True)
+    await stack.enter_async_context(reader.lifespan(accept_plate_left_in_device=True))
+    self.plate = cor_96_wellplate_360uL_Fb("plate")
+    await reader.drawer.open()
+    reader.plate_holder.assign_child_resource(self.plate)
+    await reader.drawer.close()
+    feature = reader.fluorescence
+    assert isinstance(feature, CLARIOstarSimulationFluorescence)
+    self.fluorescence = feature
     self.column_1 = self.plate.get_items("A1:H1")
     self.identifiers = [f"{row}1" for row in "ABCDEFGH"]
 
@@ -1705,13 +1668,13 @@ class SimulatedFluorescenceTests(unittest.IsolatedAsyncioTestCase):
     fitc_result, mcherry_result = await self.fluorescence.measure(
       [BASELINE, mcherry], gain=[1000, 1500], wells=self.column_1
     )
-    self.assertEqual((fitc_result.gain, mcherry_result.gain), (1000, 1500))
-    self.assertEqual(mcherry_result.emission_wavelength, 620)
+    assert (fitc_result.gain, mcherry_result.gain) == (1000, 1500)
+    assert mcherry_result.emission_wavelength == 620
     for result in (fitc_result, mcherry_result):
-      self.assertEqual(list(result.data), self.identifiers)
-      self.assertTrue(all(0 <= value <= 260_000 for value in result.data.values()))
+      assert list(result.data) == self.identifiers
+      assert all(0 <= value <= 260_000 for value in result.data.values())
     bright = await self.fluorescence.measure(BASELINE, gain=1000, enhanced_dynamic_range=True)
-    self.assertTrue(all(0 <= value <= 700_000_000 for value in bright.data.values()))
+    assert all(0 <= value <= 700_000_000 for value in bright.data.values())
     for refused in (
       dict(flying_mode=True, enhanced_dynamic_range=True),  # `_check_arguments`
       dict(focal_height=25.1),
@@ -1720,7 +1683,7 @@ class SimulatedFluorescenceTests(unittest.IsolatedAsyncioTestCase):
         measurement_settings=MeasurementSettings(well_scan="matrix", matrix_size=3),
       ),
     ):
-      with self.subTest(refused=refused), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await self.fluorescence.measure(BASELINE, gain=1000, **refused)
 
   async def test_a_matrix_reads_every_point_and_their_mean(self):
@@ -1732,33 +1695,33 @@ class SimulatedFluorescenceTests(unittest.IsolatedAsyncioTestCase):
     )
     assert result.matrix_points is not None
     points = result.matrix_points["A1"]
-    self.assertEqual(len(points), 9)
-    self.assertEqual(result.data["A1"], sum(points) / 9)
+    assert len(points) == 9
+    assert result.data["A1"] == sum(points) / 9
 
   async def test_earlier_results_are_returned_again(self):
     earlier = await self.fluorescence.measure(BASELINE, gain=1000)
     replayed = await self.fluorescence.measure(
       BASELINE, gain=1000, wells=self.column_1, simulated_data=[earlier]
     )
-    self.assertEqual(replayed.data, {well: earlier.data[well] for well in self.identifiers})
+    assert replayed.data == {well: earlier.data[well] for well in self.identifiers}
     other = replace(BASELINE, emission_wavelength=600)
-    with self.assertRaises(ValueError):  # another fluorescence channel's result
+    with pytest.raises(ValueError):  # another fluorescence channel's result
       await self.fluorescence.measure(other, gain=1000, simulated_data=[earlier])
 
   async def test_spectra_filter_detection_and_z_profiles_are_not_simulated_yet(self):
     for call in (
-      self.fluorescence.measure_spectrum(
+      lambda: self.fluorescence.measure_spectrum(
         scan="emission",
         start_wavelength=510,
         end_wavelength=600,
         excitation_wavelength=485,
         gain=1000,
       ),
-      self.fluorescence.detect_all_filters(),
-      self.fluorescence.measure_z_profile(BASELINE, well=self.plate.get_well("A1")),
+      lambda: self.fluorescence.detect_all_filters(),
+      lambda: self.fluorescence.measure_z_profile(BASELINE, well=self.plate.get_well("A1")),
     ):
-      with self.assertRaises(NotImplementedError):
-        await call
+      with pytest.raises(NotImplementedError):
+        await call()
 
 
 def load_grid_ground_truth() -> Dict[str, Any]:
@@ -1828,55 +1791,58 @@ async def scan_ground_truth(**arguments):
   return io, ground_truth, results
 
 
-class GridTests(unittest.IsolatedAsyncioTestCase):
+class TestGrid(AnyioTestBase):
   async def test_a_scan_of_the_first_and_last_well_is_sent_and_decoded_as_the_ground_truth(self):
     io, ground_truth, results = await scan_ground_truth(focal_height=15.0, gain=2239)
     payloads = [ftdi_extract_payload(frame) for frame in io.written]
-    self.assertEqual(
-      io.written[:2],
-      [STATUS_QUERY_FRAME, with_nominal_scan_edges(bytes.fromhex(ground_truth["frame"]))],
-    )
-    self.assertEqual(payloads[2], bytes.fromhex("050d0000000000"))
-    self.assertEqual(payloads.count(bytes.fromhex("05020000000000")), 2)
-    self.assertEqual(payloads[-1], bytes.fromhex("05040000000000"))
-    self.assertEqual([result.well for result in results], ["A1", "H12"])
+    assert io.written[:2] == [
+      STATUS_QUERY_FRAME,
+      with_nominal_scan_edges(bytes.fromhex(ground_truth["frame"])),
+    ]
+    assert payloads[2] == bytes.fromhex("050d0000000000")
+    assert payloads.count(bytes.fromhex("05020000000000")) == 2
+    assert payloads[-1] == bytes.fromhex("05040000000000")
+    assert [result.well for result in results] == ["A1", "H12"]
     first, last = results
     assert first.center is not None and last.center is not None
-    self.assertAlmostEqual(first.center.x, 14.45)
-    self.assertAlmostEqual(first.center.y, 85.48 - 11.35)
-    self.assertAlmostEqual(last.center.x, 113.33)
-    self.assertAlmostEqual(last.center.y, 85.48 - 74.00)
-    self.assertEqual((first.spacing, first.focal_height, first.gain), (0.33, 15.0, 2239))
+    assert first.center.x == pytest.approx(14.45)
+    assert first.center.y == pytest.approx(85.48 - 11.35)
+    assert last.center.x == pytest.approx(113.33)
+    assert last.center.y == pytest.approx(85.48 - 74.00)
+    assert (first.spacing, first.focal_height, first.gain) == (0.33, 15.0, 2239)
     for result in results:
-      self.assertEqual([len(row) for row in result.counts], [31] * 31)
+      assert [len(row) for row in result.counts] == [31] * 31
       # Read from byte 34, every count is within the detector's 260,000.
-      self.assertLessEqual(max(max(row) for row in result.counts), 260_000)
+      assert max(max(row) for row in result.counts) <= 260_000
     grid = bytes.fromhex(ground_truth["replies"][5])
-    self.assertEqual(first.counts[0][0], int.from_bytes(ftdi_extract_payload(grid)[34:38], "big"))
+    assert first.counts[0][0] == int.from_bytes(ftdi_extract_payload(grid)[34:38], "big")
 
   async def test_given_points_make_up_a_plate_around_them(self):
     feature = make_fluorescence(FakeFTDI())
     two = feature._encode_grid_geometry(
       (127.76, 85.48), [Coordinate(20, 30, 0), Coordinate(50, 60, 0)]
     )
-    self.assertEqual(two.hex(), "31e8216407d015ac138809f40201")
+    assert two.hex() == "31e8216407d015ac138809f40201"
     one = feature._encode_grid_geometry((127.76, 85.48), [Coordinate(20, 30, 0)])
-    self.assertEqual(one[4:12], two[4:8] * 2)
-    self.assertEqual(one[12:], bytes([1, 1]))
+    assert one[4:12] == two[4:8] * 2
+    assert one[12:] == bytes([1, 1])
 
-  async def test_given_points_are_checked_and_warned_untested(self):
+  async def test_given_points_are_checked_and_warned_untested(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     feature = make_fluorescence(FakeFTDI())
     for positions in ([], [Coordinate(1, 1, 0)] * 3, [Coordinate(200, 10, 0)]):
-      with self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure_grid(GRID_CHANNEL, positions=positions, gain=2239, focal_height=15.0)
     with (
       patch.object(feature, "_get_grids", AsyncMock(return_value=[])),
-      self.assertLogs(measurement_module.logger, "WARNING") as logs,
+      caplog.at_level(logging.WARNING, logger=measurement_module.logger.name),
     ):
       await feature.measure_grid(
         GRID_CHANNEL, positions=[Coordinate(20, 30, 0)], gain=2239, focal_height=15.0
       )
-    self.assertIn("has not been tested on hardware", logs.output[0])
+    assert "has not been tested on hardware" in caplog.records[0].getMessage()
 
   async def test_a_z_scan_runs_only_without_a_focal_height(self):
     plate = grid_plate()
@@ -1898,29 +1864,33 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       patch.object(feature, "_get_grids", AsyncMock(return_value=[])) as scan,
     ):
       await feature.measure_well_centers(GRID_CHANNEL)
-      self.assertIs(z_scan.call_args.kwargs["well"], plate.get_well("A1"))
-      self.assertEqual(z_scan.call_args.kwargs["gain_target_percent"], 50.0)
-      self.assertEqual(scan.call_args.args[4:6], (14.9, 2239))
+      assert z_scan.call_args.kwargs["well"] is plate.get_well("A1")
+      assert z_scan.call_args.kwargs["gain_target_percent"] == 50.0
+      assert scan.call_args.args[4:6] == (14.9, 2239)
       await feature.measure_well_centers(GRID_CHANNEL, gain=1000)
-      self.assertIsNone(z_scan.call_args.kwargs["gain_target_percent"])
-      self.assertEqual(scan.call_args.args[4:6], (14.9, 1000))
+      assert z_scan.call_args.kwargs["gain_target_percent"] is None
+      assert scan.call_args.args[4:6] == (14.9, 1000)
       await feature.measure_well_centers(GRID_CHANNEL, focal_height=10.0, gain=1000)
-      self.assertEqual(z_scan.call_count, 2)
-      self.assertEqual(scan.call_args.args[4:6], (10.0, 1000))
+      assert z_scan.call_count == 2
+      assert scan.call_args.args[4:6] == (10.0, 1000)
 
-  async def test_wells_are_scanned_two_at_a_time(self):
+  async def test_wells_are_scanned_two_at_a_time(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ):
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     plate = grid_plate()
     feature = make_fluorescence(FakeFTDI(), plate)
     wells = [plate.get_well(name) for name in ("B2", "G11", "D6")]
     with (
       patch.object(feature, "_get_grids", AsyncMock(return_value=[])) as scan,
-      self.assertLogs(measurement_module.logger, "WARNING"),
+      caplog.at_level(logging.WARNING, logger=measurement_module.logger.name),
     ):
       await feature.measure_well_centers(GRID_CHANNEL, wells=wells, focal_height=15.0, gain=2239)
-    self.assertEqual([call.args[2] for call in scan.call_args_list], [["B2", "G11"], ["D6"]])
+    assert len(caplog.records) >= 1
+    assert [call.args[2] for call in scan.call_args_list] == [["B2", "G11"], ["D6"]]
     first_pair, last = (call.args[0] for call in scan.call_args_list)
-    self.assertEqual((first_pair[13], first_pair[14]), (2, 1))
-    self.assertEqual((last[13], last[14]), (1, 1))
+    assert (first_pair[13], first_pair[14]) == (2, 1)
+    assert (last[13], last[14]) == (1, 1)
 
   async def test_invalid_arguments_send_nothing(self):
     io = FakeFTDI()
@@ -1934,12 +1904,12 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       dict(wells=[]),
     ]
     for arguments in cases:
-      with self.subTest(arguments=arguments), self.assertRaises(ValueError):
+      with pytest.raises(ValueError):
         await feature.measure_well_centers(GRID_CHANNEL, **arguments)
-    self.assertEqual(io.written, [])
+    assert io.written == []
 
 
-class DrawerOpenTests(unittest.IsolatedAsyncioTestCase):
+class TestDrawerOpen(AnyioTestBase):
   async def test_a_z_scan_and_a_grid_scan_with_the_drawer_out_are_refused(self):
     plate, grid = fluorescence_plate(), grid_plate()
     calls = {
@@ -1949,13 +1919,12 @@ class DrawerOpenTests(unittest.IsolatedAsyncioTestCase):
       ),
     }
     for name, call in calls.items():
-      with self.subTest(name):
-        io = FakeFTDI()
-        io.replies = [STATUS_DRAWER_OPEN]
-        feature = make_fluorescence(io, grid if name == "grid scan" else plate)
-        with self.assertRaisesRegex(RuntimeError, "the drawer is open"):
-          await call(feature)
-        self.assertEqual(io.written, [STATUS_QUERY_FRAME])
+      io = FakeFTDI()
+      io.replies = [STATUS_DRAWER_OPEN]
+      feature = make_fluorescence(io, grid if name == "grid scan" else plate)
+      with pytest.raises(RuntimeError, match="the drawer is open"):
+        await call(feature)
+      assert io.written == [STATUS_QUERY_FRAME]
 
 
 if __name__ == "__main__":

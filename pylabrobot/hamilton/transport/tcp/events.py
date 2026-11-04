@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
+from collections import deque
 from types import TracebackType
 from typing import AsyncIterator, Callable, Literal, Optional
+
+import anyio
 
 from pylabrobot.hamilton.transport.tcp.messages import CommandResponse
 
@@ -36,7 +38,9 @@ class EventSubscription(AsyncIterator[CommandResponse]):
       raise ValueError("Event capacity must be positive")
     if overflow not in ("error", "drop_oldest", "drop_newest"):
       raise ValueError(f"Unknown event overflow policy: {overflow}")
-    self._queue: asyncio.Queue[Optional[CommandResponse]] = asyncio.Queue(capacity)
+    self._queue: deque[CommandResponse] = deque()
+    self._capacity = capacity
+    self._changed = anyio.Event()
     self._overflow = overflow
     self._on_close = on_close
     self._closed = False
@@ -53,15 +57,16 @@ class EventSubscription(AsyncIterator[CommandResponse]):
     """Deliver without blocking the protocol reader."""
     if self._closed:
       return
-    if self._queue.full():
+    if len(self._queue) >= self._capacity:
       self._dropped += 1
       if self._overflow == "error":
         self._finish(EventOverflowError("Hamilton TCP event subscription overflowed"))
         return
       if self._overflow == "drop_newest":
         return
-      self._queue.get_nowait()
-    self._queue.put_nowait(event)
+      self._queue.popleft()
+    self._queue.append(event)
+    self._changed.set()
 
   def _finish(self, error: Optional[Exception] = None) -> None:
     """Close once, discard buffered events, and wake a blocked consumer."""
@@ -70,9 +75,8 @@ class EventSubscription(AsyncIterator[CommandResponse]):
     self._closed = True
     self._error = error
     self._on_close(self)
-    while not self._queue.empty():
-      self._queue.get_nowait()
-    self._queue.put_nowait(None)
+    self._queue.clear()
+    self._changed.set()
 
   async def __anext__(self) -> CommandResponse:
     """Wait for an event, session termination, or explicit subscription closure."""
@@ -80,12 +84,16 @@ class EventSubscription(AsyncIterator[CommandResponse]):
       raise RuntimeError("Event subscriptions support one consumer at a time")
     self._consuming = True
     try:
-      event = None if self._closed else await self._queue.get()
-      if event is None:
+      while not self._queue and not self._closed:
+        changed = self._changed
+        await changed.wait()
+        if self._changed is changed:
+          self._changed = anyio.Event()
+      if self._closed:
         if self._error is not None:
           raise self._error
         raise StopAsyncIteration
-      return event
+      return self._queue.popleft()
     finally:
       self._consuming = False
 

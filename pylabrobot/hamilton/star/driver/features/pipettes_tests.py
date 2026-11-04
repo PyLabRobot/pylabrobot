@@ -5,6 +5,10 @@ import unittest
 import unittest.mock
 from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
 
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
@@ -19,6 +23,7 @@ from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
 from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 async def channels(width: float, positions: List[float]) -> Tuple[Pipettes, List[str]]:
@@ -421,6 +426,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     pipettes = await simulated_channels()
     await pipettes._set_z_speed(2, 50.0)
     await pipettes._set_y_acceleration_level(2, 1)
+    await pipettes._driver.stop()
     await pipettes._driver.setup()
     self.assertEqual(await pipettes.request_z_speed(2), 125.0)
     self.assertEqual(await pipettes.request_y_acceleration_level(2), 4)
@@ -1463,7 +1469,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     async def sleeping(seconds: float) -> None:
       slept.append(seconds)
 
-    with unittest.mock.patch("asyncio.sleep", sleeping):
+    with unittest.mock.patch("anyio.sleep", sleeping):
       await self.pipettes.probe_z_heights_using_ztouch(self._wells("A1", "B1", "C1", "D1"))
       self.assertEqual(slept, [0.25, 0.5, 0.75], "channel 0 at once, the rest 0.25 s apart")
       self.assertEqual([c[:4] for c in self.sent], ["P1ZH", "P2ZH", "P3ZH", "P4ZH"])
@@ -2258,26 +2264,46 @@ class TestTipHandling(unittest.IsolatedAsyncioTestCase):
     """The traverse height is a minimum: a channel already above it is not taken down to it."""
     from unittest.mock import AsyncMock, patch
 
-    pipettes, rack, _ = await channels_over_a_rack()
-    await pipettes.move_to_safe_z()
-    safe = await pipettes.request_stop_disc_z_position(0)
-    with patch.object(pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)):
-      with self.assertRaises(RuntimeError):
-        await pipettes.pick_up_tips([rack.get_item("A1")])
-    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL, hamilton_tip_carrier_L5
+
+    deck = STARDeck()
+    carrier = hamilton_tip_carrier_L5(name="tip_carrier")
+    carrier[0] = rack = hamilton_96_tiprack_300uL(name="rack")
+    deck.assign_child_resource(carrier, track=16)
+    driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
+    async with driver:
+      pipettes = driver.pipettes
+      assert pipettes is not None
+      await pipettes.move_to_safe_z()
+      safe = await pipettes.request_stop_disc_z_position(0)
+      with patch.object(
+        pipettes, "_unchecked_fw_pick_up_tips", AsyncMock(side_effect=RuntimeError)
+      ):
+        with self.assertRaises(RuntimeError):
+          await pipettes.pick_up_tips([rack.get_item("A1")])
+      self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
 
   async def test_a_failed_drop_leaves_a_channel_above_the_traverse_height_where_it_is(self):
     from unittest.mock import AsyncMock, patch
 
-    pipettes, rack, _ = await channels_over_a_rack()
-    spot = rack.get_item("A1")
-    await pipettes.pick_up_tips([spot])
-    await pipettes.move_to_safe_z()
-    safe = await pipettes.request_stop_disc_z_position(0)
-    with patch.object(pipettes, "_unchecked_fw_drop_tips", AsyncMock(side_effect=RuntimeError)):
-      with self.assertRaises(RuntimeError):
-        await pipettes.drop_tips([spot])
-    self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL, hamilton_tip_carrier_L5
+
+    deck = STARDeck()
+    carrier = hamilton_tip_carrier_L5(name="tip_carrier")
+    carrier[0] = rack = hamilton_96_tiprack_300uL(name="rack")
+    deck.assign_child_resource(carrier, track=16)
+    driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
+    async with driver:
+      pipettes = driver.pipettes
+      assert pipettes is not None
+      spot = rack.get_item("A1")
+      await pipettes.pick_up_tips([spot])
+      await pipettes.move_to_safe_z()
+      safe = await pipettes.request_stop_disc_z_position(0)
+      with patch.object(pipettes, "_unchecked_fw_drop_tips", AsyncMock(side_effect=RuntimeError)):
+        with self.assertRaises(RuntimeError):
+          await pipettes.drop_tips([spot])
+      self.assertAlmostEqual(await pipettes.request_stop_disc_z_position(0), safe, places=1)
 
   async def test_a_pickup_that_faults_on_one_channel_keeps_the_others_tips(self):
     """Not every pick-up uses every channel: the error names the ones that faulted, by channel.
@@ -2894,7 +2920,10 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
   """
 
   async def asyncSetUp(self):
-    patcher = unittest.mock.patch("asyncio.sleep", new_callable=unittest.mock.AsyncMock)
+    patcher = unittest.mock.patch(
+      "pylabrobot.hamilton.star.driver.simulator.anyio.sleep",
+      new_callable=unittest.mock.AsyncMock,
+    )
     self.sleep = patcher.start()
     self.addCleanup(patcher.stop)
 
@@ -3365,7 +3394,7 @@ class TestEmptyTip(unittest.IsolatedAsyncioTestCase):
     async def recorded(module: str, command: str, **kwargs: Any):
       shown = {k: v for k, v in kwargs.items() if k not in ("fmt", "read_timeout", "subsystem")}
       self.sent.append(assemble_command(module=module, command=command, id_=None, **shown))
-      await asyncio.sleep(0)  # a reply takes time, so the other channels' commands go meanwhile
+      await anyio.sleep(0)  # a reply takes time, so the other channels' commands go meanwhile
       return await answer(module=module, command=command, **kwargs)
 
     self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
@@ -4717,10 +4746,11 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     self.assertEqual([tip.tracker.volume for tip in tips if tip is not None], [0.0, 20.0])
 
 
-class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
+class TestJetDispenseOfWhatTheAspirateDrew(AnyioTestBase):
   """1000 uL filter tips over a 2 mL plate: a jet dispense pushes what the same class drew."""
 
-  async def asyncSetUp(self):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     from pylabrobot.resources import set_tip_tracking, set_volume_tracking
     from pylabrobot.resources.corning.plates import cor_96_wellplate_2mL_Vb
     from pylabrobot.resources.hamilton import (
@@ -4731,8 +4761,8 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
 
     set_tip_tracking(True)
     set_volume_tracking(True)
-    self.addCleanup(set_tip_tracking, False)
-    self.addCleanup(set_volume_tracking, False)
+    stack.callback(set_tip_tracking, False)
+    stack.callback(set_volume_tracking, False)
     self.deck = STARDeck()
     tips = TIP_CAR_480_A00(name="tips")
     tips[1] = self.rack = hamilton_96_tiprack_1000uL_filter(name="rack")
@@ -4741,17 +4771,14 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
     plates[0] = self.plate = cor_96_wellplate_2mL_Vb(name="plate")
     self.deck.assign_child_resource(plates, track=30)
     self.driver = STARSimulationDriver(deck=self.deck, declared_configuration_json=RECORDING_STAR)
-    await self.driver.setup()
+    await stack.enter_async_context(self.driver.lifespan())
     assert self.driver.pipettes is not None
     self.pipettes = self.driver.pipettes
     self.source, self.target = self.plate.get_well("A1"), self.plate.get_well("B1")
     self.source.tracker.set_volume(1500.0)
     await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
 
-  async def asyncTearDown(self):
-    await self.driver.stop()
-
-  def _jet_water(self):
+  def _jet_water(self) -> Any:
     """The jet water class for the mounted tip, as a protocol looks it up."""
     from pylabrobot.hamilton.star.liquid_classes import get_star_liquid_class
     from pylabrobot.resources.liquid import Liquid
@@ -4770,7 +4797,7 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
     assert water is not None
     return water
 
-  async def test_321_uL_of_water_drawn_is_dispensed(self):
+  async def test_321_uL_of_water_drawn_is_dispensed(self) -> None:
     # The class corrects 321 uL to 337.449 uL: kept as 337.4 once drawn, pushed as 337.45. The
     # 0.05 uL between them is rounding alone, and the dispense goes ahead.
     water = self._jet_water()
@@ -4778,9 +4805,9 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.dispense(
       [self.target], volumes=[321.0], hamilton_liquid_classes=[water], jet=[True]
     )
-    self.assertAlmostEqual(self.target.tracker.get_used_volume(), 321.0)
+    assert self.target.tracker.get_used_volume() == pytest.approx(321.0)
 
-  async def test_a_drive_resting_below_zero_dispenses_what_it_drew(self):
+  async def test_a_drive_resting_below_zero_dispenses_what_it_drew(self) -> None:
     # As a device reads after a reset: 2 increments under zero. The 889.8 uL drawn then pushes out
     # 0.1 uL past where the piston stood, which is air, not a reason to refuse.
     water = self._jet_water()
@@ -4791,4 +4818,128 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.dispense(
       [self.target], volumes=[889.8], hamilton_liquid_classes=[water], jet=[True]
     )
-    self.assertAlmostEqual(self.target.tracker.get_used_volume(), 889.8)
+    assert self.target.tracker.get_used_volume() == pytest.approx(889.8)
+
+
+class TestPipettesCancellationShielding(AnyioTestBase):
+  """Cleanup and recovery wire actions stay shielded under level-triggered AnyIO cancellation."""
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    from pylabrobot.resources import set_tip_tracking
+    from pylabrobot.resources.hamilton import hamilton_96_tiprack_300uL, hamilton_tip_carrier_L5
+
+    await super()._enter_lifespan(stack, **kwargs)
+    set_tip_tracking(True)
+    stack.callback(set_tip_tracking, False)
+    deck = STARDeck()
+    carrier = hamilton_tip_carrier_L5(name="tip_carrier")
+    carrier[0] = self.rack = hamilton_96_tiprack_300uL(name="rack")
+    deck.assign_child_resource(carrier, track=16)
+    self.driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
+    await stack.enter_async_context(self.driver.lifespan())
+    assert self.driver.pipettes is not None
+    self.pipettes = self.driver.pipettes
+
+  async def test_temporary_z_drive_profile_restores_speed_when_cancelled(self) -> None:
+    sent: List[str] = []
+    log = self.driver._log_exchange
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written.startswith("P1AAzv"):
+        sent.append(written)
+      log(written, read)
+
+    entered = anyio.Event()
+    scopes: List[anyio.CancelScope] = []
+
+    async def worker() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        async with self.pipettes._temporary_z_drive_profile(speed=10.0, channels=[0]):
+          entered.set()
+          await anyio.sleep_forever()
+
+    with unittest.mock.patch.object(self.driver, "_log_exchange", recorded):
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(worker)
+        await entered.wait()
+        scopes[0].cancel()
+
+    assert len(sent) == 2
+    assert sent[1] == "P1AAzv11652"
+
+  async def test_cancelled_pickup_reconciles_raises_channels_and_propagates_cancellation(
+    self,
+  ) -> None:
+    await self.pipettes.move_stop_disc_to_z_position(0, 250.0)
+    entered = anyio.Event()
+    cancelled_seen = False
+
+    async def slow_pickup(*args: Any, **kwargs: Any) -> None:
+      entered.set()
+      await anyio.sleep_forever()
+
+    with unittest.mock.patch.object(self.pipettes, "_unchecked_fw_pick_up_tips", slow_pickup):
+      with anyio.CancelScope() as scope:
+
+        async def cancel_once_started() -> None:
+          await entered.wait()
+          scope.cancel()
+
+        async with anyio.create_task_group() as task_group:
+          task_group.start_soon(cancel_once_started)
+          try:
+            await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
+          except anyio.get_cancelled_exc_class():
+            cancelled_seen = True
+            raise
+
+    assert cancelled_seen
+    assert await self.pipettes.request_stop_disc_z_position(0) == pytest.approx(282.8, abs=0.1)
+
+  async def test_outer_cancellation_during_post_failure_raise_completes_channel_retract(
+    self,
+  ) -> None:
+    await self.pipettes.move_stop_disc_to_z_position(0, 250.0)
+    real_raise_targets = self.pipettes._traverse_raise_targets
+    scopes: List[anyio.CancelScope] = []
+
+    async def cancel_mid_raise(minimum_z: float) -> Dict[int, float]:
+      scopes[0].cancel()
+      await anyio.lowlevel.checkpoint()
+      return await real_raise_targets(minimum_z)
+
+    with (
+      unittest.mock.patch.object(
+        self.pipettes,
+        "_unchecked_fw_pick_up_tips",
+        unittest.mock.AsyncMock(side_effect=RuntimeError("fw")),
+      ),
+      unittest.mock.patch.object(self.pipettes, "_traverse_raise_targets", cancel_mid_raise),
+    ):
+      with pytest.raises(RuntimeError, match="fw"):
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
+          await anyio.lowlevel.checkpoint()
+
+    assert await self.pipettes.request_stop_disc_z_position(0) == pytest.approx(282.8, abs=0.1)
+
+  async def test_base_exception_during_post_failure_raise_is_not_swallowed(self) -> None:
+    async def interrupting_raise_targets(minimum_z: float) -> Dict[int, float]:
+      del minimum_z
+      await anyio.lowlevel.checkpoint()
+      raise KeyboardInterrupt
+
+    with (
+      unittest.mock.patch.object(
+        self.pipettes,
+        "_unchecked_fw_pick_up_tips",
+        unittest.mock.AsyncMock(side_effect=RuntimeError("fw")),
+      ),
+      unittest.mock.patch.object(
+        self.pipettes, "_traverse_raise_targets", interrupting_raise_targets
+      ),
+    ):
+      with pytest.raises(KeyboardInterrupt):
+        await self.pipettes.pick_up_tips([self.rack.get_item("A1")])

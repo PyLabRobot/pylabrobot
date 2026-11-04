@@ -1,7 +1,13 @@
 import math
 import unittest
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.io.serial import Serial
 from pylabrobot.legacy.plate_reading.molecular_devices.backend import (
   Calibrate,
   CarriageSpeed,
@@ -17,10 +23,17 @@ from pylabrobot.legacy.plate_reading.molecular_devices.backend import (
   ShakeSettings,
   SpectrumSettings,
 )
+from pylabrobot.legacy.plate_reading.molecular_devices.spectramax_384_plus_backend import (
+  MolecularDevicesSpectraMax384PlusBackend,
+)
 from pylabrobot.legacy.plate_reading.molecular_devices.spectramax_gemini_em_backend import (
   MolecularDevicesSpectraMaxGeminiEMBackend,
 )
+from pylabrobot.legacy.plate_reading.molecular_devices.spectramax_m5_backend import (
+  MolecularDevicesSpectraMaxM5Backend,
+)
 from pylabrobot.resources.agenbio.plates import agenbio_96_wellplate_Ub_2200uL
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
@@ -43,16 +56,15 @@ class TestMolecularDevicesBackend(unittest.IsolatedAsyncioTestCase):
       ).start()
     self.addCleanup(patch.stopall)
 
-  async def test_setup_stop(self):
+  async def test_lifespan_handshake(self):
     # un-mock send_command for this test
     with patch.object(
       self.backend, "send_command", wraps=self.backend.send_command
     ) as wrapped_send_command:
-      await self.backend.setup()
-      self.mock_serial.setup.assert_called_once()
+      async with self.backend:
+        pass
+      self.mock_serial.lifespan.assert_called_once_with()
       wrapped_send_command.assert_called_with("!")
-      await self.backend.stop()
-      self.mock_serial.stop.assert_called_once()
 
   async def test_set_clear(self):
     await self.backend._set_clear()
@@ -1696,6 +1708,325 @@ class TestErrorHandling(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(response, ["OK"])
     except MolecularDevicesError:
       self.fail("MolecularDevicesError raised for a valid OK response")
+
+
+LegacyReadHook = Callable[[], Awaitable[None]]
+
+
+class FakeLegacySpectraMaxSerial(HasLifespan):
+  """Software Serial double with one response script per write."""
+
+  def __init__(
+    self,
+    script: List[List[bytes]],
+    *,
+    events: Optional[List[str]] = None,
+    entry_error: Optional[BaseException] = None,
+    exit_error: Optional[BaseException] = None,
+    after_write: Optional[Dict[str, LegacyReadHook]] = None,
+    before_read: Optional[Dict[str, LegacyReadHook]] = None,
+  ) -> None:
+    super().__init__()
+    self.script = list(script)
+    self.events = events if events is not None else []
+    self.entry_error = entry_error
+    self.exit_error = exit_error
+    self.after_write = after_write or {}
+    self.before_read = before_read or {}
+    self.written: List[str] = []
+    self.current_command = ""
+    self.response: List[bytes] = []
+    self.timeout = 0.2
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("FakeLegacySpectraMaxSerial does not accept lifespan options")
+    self.events.append("serial.enter")
+    stack.push_shielded_async_callback(self._close)
+    if self.entry_error is not None:
+      raise self.entry_error
+
+  async def _close(self) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.events.append("serial.exit")
+    if self.exit_error is not None:
+      raise self.exit_error
+
+  async def write(self, data: bytes) -> None:
+    await anyio.lowlevel.checkpoint()
+    self.current_command = data.decode("ascii").rstrip("\r")
+    self.written.append(self.current_command)
+    self.events.append(f"write:{self.current_command}")
+    self.response = self.script.pop(0) if self.script else []
+    hook = self.after_write.get(self.current_command)
+    if hook is not None:
+      await hook()
+
+  async def readline(self) -> bytes:
+    await anyio.lowlevel.checkpoint()
+    hook = self.before_read.pop(self.current_command, None)
+    if hook is not None:
+      await hook()
+    return self.response.pop(0) if self.response else b""
+
+
+def _legacy_exception_context_contains(error: BaseException, target: BaseException) -> bool:
+  while error.__context__ is not None:
+    error = error.__context__
+    if error is target:
+      return True
+  return False
+
+
+LEGACY_SPECTRAMAX_TYPES = [
+  MolecularDevicesSpectraMaxM5Backend,
+  MolecularDevicesSpectraMax384PlusBackend,
+  MolecularDevicesSpectraMaxGeminiEMBackend,
+]
+
+
+class TestLegacySpectraMaxShakingScope(AnyioTestBase):
+  def _make(self, backend_type: Any, script: List[List[bytes]], **fake_kwargs: Any) -> Any:
+    with patch("pylabrobot.legacy.plate_reading.molecular_devices.backend.Serial"):
+      backend = backend_type(port="FAKE")
+    backend.io = cast(Serial, FakeLegacySpectraMaxSerial(script, **fake_kwargs))
+    return backend
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_scope_uses_only_exact_now_then_stop_commands(self, backend_type: Any) -> None:
+    backend = self._make(backend_type, [[b"OK>\r\n"], [b"OK>\r\n"], [b"OK>\r\n"]])
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+
+    async with backend:
+      async with backend.shaking():
+        assert backend._shaking_active
+
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_scope_body_failure_still_stops(self, backend_type: Any) -> None:
+    backend = self._make(backend_type, [[b"OK>\r\n"], [b"OK>\r\n"], [b"OK>\r\n"]])
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+    body_error = ValueError("body failed")
+
+    async with backend:
+      with pytest.raises(ValueError, match="body failed") as error_info:
+        async with backend.shaking():
+          raise body_error
+      assert error_info.value is body_error
+
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_stop_failure_retains_retry_state_and_body_context(self, backend_type: Any) -> None:
+    backend = self._make(
+      backend_type,
+      [[b"OK>\r\n"], [b"OK>\r\n"], [b"FAIL\t105>\r\n"], [b"OK>\r\n"]],
+    )
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+    body_error = ValueError("body failed")
+
+    async with backend:
+      with pytest.raises(MolecularDevicesError) as error_info:
+        async with backend.shaking():
+          raise body_error
+      assert _legacy_exception_context_contains(error_info.value, body_error)
+      assert backend._shaking_active
+      assert backend._shaking_state_unknown
+      assert backend._shaking_scope_token is None
+      await backend.stop_shake()
+      assert not backend._shaking_active
+      assert not backend._shaking_state_unknown
+
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP", "!SHAKE STOP"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_cancellation_after_now_commits_stops_before_propagating(
+    self, backend_type: Any
+  ) -> None:
+    now_written = anyio.Event()
+    release_now_response = anyio.Event()
+    finished = anyio.Event()
+    scopes: List[anyio.CancelScope] = []
+
+    async def signal_now() -> None:
+      now_written.set()
+
+    async def block_now_response() -> None:
+      await release_now_response.wait()
+
+    backend = self._make(
+      backend_type,
+      [[b"OK>\r\n"], [b"OK>\r\n"], [b"OK>\r\n"]],
+      after_write={"!SHAKE NOW": signal_now},
+      before_read={"!SHAKE NOW": block_now_response},
+    )
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+
+    async def use_scope() -> None:
+      try:
+        with anyio.CancelScope() as scope:
+          scopes.append(scope)
+          async with backend.shaking():
+            pytest.fail("cancelled scope reached body")
+      finally:
+        finished.set()
+
+    async with backend:
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(use_scope)
+        await now_written.wait()
+        scopes[0].cancel()
+        await anyio.sleep(0)
+        assert not finished.is_set()
+        release_now_response.set()
+        await finished.wait()
+
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_cancellation_waiting_for_transition_lock_is_pre_mutation(
+    self, backend_type: Any
+  ) -> None:
+    backend = self._make(backend_type, [[b"OK>\r\n"]])
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+    started = anyio.Event()
+    scopes: List[anyio.CancelScope] = []
+
+    async def enter_scope() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        started.set()
+        async with backend.shaking():
+          pytest.fail("cancelled lock waiter reached body")
+
+    async with backend:
+      await backend._shaking_transition_lock.acquire()
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(enter_scope)
+        await started.wait()
+        await anyio.sleep(0)
+        scopes[0].cancel()
+        backend._shaking_transition_lock.release()
+
+    assert serial.written == ["!"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_scope_rejects_overlap_and_direct_transitions(self, backend_type: Any) -> None:
+    backend = self._make(backend_type, [[b"OK>\r\n"], [b"OK>\r\n"], [b"OK>\r\n"]])
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+    failures: List[RuntimeError] = []
+
+    async def enter_concurrent_scope() -> None:
+      try:
+        async with backend.shaking():
+          pytest.fail("concurrent scope reached body")
+      except RuntimeError as error:
+        failures.append(error)
+
+    async with backend:
+      async with backend.shaking():
+        with pytest.raises(RuntimeError, match="already scoped"):
+          async with backend.shaking():
+            pytest.fail("nested scope reached body")
+        with pytest.raises(RuntimeError, match="scope"):
+          await backend.start_shake()
+        with pytest.raises(RuntimeError, match="scope"):
+          await backend.stop_shake()
+        async with anyio.create_task_group() as task_group:
+          task_group.start_soon(enter_concurrent_scope)
+
+    assert len(failures) == 1
+    assert "already scoped" in str(failures[0])
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_scope_rejects_preexisting_durable_shaking(self, backend_type: Any) -> None:
+    backend = self._make(backend_type, [[b"OK>\r\n"], [b"OK>\r\n"], [b"OK>\r\n"]])
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+
+    async with backend:
+      await backend.start_shake()
+      with pytest.raises(RuntimeError, match="already active"):
+        async with backend.shaking():
+          pytest.fail("scope adopted durable shaking")
+      await backend.stop_shake()
+
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP"]
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_parent_cleanup_force_stops_and_invalidates_live_scope(
+    self, backend_type: Any
+  ) -> None:
+    events: List[str] = []
+    backend = self._make(
+      backend_type,
+      [[b"OK>\r\n"], [b"OK>\r\n"], [b"OK>\r\n"]],
+      events=events,
+    )
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+    lifespan = backend.lifespan()
+    scope = backend.shaking()
+
+    await lifespan.__aenter__()
+    await scope.__aenter__()
+    await lifespan.__aexit__(None, None, None)
+    assert backend._shaking_scope_token is None
+    assert events[-2:] == ["write:!SHAKE STOP", "serial.exit"]
+    stop_count = serial.written.count("!SHAKE STOP")
+    await scope.__aexit__(None, None, None)
+
+    assert serial.written == ["!", "!SHAKE NOW", "!SHAKE STOP"]
+    assert serial.written.count("!SHAKE STOP") == stop_count
+
+  @pytest.mark.parametrize("backend_type", LEGACY_SPECTRAMAX_TYPES)
+  async def test_parent_stop_failure_retains_retry_state_across_reentry(
+    self, backend_type: Any
+  ) -> None:
+    backend = self._make(
+      backend_type,
+      [
+        [b"OK>\r\n"],
+        [b"OK>\r\n"],
+        [b"FAIL\t105>\r\n"],
+        [b"OK>\r\n"],
+        [b"OK>\r\n"],
+        [b"OK>\r\n"],
+        [b"OK>\r\n"],
+      ],
+    )
+    serial = cast(FakeLegacySpectraMaxSerial, backend.io)
+    lifespan = backend.lifespan()
+    stale_scope = backend.shaking()
+
+    await lifespan.__aenter__()
+    await stale_scope.__aenter__()
+    with pytest.raises(MolecularDevicesError):
+      await lifespan.__aexit__(None, None, None)
+    assert backend._shaking_active
+    assert backend._shaking_state_unknown
+    assert backend._shaking_scope_token is None
+
+    commands_after_parent_exit = list(serial.written)
+    await stale_scope.__aexit__(None, None, None)
+    assert serial.written == commands_after_parent_exit
+
+    async with backend:
+      await backend.stop_shake()
+      assert not backend._shaking_active
+      assert not backend._shaking_state_unknown
+      async with backend.shaking():
+        assert backend._shaking_active
+
+    assert serial.written == [
+      "!",
+      "!SHAKE NOW",
+      "!SHAKE STOP",
+      "!",
+      "!SHAKE STOP",
+      "!SHAKE NOW",
+      "!SHAKE STOP",
+    ]
 
 
 if __name__ == "__main__":

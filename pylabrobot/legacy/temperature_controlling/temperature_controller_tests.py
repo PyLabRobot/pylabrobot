@@ -1,7 +1,11 @@
-import asyncio
 import unittest
+from typing import Any, List
 from unittest.mock import AsyncMock, patch
 
+import anyio
+import pytest
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.legacy.temperature_controlling import (
   TemperatureController,
@@ -10,6 +14,7 @@ from pylabrobot.legacy.temperature_controlling import (
 from pylabrobot.legacy.temperature_controlling.backend import TemperatureControllerBackend
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+from pylabrobot.testing import AnyioTestBase
 
 
 class TemperatureControllerTests(unittest.TestCase):
@@ -182,10 +187,9 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
 
     # Keep background workers on the real asyncio.sleep.
     with patch(
-      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio",
-      wraps=asyncio,
-      sleep=AsyncMock(),
-    ) as mock_asyncio:
+      "pylabrobot.legacy.temperature_controlling.temperature_controller.anyio.sleep",
+      new_callable=AsyncMock,
+    ) as sleep:
       with use_event_bus(event_bus):
         await temperature_controller.hold_temperature(duration=120.0)
 
@@ -202,7 +206,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].context["duration"], 120.0)
     self.assertEqual(events[0].context["target_temperature"], 37.0)
     self.assertNotIn("duration_s", events[0].context)
-    mock_asyncio.sleep.assert_awaited_once_with(120.0)
+    sleep.assert_awaited_once_with(120.0)
     backend.set_temperature.assert_not_awaited()
 
   async def test_hold_temperature_failure_emits_invocation_context(self):
@@ -249,16 +253,15 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     event_bus.subscribe(events.append)
 
     with patch(
-      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio",
-      wraps=asyncio,
-      sleep=AsyncMock(),
-    ) as mock_asyncio:
+      "pylabrobot.legacy.temperature_controlling.temperature_controller.anyio.sleep",
+      new_callable=AsyncMock,
+    ) as sleep:
       with use_event_bus(event_bus):
         await temperature_controller.hold_temperature(120.0)
 
     self.assertEqual(events[0].context["target_temperature"], 37.0)
     self.assertEqual(events[0].context["duration"], 120.0)
-    mock_asyncio.sleep.assert_awaited_once_with(120.0)
+    sleep.assert_awaited_once_with(120.0)
 
 
 class _FakeBackend(TemperatureControllerBackend):
@@ -271,10 +274,11 @@ class _FakeBackend(TemperatureControllerBackend):
   def supports_active_cooling(self) -> bool:
     return True
 
-  async def setup(self):
-    pass
-
-  async def stop(self):
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    **backend_kwargs: Any,
+  ) -> None:
     pass
 
   async def set_temperature(self, temperature: float):
@@ -286,6 +290,14 @@ class _FakeBackend(TemperatureControllerBackend):
 
   async def deactivate(self):
     pass
+
+
+@pytest.mark.parametrize("backend_type", [_FakeBackend])
+def test_backend_double_inherits_managed_methods(
+  backend_type: type[HasLifespan],
+) -> None:
+  assert backend_type.setup is HasLifespan.setup
+  assert backend_type.stop is HasLifespan.stop
 
 
 class PassiveCoolingWithSupportTests(unittest.IsolatedAsyncioTestCase):
@@ -302,3 +314,112 @@ class PassiveCoolingWithSupportTests(unittest.IsolatedAsyncioTestCase):
 
     await tc.set_temperature(20, passive=True)
     self.assertFalse(backend.set_called)
+
+
+class RecordingTemperatureControllerBackend(TemperatureControllerBackend):
+  """Temperature backend double recording every query and command it receives.
+
+  ``get_current_temperature`` awaits a checkpoint before recording itself, so a poll
+  that is cancelled before it runs leaves no trace and a test can assert that polling
+  stopped.
+  """
+
+  def __init__(self, temperature: float = 20.0) -> None:
+    super().__init__()
+    self.temperature = temperature
+    self.polls: List[str] = []
+    self.commands: List[str] = []
+    self.polled = anyio.Event()
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    if kwargs:
+      raise TypeError("temperature backend double does not accept lifespan options")
+
+  @property
+  def supports_active_cooling(self) -> bool:
+    return True
+
+  async def set_temperature(self, temperature: float) -> None:
+    self.commands.append(f"set_temperature:{temperature}")
+    self.temperature = temperature
+
+  async def get_current_temperature(self) -> float:
+    await anyio.sleep(0)
+    self.polls.append("current_temperature")
+    self.polled.set()
+    return self.temperature
+
+  async def deactivate(self) -> None:
+    self.commands.append("deactivate")
+
+
+def make_temperature_controller(
+  backend: TemperatureControllerBackend,
+) -> TemperatureController:
+  """Build a temperature controller frontend over a software backend double."""
+  return TemperatureController(
+    name="wait_temperature_controller",
+    size_x=1,
+    size_y=1,
+    size_z=1,
+    backend=backend,
+    child_location=Coordinate.zero(),
+  )
+
+
+class TestTemperatureControllerWaits(AnyioTestBase):
+  async def test_wait_for_temperature_uses_one_deadline(self) -> None:
+    backend = RecordingTemperatureControllerBackend(temperature=20.0)
+    temperature_controller = make_temperature_controller(backend)
+    temperature_controller.target_temperature = 37.0
+
+    start = anyio.current_time()
+    with anyio.fail_after(1):
+      with pytest.raises(TimeoutError, match="within 0.01 seconds"):
+        await temperature_controller.wait_for_temperature(timeout=0.01)
+    elapsed = anyio.current_time() - start
+
+    assert backend.polls == ["current_temperature"]
+    assert elapsed < 0.5
+
+  async def test_wait_for_temperature_rejects_none_timeout(self) -> None:
+    backend = RecordingTemperatureControllerBackend(temperature=20.0)
+    temperature_controller = make_temperature_controller(backend)
+    temperature_controller.target_temperature = 37.0
+
+    with anyio.fail_after(0.2):
+      with pytest.raises(TypeError, match="timeout"):
+        await temperature_controller.wait_for_temperature(timeout=None)  # type: ignore[arg-type]
+
+    assert backend.polls == []
+    assert backend.commands == []
+
+  async def test_wait_for_temperature_cancels_during_poll_sleep(self) -> None:
+    backend = RecordingTemperatureControllerBackend(temperature=20.0)
+    temperature_controller = make_temperature_controller(backend)
+    temperature_controller.target_temperature = 37.0
+
+    start = anyio.current_time()
+    with anyio.fail_after(1):
+      async with anyio.create_task_group() as task_group:
+        task_group.start_soon(temperature_controller.wait_for_temperature)
+        await backend.polled.wait()
+        task_group.cancel_scope.cancel()
+    elapsed = anyio.current_time() - start
+
+    assert backend.polls == ["current_temperature"]
+    assert elapsed < 0.5
+
+  async def test_hold_temperature_is_backend_neutral(self) -> None:
+    backend = RecordingTemperatureControllerBackend(temperature=20.0)
+    temperature_controller = make_temperature_controller(backend)
+    temperature_controller.target_temperature = 37.0
+
+    start = anyio.current_time()
+    with anyio.fail_after(1):
+      await temperature_controller.hold_temperature(0.01)
+    elapsed = anyio.current_time() - start
+
+    assert backend.commands == []
+    assert backend.polls == []
+    assert elapsed >= 0.01

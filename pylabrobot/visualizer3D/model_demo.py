@@ -14,6 +14,8 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Set, Tuple
 
+import anyio
+
 from .demo import build_facility, star_of, turn_the_arm, work_the_jaws
 from .server import Viewer3D
 
@@ -57,18 +59,18 @@ async def main() -> None:
   logging.disable(logging.WARNING)
   facility = build_facility(bare=True)
   star = star_of(facility)
-  await star.setup()
-
   viewer = Viewer3D(facility, name="model_demo.py")
-  await viewer.start()
-  # The scene as the first client will be handed it, its meshes resolved.
-  report(viewer._scene_message()["models"])
-  if star.iswap is None:
-    print("  this STARlet has no iSWAP, so nothing moves")
-    return
-  # The arm turns and the jaws work at the same time, as they do on the device: one drive does not
-  # wait on the other.
-  await asyncio.gather(turn_the_arm(star), work_the_jaws(star))
+  async with star, viewer:
+    # The scene as the first client will be handed it, its meshes resolved.
+    report(viewer._scene_message()["models"])
+    if star.iswap is None:
+      print("  this STARlet has no iSWAP, so nothing moves")
+      return
+    # The arm turns and the jaws work at the same time, as they do on the device: one drive does not
+    # wait on the other.
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(turn_the_arm, star)
+      tg.start_soon(work_the_jaws, star)
 
 
 if __name__ == "__main__":

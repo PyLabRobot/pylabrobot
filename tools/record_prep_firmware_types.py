@@ -16,10 +16,11 @@ key as it was and adding `enums` and `structs` to each object that declares any.
 """
 
 import argparse
-import asyncio
 import json
 import logging
 from typing import Any, Dict, List
+
+import anyio
 
 from pylabrobot.hamilton.prep import PrepDriver
 from pylabrobot.hamilton.transport.tcp.introspection import EnumInfo, StructInfo
@@ -76,16 +77,13 @@ async def record(host: str, path: str, port: int = 2000) -> None:
     recorded = json.load(f)
 
   driver = PrepDriver(deck=PrepDeck(), host=host, port=port)
-  await driver._open()
-  try:
+  async with driver._link():
     serial = await driver.request_device_serial_number()
     if serial != recorded.get("serial_number"):
       raise RuntimeError(
         f"{path} was recorded from {recorded.get('serial_number')}, this device is {serial}"
       )
     await _types_of(driver, recorded["tree"])
-  finally:
-    await driver._close()
 
   with open(path, "w", encoding="utf-8") as f:
     json.dump(recorded, f, indent=1)
@@ -100,7 +98,7 @@ def main() -> None:
   parser.add_argument("--port", type=int, default=2000)
   args = parser.parse_args()
   logging.basicConfig(level=logging.INFO)
-  asyncio.run(record(args.host, args.tree, args.port))
+  anyio.run(record, args.host, args.tree, args.port)
 
 
 if __name__ == "__main__":

@@ -52,20 +52,16 @@ async def scan_system(directory: Path, storage_quota: int = DEFAULT_QUOTA):
   driver = make_celigo(config=config)
   hardware = make_driver()
   with (
-    patch.object(driver, "setup", hardware.setup),
-    patch.object(driver, "stop", hardware.stop),
+    patch.object(driver, "lifespan", hardware.lifespan),
     patch.object(driver, "request_controller_status", hardware.request_controller_status),
     patch.object(driver, "request_digital_input", hardware.request_digital_input),
     patch.object(driver, "move_to_scan_block", hardware.move_to_scan_block),
     patch.object(driver, "acquire_scan_position", hardware.acquire_scan_position),
   ):
     server, _ = make_server(directory, config=config, driver=driver, storage_quota=storage_quota)
-    await server.start()
-    try:
-      async with CeligoClient(server.endpoint, device_id=server.session.device_id) as client:
-        yield server, client, hardware
-    finally:
-      await server.stop()
+    client = CeligoClient(server.endpoint, device_id=server.session.device_id)
+    async with server, client:
+      yield server, client, hardware
 
 
 class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
@@ -73,17 +69,14 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
     """A 128-frame plate can reserve worst-case pixels without a quota override."""
     with TemporaryDirectory() as directory:
       server, hardware = make_server(Path(directory), config=make_config(2048, 2048))
-      await server.start()
-      try:
-        async with CeligoClient(server.endpoint, device_id=server.session.device_id) as client:
-          plan = await client.build_scan_plan(
-            ScanSpec.points([(63.5, 43)] * 128, channel="brightfield")
-          )
-          job = await client.create_scan("plate", plan=plan)
-          self.assertEqual((await job.get_status()).total, 128)
-          self.assertEqual(hardware.method_calls, [])
-      finally:
-        await server.stop()
+      client = CeligoClient(server.endpoint, device_id=server.session.device_id)
+      async with server, client:
+        plan = await client.build_scan_plan(
+          ScanSpec.points([(63.5, 43)] * 128, channel="brightfield")
+        )
+        job = await client.create_scan("plate", plan=plan)
+        self.assertEqual((await job.get_status()).total, 128)
+        self.assertEqual(hardware.method_calls, [])
 
   async def test_notebook_geometries_and_estimates_match_local_planning(self) -> None:
     """All notebook geometries survive RPC without constructing a hardware session."""
@@ -263,19 +256,19 @@ class ScanRpcTests(unittest.IsolatedAsyncioTestCase):
     """Recover the same scan, images, and plan without replaying completed work."""
     with TemporaryDirectory() as directory:
       path = Path(directory)
-      async with scan_system(path) as (_, client, hardware):
+      async with scan_system(path) as (server, client, hardware):
         await initialize(client)
         plan = await client.build_scan_plan(
           ScanSpec.points([(5, 5), (6, 6)], channel="brightfield", initial_brightfield_z_mm=2.45)
         )
-        job = await client.create_scan("reconnect", plan=plan)
         await client.create_scan("ready", plan=plan)
+        starter = CeligoClient(server.endpoint, device_id=client.device_id)
         with block_calls(hardware.acquire_scan_position) as (entered, release):
-          await job.start()
-          await asyncio.wait_for(entered.wait(), 5)
-          await client.disconnect()
+          async with starter:
+            job = await starter.create_scan("reconnect", plan=plan)
+            await job.start()
+            await asyncio.wait_for(entered.wait(), 5)
           release.set()
-          await client.connect()
           recovered = await client.recover_job("reconnect")
           self.assertEqual((await recovered.wait()).outcome, job_pb.OUTCOME_SUCCEEDED)
           self.assertEqual(await recovered.get_scan_plan(), plan)

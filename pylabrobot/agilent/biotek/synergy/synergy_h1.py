@@ -1,6 +1,7 @@
-import asyncio
 import logging
 from typing import Optional
+
+import anyio
 
 try:
   from pylibftdi import FtdiError
@@ -60,4 +61,4 @@ class SynergyH1(BioTekPlateReaderDriver):
         if retries == 3:
           raise
         logger.warning("Synergy H1 FTDI read failed; retrying", exc_info=True)
-        await asyncio.sleep(0.05)
+        await anyio.sleep(0.05)

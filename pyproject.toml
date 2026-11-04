@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["typing_extensions", "websockets>=14"]
+dependencies = ["anyio>=4.7", "sniffio", "typing_extensions", "websockets>=14"]
 
 [project.scripts]
 plr = "pylabrobot.cli:main"
@@ -40,7 +40,9 @@ odyssey = ["Pillow"]
 all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,precise-flex-vision,xarm,odyssey]"]
 test = [
   "pytest>=9.1",
+  "pytest-timeout",
   "pytest-xdist",
+  "trio",
 ]
 dev = [
   "PyLabRobot[all,test,celigo,rpc-dev]",

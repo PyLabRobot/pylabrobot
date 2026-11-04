@@ -63,22 +63,21 @@ class TestLifecycleHalves(unittest.IsolatedAsyncioTestCase):
     """The run is what the robot holds against its touchscreen, so taking the
     robot is create_run's doing, not connect's."""
 
-    await self.flex.connect()
-    self.assertIsNone(self.flex.run_id)
-    self.assertEqual(
-      [c for c in self.api.submit_command.await_args_list if c.args[1] == "home"], []
-    )
+    async with self.flex.lifespan(skip_home=True, query_only=True):
+      await self.flex.connect()
+      self.assertIsNone(self.flex.run_id)
+      self.assertEqual(
+        [c for c in self.api.submit_command.await_args_list if c.args[1] == "home"], []
+      )
 
   async def test_initialize_discovers_without_moving(self):
     """Asking what is mounted must not require moving the robot to find out."""
-    await self.flex.connect()
-    await self.flex.create_run()
-
-    await self.flex.initialize()
-    self.assertIsInstance(self.flex.left, FlexHead8)
-    self.assertEqual(
-      [c for c in self.api.submit_command.await_args_list if c.args[1] == "home"], []
-    )
+    async with self.flex.lifespan(skip_home=True):
+      await self.flex.initialize()
+      self.assertIsInstance(self.flex.left, FlexHead8)
+      self.assertEqual(
+        [c for c in self.api.submit_command.await_args_list if c.args[1] == "home"], []
+      )
 
   async def test_cancel_run_frees_local_control_without_dropping_the_link(self):
     """The operator's 'give me the robot back' action: end the session, stay connected."""

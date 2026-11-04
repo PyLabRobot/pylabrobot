@@ -14,13 +14,13 @@ import itertools
 import logging
 from typing import Tuple
 
+import anyio
+
 from pylabrobot.hamilton.star.device import STARDevice, STARlet
 from pylabrobot.resources import set_volume_tracking
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import (
-  PLT_CAR_L5AC_A00,
-  TIP_CAR_480_A00,
   hamilton_96_tiprack_10uL_NTR,
   hamilton_96_tiprack_50uL_NTR,
   hamilton_96_tiprack_300uL_filter,
@@ -31,6 +31,8 @@ from pylabrobot.resources.hamilton import (
   hamilton_mfx_carrier_L5_base,
   hamilton_mfx_resourceholder_ntr,
   hamilton_mfx_tiprackholder_standard,
+  hamilton_plate_carrier_L5_ac,
+  hamilton_tip_carrier_L5,
   hamilton_tip_carrier_L5_ntr_a00,
 )
 from pylabrobot.resources.plate import Plate
@@ -69,19 +71,19 @@ def build_facility(*, bare: bool = False) -> Facility:
   facility.assign_child_resource(star, location=Coordinate(0, 0, bench.get_size_z()))
   facility.assign_child_resource(bench, location=Coordinate(0, 0, 0))
 
-  tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
+  tip_carrier = hamilton_tip_carrier_L5(name="tip_carrier")
   # Filtered and unfiltered side by side, so the filter in a tip can be told apart.
   tip_carrier[0] = hamilton_96_tiprack_1000uL(name="tips_0")
   tip_carrier[1] = hamilton_96_tiprack_1000uL_filter(name="tips_1")
   tip_carrier[2] = hamilton_96_tiprack_300uL_filter(name="tips_2")
-  star.deck.assign_child_resource(tip_carrier, rails=1)
+  star.deck.assign_child_resource(tip_carrier, track=1)
 
-  plate_carrier = PLT_CAR_L5AC_A00(name="source_carrier")
+  plate_carrier = hamilton_plate_carrier_L5_ac(name="source_carrier")
   for slot in range(5):
     plate_carrier[slot] = cor_96_wellplate_360uL_Fb(name=f"source_{slot}")
   star.deck.assign_child_resource(plate_carrier, track=7)
 
-  destination_carrier = PLT_CAR_L5AC_A00(name="destination_carrier")
+  destination_carrier = hamilton_plate_carrier_L5_ac(name="destination_carrier")
   for slot in range(5):
     destination_carrier[slot] = cor_96_wellplate_360uL_Fb(name=f"destination_{slot}")
   star.deck.assign_child_resource(destination_carrier, track=13)
@@ -176,7 +178,7 @@ async def run(facility: Resource) -> None:
     raise TypeError("the demo deck no longer holds the plates this run drives")
 
   fill(source, 300.0)
-  await asyncio.sleep(2.0)
+  await anyio.sleep(2.0)
 
   for column in range(12):
     for row in "ABCDEFGH":
@@ -184,7 +186,7 @@ async def run(facility: Resource) -> None:
       taken = min(150.0, source.get_item(well).tracker.get_used_volume())
       source.get_item(well).tracker.remove_liquid(taken)
       destination.get_item(well).tracker.add_liquid(volume=taken)
-    await asyncio.sleep(0.45)
+    await anyio.sleep(0.45)
 
   print("run complete; the viewer stays up")
 
@@ -201,7 +203,7 @@ async def sweep_arm(star: STARDevice) -> None:
   for step in itertools.count():
     target = low + span * (0.15 if step % 2 else 0.75)
     await star.x_arm.move_to_x_position(round(target, 1))
-    await asyncio.sleep(3.0)
+    await anyio.sleep(3.0)
 
 
 # How far forward to bring the elbow before turning it, in mm: more than link 1's own length,
@@ -243,7 +245,7 @@ async def turn_the_arm(star: STARDevice) -> None:
       # What the guards refuse is what a real caller would be refused. Printed, not logged: nothing
       # configures logging here, and a pose silently not happening looks like a viewer that stopped.
       print(f"  the arm may not go to {where}: {refused}")
-    await asyncio.sleep(HELD_FOR)
+    await anyio.sleep(HELD_FOR)
 
 
 async def work_the_jaws(star: STARDevice) -> None:
@@ -261,7 +263,7 @@ async def work_the_jaws(star: STARDevice) -> None:
   # move where closing onto an already-closed gripper would not.
   closed, opened = (c.gripper_increments_to_mm(end) for end in c.gripper_range_increments)
   # Offset against the arm's own cycle, so the two are not seen only ever moving together.
-  await asyncio.sleep(HELD_FOR / 2)
+  await anyio.sleep(HELD_FOR / 2)
 
   for step in itertools.count():
     width = (opened, closed)[step % 2]
@@ -269,7 +271,7 @@ async def work_the_jaws(star: STARDevice) -> None:
       await iswap.gripper_move_to_jaw_position(width)
     except ValueError as refused:
       print(f"  the jaws may not go to {width:.1f} mm: {refused}")
-    await asyncio.sleep(HELD_FOR)
+    await anyio.sleep(HELD_FOR)
 
 
 async def main() -> None:
@@ -278,17 +280,19 @@ async def main() -> None:
 
   facility = build_facility()
   star = star_of(facility)
-  await star.setup()
-  declare_channel_access(star)
+  async with star:
+    declare_channel_access(star)
 
-  viewer = Viewer3D(facility, name="demo.py")
-  await viewer.start()
-
-  await viewer.wait_for_browser()  # nothing moves before a page is drawing
-  await run(facility)
-  # The arm and the iSWAP move at once, as they do on the device: they are on the same carriage
-  # and neither waits for the other.
-  await asyncio.gather(sweep_arm(star), turn_the_arm(star), work_the_jaws(star))
+    viewer = Viewer3D(facility, name="demo.py")
+    async with viewer:
+      await viewer.wait_for_browser()  # nothing moves before a page is drawing
+      await run(facility)
+      # The arm and the iSWAP move at once, as they do on the device: they are on the same carriage
+      # and neither waits for the other.
+      async with anyio.create_task_group() as tg:
+        tg.start_soon(sweep_arm, star)
+        tg.start_soon(turn_the_arm, star)
+        tg.start_soon(work_the_jaws, star)
 
 
 if __name__ == "__main__":

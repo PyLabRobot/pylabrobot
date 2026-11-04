@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import hashlib
 import io
@@ -7,8 +6,12 @@ import logging
 import struct
 import time
 from collections import defaultdict
-from typing import Callable, Dict, List, Optional, Tuple, TypeVar
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Callable, Dict, List, Optional, Tuple, TypeVar
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.sila.grpc import (
   command_execution_uuid,
   decode_command_confirmation,
@@ -338,6 +341,8 @@ class ExperimentalPicoBackend(ImagerBackend):
       :meth:`change_filter_cube`. Not all positions need to be specified.
   """
 
+  _CLEANUP_TIMEOUT = 35.0
+
   def __init__(
     self,
     host: str,
@@ -369,6 +374,10 @@ class ExperimentalPicoBackend(ImagerBackend):
     self._lock_id: Optional[str] = None
     self._locked = False
     self._door_open = False
+    self._objective_maintenance_active = False
+    self._objective_maintenance_state_unknown = False
+    self._objective_maintenance_scope_token: Optional[object] = None
+    self._objective_maintenance_transition_lock = anyio.Lock()
 
   # -- gRPC helpers --
 
@@ -401,7 +410,7 @@ class ExperimentalPicoBackend(ImagerBackend):
   ) -> _T:
     for attempt in range(2):
       try:
-        return await asyncio.to_thread(fn)
+        return await anyio.to_thread.run_sync(fn)
       except grpc.RpcError as e:
         if attempt == 0 and with_lock and "CommandRequiresLock" in decode_grpc_error(e):
           await self._relock()
@@ -416,11 +425,14 @@ class ExperimentalPicoBackend(ImagerBackend):
     request: bytes = b"",
     with_lock: bool = False,
     timeout: float = 30.0,
+    _on_dispatch: Optional[Callable[[], None]] = None,
   ) -> bytes:
     channel = self.channel
     metadata = self._lock_metadata() if with_lock else None
 
     def fn():
+      if _on_dispatch is not None:
+        _on_dispatch()
       rpc = channel.unary_unary(
         f"/{service}/{method}",
         request_serializer=lambda x: x,
@@ -476,7 +488,8 @@ class ExperimentalPicoBackend(ImagerBackend):
 
   # -- lifecycle --
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
     if not HAS_GRPC:
       raise RuntimeError(
         f"grpcio is required for the PicoBackend. Import error: {_GRPC_IMPORT_ERROR}"
@@ -488,6 +501,7 @@ class ExperimentalPicoBackend(ImagerBackend):
         ("grpc.max_receive_message_length", 64 * 1024 * 1024),
       ],
     )
+    stack.callback(self._close_channel)
     self._lock_id = "pylabrobot"
 
     # Try to unlock a stale lock from a previous session that didn't clean up.
@@ -497,6 +511,12 @@ class ExperimentalPicoBackend(ImagerBackend):
       pass
 
     await self._lock()
+    stack.push_shielded_async_callback(
+      self._unlock_during_stop, shield_timeout=self._CLEANUP_TIMEOUT
+    )
+    stack.push_shielded_async_callback(
+      self._force_exit_objective_maintenance, shield_timeout=self._CLEANUP_TIMEOUT
+    )
 
     installed_obj = await self._get_installed_objectives()
     num_obj = len(installed_obj)
@@ -518,16 +538,17 @@ class ExperimentalPicoBackend(ImagerBackend):
 
     logger.info("PicoBackend: connected to %s:%d", self._host, self._port)
 
-  async def stop(self) -> None:
-    if self._channel is not None:
-      if self._locked:
-        try:
-          await self._unlock()
-        except (grpc.RpcError, RuntimeError) as e:
-          logger.warning("PicoBackend: unlock failed during stop: %s", e)
-      self._channel.close()
-      self._channel = None
-    logger.info("PicoBackend: stopped")
+  def _close_channel(self) -> None:
+    channel = self._channel
+    self._channel = None
+    if channel is not None:
+      channel.close()
+
+  async def _unlock_during_stop(self) -> None:
+    try:
+      await self._unlock()
+    except (grpc.RpcError, RuntimeError) as e:
+      logger.warning("PicoBackend: unlock failed during stop: %s", e)
 
   # -- configuration --
 
@@ -569,7 +590,7 @@ class ExperimentalPicoBackend(ImagerBackend):
 
   # -- objective maintenance --
 
-  async def enter_objective_maintenance(self, position: int) -> None:
+  async def _enter_objective_maintenance_transition(self, position: int) -> None:
     """Open the objective door for swapping objectives.
 
     Args:
@@ -581,12 +602,101 @@ class ExperimentalPicoBackend(ImagerBackend):
     params = json.dumps({"Index": position})
     req = length_delimited(1, sila_string(params))
     await self._initialize()
-    await self._call(_OBJ_SVC, "EnterObjectiveMaintenance", req, True)
+    await anyio.lowlevel.checkpoint()
+    was_active = self._objective_maintenance_active
+    was_state_unknown = self._objective_maintenance_state_unknown
+    enter_dispatched = False
+
+    def publish_enter_attempt() -> None:
+      nonlocal enter_dispatched
+      enter_dispatched = True
+      self._objective_maintenance_state_unknown = True
+
+    try:
+      await self._call(
+        _OBJ_SVC,
+        "EnterObjectiveMaintenance",
+        req,
+        True,
+        _on_dispatch=publish_enter_attempt,
+      )
+    except BaseException:
+      if was_active or was_state_unknown:
+        self._objective_maintenance_active = was_active
+        self._objective_maintenance_state_unknown = was_state_unknown
+      elif enter_dispatched:
+        with anyio.CancelScope(shield=True):
+          await self._exit_objective_maintenance_transition()
+      raise
+    else:
+      self._objective_maintenance_active = True
+      self._objective_maintenance_state_unknown = False
+
+  async def _exit_objective_maintenance_transition(self) -> None:
+    self._objective_maintenance_state_unknown = True
+    try:
+      await self._call(_OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
+    except BaseException:
+      self._objective_maintenance_active = True
+      raise
+    else:
+      self._objective_maintenance_active = False
+      self._objective_maintenance_state_unknown = False
+
+  async def enter_objective_maintenance(self, position: int) -> None:
+    """Open the objective door for durable objective maintenance."""
+    async with self._objective_maintenance_transition_lock:
+      if self._objective_maintenance_scope_token is not None:
+        raise RuntimeError("Objective maintenance is scoped")
+      await self._enter_objective_maintenance_transition(position)
 
   async def exit_objective_maintenance(self) -> None:
     """Close the objective door after swapping objectives."""
+    async with self._objective_maintenance_transition_lock:
+      if self._objective_maintenance_scope_token is not None:
+        raise RuntimeError("Objective maintenance is scoped")
+      await self._exit_objective_maintenance_transition()
 
-    await self._call(_OBJ_SVC, "ExitObjectiveMaintenance", b"", True)
+  @asynccontextmanager
+  async def objective_maintenance(self, position: int) -> AsyncIterator[None]:
+    """Keep objective maintenance active for the lifetime of this context."""
+    token = object()
+    async with self._objective_maintenance_transition_lock:
+      if not self.is_active:
+        raise RuntimeError("Objective maintenance scopes require an active Pico lifespan")
+      if self._objective_maintenance_scope_token is not None:
+        raise RuntimeError("Objective maintenance is already scoped")
+      if self._objective_maintenance_active or self._objective_maintenance_state_unknown:
+        raise RuntimeError("Objective maintenance is already active")
+      self._objective_maintenance_scope_token = token
+      try:
+        await self._enter_objective_maintenance_transition(position)
+      except BaseException:
+        self._objective_maintenance_scope_token = None
+        raise
+
+    try:
+      await anyio.lowlevel.checkpoint()
+      yield
+    finally:
+      with anyio.CancelScope(shield=True):
+        async with self._objective_maintenance_transition_lock:
+          if self._objective_maintenance_scope_token is token:
+            try:
+              await self._exit_objective_maintenance_transition()
+            finally:
+              self._objective_maintenance_scope_token = None
+
+  async def _force_exit_objective_maintenance(self) -> None:
+    """Exit tracked maintenance before releasing the server and channel."""
+    async with self._objective_maintenance_transition_lock:
+      if (
+        self._objective_maintenance_active
+        or self._objective_maintenance_state_unknown
+        or self._objective_maintenance_scope_token is not None
+      ):
+        await self._exit_objective_maintenance_transition()
+        self._objective_maintenance_scope_token = None
 
   async def get_available_objectives(self, position: int) -> List[dict]:
     """Query which objectives are compatible with a given turret position.

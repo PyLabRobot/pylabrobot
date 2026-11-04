@@ -1,6 +1,5 @@
 """KingFisher Presto magnetic particle processor over USB HID."""
 
-import asyncio
 import base64
 import logging
 import re
@@ -8,10 +7,12 @@ import xml.etree.ElementTree as ET
 import zlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from types import TracebackType
 from typing import Literal, Optional, cast
 from xml.sax.saxutils import quoteattr
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.io.hid import HID
 from pylabrobot.thermo_fisher.kingfisher.bdz import BdzProtocol, bdz_variant, write_bdz
 from pylabrobot.thermo_fisher.kingfisher.presto.connection import (
@@ -84,12 +85,13 @@ class PrestoEvent:
     return self.name in ("LoadPlate", "RemovePlate", "ChangePlate", "Pause")
 
 
-class KingFisherPresto:
+class KingFisherPresto(HasLifespan):
   """Control a Presto directly through its XML command/event protocol.
 
-  The driver has not been verified on hardware. ``setup()`` connects without
-  moving the turntable. Nests are numbered 1 and 2; their position is unknown
-  until a rotation completes. Protocol timing remains instrument-controlled.
+  The driver has not been verified on hardware. Entering the lifespan connects
+  without moving the turntable. Nests are numbered 1 and 2; their position is
+  unknown until a rotation completes. Protocol timing remains
+  instrument-controlled.
 
   Args:
     serial_number: Select a particular instrument when several are connected.
@@ -110,11 +112,11 @@ class KingFisherPresto:
 
   def __init__(self, serial_number: Optional[str] = None, timeout: float = 30.0) -> None:
     """Configure a USB HID connection without opening hardware."""
+    super().__init__()
     self.io = HID("KingFisher Presto", vid=0x0AB6, pid=0x02C9, serial_number=serial_number)
     self._connection = PrestoConnection(self.io, self._on_event, timeout)
     self._setup_finished = False
-    self._lifecycle = asyncio.Lock()
-    self._motion = asyncio.Lock()
+    self._motion = anyio.Lock()
     self._position_generation = 0
     self._ready_generation = 0
     self._position_at_processing = None
@@ -153,61 +155,42 @@ class KingFisherPresto:
       str(error) if error else None,
     )
 
-  async def setup(self) -> None:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Connect and read identity/status without moving or acknowledging faults."""
-    async with self._lifecycle:
-      if self._setup_finished:
-        self._connection.check_open()
-        return
-      logger.warning(
-        "KingFisher Presto is unverified on hardware. Please report successful testing "
-        "with the firmware version and update this warning after verification."
-      )
-      self._clear_state()
-      self._connection.io = self.io
-      try:
-        await self._connection.setup()
-        result = await self._connection.command(command_xml("Connect"))
-        self.instrument = result.findtext("Instrument")
-        self.version = result.findtext("Version")
-        self.serial = result.findtext("Serial")
-        self._setup_finished = True
-        status = await self.get_status()
-        logger.info("Connected to %s (%s): %s", self.instrument, self.serial, status.status)
-        if status.status != "Idle":
-          logger.warning("Presto connected with status %s: %s", status.status, status.error_text)
-      except BaseException:
-        self._clear_state()
-        await self._connection.stop()
-        raise
+    await super()._enter_lifespan(stack)
+    logger.warning(
+      "KingFisher Presto is unverified on hardware. Please report successful testing "
+      "with the firmware version and update this warning after verification."
+    )
+    self._clear_state()
+    self._motion = anyio.Lock()
+    self._connection.io = self.io
+    await stack.enter_async_context(self._connection.lifespan())
+    stack.callback(self._log_closed)
+    stack.callback(self._clear_state)
+    stack.push_shielded_async_callback(self._disconnect_quietly)
+    result = await self._connection.command(command_xml("Connect"))
+    self.instrument = result.findtext("Instrument")
+    self.version = result.findtext("Version")
+    self.serial = result.findtext("Serial")
+    self._setup_finished = True
+    status = await self.get_status()
+    logger.info("Connected to %s (%s): %s", self.instrument, self.serial, status.status)
+    if status.status != "Idle":
+      logger.warning("Presto connected with status %s: %s", status.status, status.error_text)
 
-  async def stop(self) -> None:
-    """Close the connection; use stop_protocol() to stop instrument execution."""
-    async with self._lifecycle:
-      try:
-        if self._setup_finished:
-          try:
-            await self._connection.disconnect()
-          except (PrestoError, OSError, asyncio.TimeoutError):
-            logger.debug("Presto disconnect unavailable; closing transport", exc_info=True)
-      finally:
-        self._clear_state()
-        await self._connection.stop()
-        logger.info("Presto connection closed")
+  async def _disconnect_quietly(self) -> None:
+    """Send Disconnect when setup completed and the session remains open."""
+    if not self._setup_finished:
+      return
+    try:
+      await self._connection.disconnect()
+    except (PrestoError, OSError, TimeoutError):
+      logger.debug("Presto disconnect unavailable; closing transport", exc_info=True)
 
-  async def __aenter__(self) -> "KingFisherPresto":
-    """Connect for an async context."""
-    await self.setup()
-    return self
-
-  async def __aexit__(
-    self,
-    exc_type: Optional[type[BaseException]],
-    exc_value: Optional[BaseException],
-    traceback: Optional[TracebackType],
-  ) -> None:
-    """Close the connection on context exit."""
-    await self.stop()
+  def _log_closed(self) -> None:
+    """Log connection closure when the lifespan exits."""
+    logger.info("Presto connection closed")
 
   async def get_protocol_time_left(self, protocol: Optional[str] = None) -> ProtocolTimeLeft:
     """Read remaining protocol/step time in seconds."""
@@ -376,7 +359,7 @@ class KingFisherPresto:
     await self.rotate(position, "processing")
 
   async def abort(self) -> None:
-    """Abort execution; call stop() then setup() to start a fresh connection."""
+    """Abort execution; exit and re-enter the lifespan to start a fresh connection."""
     self._position_at_processing = None
     self._position_generation += 1
     await self._connection.abort()

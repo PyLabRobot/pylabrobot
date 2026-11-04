@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from typing_extensions import Self
-
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.revvity.celigo.grpc.limits import MAX_MESSAGE_BYTES
 from pylabrobot.revvity.celigo.grpc.remote_job import CeligoImagingJob
 from pylabrobot.revvity.celigo.grpc.scan_serialization import (
@@ -48,21 +47,16 @@ class CeligoClient(DeviceClient):
     self.images: ImageClient
     self.operations: rpc.CeligoServiceAsyncStub
 
-  async def connect(self) -> Self:
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
     """Validate device identity and required capabilities before binding optional clients."""
-    await super().connect()
-    try:
-      info = await self.get_device_info()
-      if not {JOB_SERVICE, IMAGE_SERVICE}.issubset(info.services):
-        raise ValueError("device does not advertise the required job and image capabilities")
-      assert self.channel is not None
-      self.jobs = JobClient(self.channel, self.device_id, self.timeout)
-      self.images = ImageClient(self.channel, self.device_id, self.timeout)
-      self.operations = rpc.CeligoServiceStub(self.channel)
-    except BaseException:
-      await self.disconnect()
-      raise
-    return self
+    await super()._enter_lifespan(stack)
+    info = await self.get_device_info()
+    if not {JOB_SERVICE, IMAGE_SERVICE}.issubset(info.services):
+      raise ValueError("device does not advertise the required job and image capabilities")
+    assert self.channel is not None
+    self.jobs = JobClient(self.channel, self.device_id, self.timeout)
+    self.images = ImageClient(self.channel, self.device_id, self.timeout)
+    self.operations = rpc.CeligoServiceStub(self.channel)
 
   def bind_job(self, ref: job_pb.JobRef) -> CeligoImagingJob:
     """Bind a typed creation result to this device and its image client."""

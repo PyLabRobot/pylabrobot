@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import hmac
 import logging
@@ -12,6 +11,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, cast
 from xml.dom import minidom
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io import Socket
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import LidStatus, Protocol, Stage, Step
@@ -205,6 +207,10 @@ def _gen_protocol_data(
   return data
 
 
+_THERMOCYCLER_CLEANUP_TIMEOUT = 120.0
+_BUZZER_OFF_TIMEOUT = 5.0
+
+
 class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   """Backend for Proflex thermocycler."""
 
@@ -215,6 +221,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     serial_number: Optional[str] = None,
     port: Optional[int] = None,
   ):
+    super().__init__()
     if port is not None:
       raise NotImplementedError("Specifying a port is deprecated. Use use_ssl instead.")
 
@@ -259,6 +266,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     self.available_blocks: List[int] = []
     self.logger = logging.getLogger("pylabrobot.legacy.thermocycling.proflex")
     self.current_runs: Dict[int, str] = {}
+    self._scpi_lock = anyio.Lock()
 
   @property
   def num_blocks(self) -> int:
@@ -403,7 +411,8 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   async def _read_response(self, timeout=1, read_once=True) -> str:
     try:
       if read_once:
-        response_b = await self.io.read(timeout=timeout)
+        with anyio.fail_after(timeout):
+          response_b = await self.io.read()
       else:
         response_b = await self.io.read_until_eof(timeout=timeout)
       response = response_b.decode("ascii")
@@ -411,19 +420,64 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       return response
     except TimeoutError:
       return ""
+    except anyio.EndOfStream:
+      return ""
     except Exception as e:
       self.logger.error("Error reading from socket: %s", e)
       return ""
 
-  async def send_command(self, data, response_timeout=1, read_once=True):
+  async def _exchange(
+    self,
+    data: dict,
+    response_timeout: float = 1,
+    read_once: bool = True,
+    read_next: bool = False,
+    run_owner: Optional[tuple[int, str]] = None,
+  ) -> tuple[str, Optional[str]]:
     msg = self._build_scpi_msg(data)
     self.logger.debug("Command sent: %s", msg.strip())
+    payload = msg.encode("ascii")
+    response = ""
+    follow_up: Optional[str] = None
+    error: Optional[BaseException] = None
 
-    await self.io.write(msg.encode("ascii"), timeout=response_timeout)
-    return await self._read_response(timeout=response_timeout, read_once=read_once)
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    with anyio.fail_after(response_timeout):
+      reply_deadline = anyio.current_effective_deadline()
+      await self._scpi_lock.acquire()
+    try:
+      # Keep this checkpoint even though the pre-lock checkpoint covers contended cancellation.
+      # AnyIO's uncontended lock fast path can otherwise defer cancellation until after the write.
+      await anyio.lowlevel.checkpoint_if_cancelled()
+      with anyio.CancelScope(shield=True):
+        try:
+          with anyio.CancelScope(deadline=reply_deadline) as reply_scope:
+            if run_owner is not None:
+              block_id, run_name = run_owner
+              self.current_runs[block_id] = run_name
+            await self.io.write(payload, timeout=response_timeout)
+            response = await self._read_response(timeout=response_timeout, read_once=read_once)
+            if read_next and self._parse_scpi_response(response)["status"] == "NEXT":
+              follow_up = await self._read_response(timeout=response_timeout, read_once=read_once)
+          if reply_scope.cancelled_caught:
+            error = TimeoutError(f"Timed out waiting for response to {msg.strip()}")
+        except BaseException as exc:
+          error = exc
+    finally:
+      self._scpi_lock.release()
 
-  async def _scpi_authenticate(self):
-    await self.io.setup()
+    await anyio.lowlevel.checkpoint()
+    if error is not None:
+      raise error
+    return response, follow_up
+
+  async def send_command(self, data, response_timeout=1, read_once=True):
+    response, _ = await self._exchange(
+      data=data, response_timeout=response_timeout, read_once=read_once
+    )
+    return response
+
+  async def _authenticate_open_socket(self) -> None:
     await self._read_response(timeout=5)
     challenge_res = await self.send_command({"cmd": "CHAL?"})
     challenge = self._parse_scpi_response(challenge_res)["args"][0]
@@ -459,10 +513,6 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     return run_name != "-"
 
   async def _load_available_blocks(self) -> None:
-    await (
-      self._scpi_authenticate()
-    )  # in case users wants to see available blocks without setting them up
-    await self._load_num_blocks_and_type()
     assert self._num_blocks is not None, "Number of blocks not set"
     for block_id in range(self._num_blocks):
       block_error = await self.get_error(block_id=block_id)
@@ -534,12 +584,13 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   ) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} is not available")
-    res = await self.send_command(
-      {"cmd": f"TBC{block_id + 1}:BLOCK", "args": [1 if control_enabled else 0, temp]}
+    res, follow_up = await self._exchange(
+      {"cmd": f"TBC{block_id + 1}:BLOCK", "args": [1 if control_enabled else 0, temp]},
+      read_next=True,
     )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set block idle temperature")
-    follow_up = await self._read_response()
+    assert follow_up is not None
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set block idle temperature")
 
@@ -548,12 +599,13 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
   ) -> None:
     if block_id not in self.available_blocks:
       raise ValueError(f"Block {block_id} not available")
-    res = await self.send_command(
-      {"cmd": f"TBC{block_id + 1}:COVER", "args": [1 if control_enabled else 0, temp]}
+    res, follow_up = await self._exchange(
+      {"cmd": f"TBC{block_id + 1}:COVER", "args": [1 if control_enabled else 0, temp]},
+      read_next=True,
     )
     if self._parse_scpi_response(res)["status"] != "NEXT":
       raise ValueError("Failed to set cover idle temperature")
-    follow_up = await self._read_response()
+    assert follow_up is not None
     if self._parse_scpi_response(follow_up)["status"] != "OK":
       raise ValueError("Failed to set cover idle temperature")
 
@@ -613,20 +665,28 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
     assert all(char in ".- " for char in morse_code), "Invalid characters in morse code"
     for char in morse_code:
       if char == ".":
-        await self.buzzer_on()
-        await asyncio.sleep(short_beep_duration)
-        await self.buzzer_off()
+        try:
+          await self.buzzer_on()
+          await anyio.sleep(short_beep_duration)
+        finally:
+          with anyio.CancelScope(shield=True):
+            with anyio.fail_after(_BUZZER_OFF_TIMEOUT):
+              await self.buzzer_off()
       elif char == "-":
-        await self.buzzer_on()
-        await asyncio.sleep(long_beep_duration)
-        await self.buzzer_off()
+        try:
+          await self.buzzer_on()
+          await anyio.sleep(long_beep_duration)
+        finally:
+          with anyio.CancelScope(shield=True):
+            with anyio.fail_after(_BUZZER_OFF_TIMEOUT):
+              await self.buzzer_off()
       elif char == " ":
-        await asyncio.sleep(space_duration)
-      await asyncio.sleep(short_beep_duration)  # between letters is a short unit
+        await anyio.sleep(space_duration)
+      await anyio.sleep(short_beep_duration)  # between letters is a short unit
 
   async def continue_run(self, block_id: int):
     for _ in range(3):
-      await asyncio.sleep(1)
+      await anyio.sleep(1)
       res = await self.send_command({"cmd": f"TBC{block_id + 1}:CONTinue"})
       if self._parse_scpi_response(res)["status"] != "OK":
         raise ValueError("Failed to continue from indefinite hold")
@@ -779,35 +839,43 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       self.logger.error("Protocol failed to load")
       raise ValueError("Protocol failed to load")
 
-    start_res = await self.send_command(
-      {
-        "cmd": f"TBC{block_id + 1}:RunProtocol",
-        "params": {
-          "User": user_name,
-          "CoverTemperature": cover_temp,
-          "CoverEnabled": "On" if cover_enabled else "Off",
+    try:
+      start_res, _ = await self._exchange(
+        {
+          "cmd": f"TBC{block_id + 1}:RunProtocol",
+          "params": {
+            "User": user_name,
+            "CoverTemperature": cover_temp,
+            "CoverEnabled": "On" if cover_enabled else "Off",
+          },
+          "args": [protocol_name, run_name],
         },
-        "args": [protocol_name, run_name],
-      },
-      response_timeout=2,
-      read_once=False,
-    )
+        response_timeout=2,
+        read_once=False,
+        run_owner=(block_id, run_name),
+      )
 
-    if self._parse_scpi_response(start_res)["status"] == "NEXT":
-      self.logger.info("Protocol started")
-    else:
-      self.logger.error(start_res)
-      self.logger.error("Protocol failed to start")
-      raise ValueError("Protocol failed to start")
+      if self._parse_scpi_response(start_res)["status"] == "NEXT":
+        self.logger.info("Protocol started")
+      else:
+        self.logger.error(start_res)
+        self.logger.error("Protocol failed to start")
+        raise ValueError("Protocol failed to start")
 
-    total_time = await self.get_estimated_run_time(block_id=block_id)
-    total_time = float(total_time)
-    self.logger.info(f"Estimated run time: {total_time}")
-    self.current_runs[block_id] = run_name
+      total_time = await self.get_estimated_run_time(block_id=block_id)
+      total_time = float(total_time)
+      self.logger.info(f"Estimated run time: {total_time}")
+    except anyio.get_cancelled_exc_class():
+      if self.current_runs.get(block_id) == run_name:
+        with anyio.CancelScope(shield=True):
+          with anyio.fail_after(_THERMOCYCLER_CLEANUP_TIMEOUT):
+            await self.abort_run(block_id)
+      raise
 
   async def abort_run(self, block_id: int):
     if not await self.is_block_running(block_id=block_id):
       self.logger.info("Failed to abort protocol: no run is currently running on this block")
+      self.current_runs.pop(block_id, None)
       return
     run_name = await self.get_run_name(block_id=block_id)
     abort_res = await self.send_command({"cmd": f"TBC{block_id + 1}:AbortRun", "args": [run_name]})
@@ -816,7 +884,8 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       self.logger.error("Failed to abort protocol")
       raise ValueError("Failed to abort protocol")
     self.logger.info("Protocol aborted")
-    await asyncio.sleep(10)
+    self.current_runs.pop(block_id, None)
+    await anyio.sleep(10)
 
   @dataclass
   class RunProgress:
@@ -870,7 +939,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
             abs(float(block_temps[i]) - target_temps[i]) < 0.5 for i in range(len(block_temps))
           ):
             break
-          await asyncio.sleep(5)
+          await anyio.sleep(5)
         self.logger.info("Infinite hold")
         return ThermoFisherThermocyclerBackend.RunProgress(
           running=False,
@@ -890,10 +959,57 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
 
   # *************Methods implementing ThermocyclerBackend***********************
 
-  async def setup(
-    self, block_idle_temp=25, cover_idle_temp=105, blocks_to_setup: Optional[List[int]] = None
-  ):
-    await self._scpi_authenticate()
+  def _clear_connection_discovery_state(self) -> None:
+    """Clear discovery state associated with the previous connection."""
+    self.available_blocks.clear()
+    self._num_blocks = None
+    self.num_temp_zones = 0
+
+  async def _cleanup_thermocycler(self) -> None:
+    blocks = sorted(set(self.current_runs) | set(self.available_blocks))
+    self.available_blocks = blocks
+    actions = []
+    for block_id in blocks:
+      if block_id in self.current_runs:
+        actions.append((self.abort_run, block_id))
+      actions.append((self.deactivate_lid, block_id))
+      actions.append((self.deactivate_block, block_id))
+
+    async with AsyncExitStackWithShielding() as cleanup:
+      for callback, block_id in reversed(actions):
+        cleanup.push_shielded_async_callback(
+          callback, block_id, shield_timeout=_THERMOCYCLER_CLEANUP_TIMEOUT
+        )
+
+  async def _enter_lifespan(
+    self,
+    stack: AsyncExitStackWithShielding,
+    *,
+    block_idle_temp: float = 25,
+    cover_idle_temp: float = 105,
+    blocks_to_setup: Optional[List[int]] = None,
+  ) -> None:
+    await super()._enter_lifespan(stack)
+    if isinstance(block_idle_temp, bool) or not isinstance(block_idle_temp, (int, float)):
+      raise TypeError("block_idle_temp must be a number")
+    if isinstance(cover_idle_temp, bool) or not isinstance(cover_idle_temp, (int, float)):
+      raise TypeError("cover_idle_temp must be a number")
+    if blocks_to_setup is not None and (
+      not isinstance(blocks_to_setup, list)
+      or any(isinstance(block, bool) or not isinstance(block, int) for block in blocks_to_setup)
+    ):
+      raise TypeError("blocks_to_setup must be a list of integers or None")
+
+    self._clear_connection_discovery_state()
+    await stack.enter_async_context(self.io.lifespan())
+    await self._authenticate_open_socket()
+    stack.push_shielded_async_callback(
+      self._cleanup_thermocycler, shield_timeout=_THERMOCYCLER_CLEANUP_TIMEOUT
+    )
+
+    for block_id in list(self.current_runs):
+      await self.abort_run(block_id)
+
     await self.power_on()
     await self._load_num_blocks_and_type()
     if blocks_to_setup is None:
@@ -901,7 +1017,7 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       if len(self.available_blocks) == 0:
         raise ValueError("No available blocks. Set blocks_to_setup to force setup")
     else:
-      self.available_blocks = blocks_to_setup
+      self.available_blocks = list(blocks_to_setup)
     for block_index in self.available_blocks:
       await self.set_block_idle_temp(temp=block_idle_temp, block_id=block_index)
       await self.set_cover_idle_temp(temp=cover_idle_temp, block_id=block_index)
@@ -978,15 +1094,6 @@ class ThermoFisherThermocyclerBackend(ThermocyclerBackend, metaclass=ABCMeta):
       user_name=user,
       stage_name_prefixes=stage_name_prefixes,
     )
-
-  async def stop(self):
-    for block_id in self.current_runs.keys():
-      await self.abort_run(block_id=block_id)
-
-      await self.deactivate_lid(block_id=block_id)
-      await self.deactivate_block(block_id=block_id)
-
-    await self.io.stop()
 
   async def get_block_status(self, *args, **kwargs):
     raise NotImplementedError

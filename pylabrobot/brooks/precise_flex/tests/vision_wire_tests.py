@@ -5,9 +5,10 @@ property protocol on :1450 and its image stream on :1500. Every reply is one the
 """
 
 import io
-import unittest
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
+
+import pytest
 
 from pylabrobot.brooks.precise_flex import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.driver.errors import PreciseFlexVisionError
@@ -16,9 +17,10 @@ from pylabrobot.brooks.precise_flex.driver.features.vision import (
   StereoParameters,
   VisionConfiguration,
 )
+from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.socket import Socket
 
-from .wire_tests import _REPLIES
+from .wire_tests import _REPLIES, _FastEomTestBase
 from .wire_tests import _SETUP as _CONTROLLER_SETUP
 
 try:
@@ -133,12 +135,13 @@ class _FakeNetwork:
     self.unreachable: List[int] = []
     self._pending: Dict[int, List[str]] = {}
 
-  def install(self, test: unittest.TestCase) -> None:
+  def install(self, stack: AsyncExitStackWithShielding) -> None:
     network = self
 
     async def setup(sock: Socket) -> None:
       if sock._port in network.unreachable:
         raise ConnectionRefusedError(sock._port)
+      network._pending.pop(sock._port, None)
       network.sent.append(f"{_LINK[sock._port]}: <open>")
 
     async def stop(sock: Socket) -> None:
@@ -168,9 +171,7 @@ class _FakeNetwork:
       ("readline", readline),
       ("read", read),
     ):
-      p = patch.object(Socket, name, fn)
-      p.start()
-      test.addCleanup(p.stop)
+      stack.enter_context(patch.object(Socket, name, fn))
 
 
 def _vision(arm: PreciseFlexDriver) -> PreciseFlexVision:
@@ -461,19 +462,20 @@ _STOP: List[str] = [
 ]
 
 
-class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
+class TestPreciseFlexVisionWire(_FastEomTestBase):
   """Each vision method sends exactly what it sends today, on the link it sends it on."""
 
-  def setUp(self) -> None:
-    sleep = patch(
-      "pylabrobot.brooks.precise_flex.driver.features.arm.asyncio.sleep", new=AsyncMock()
-    )
-    sleep.start()
-    self.addCleanup(sleep.stop)
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
     self.network = _FakeNetwork()
-    self.network.install(self)
+    self.network.install(stack)
+    self._arm_stack = AsyncExitStackWithShielding()
+    stack.push_shielded_async_callback(self._arm_stack.aclose)
 
-  async def _arm(self, vision_host: Optional[str] = "vision-server", **kwargs) -> PreciseFlexDriver:
+  async def _arm(
+    self, vision_host: Optional[str] = "vision-server", **kwargs: Any
+  ) -> PreciseFlexDriver:
+    await self._arm_stack.aclose()
     arm = PreciseFlexDriver(
       host="pf400",
       gripper_length=162.0,
@@ -481,32 +483,28 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
       closed_gripper_position=80.0,
       vision_host=vision_host,
     )
-    await arm.setup(**kwargs)
+    await self._arm_stack.enter_async_context(arm.lifespan(**kwargs))
     return arm
 
-  async def test_setup_with_vision(self):
+  async def test_setup_with_vision(self) -> None:
     arm = await self._arm()
-    self.assertEqual(self.network.sent, _SETUP)
+    assert self.network.sent == _SETUP
     config = _vision(arm).configuration
-    self.assertEqual(
-      {name: tool.type for name, tool in config.vision_tools.items()},
-      {name: kind for name, (kind, _) in _TOOLS.items()},
-    )
-    self.assertEqual(
-      [(camera.name, camera.width, camera.height) for camera in config.cameras.values()],
-      [("Cam1", 2592, 1944), ("Cam2", 2592, 1944)],
-    )
-    self.assertEqual(
-      (
-        config.vision_version,
-        config.licensed,
-        config.active_project,
-        len(config.vision_tool_types),
-      ),
-      ("5.3.3.0", True, "VisionTest", 22),
-    )
+    assert {name: tool.type for name, tool in config.vision_tools.items()} == {
+      name: kind for name, (kind, _) in _TOOLS.items()
+    }
+    assert [(camera.name, camera.width, camera.height) for camera in config.cameras.values()] == [
+      ("Cam1", 2592, 1944),
+      ("Cam2", 2592, 1944),
+    ]
+    assert (
+      config.vision_version,
+      config.licensed,
+      config.active_project,
+      len(config.vision_tool_types),
+    ) == ("5.3.3.0", True, "VisionTest", 22)
 
-  async def test_setup_without_the_vision_server(self):
+  async def test_setup_without_the_vision_server(self) -> None:
     without_module = _REPLIES["version"].split(", IntelliGuide")[0]
     for name, kwargs, vision_built in (
       ("skip_vision_setup", {"skip_vision_setup": True}, False),
@@ -514,21 +512,21 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
       ("vision server unreachable", {}, True),
       ("no vision_host", {"vision_host": None}, True),
     ):
-      with self.subTest(name):
-        self.network.sent.clear()
-        self.network.controller_replies = dict(_CONTROLLER_REPLIES)
-        self.network.unreachable = []
-        if name == "no IntelliGuide module":
-          self.network.controller_replies["version"] = without_module
-        if name == "vision server unreachable":
-          self.network.unreachable = [_VISION_SERVER_PORT]
-        arm = await self._arm(**kwargs)
-        self.assertEqual([c for c in self.network.sent if not c.startswith("controller")], [])
-        self.assertEqual(arm.vision is not None, vision_built)
-        if arm.vision is not None:
-          self.assertFalse(arm.vision.configuration.discovered)
+      self.network.sent.clear()
+      self.network.controller_replies = dict(_CONTROLLER_REPLIES)
+      self.network.unreachable = []
+      if name == "no IntelliGuide module":
+        self.network.controller_replies["version"] = without_module
+      if name == "vision server unreachable":
+        self.network.unreachable = [_VISION_SERVER_PORT]
+      arm = await self._arm(**kwargs)
+      await self._arm_stack.aclose()
+      assert [c for c in self.network.sent if not c.startswith("controller")] == [], name
+      assert (arm.vision is not None) == vision_built, name
+      if arm.vision is not None:
+        assert not arm.vision.configuration.discovered, name
 
-  async def test_without_a_vision_server_its_methods_raise(self):
+  async def test_without_a_vision_server_its_methods_raise(self) -> None:
     arm = await self._arm(vision_host=None)
     self.network.sent.clear()
     for call in (
@@ -536,34 +534,33 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
       lambda: _vision(arm).capture_image(1),
       lambda: _vision(arm).start_led(use_server="vision"),
     ):
-      with self.assertRaisesRegex(RuntimeError, "pass vision_host at setup"):
+      with pytest.raises(RuntimeError, match="pass vision_host at setup"):
         await call()
-    self.assertEqual(self.network.sent, [])
+    assert self.network.sent == []
 
-  async def test_stop_closes_the_vision_server(self):
-    arm = await self._arm()
+  async def test_stop_closes_the_vision_server(self) -> None:
+    await self._arm()
     self.network.sent.clear()
-    await arm.stop()
-    self.assertEqual(self.network.sent, _STOP)
+    await self._arm_stack.aclose()
+    assert self.network.sent == _STOP
 
-  async def test_a_method_needs_its_tool_type(self):
-    for name, configuration, sends in (
+  async def test_a_method_needs_its_tool_type(self) -> None:
+    for _, configuration, sends in (
       ("discovered without it", VisionConfiguration(discovered=True), False),
       ("not discovered", VisionConfiguration(), True),
     ):
-      with self.subTest(name):
-        arm = await self._arm()
-        _vision(arm).configuration = configuration
-        self.network.sent.clear()
-        if sends:
+      arm = await self._arm()
+      _vision(arm).configuration = configuration
+      self.network.sent.clear()
+      if sends:
+        await _vision(arm).start_led()
+      else:
+        with pytest.raises(RuntimeError, match="'LightControl' vision tool type"):
           await _vision(arm).start_led()
-        else:
-          with self.assertRaisesRegex(RuntimeError, "'LightControl' vision tool type"):
-            await _vision(arm).start_led()
-        self.assertEqual(bool(self.network.sent), sends)
+      assert bool(self.network.sent) == sends
 
-  @unittest.skipIf(_PILImage is None, "Pillow is not installed")
-  async def test_capture_image_returns_the_wanted_frame(self):
+  @pytest.mark.skipif(_PILImage is None, reason="Pillow is not installed")
+  async def test_capture_image_returns_the_wanted_frame(self) -> None:
     arm = await self._arm()
     self.network.sent.clear()
     self.network.image_chunks = [_result("Primary Image [1]", b"stale")]  # left by a tool run
@@ -572,33 +569,25 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
       _result("Primary Image [1]", _jpeg((200, 0, 0))),
     ]
     frame = await _vision(arm).capture_image("front")
-    self.assertEqual(frame.shape, (2, 2, 3))  # height x width x RGB
-    self.assertGreater(frame[..., 0].mean(), frame[..., 2].mean())  # camera 1's red frame
-    self.assertEqual(
-      self.network.sent,
-      [
-        "image: <read>",
-        "image: <read>",
-        "vision: property set system.cameraacquire 1",
-        "image: <read>",
-        "image: <read>",
-      ],
-    )
+    assert frame.shape == (2, 2, 3)  # height x width x RGB
+    assert frame[..., 0].mean() > frame[..., 2].mean()  # camera 1's red frame
+    assert self.network.sent == [
+      "image: <read>",
+      "image: <read>",
+      "vision: property set system.cameraacquire 1",
+      "image: <read>",
+      "image: <read>",
+    ]
 
-  async def test_every_vision_method(self):
+  async def test_every_vision_method(self) -> None:
     for name, call, expected, outcome in _CASES:
-      with self.subTest(name):
-        arm = await self._arm()
-        self.network.sent.clear()
-        if isinstance(outcome, type) and issubclass(outcome, Exception):
-          with self.assertRaises(outcome):
-            await call(arm)
-        else:
-          returned = await call(arm)
-          if outcome is not _UNCHECKED:
-            self.assertEqual(returned, outcome)
-        self.assertEqual(self.network.sent, expected)
-
-
-if __name__ == "__main__":
-  unittest.main()
+      arm = await self._arm()
+      self.network.sent.clear()
+      if isinstance(outcome, type) and issubclass(outcome, Exception):
+        with pytest.raises(outcome):
+          await call(arm)
+      else:
+        returned = await call(arm)
+        if outcome is not _UNCHECKED:
+          assert returned == outcome, name
+      assert self.network.sent == expected, name

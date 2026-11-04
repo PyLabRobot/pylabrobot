@@ -12,6 +12,7 @@ from pylabrobot.bmg_labtech.vantastar.driver.master_tests import (
   commands,
   make_driver,
 )
+from pylabrobot.testing.concurrency import AnyioTestBase
 
 
 class ShakeCommandTests(unittest.TestCase):
@@ -33,7 +34,7 @@ class ShakeCommandTests(unittest.TestCase):
       Shaker.build_shake("orbital", 250, 10)
 
 
-class ShakerTests(unittest.IsolatedAsyncioTestCase):
+class TestShaker(AnyioTestBase):
   """Shaking through the driver."""
 
   async def test_shake_moves_the_plate_in_when_the_motors_are_off(self):
@@ -42,7 +43,7 @@ class ShakerTests(unittest.IsolatedAsyncioTestCase):
     driver = make_driver(lambda p: replies.popleft())
     await driver.shaker.shake("double_orbital", 300, 10)
     sent = [c for c in commands(driver) if c[0] != 0x80]
-    self.assertEqual(sent, [PLATE_IN, SHAKE_DOUBLE_ORBITAL_300_10])
+    assert sent == [PLATE_IN, SHAKE_DOUBLE_ORBITAL_300_10]
 
 
 if __name__ == "__main__":

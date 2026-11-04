@@ -5,11 +5,11 @@ TODO(device) marks what only a first run with a plate on it can settle.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Optional, Tuple
+
+import anyio
 
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.coordinate import Coordinate
@@ -360,9 +360,10 @@ class PrepHamiltonHeaterShaker:
     """
     await self.start_shaking(speed, direction=direction, acceleration=acceleration)
     try:
-      await asyncio.sleep(duration)
+      await anyio.sleep(duration)
     finally:
-      await self.stop_shaking()
+      with anyio.CancelScope(shield=True):
+        await self.stop_shaking()
 
   # ----------------------------------------
   # Temperature
@@ -425,16 +426,16 @@ class PrepHamiltonHeaterShaker:
       raise RuntimeError("no target temperature set; call `start_temperature_control` first")
     tolerance = self.default_temperature_tolerance if tolerance is None else tolerance
     timeout = self.default_temperature_timeout if timeout is None else timeout
-    deadline = time.monotonic() + timeout
+    deadline = anyio.current_time() + timeout
     while True:
       temperature = await self.measure_temperature()
       if abs(temperature - self.target_temperature) <= tolerance:
         return temperature
-      if time.monotonic() >= deadline:
+      if anyio.current_time() >= deadline:
         raise TimeoutError(
           f"{temperature} °C after {timeout} s, target {self.target_temperature} ± {tolerance}"
         )
-      await asyncio.sleep(self.default_poll_interval)
+      await anyio.sleep(self.default_poll_interval)
 
   async def stop_temperature_control(self) -> None:
     """Stop heating."""

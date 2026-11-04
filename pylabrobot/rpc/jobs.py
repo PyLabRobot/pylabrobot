@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing, asynccontextmanager
 from typing import Protocol
 
+import anyio
 import grpc
 
 from pylabrobot.rpc.transport import Updates, copy_message, require_device, translate_rpc_errors
@@ -128,7 +128,11 @@ class Job:
       call.cancel()
 
   async def wait(self, timeout: float | None = None) -> pb.JobStatus:
-    """Wait for Finished, optionally limiting the wait without cancelling remote execution."""
+    """Wait for Finished, optionally limiting the wait without cancelling remote execution.
+
+    Raises:
+      TimeoutError: If `timeout` seconds pass before the job finishes.
+    """
 
     async def finished() -> pb.JobStatus:
       """Consume snapshots until a terminal one arrives."""
@@ -138,7 +142,8 @@ class Job:
           if snapshot.state == pb.JOB_STATE_FINISHED:
             return snapshot
 
-    return await asyncio.wait_for(finished(), timeout)
+    with anyio.fail_after(timeout):
+      return await finished()
 
 
 class JobClient:

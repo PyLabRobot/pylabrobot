@@ -46,13 +46,13 @@ async def hardware_system(tmp_path, config):
     tmp_path / "data", "celigo-test", config, factory, tmp_path / "hardware.lock"
   )
   server = CeligoServer(session)
-  await server.start()
-  try:
-    async with CeligoClient(server.endpoint, device_id="celigo-test") as client:
-      yield server, client, driver, factory
-  finally:
-    driver.stop.side_effect = None
-    await server.stop()
+  client = CeligoClient(server.endpoint, device_id="celigo-test")
+  async with server:
+    try:
+      async with client:
+        yield server, client, driver, factory
+    finally:
+      driver.stop.side_effect = None
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
@@ -265,6 +265,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         await job.start()
         assert (await job.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
         assert factory.call_count == 1 and [call[0] for call in driver.method_calls] == [
+          "lifespan",
           "setup",
           "request_controller_status",
           "request_controller_status",
@@ -324,15 +325,15 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
     with TemporaryDirectory() as temporary_directory:
       tmp_path = Path(temporary_directory)
       async with hardware_system(tmp_path, make_config()) as hardware:
-        _, client, driver, _ = hardware
+        server, client, driver, _ = hardware
         await initialize(client)
+        starter = CeligoClient(server.endpoint, device_id="celigo-test")
         with block_calls(driver.acquire_scan_position) as (capture_entered, capture_release):
-          job = await capture(client)
-          await job.start()
-          await asyncio.wait_for(capture_entered.wait(), 5)
-          await client.disconnect()
+          async with starter:
+            job = await capture(starter)
+            await job.start()
+            await asyncio.wait_for(capture_entered.wait(), 5)
           capture_release.set()
-          await client.connect()
           recovered = await client.recover_job("capture")
           assert recovered.identifier == job.identifier
           assert (await recovered.wait()).outcome == job_pb.OUTCOME_SUCCEEDED
@@ -397,6 +398,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             assert final.outcome == job_pb.OUTCOME_FAILED
             assert "controller fault" in final.error
             assert [call[0] for call in driver.method_calls] == [
+              "lifespan",
               "setup",
               "request_controller_status",
               "stop",
@@ -453,7 +455,7 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
           await job.start()
           await asyncio.wait_for(capture_entered.wait(), 5)
           execution = server.session.jobs[job.identifier]
-          execution.task.cancel()
+          execution.execution_scope.cancel()
           await asyncio.sleep(0)
           assert (await job.get_status()).state == job_pb.JOB_STATE_RUNNING
           assert server.session.active_job is execution
@@ -493,8 +495,8 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
           tmp_path / "other", "celigo-test", config, make_driver, tmp_path / "hardware.lock"
         )
         with self.assertRaises(BusyError):
-          await other.open()
-        await other.stop()
+          async with other:
+            pass
       store = JobStore(
         tmp_path / "data",
         "celigo-test",

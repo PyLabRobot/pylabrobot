@@ -17,6 +17,9 @@ from typing import (
   Union,
 )
 
+import anyio
+
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.liquid_class_resolver import LiquidClassLookup
 from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand
@@ -30,10 +33,11 @@ from pylabrobot.hamilton.transport.tcp.messages import (
 )
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
-from pylabrobot.hamilton.transport.tcp.session import TCPSession
+from pylabrobot.hamilton.transport.tcp.session import SessionState, TCPSession
 from pylabrobot.hamilton.transport.tcp.tcp import HamiltonTCPClient
 from pylabrobot.hamilton.transport.tcp.wire_types import HamiltonDataType, HcResultEntry
 from pylabrobot.io.socket import Socket
+from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
@@ -184,8 +188,14 @@ def _hamilton_tip_for_reach(reach: float, has_filter: bool, name: str) -> Option
 
 def _refused_with(error: BaseException, code: int) -> bool:
   """Whether a device refusal carries `code` in any of its entries."""
-  entries = getattr(error, "entries", None) or getattr(error, "hoi_entries", None) or []
-  return any(getattr(entry, "result", None) == code for entry in entries)
+  if isinstance(error, HoiError):
+    entries: List[HcResultEntry] = error.entries
+  elif isinstance(error, ChannelizedError):
+    raw_entries = error.kwargs.get("hoi_entries")
+    entries = raw_entries if isinstance(raw_entries, list) else []
+  else:
+    entries = []
+  return any(entry.result == code for entry in entries)
 
 
 @dataclass(frozen=True)
@@ -282,7 +292,7 @@ class _PrepTCPSession(TCPSession):
     self, command: TCPCommand[object], *, read_timeout: Optional[float] = None
   ) -> CommandResponse:
     request = command.request if isinstance(command, _ResolvedPrepCommand) else command
-    link = f"[{getattr(self._io, '_host', '?')}:{getattr(self._io, '_port', '?')}]"
+    link = f"[{self._io._host}:{self._io._port}]"
     if logger.isEnabledFor(logging.DEBUG):
       logger.debug("%s write: %s to %s", link, request, command.dest)
     response = await super().exchange(command, read_timeout=read_timeout)
@@ -320,7 +330,7 @@ class _PrepTCPSession(TCPSession):
       return params.hex()
 
 
-class PrepDriver:
+class PrepDriver(HasLifespan):
   """Hamilton Prep liquid handler.
 
   Setup constructs peers (``channels``, ``head8``, ``method``, ``calibration``,
@@ -354,6 +364,7 @@ class PrepDriver:
     Raises:
       ValueError: If neither `host` nor `io` is given.
     """
+    super().__init__()
     # What was declared this device is, read once here. Empty when nothing was declared.
     self.declared_configuration_json = declared_configuration_json
     self.declared: Dict[str, Any] = (
@@ -386,7 +397,10 @@ class PrepDriver:
     self.calibration: Optional[Calibration] = None
     # The gantry the channels ride. Built at setup, and kept across setups like the configuration.
     self.x_arm: Optional[XArm] = None
+    self._core_gripper_arm: Optional[XArm] = None
+    self._animation_tg: Optional[anyio.abc.TaskGroup] = None
     self._setup_finished: bool = False
+    self._needs_safety = False
 
   def get_component_name(self, name: str) -> str:
     """Resolve a built-in resource name using the Prep deck's naming prefix."""
@@ -398,8 +412,37 @@ class PrepDriver:
   # Connection and lifecycle
   # ----------------------------------------
 
-  async def setup(
+  async def _enter_link(self, stack: AsyncExitStackWithShielding) -> None:
+    """Open the links on `stack` and check that a Prep answers, initializing and moving nothing.
+
+    Raises:
+      RuntimeError: If the device's firmware root is not a Prep's.
+    """
+    self._mlprep_address = None
+    await stack.enter_async_context(self.io.lifespan())
+    stack.callback(self._clear_connection_state)
+    root = await self.request_root_name()
+    if root != PREP_ROOT_NAME:
+      raise RuntimeError(
+        f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
+      )
+    self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
+    if self._second_io is not None:
+      await stack.enter_async_context(self._second_io.lifespan())
+
+  @asynccontextmanager
+  async def _link(self) -> AsyncIterator[None]:
+    """Hold the links open for read-only tooling, without the driver lifespan's initialization.
+
+    Firmware queries work inside; features are not constructed and nothing moves on exit.
+    """
+    async with AsyncExitStackWithShielding() as stack:
+      await self._enter_link(stack)
+      yield
+
+  async def _enter_lifespan(
     self,
+    stack: AsyncExitStackWithShielding,
     *,
     smart: bool = True,
     force_initialize: bool = False,
@@ -407,7 +450,8 @@ class PrepDriver:
     default_minimum_traverse_height: Optional[float] = None,
     use_v1_aspirate_dispense: bool = False,
     enable_safe_speeds: bool = False,
-  ):
+    skip_raise_to_z_safety: bool = False,
+  ) -> None:
     """Connect, discover the device, initialize MLPrep, construct peers.
 
     A device that reports itself initialized is left as it was found, so what the channels hold is read and
@@ -424,157 +468,160 @@ class PrepDriver:
         names none, in mm. Replaces what the device reports.
       enable_safe_speeds: MLPrep's safe speeds, switched to this when the device reports otherwise. Each
         setup finds the device back on its own setting, so it is set every time.
+      skip_raise_to_z_safety: leave the channels where they stand when exiting the lifespan.
 
     Raises:
       RuntimeError: If the device records a plate gripped and has to initialize, and the person at it
         does not confirm the grippers may open.
     """
+    await super()._enter_lifespan(stack)
     logger.debug("Setting up Prep on %s ...", self.describe_link())
-    try:
-      await self._open()
+    self._needs_safety = False
+    await self._enter_link(stack)
+    self._animation_tg = await stack.enter_task_group()
+    stack.callback(self._cancel_animations)
+    stack.push_shielded_async_callback(self._stop_lights, shield_timeout=30)
+    stack.push_shielded_async_callback(self._stop_hs, shield_timeout=60)
+    stack.push_shielded_async_callback(self._stop_head8, shield_timeout=180)
+    stack.push_shielded_async_callback(self._stop_pipettes, shield_timeout=180)
+    stack.push_shielded_async_callback(self._leave_safe, skip_raise_to_z_safety, shield_timeout=240)
 
-      # 1. What is on the other end, and what does it carry?
-      logger.debug("[PHASE 1] Discovery")
-      await self.discover()
+    # 1. What is on the other end, and what does it carry?
+    logger.debug("[PHASE 1] Discovery")
+    await self.discover()
 
-      # The light as early as the device's method table allows, so the deck says the device is
-      # working for all of the initializing and bringing up that is left. A colour, not an
-      # animation: the host drives every frame down this same connection, and setup keeps it busy.
-      if self.lights is None and await self.request_deck_light_installed():
-        self.lights = Lights(self)
-      if self.lights is not None:
-        await self.lights.set_color("turquoise")
+    # The light as early as the device's method table allows, so the deck says the device is
+    # working for all of the initializing and bringing up that is left. A colour, not an
+    # animation: the host drives every frame down this same connection, and setup keeps it busy.
+    if self.lights is None and await self.request_deck_light_installed():
+      self.lights = Lights(self)
+    if self.lights is not None:
+      await self.lights.set_color("turquoise")
 
-      # 2. Bring the device to a known state.
-      logger.debug("[PHASE 2] Device initialization")
-      # Kept across a power cycle: while it is set, the device refuses to initialize (0x0F0A) and to
-      # take the tools home (0x0F04).
-      plate_held = await self._request_plate_held()
-      if skip_device_initialization:
-        logger.warning("skipping the device initialization procedure, as asked")
+    # 2. Bring the device to a known state.
+    logger.debug("[PHASE 2] Device initialization")
+    self._needs_safety = True
+    # Kept across a power cycle: while it is set, the device refuses to initialize (0x0F0A) and to
+    # take the tools home (0x0F04).
+    plate_held = await self._request_plate_held()
+    if skip_device_initialization:
+      logger.warning("skipping the device initialization procedure, as asked")
+    else:
+      if plate_held and (force_initialize or not await self.request_initialization_status()):
+        await self._release_held_plate_by_hand()
+        plate_held = False
+        # Known to need it, just asked: not asked again.
+        await self._initialize_instrument(smart=smart, force_initialize=True)
       else:
-        if plate_held and (force_initialize or not await self.request_initialization_status()):
-          await self._release_held_plate_by_hand()
-          plate_held = False
-          # Known to need it, just asked: not asked again.
-          await self._initialize_instrument(smart=smart, force_initialize=True)
-        else:
-          await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
+        await self._initialize_instrument(smart=smart, force_initialize=force_initialize)
 
-      assert self.configuration is not None
-      if self.configuration.safe_speeds_enabled != enable_safe_speeds:
-        await self._set_safe_speeds_enabled(enable_safe_speeds)
-        self.configuration.safe_speeds_enabled = enable_safe_speeds
+    assert self.configuration is not None
+    if self.configuration.safe_speeds_enabled != enable_safe_speeds:
+      await self._set_safe_speeds_enabled(enable_safe_speeds)
+      self.configuration.safe_speeds_enabled = enable_safe_speeds
 
-      # 3. Each feature brings itself up.
-      logger.debug("[PHASE 3] Feature initialization")
+    # 3. Each feature brings itself up.
+    logger.debug("[PHASE 3] Feature initialization")
 
-      # Built only if not already there: a caller can hand a feature its configuration before setup,
-      # and re-running setup keeps it.
-      if self.method is None:
-        self.method = MethodLifecycle(self)
-      if self.calibration is None:
-        self.calibration = Calibration(self)
-      if self.pipettes is None:
-        self.pipettes = Pipettes(self)
-      if use_v1_aspirate_dispense:
-        self.pipettes.configuration.use_v1_aspirate_dispense = True
-      await self.pipettes._on_setup()
+    # Built only if not already there: a caller can hand a feature its configuration before setup,
+    # and re-running setup keeps it.
+    if self.method is None:
+      self.method = MethodLifecycle(self)
+    if self.calibration is None:
+      self.calibration = Calibration(self)
+    if self.pipettes is None:
+      self.pipettes = Pipettes(self)
+    if use_v1_aspirate_dispense:
+      self.pipettes.configuration.use_v1_aspirate_dispense = True
+    await self.pipettes._on_setup()
+    if default_minimum_traverse_height is not None:
+      self.pipettes.default_minimum_traverse_height = default_minimum_traverse_height
+
+    if self.pipettes.head8_installed:
+      if self.head8 is None:
+        self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
+      elif use_v1_aspirate_dispense:
+        self.head8._use_v1_aspirate_dispense = True
+      await self.head8._on_setup()
+      # One height governs the arm: the head rides the channels' gantry, so it travels at what
+      # they travel at rather than at a second number that happens to match.
+      self.head8.default_minimum_traverse_height = self.pipettes.default_minimum_traverse_height
       if default_minimum_traverse_height is not None:
-        self.pipettes.default_minimum_traverse_height = default_minimum_traverse_height
+        self.head8.default_minimum_traverse_height = default_minimum_traverse_height
 
-      if self.pipettes.head8_installed:
-        if self.head8 is None:
-          self.head8 = Head8(self, use_v1_aspirate_dispense=use_v1_aspirate_dispense)
-        elif use_v1_aspirate_dispense:
-          self.head8._use_v1_aspirate_dispense = True
-        await self.head8._on_setup()
-        # One height governs the arm: the head rides the channels' gantry, so it travels at what
-        # they travel at rather than at a second number that happens to match.
-        self.head8.default_minimum_traverse_height = self.pipettes.default_minimum_traverse_height
-        if default_minimum_traverse_height is not None:
-          self.head8.default_minimum_traverse_height = default_minimum_traverse_height
+    if self.configuration is not None and self.configuration.heater_shaker_installed:
+      if self.hs is None:
+        self.hs = PrepHamiltonHeaterShaker(self)
+      await self.hs._on_setup()
 
-      if self.configuration is not None and self.configuration.heater_shaker_installed:
-        if self.hs is None:
-          self.hs = PrepHamiltonHeaterShaker(self)
-        await self.hs._on_setup()
-
-      # What the device was left holding, and where it was left standing: read before anything moves laterally,
-      # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
-      tips = await self.pipettes.sense_tip_presence()
-      logger.info(
-        "tips held at setup: %s",
-        ", ".join(f"channel {i}" for i, held in enumerate(tips) if held) or "none",
-      )
-      try:
-        await self.pipettes.move_to_safe_z()
-      except Exception:
-        # A device that has not initialized refuses to move; setup still has to finish so the caller can look.
-        logger.warning("could not raise the channels to Z safety at setup", exc_info=True)
-      # Asked, not assumed, as `stop` asks: a device that reported itself initialized was left as someone
-      # else left it, and a raise that answers has not said where it arrived.
-      low = await self.features_below_safe_z()
-      if low:
-        logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
-      if self.head8 is not None:
-        # TODO: the head is left where it stands, and every lateral move travels it there. No move
-        # of its Z alone is known, so nothing here can lift it, though GetPositions reports where
-        # it is (its `MPHChannel` entry). `MoveZUpToSafe` takes ChannelIndex values
-        # and the MPH has one (3): try it on a device with a head fitted, and if it answers, raise
-        # the head in `Pipettes.move_to_xy_positions` and `XArm.move_to_x_position` as the channels
-        # are raised.
-        logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
-
-      if self.core_grippers is None:
-        self.core_grippers = CoreGrippers(self)
-      if self.x_arm is None:
-        self.x_arm = XArm(self)
-      # Every X move inside a firmware command runs at MLPrep's X speed scale: the arm's default speed.
-      x_scale = self.x_arm.configuration.speed_to_scale_percent(self.x_arm.default_speed)
-      if await self.request_x_speed_scale() != x_scale:
-        await self.set_x_speed_scale(x_scale)
-      # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
-      if self.deck is not None:
-        logger.debug("[PHASE 4] Feature resources")
-        self._place_reported_sites()
-        await self._create_capability_resources()
-        self._seat_heater_shaker()
-
-      if any(tips) and plate_held:
-        attached = await self.pipettes.request_attached_tip_information(tips.index(True))
-        if attached is not None and attached.is_tool and self.core_grippers is not None:
-          await self.core_grippers._adopt_mounted_tools()
-        logger.warning(
-          "the device records a plate gripped, so the tools stay on: lower it onto a free spot with "
-          "`pipettes.move_tool_bottom_to_z_positions` (both channels together), let go with "
-          "`core_grippers.release_plate()`, then return the tools"
-        )
-      elif any(tips):
-        try:
-          await self._return_or_discard_attached(tips)
-        except Exception:
-          # Setup still has to finish: the caller needs a driver to look at the device with.
-          logger.warning("could not clear what was attached at setup", exc_info=True)
-        # The device reports each channel's window for whatever is attached to it, so the windows
-        # recorded at discovery are that thing's. Read them again now the channels are clear.
-        still = await self.pipettes.sense_tip_presence()
-        carrying = [channel for channel, held in enumerate(still) if held]
-        if carrying:
-          logger.warning(
-            "%s still carries something, so the windows recorded are its, not an empty channel's",
-            channels_named(carrying),
-          )
-        else:
-          await self.pipettes._record_channel_bounds()
-      self._setup_finished = True
+    # What the device was left holding, and where it was left standing: read before anything moves laterally,
+    # then raise what can be raised. The 8-channel head is not raised: no move of its Z alone is known.
+    tips = await self.pipettes.sense_tip_presence()
+    logger.info(
+      "tips held at setup: %s",
+      ", ".join(f"channel {i}" for i, held in enumerate(tips) if held) or "none",
+    )
+    try:
+      await self.pipettes.move_to_safe_z()
     except Exception:
-      # The deck said the device was working; it is not, and the link is about to go.
-      if self.lights is not None:
-        self.lights.stop_animation()
-      await self._close()
-      raise
+      # A device that has not initialized refuses to move; setup still has to finish so the caller can look.
+      logger.warning("could not raise the channels to Z safety at setup", exc_info=True)
+    # Asked, not assumed, as `stop` asks: a device that reported itself initialized was left as someone
+    # else left it, and a raise that answers has not said where it arrived.
+    low = await self.features_below_safe_z()
+    if low:
+      logger.warning("not everything is at Z safety after setup: %s", "; ".join(low))
+    if self.head8 is not None:
+      # TODO: the head is left where it stands, and every lateral move travels it there. No move
+      # of its Z alone is known, so nothing here can lift it, though GetPositions reports where
+      # it is (its `MPHChannel` entry). `MoveZUpToSafe` takes ChannelIndex values
+      # and the MPH has one (3): try it on a device with a head fitted, and if it answers, raise
+      # the head in `Pipettes.move_to_xy_positions` and `XArm.move_to_x_position` as the channels
+      # are raised.
+      logger.warning("the 8-channel head is not raised at setup: no move of its Z alone is known")
 
+    if self.core_grippers is None:
+      self.core_grippers = CoreGrippers(self)
+    if self.x_arm is None:
+      self.x_arm = XArm(self)
+    # Every X move inside a firmware command runs at MLPrep's X speed scale: the arm's default speed.
+    x_scale = self.x_arm.configuration.speed_to_scale_percent(self.x_arm.default_speed)
+    if await self.request_x_speed_scale() != x_scale:
+      await self.set_x_speed_scale(x_scale)
+    # What was found, as resources on the deck - when the driver was given a Prep deck to reflect into.
+    if self.deck is not None:
+      logger.debug("[PHASE 4] Feature resources")
+      self._place_reported_sites()
+      await self._create_capability_resources()
+      self._seat_heater_shaker()
+
+    if any(tips) and plate_held:
+      attached = await self.pipettes.request_attached_tip_information(tips.index(True))
+      if attached is not None and attached.is_tool and self.core_grippers is not None:
+        await self.core_grippers._adopt_mounted_tools()
+      logger.warning(
+        "the device records a plate gripped, so the tools stay on: lower it onto a free spot with "
+        "`pipettes.move_tool_bottom_to_z_positions` (both channels together), let go with "
+        "`core_grippers.release_plate()`, then return the tools"
+      )
+    elif any(tips):
+      try:
+        await self._return_or_discard_attached(tips)
+      except Exception:
+        # Setup still has to finish: the caller needs a driver to look at the device with.
+        logger.warning("could not clear what was attached at setup", exc_info=True)
+      # The device reports each channel's window for whatever is attached to it, so the windows
+      # recorded at discovery are that thing's. Read them again now the channels are clear.
+      still = await self.pipettes.sense_tip_presence()
+      carrying = [channel for channel, held in enumerate(still) if held]
+      if carrying:
+        logger.warning(
+          "%s still carries something, so the windows recorded are its, not an empty channel's",
+          channels_named(carrying),
+        )
+      else:
+        await self.pipettes._record_channel_bounds()
+    self._setup_finished = True
     logger.info("%s", self.format_setup_summary())
 
     # Setup got all the way here, so say so, and leave the deck as setup found it: dark. Setup
@@ -582,37 +629,20 @@ class PrepDriver:
     if self.lights is not None:
       await self.lights.hold("green", duration=self.lights.default_ready_seconds)
 
-  async def _open(self) -> None:
-    """Open the link and check that a Prep answers on it.
+  def _cancel_animations(self) -> None:
+    """Stop any running light animation before the animation task group exits."""
+    if self.lights is not None:
+      self.lights.stop_animation()
+    if self._animation_tg is not None:
+      self._animation_tg.cancel_scope.cancel()
+      self._animation_tg = None
 
-    Raises:
-      RuntimeError: If the device's firmware root is not a Prep's.
-    """
-    await self.io.setup()
+  def _clear_connection_state(self) -> None:
+    """Discard connection-local addresses and setup status after link cleanup."""
     self._mlprep_address = None
-    try:
-      root = await self.request_root_name()
-      if root != PREP_ROOT_NAME:
-        raise RuntimeError(
-          f"Expected root '{PREP_ROOT_NAME}' (Prep), but discovered '{root}'. Wrong instrument?"
-        )
-      self._mlprep_address = await self.resolve_path(MLPREP_OBJECT_PATH)
-      if self._second_io is not None:
-        await self._second_io.setup()
-    except BaseException:
-      await self._close()
-      raise
-
-  async def _close(self) -> None:
-    """Close the links and discard what was resolved on them."""
-    try:
-      if self._second_io is not None:
-        await self._second_io.stop()
-    finally:
-      try:
-        await self.io.stop()
-      finally:
-        self._mlprep_address = None
+    self._setup_finished = False
+    self._needs_safety = False
+    self._core_gripper_arm = None
 
   async def features_below_safe_z(self, tolerance: float = 0.5) -> List[str]:
     """Which channels report below where they are safe.
@@ -644,7 +674,7 @@ class PrepDriver:
           low.append(f"channel {channel} at {z:.1f} mm, safe is {safe:.1f} mm")
     return low
 
-  async def stop(self, skip_raise_to_z_safety: bool = False):
+  async def _leave_safe(self, skip_raise_to_z_safety: bool) -> None:
     """Close the link, leaving the device safe to move laterally.
 
     The device keeps its state, but not the deck light: it is darkened, since a colour stands on
@@ -658,7 +688,7 @@ class PrepDriver:
       skip_raise_to_z_safety: leave the channels where they stand. The next lateral move of the arm or of a
         channel will crash a channel that is low, so only for holding a position between sessions.
     """
-    if not self._setup_finished:
+    if not self._needs_safety or self.io._session.state is SessionState.UNCERTAIN:
       return
     try:
       # A plate in the jaws goes back first: parking spreads the channels and would tear it out.
@@ -698,25 +728,40 @@ class PrepDriver:
       logger.warning(
         "could not bring the device to a safe state; closing the link anyway", exc_info=True
       )
-    finally:
-      if self.pipettes is not None:
-        await self.pipettes._on_stop()
-      if self.head8 is not None:
-        await self.head8._on_stop()
-      if self.hs is not None:
-        try:
-          await self.hs._on_stop()
-        except Exception:
-          logger.warning("could not stop the heater shaker", exc_info=True)
+
+  async def _stop_lights(self) -> None:
+    """Darken the deck light before the client lifespan exits."""
+    if not self._needs_safety or self.io._session.state is SessionState.UNCERTAIN:
       if self.lights is not None:
-        # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
-        # would leave the deck lit for good.
-        try:
-          await self.lights.turn_off()
-        except Exception:
-          logger.warning("could not darken the deck light", exc_info=True)
-      await self._close()
-      self._setup_finished = False
+        self.lights.stop_animation()
+      return
+    if self.lights is not None:
+      # A colour stands on the device without a host to hold it, so a driver that let go mid-hold
+      # would leave the deck lit for good.
+      try:
+        await self.lights.turn_off()
+      except Exception:
+        logger.warning("could not darken the deck light", exc_info=True)
+
+  async def _stop_hs(self) -> None:
+    """Stop the heater shaker before the client lifespan exits."""
+    if not self._needs_safety or self.io._session.state is SessionState.UNCERTAIN:
+      return
+    if self.hs is not None:
+      try:
+        await self.hs._on_stop()
+      except Exception:
+        logger.warning("could not stop the heater shaker", exc_info=True)
+
+  async def _stop_head8(self) -> None:
+    """Release head8 session state independently of the pipettes."""
+    if self.head8 is not None:
+      await self.head8._on_stop()
+
+  async def _stop_pipettes(self) -> None:
+    """Release pipette session state before the client lifespan exits."""
+    if self.pipettes is not None:
+      await self.pipettes._on_stop()
 
   # ----------------------------------------
   # Low-level I/O
@@ -1299,10 +1344,20 @@ class PrepDriver:
     declared = self.declared.get("device")
     if declared is None:
       return
+    checks = (
+      ("num_channels", declared.num_channels, discovered.num_channels),
+      ("head8_installed", declared.head8_installed, discovered.head8_installed),
+      ("has_enclosure", declared.has_enclosure, discovered.has_enclosure),
+      (
+        "heater_shaker_installed",
+        declared.heater_shaker_installed,
+        discovered.heater_shaker_installed,
+      ),
+    )
     differences = [
-      f"{name}: declared {getattr(declared, name)!r}, device answers {getattr(discovered, name)!r}"
-      for name in _DECLARATION_MUST_MATCH
-      if getattr(declared, name) != getattr(discovered, name)
+      f"{name}: declared {want!r}, device answers {got!r}"
+      for name, want, got in checks
+      if want != got
     ]
     if differences:
       raise ValueError(
