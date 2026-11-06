@@ -376,6 +376,38 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
       # worked out again. Forgetting that is what left a 96-head standing still while its arm swept.
       self.assertEqual(await self.world_x(browser, "rider"), 720)
 
+  async def test_a_link_stays_on_its_joint_while_it_glides(self):
+    """With glide on, a location eased while its rotation jumped, so a link turned about its joint
+    left the joint mid-glide. The rider turns 90 degrees about a point 20 mm along its own x."""
+    async with Browser() as browser:
+      await self.page(browser)
+      await browser.evaluate(
+        "(() => { const glide = document.getElementById('glide-rate'); glide.value = '1';"
+        " glide.dispatchEvent(new Event('input')); return true; })()"
+      )
+      # The carrier stands at 100, 100 and the rider at 20, 20 on it: the joint is at 140, 120.
+      joint, end = (140.0, 120.0), (140.0, 100.0)
+      self.rider.rotate_to(z=90, pivot_coordinate=Coordinate(20, 0, 0))
+      drawn = []
+      deadline = time.monotonic() + 5
+      while time.monotonic() < deadline:
+        x, y, _ = await browser.evaluate("window.plrViewer.worldOf('rider')")
+        drawn.append((x, y))
+        if abs(x - end[0]) < 1e-3 and abs(y - end[1]) < 1e-3:
+          break
+        await asyncio.sleep(0.02)
+      self.assertAlmostEqual(
+        drawn[-1][0], end[0], delta=1e-3, msg="did not end where the tree says"
+      )
+      self.assertAlmostEqual(
+        drawn[-1][1], end[1], delta=1e-3, msg="did not end where the tree says"
+      )
+      between = [(x, y) for x, y in drawn if 120.5 < x < end[0] - 0.5]
+      self.assertGreater(len(between), 3, "never drawn between the two ends: it did not glide")
+      for x, y in drawn:
+        off = ((x - joint[0]) ** 2 + (y - joint[1]) ** 2) ** 0.5
+        self.assertAlmostEqual(off, 20, delta=0.2, msg=f"{x:.1f}, {y:.1f} left the joint")
+
   async def test_a_quality_level_changes_the_pixel_ratio_and_the_lighting(self):
     """The page steps quality down on its own when frames are slow; the levels are driven here.
     On a screen of two device pixels per CSS pixel, or the lowest level's ratio is the full one."""
