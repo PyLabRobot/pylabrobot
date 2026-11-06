@@ -381,21 +381,19 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
     left the joint mid-glide. The rider turns 90 degrees about a point 20 mm along its own x."""
     async with Browser() as browser:
       await self.page(browser)
-      await browser.evaluate(
-        "(() => { const glide = document.getElementById('glide-rate'); glide.value = '1';"
-        " glide.dispatchEvent(new Event('input')); return true; })()"
-      )
+      # The glide is stepped from here: a software renderer draws too few frames to catch it.
+      await browser.evaluate("import('./live.js').then((live) => { window.live = live; })")
+      await browser.settle("window.live !== undefined", 10)
+      await browser.evaluate("window.live.setGlideSeconds(1000)")
       # The carrier stands at 100, 100 and the rider at 20, 20 on it: the joint is at 140, 120.
       joint, end = (140.0, 120.0), (140.0, 100.0)
       self.rider.rotate_to(z=90, pivot_coordinate=Coordinate(20, 0, 0))
-      drawn = []
-      deadline = time.monotonic() + 5
-      while time.monotonic() < deadline:
-        x, y, _ = await browser.evaluate("window.plrViewer.worldOf('rider')")
-        drawn.append((x, y))
-        if abs(x - end[0]) < 1e-3 and abs(y - end[1]) < 1e-3:
-          break
-        await asyncio.sleep(0.02)
+      await browser.settle("window.live.glides.size > 0", 10)
+      drawn = await browser.evaluate(
+        "Array.from({ length: 11 }, () => {"
+        " const at = window.plrViewer.worldOf('rider').slice(0, 2);"
+        " window.live.updateGlides(100); return at; })"
+      )
       self.assertAlmostEqual(
         drawn[-1][0], end[0], delta=1e-3, msg="did not end where the tree says"
       )
