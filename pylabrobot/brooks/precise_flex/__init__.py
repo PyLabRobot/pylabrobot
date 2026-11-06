@@ -9,10 +9,10 @@ common driver in one place rather than duplicated per arm model.
 Scope - the PreciseFlex robot line. Implemented:
 
 - PreciseFlex 400 (PF400)
-- PreciseFlex 3400 (PF3400)
 
 To be added here:
 
+- PreciseFlex 3400 (PF3400)
 - PreciseFlex 100 / 1400 (PF100 / PF1400)
 - c-series: c3, c5, c8A, c10
 - direct-drive: DD4, DD6
@@ -39,10 +39,12 @@ from pylabrobot.brooks.precise_flex.driver.errors import (
   PreciseFlexPowerError,
   PreciseFlexReachError,
   PreciseFlexServoError,
+  PreciseFlexVisionError,
 )
 from pylabrobot.brooks.precise_flex.driver.features.arm import MotionProfile, PreciseFlexArm
 from pylabrobot.brooks.precise_flex.driver.features.gripper import PreciseFlexGripper
 from pylabrobot.brooks.precise_flex.driver.features.rail import PreciseFlexRail
+from pylabrobot.brooks.precise_flex.driver.features.vision import PreciseFlexVision
 from pylabrobot.brooks.precise_flex.driver.master import PreciseFlex, PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.driver.simulator import PreciseFlexSimulationDriver
 from pylabrobot.brooks.precise_flex.kinematics import (
@@ -76,6 +78,8 @@ __all__ = [
   "PreciseFlexRail",
   "PreciseFlexServoError",
   "PreciseFlexSimulationDriver",
+  "PreciseFlexVision",
+  "PreciseFlexVisionError",
   "WorkEnvelope",
   "Wrist",
 ]

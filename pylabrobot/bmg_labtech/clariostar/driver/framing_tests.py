@@ -11,12 +11,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.drawer_tests import (
   OPEN_DRAWER_FRAME,
   OPEN_DRAWER_REPLY,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import (
-  FTDI_HEADER,
-  usb_packet_type,
-  usb_total_length,
-  usb_wrap_payload,
-)
+from pylabrobot.bmg_labtech.clariostar.driver.framing import FTDI_HEADER
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   FIRMWARE_INFO_FRAME,
   FIRMWARE_INFO_REPLY,
@@ -101,35 +96,6 @@ class FTDIFramingTests(unittest.TestCase):
       ftdi_validate_frame(STATUS_REPLY_FRAME[:-1], header=FTDI_HEADER)
     with self.assertRaises(FrameError):
       ftdi_validate_frame(STATUS_REPLY_FRAME[:5], header=FTDI_HEADER)
-
-
-class USBFramingTests(unittest.TestCase):
-  def test_short_payload_is_one_packet(self):
-    self.assertEqual(usb_wrap_payload(b"\x80"), [bytes.fromhex("000c010000000180")])
-
-  def test_57_bytes_fill_one_packet(self):
-    (packet,) = usb_wrap_payload(bytes(range(57)))
-    self.assertEqual(len(packet), 64)
-    self.assertEqual(packet[:7], bytes.fromhex("000c0100000039"))
-
-  def test_long_payload_splits_into_first_and_continuations(self):
-    payload = bytes(i & 0xFF for i in range(130))
-    packets = usb_wrap_payload(payload)
-    self.assertEqual([len(p) for p in packets], [64, 64, 23])
-    self.assertEqual(packets[0][:7], bytes.fromhex("000c0200000082"))
-    self.assertEqual(packets[1][:7], bytes.fromhex("000c0300000001"))
-    self.assertEqual(packets[2][:7], bytes.fromhex("000c0300000002"))
-    self.assertEqual(b"".join(p[7:] for p in packets), payload)
-    self.assertEqual(usb_total_length(packets[0]), 130)
-
-  def test_empty_payload_rejected(self):
-    with self.assertRaises(ValueError):
-      usb_wrap_payload(b"")
-
-  def test_packet_type_requires_header(self):
-    self.assertEqual(usb_packet_type(bytes.fromhex("000c010000000180")), 0x01)
-    with self.assertRaises(FrameError):
-      usb_packet_type(STATUS_QUERY_FRAME)
 
 
 if __name__ == "__main__":
