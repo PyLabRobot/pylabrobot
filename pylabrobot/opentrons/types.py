@@ -79,6 +79,35 @@ class ModuleInfo:
 
 
 @dataclass(frozen=True)
+class DoorStatus:
+  """The front door as the OT-2's door switch reports it."""
+
+  closed: bool
+  required_closed_for_protocol: bool
+
+  @classmethod
+  def from_response(cls, data: Dict[str, Any]) -> "DoorStatus":
+    """Parse the ``data`` object of ``GET /robot/door/status``.
+
+    Args:
+      data: the response's ``data`` object.
+
+    Raises:
+      OpentronsProtocolError: If the status is neither "open" nor "closed", or the requirement is
+        not a boolean.
+    """
+    status = _string(data, "status")
+    if status not in {"open", "closed"}:
+      raise OpentronsProtocolError(f"Unknown door status {status!r}")
+    required = data.get("doorRequiredClosedForProtocol")
+    if not isinstance(required, bool):
+      raise OpentronsProtocolError(
+        f"Expected a boolean for 'doorRequiredClosedForProtocol', got {required!r}"
+      )
+    return cls(closed=status == "closed", required_closed_for_protocol=required)
+
+
+@dataclass(frozen=True)
 class DeckFixture:
   """A fixture installed in a Flex deck cutout."""
 

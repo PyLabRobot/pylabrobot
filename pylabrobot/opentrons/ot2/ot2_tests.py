@@ -7,6 +7,7 @@ from pylabrobot.opentrons.api import OpentronsAPI
 from pylabrobot.opentrons.labware import LabwareRegistry
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import (
+  DoorStatus,
   LabwareIdentity,
   ModuleInfo,
   MountedPipette,
@@ -101,6 +102,24 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.robot.stop()
     self.io.stop.assert_awaited_once_with()
     self.protocol_run.stop.assert_not_awaited()
+
+  async def test_rail_lights_and_door_need_a_connection_but_no_run(self) -> None:
+    self.api.get_rail_lights.return_value = True
+    self.api.get_door_status.return_value = DoorStatus(
+      closed=True, required_closed_for_protocol=False
+    )
+    with self.assertRaisesRegex(RuntimeError, "not connected"):
+      await self.robot.set_rail_lights(True)
+
+    await self.robot.connect()
+    await self.robot.set_rail_lights(False)
+    self.assertTrue(await self.robot.get_rail_lights())
+    self.assertTrue((await self.robot.get_door_status()).closed)
+
+    self.api.set_rail_lights.assert_awaited_once_with(False)
+    self.api.create_run.assert_not_awaited()
+    with self.assertRaises(TypeError):
+      await self.robot.set_rail_lights(1)  # type: ignore[arg-type]
 
   async def test_queries_do_not_rebind_an_active_session(self) -> None:
     await self.robot.setup(skip_home=True)
