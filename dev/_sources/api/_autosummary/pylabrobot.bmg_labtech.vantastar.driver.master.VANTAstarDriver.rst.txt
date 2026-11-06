@@ -51,6 +51,7 @@ pylabrobot.bmg\_labtech.vantastar.driver.master.VANTAstarDriver
       ~VANTAstarDriver.run_absorbance_spectrum
       ~VANTAstarDriver.run_blocks
       ~VANTAstarDriver.run_measurement
+      ~VANTAstarDriver.save_configuration
       ~VANTAstarDriver.send_command
       ~VANTAstarDriver.setup
       ~VANTAstarDriver.stop

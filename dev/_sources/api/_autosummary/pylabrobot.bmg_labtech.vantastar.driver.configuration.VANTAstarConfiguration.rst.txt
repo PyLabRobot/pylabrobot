@@ -15,14 +15,26 @@ pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration
    .. autosummary::
       :toctree: .
    
+      ~VANTAstarConfiguration.atmospheric_control_unit_connected
+      ~VANTAstarConfiguration.barcode_readers
       ~VANTAstarConfiguration.cpu_board_version
       ~VANTAstarConfiguration.firmware_build
       ~VANTAstarConfiguration.firmware_package
       ~VANTAstarConfiguration.firmware_version
+      ~VANTAstarConfiguration.linear_variable_filters
       ~VANTAstarConfiguration.mainboard_version
       ~VANTAstarConfiguration.modules
+      ~VANTAstarConfiguration.monochromator_slides
+      ~VANTAstarConfiguration.photomultipliers
       ~VANTAstarConfiguration.protocol_version
+      ~VANTAstarConfiguration.pumps
       ~VANTAstarConfiguration.serial_number
+      ~VANTAstarConfiguration.spectrometer
+      ~VANTAstarConfiguration.spectrometer_maximum_wavelength
+      ~VANTAstarConfiguration.stacker_connected
+      ~VANTAstarConfiguration.stirrer
+      ~VANTAstarConfiguration.temperature_controller
+      ~VANTAstarConfiguration.temperature_controller_channels
    
    
 
@@ -34,5 +46,6 @@ pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration
       :toctree: .
    
       ~VANTAstarConfiguration.__init__
+      ~VANTAstarConfiguration.update_from_modules
    
    

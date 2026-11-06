@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration.spectrometer\_maximum\_wavelength
+===============================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.configuration
+
+.. autoattribute:: VANTAstarConfiguration.spectrometer_maximum_wavelength

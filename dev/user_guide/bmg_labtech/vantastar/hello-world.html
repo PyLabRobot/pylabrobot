@@ -867,6 +867,20 @@
 </div>
 </div>
 </div>
+<section id="declared-configuration">
+<h3>Declared configuration<a class="headerlink" href="#declared-configuration" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">reader.driver.configuration</span></code> holds what the reader reported about itself at setup: its firmware, its serial number and the fitted hardware (photomultipliers, temperature controller, pumps, spectrometer, monochromator slides, atmospheric control unit, stirrer, stacker, barcode readers). To make sure a protocol runs on a reader built as the one it was written for, save the configuration once and declare it: <code class="docutils literal notranslate"><span class="pre">setup</span></code> then refuses a reader that disagrees with it on what is fitted, naming each difference. Firmware and serial number are not compared. The configuration of the tested reader is kept as <code class="docutils literal notranslate"><span class="pre">pylabrobot.bmg_labtech.vantastar.device.RECORDING_VANTASTAR</span></code>; the INIT reply does not say whether the luminescence module is fitted, so it is not part of it.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">reader</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">save_configuration</span><span class="p">(</span><span class="s2">"my_vantastar.json"</span><span class="p">)</span>
+
+<span class="c1"># later, for the same reader or another of its build:</span>
+<span class="c1"># reader = VANTAstar(name="vantastar", declared_configuration_json="my_vantastar.json")</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
 </section>
 <section id="loading-a-plate">
 <h2>Loading a plate<a class="headerlink" href="#loading-a-plate" title="Link to this heading">#</a></h2>
@@ -1170,7 +1184,10 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#properties">Properties</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-it-talks">How it talks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-setup">Physical setup</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup">Setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup">Setup</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#declared-configuration">Declared configuration</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-a-plate">Loading a plate</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#absorbance">Absorbance</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#read-settings">Read settings</a></li>
