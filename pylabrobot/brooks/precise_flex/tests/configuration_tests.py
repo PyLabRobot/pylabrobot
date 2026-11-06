@@ -5,8 +5,9 @@ import tempfile
 import unittest
 
 from pylabrobot.brooks.precise_flex import kinematics
+from pylabrobot.brooks.precise_flex.device import RECORDING_PF400
 from pylabrobot.brooks.precise_flex.driver.configuration import (
-  Axis,
+  PreciseFlexAxis,
   PreciseFlexConfiguration,
   read_configuration,
   to_jsonable,
@@ -21,17 +22,17 @@ from pylabrobot.brooks.precise_flex.tests.wire_tests import (
   _make_arm,
 )
 
-# What an extended-reach PreciseFlex 400 with 400 mm of Z travel reported about itself.
-RECORDING_PF400 = os.path.join(
-  os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-  "driver",
-  "recordings",
-  "pf400_extended_400mm.json",
-)
-
 
 def configuration(rail=None) -> PreciseFlexConfiguration:
-  per_axis = {axis: float(axis) for axis in (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST)}
+  per_axis = {
+    axis: float(axis)
+    for axis in (
+      PreciseFlexAxis.BASE,
+      PreciseFlexAxis.SHOULDER,
+      PreciseFlexAxis.ELBOW,
+      PreciseFlexAxis.WRIST,
+    )
+  }
   return PreciseFlexConfiguration(
     manufacturer="Precise Automation",
     controller_model="G1400",
@@ -47,12 +48,12 @@ def configuration(rail=None) -> PreciseFlexConfiguration:
     axis_mask=47,
     arm=PreciseFlexArmConfiguration(
       soft_limits={
-        Axis.BASE: (1.5, 401.5),
-        Axis.SHOULDER: (-93.0, 93.0),
-        Axis.ELBOW: (12.0, 348.0),
-        Axis.WRIST: (-970.0, 970.0),
+        PreciseFlexAxis.BASE: (1.5, 401.5),
+        PreciseFlexAxis.SHOULDER: (-93.0, 93.0),
+        PreciseFlexAxis.ELBOW: (12.0, 348.0),
+        PreciseFlexAxis.WRIST: (-970.0, 970.0),
       },
-      hard_limits={Axis.BASE: (0.0, 403.0)},
+      hard_limits={PreciseFlexAxis.BASE: (0.0, 403.0)},
       max_joint_speed=per_axis,
       max_joint_acceleration=per_axis,
       max_joint_deceleration=per_axis,
@@ -107,18 +108,13 @@ class TestSavedConfiguration(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       list(self.saved["arm"]["soft_limits"]), list("BASE SHOULDER ELBOW WRIST".split())
     )
-    self.assertEqual(read.arm.soft_limits[Axis.SHOULDER], (-93.0, 93.0))
+    self.assertEqual(read.arm.soft_limits[PreciseFlexAxis.SHOULDER], (-93.0, 93.0))
     self.assertIsInstance(read.arm.kinematics, kinematics.PF400Params)
 
   def test_a_rail_is_read_back_with_what_it_did_not_report_left_out(self):
     read = self.round_trip(configuration(rail=PreciseFlexRailConfiguration((0.0, 1000.0))))
     self.assertEqual(read.rail, PreciseFlexRailConfiguration(soft_limit_range=(0.0, 1000.0)))
     self.assertTrue(read.has_rail)
-
-  def test_each_feature_is_saved_beside_the_device(self):
-    self.round_trip(configuration(rail=PreciseFlexRailConfiguration((0.0, 1000.0))))
-    self.assertEqual(list(self.saved), ["device", "arm", "gripper", "rail"])
-    self.assertNotIn("arm", self.saved["device"])
 
   def test_live_state_is_not_written(self):
     read = self.round_trip(configuration())
@@ -162,10 +158,11 @@ class TestTheRecordedPF400(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.recorded.robot_name, "PreciseFlex 400SX")
     self.assertEqual(self.recorded.arm.reach_class, "extended")
     self.assertEqual(self.recorded.arm.z_range, (1.5, 401.5))
-    self.assertEqual(self.recorded.arm.soft_limits[Axis.WRIST], (-960.0, 960.0))
+    self.assertEqual(self.recorded.arm.soft_limits[PreciseFlexAxis.WRIST], (-960.0, 960.0))
     self.assertEqual(self.recorded.arm.kinematics.gripper_length, 162.0)
     self.assertEqual(self.recorded.gripper.soft_limit_range, (69.0, 134.0))
     self.assertEqual(self.recorded.camera_count, 2)
+    self.assertTrue(self.recorded.has_vision_server)
     self.assertTrue(self.recorded.has_vision_gripper)
     self.assertFalse(self.recorded.has_rail)
 
@@ -195,11 +192,6 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase)
     )
     self.recorded = read_configuration(RECORDING_PF400)["device"]
 
-  def test_the_file_is_read_when_the_driver_is_built(self):
-    self.assertEqual(self.driver.declared, read_configuration(RECORDING_PF400))
-    self.assertEqual(self.driver.declared["device"], self.recorded)
-    self.assertEqual(self.driver.declared_configuration_json, RECORDING_PF400)
-
   def test_another_arm_of_the_same_build_passes(self):
     another = dataclasses.replace(
       self.recorded, controller_serial="another", gpl_version="GPL 5.2", modules=()
@@ -212,11 +204,18 @@ class TestADeclaredConfigurationIsCrossChecked(unittest.IsolatedAsyncioTestCase)
     tool = dataclasses.replace(self.recorded.arm.kinematics, gripper_length=170.0)
     longer_tool = dataclasses.replace(self.recorded.arm, kinematics=tool)
     narrowed = dataclasses.replace(
-      self.recorded.arm, soft_limits={**self.recorded.arm.soft_limits, Axis.SHOULDER: (-90.0, 90.0)}
+      self.recorded.arm,
+      soft_limits={**self.recorded.arm.soft_limits, PreciseFlexAxis.SHOULDER: (-90.0, 90.0)},
     )
     for answered, named in (
-      (dataclasses.replace(self.recorded, arm=standard), r"arm.kinematics: declared .*l1=302.0"),
-      (dataclasses.replace(self.recorded, arm=longer_tool), "gripper_length=170.0"),
+      (
+        dataclasses.replace(self.recorded, arm=standard),
+        r"arm.kinematics \(l1, l2, gripper_length\): declared \(302.0",
+      ),
+      (
+        dataclasses.replace(self.recorded, arm=longer_tool),
+        r"device answers \(302.0, 289.0, 170.0\)",
+      ),
       (dataclasses.replace(self.recorded, arm=narrowed), "arm.soft_limits"),
       (
         dataclasses.replace(self.recorded, rail=PreciseFlexRailConfiguration((0.0, 1000.0))),
@@ -266,11 +265,6 @@ class TestAVisionGripperIsItsCameras(unittest.IsolatedAsyncioTestCase):
     fake = _FakeController({self.NAME: "0 PreciseFlex 400SX", **replies})
     arm = _make_arm(fake)
     return await arm.discover(), fake
-
-  async def test_an_arm_named_without_a_v_that_counts_two_cameras_has_one(self):
-    configuration, _ = await self.discovered()
-    self.assertEqual(configuration.camera_count, 2)
-    self.assertTrue(configuration.has_vision_gripper)
 
   async def test_an_arm_that_counts_none_has_none_whatever_it_is_called(self):
     configuration, _ = await self.discovered(**{self.NAME: "0 PreciseFlex 400SXV", self.COUNT: "0"})

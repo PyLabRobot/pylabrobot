@@ -1,7 +1,7 @@
 """
 PF400 kinematics: FK and IK for a 4-DOF SCARA + prismatic Z + optional rail.
 
-Joint dict keys match the firmware and `Axis` enum:
+Joint dict keys match the firmware and `PreciseFlexAxis` enum:
   1: J1 (Z lift) [mm]
   2: J2 (shoulder) [deg]
   3: J3 (elbow) [deg]
@@ -19,7 +19,7 @@ import warnings
 from dataclasses import dataclass
 from enum import IntEnum
 from math import atan2, cos, degrees, hypot, pi, radians, sin
-from typing import Dict, Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.resources import Coordinate, Rotation
 
@@ -28,7 +28,7 @@ from pylabrobot.resources import Coordinate, Rotation
 # ---------------------------------------------------------------------------
 
 
-class Axis(IntEnum):
+class PreciseFlexAxis(IntEnum):
   """The arm's axes, numbered as the firmware numbers them."""
 
   BASE = 1
@@ -39,7 +39,7 @@ class Axis(IntEnum):
   RAIL = 6
 
 
-JointState = Dict[Axis, float]
+JointState = Dict[PreciseFlexAxis, float]
 """Where every axis is, in its own units: the base, gripper and rail in mm, the shoulder, elbow and
 wrist in degrees."""
 
@@ -61,6 +61,26 @@ class PreciseFlexCartesianPose(CartesianPose):
   rail_position: Optional[float] = None
   orientation: Optional[ElbowOrientation] = None
   wrist: Optional[Wrist] = None
+
+
+@dataclass(frozen=True)
+class PreciseFlexPose:
+  """Where every joint of the arm is, and where its gripper is, in the arm's base frame.
+
+  One answer for the whole arm rather than for its end: whether the arm clears something depends
+  on its elbow and wrist as much as on the gripper.
+  """
+
+  shoulder_joint_location: Coordinate
+  """The shoulder axis: on the rail, at the Z drive's height."""
+  elbow_joint_location: Coordinate
+  """Link 1's far end, the joint link 2 turns about."""
+  wrist_joint_location: Coordinate
+  """Link 2's far end, the joint the gripper turns about."""
+  gripper_pose: PreciseFlexCartesianPose
+  """Where the gripper is and which way it faces, as ``fk`` returns it."""
+  joints: JointState
+  """What each drive reported, as ``request_joint_state`` returns it."""
 
 
 @dataclass(frozen=True)
@@ -123,6 +143,26 @@ def _classify_pf400_reach(links: Tuple[float, float]) -> Literal["standard", "ex
 # -- forward kinematics ----------------------------------------------------
 
 
+def compute_elbow_and_wrist(
+  p: PF400Params, shoulder: float, elbow: float
+) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+  """Where the elbow joint and the wrist joint stand, from the shoulder axis, seen from above.
+
+  Args:
+    p: kinematic parameters.
+    shoulder: the shoulder's angle, in radians.
+    elbow: the elbow's angle from link 1, in radians.
+
+  Returns:
+    The elbow joint (x, y) and the wrist joint (x, y), in mm.
+  """
+  elbow_x, elbow_y = p.l1 * cos(shoulder), p.l1 * sin(shoulder)
+  return (
+    (elbow_x, elbow_y),
+    (elbow_x + p.l2 * cos(shoulder + elbow), elbow_y + p.l2 * sin(shoulder + elbow)),
+  )
+
+
 def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
   """Forward kinematics.
 
@@ -134,18 +174,19 @@ def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
     orientation/wrist derived from the joint configuration (J3 sign and
     wrapped J4 sign, respectively).
   """
-  j1 = joints[Axis.BASE]
-  j2 = radians(joints[Axis.SHOULDER])
-  j3 = radians(joints[Axis.ELBOW])
-  j4 = radians(joints[Axis.WRIST])
-  rail_position = joints.get(Axis.RAIL, 0.0)
+  j1 = joints[PreciseFlexAxis.BASE]
+  j2 = radians(joints[PreciseFlexAxis.SHOULDER])
+  j3 = radians(joints[PreciseFlexAxis.ELBOW])
+  j4 = radians(joints[PreciseFlexAxis.WRIST])
+  rail_position = joints.get(PreciseFlexAxis.RAIL, 0.0)
   yaw = j2 + j3 + j4
-  x = rail_position + p.l1 * cos(j2) + p.l2 * cos(j2 + j3) + p.gripper_length * cos(yaw)
-  y = p.l1 * sin(j2) + p.l2 * sin(j2 + j3) + p.gripper_length * sin(yaw)
+  _, (wrist_x, wrist_y) = compute_elbow_and_wrist(p, j2, j3)
+  x = rail_position + wrist_x + p.gripper_length * cos(yaw)
+  y = wrist_y + p.gripper_length * sin(yaw)
   z = j1 + p.gripper_z_offset
-  j3_wrapped = (joints[Axis.ELBOW] + 180) % 360 - 180
+  j3_wrapped = (joints[PreciseFlexAxis.ELBOW] + 180) % 360 - 180
   orientation: ElbowOrientation = "right" if j3_wrapped >= 0 else "left"
-  wrist: Wrist = "ccw" if joints[Axis.WRIST] >= 0 else "cw"
+  wrist: Wrist = "ccw" if joints[PreciseFlexAxis.WRIST] >= 0 else "cw"
   return PreciseFlexCartesianPose(
     location=Coordinate(x, y, z),
     rotation=Rotation(-180, 90, z=degrees(yaw)),
@@ -153,6 +194,29 @@ def fk(joints: JointState, p: PF400Params) -> PreciseFlexCartesianPose:
     wrist=wrist,
     rail_position=rail_position,
   )
+
+
+def compute_outline_clearance(
+  outline: Sequence[Tuple[float, float]], other: Sequence[Tuple[float, float]]
+) -> float:
+  """How far apart two convex outlines stand, in mm. Negative when they overlap, by how deep.
+
+  The widest gap any edge of either leaves to the other. Never more than the true distance.
+
+  Args:
+    outline: the points (x, y) round one part, counter-clockwise.
+    other: the points round the other, in the same frame and the same sense.
+  """
+  clearance = float("-inf")
+  for edges, points in ((outline, other), (other, outline)):
+    for (x_1, y_1), (x_2, y_2) in zip(edges, list(edges[1:]) + list(edges[:1])):
+      length = hypot(x_2 - x_1, y_2 - y_1)
+      if length == 0.0:
+        continue
+      # Outwards from this edge: how far the nearest point of the other part stands off it.
+      out_x, out_y = (y_2 - y_1) / length, (x_1 - x_2) / length
+      clearance = max(clearance, min((x - x_1) * out_x + (y - y_1) * out_y for x, y in points))
+  return clearance
 
 
 # -- inverse kinematics ----------------------------------------------------
@@ -220,17 +284,20 @@ def ik(pose: PreciseFlexCartesianPose, p: PF400Params) -> JointState:
     j4 += 2 * pi
 
   return {
-    Axis.BASE: pose.location.z - p.gripper_z_offset,
-    Axis.SHOULDER: degrees(j2),
-    Axis.ELBOW: degrees(j3),
-    Axis.WRIST: degrees(j4),
-    Axis.RAIL: pose.rail_position,
+    PreciseFlexAxis.BASE: pose.location.z - p.gripper_z_offset,
+    PreciseFlexAxis.SHOULDER: degrees(j2),
+    PreciseFlexAxis.ELBOW: degrees(j3),
+    PreciseFlexAxis.WRIST: degrees(j4),
+    PreciseFlexAxis.RAIL: pose.rail_position,
   }
 
 
 def __getattr__(name: str) -> object:
-  """``JointPose``, deprecated: it is ``JointState``."""
+  """``JointPose`` and ``Axis``, deprecated: they are ``JointState`` and ``PreciseFlexAxis``."""
   if name == "JointPose":
     warnings.warn("`JointPose` is deprecated, use `JointState`.", DeprecationWarning, stacklevel=2)
     return JointState
+  if name == "Axis":
+    warnings.warn("`Axis` is deprecated, use `PreciseFlexAxis`.", DeprecationWarning, stacklevel=2)
+    return PreciseFlexAxis
   raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

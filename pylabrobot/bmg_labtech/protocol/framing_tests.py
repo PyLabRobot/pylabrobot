@@ -1,4 +1,4 @@
-"""FTDI framing tests, against frames recorded from a CLARIOstar."""
+"""Framing tests; the FTDI ones against frames recorded from a CLARIOstar."""
 
 import unittest
 
@@ -7,6 +7,9 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   ftdi_extract_payload,
   ftdi_validate_frame,
   ftdi_wrap_payload,
+  usb_packet_type,
+  usb_total_length,
+  usb_wrap_payload,
 )
 
 CLARIOSTAR_HEADER = 0x0C
@@ -52,6 +55,54 @@ class FTDIFramingTests(unittest.TestCase):
       ftdi_validate_frame(STATUS_IDLE[:-1], header=CLARIOSTAR_HEADER)
     with self.assertRaises(FrameError):
       ftdi_validate_frame(STATUS_IDLE[:5], header=CLARIOSTAR_HEADER)
+
+
+class USBFramingTests(unittest.TestCase):
+  def test_short_payload_is_one_packet(self):
+    self.assertEqual(
+      usb_wrap_payload(b"\x80", header=CLARIOSTAR_HEADER), [bytes.fromhex("000c010000000180")]
+    )
+
+  def test_57_bytes_fill_one_packet(self):
+    (packet,) = usb_wrap_payload(bytes(range(57)), header=CLARIOSTAR_HEADER)
+    self.assertEqual(len(packet), 64)
+    self.assertEqual(packet[:7], bytes.fromhex("000c0100000039"))
+
+  def test_long_payload_splits_into_first_and_continuations(self):
+    payload = bytes(i & 0xFF for i in range(130))
+    packets = usb_wrap_payload(payload, header=CLARIOSTAR_HEADER)
+    self.assertEqual([len(p) for p in packets], [64, 64, 23])
+    self.assertEqual(packets[0][:7], bytes.fromhex("000c0200000082"))
+    self.assertEqual(packets[1][:7], bytes.fromhex("000c0300000001"))
+    self.assertEqual(packets[2][:7], bytes.fromhex("000c0300000002"))
+    self.assertEqual(b"".join(p[7:] for p in packets), payload)
+    self.assertEqual(usb_total_length(packets[0]), 130)
+
+  def test_every_packet_carries_the_header_byte(self):
+    packets = usb_wrap_payload(bytes(130), header=0x16)
+    self.assertEqual(packets[0][:7], bytes.fromhex("00160200000082"))
+    self.assertEqual(packets[1][:7], bytes.fromhex("00160300000001"))
+    self.assertEqual(usb_packet_type(packets[0], header=0x16), 0x02)
+
+  def test_empty_payload_rejected(self):
+    with self.assertRaises(ValueError):
+      usb_wrap_payload(b"", header=CLARIOSTAR_HEADER)
+
+  def test_packet_type_requires_header(self):
+    packet = bytes.fromhex("000c010000000180")
+    self.assertEqual(usb_packet_type(packet, header=CLARIOSTAR_HEADER), 0x01)
+    with self.assertRaises(FrameError):
+      usb_packet_type(STATUS_QUERY, header=CLARIOSTAR_HEADER)
+    with self.assertRaises(FrameError):
+      usb_packet_type(packet, header=0x16)
+
+  def test_sequence_number_wraps_after_255(self):
+    packets = usb_wrap_payload(bytes(57 * 258), header=CLARIOSTAR_HEADER)
+    self.assertEqual(packets[255][:7], bytes.fromhex("000c03000000ff"))
+    self.assertEqual(packets[256][:7], bytes.fromhex("000c0300000000"))
+
+  def test_total_length_ignores_bytes_3_and_4(self):
+    self.assertEqual(usb_total_length(bytes.fromhex("000c02ffff0082")), 130)
 
 
 if __name__ == "__main__":

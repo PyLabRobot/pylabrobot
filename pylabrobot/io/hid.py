@@ -26,6 +26,7 @@ class HIDCommand(Command):
 
   def __init__(self, device_id: str, action: str, data: str):
     super().__init__(module="hid", device_id=device_id, action=action)
+    self.data = data
 
 
 class HID(IOBase):
@@ -183,6 +184,33 @@ class HID(IOBase):
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=write_data.hex()))
     return r
 
+  async def send_feature_report(self, data: bytes, report_id: bytes = b"\x00") -> int:
+    """Send a feature report, prepending its one-byte HID report ID.
+
+    Pass only the report payload in ``data``. Unnumbered reports use ID zero,
+    just like :meth:`write`. Device calls run on the transport's owning thread.
+    """
+    if len(report_id) != 1:
+      raise ValueError("report_id must contain exactly one byte")
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    report = report_id + data
+
+    def send() -> int:
+      """Write the complete report on the HID worker."""
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
+      return int(self.device.send_feature_report(report))
+
+    written = await asyncio.get_running_loop().run_in_executor(self._executor, send)
+    if written != len(report):
+      raise OSError(f"Short HID feature report write: {written} of {len(report)} bytes")
+    logger.log(LOG_LEVEL_IO, "[%s] feature report %s", self._unique_id, report.hex())
+    capturer.record(
+      HIDCommand(device_id=self._unique_id, action="send_feature_report", data=report.hex())
+    )
+    return written
+
   async def read(self, size: int, timeout: int) -> bytes:
     loop = asyncio.get_running_loop()
 
@@ -230,46 +258,44 @@ class HIDValidator(HID):
     )
     self.cr = cr
 
-  async def setup(self):
-    next_command = HIDCommand(**self.cr.next_command())
+  def _next_command(self, action: str) -> HIDCommand:
+    """Consume a captured command for this device and operation."""
+    command = self.cr.next_command()
     if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "open"
+      command["module"] != "hid"
+      or command["device_id"] != self._unique_id
+      or command["action"] != action
     ):
-      raise ValidationError(f"Next line is {next_command}, expected HID open {self._unique_id}")
+      raise ValidationError(f"Next command is {command}, expected HID {action} {self._unique_id}")
+    return HIDCommand(command["device_id"], command["action"], command["data"])
+
+  async def setup(self):
+    self._next_command("open")
 
   async def stop(self):
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "close"
-    ):
-      raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+    self._next_command("close")
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "write"
-    ):
-      raise ValidationError(f"Next line is {next_command}, expected HID write {self._unique_id}")
+    next_command = self._next_command("write")
     write_data = report_id + data
     if not next_command.data == write_data.hex():
       align_sequences(expected=next_command.data, actual=write_data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
+    return len(write_data)
+
+  async def send_feature_report(self, data: bytes, report_id: bytes = b"\x00") -> int:
+    """Validate the payload and report ID without opening hardware."""
+    if len(report_id) != 1:
+      raise ValueError("report_id must contain exactly one byte")
+    command = self._next_command("send_feature_report")
+    report = report_id + data
+    if command.data != report.hex():
+      raise ValidationError(f"Expected feature report {command.data}, got {report.hex()}")
+    return len(report)
 
   async def read(self, size: int, timeout: int) -> bytes:
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "read"
-      and len(next_command.data) == size
-    ):
-      raise ValidationError(
-        f"Next line is {next_command}, expected HID read {self._unique_id}: {size}"
-      )
-    return next_command.data.encode()
+    command = self._next_command("read")
+    data = bytes.fromhex(command.data)
+    if len(data) > size:
+      raise ValidationError(f"Captured HID read has {len(data)} bytes, requested at most {size}")
+    return data
