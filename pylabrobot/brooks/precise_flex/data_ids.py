@@ -11,7 +11,7 @@ power/system-state word) so a reply can be decoded, not just located.
 from enum import IntEnum
 from typing import Dict
 
-from .kinematics import Axis
+from .kinematics import PreciseFlexAxis
 
 
 class DataID(IntEnum):
@@ -111,14 +111,14 @@ def _parse_scalar(response: str) -> float:
   return float(response.split(",")[0])
 
 
-def _parse_per_axis(response: str) -> Dict[Axis, float]:
-  """Parse a comma-separated per-axis DataID reply into an {Axis: value} map."""
+def _parse_per_axis(response: str) -> Dict[PreciseFlexAxis, float]:
+  """Parse a comma-separated per-axis DataID reply into an {PreciseFlexAxis: value} map."""
   values = [float(v) for v in response.split(",")]
-  return {Axis(i + 1): values[i] for i in range(min(len(values), len(Axis)))}
+  return {PreciseFlexAxis(i + 1): values[i] for i in range(min(len(values), len(PreciseFlexAxis)))}
 
 
 def _zip_axis_ranges(
-  low: Dict[Axis, float], high: Dict[Axis, float]
-) -> Dict[Axis, tuple[float, float]]:
-  """Combine min and max per-axis maps into an {Axis: (min, max)} map."""
+  low: Dict[PreciseFlexAxis, float], high: Dict[PreciseFlexAxis, float]
+) -> Dict[PreciseFlexAxis, tuple[float, float]]:
+  """Combine min and max per-axis maps into an {PreciseFlexAxis: (min, max)} map."""
   return {axis: (low[axis], high[axis]) for axis in low.keys() & high.keys()}
