@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.configuration.VANTAstarConfiguration.atmospheric\_control\_unit\_connected
+===================================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.configuration
+
+.. autoattribute:: VANTAstarConfiguration.atmospheric_control_unit_connected
