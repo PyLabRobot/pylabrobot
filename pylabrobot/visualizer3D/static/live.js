@@ -4,7 +4,7 @@
 import * as THREE from "three";
 
 import { placeEdges, showEdges } from "./boxes.js";
-import { LIQUID, MOVING_PARTS, VESSEL_EMPTY } from "./constants.js";
+import { DEG, LIQUID, MOVING_PARTS, VESSEL_EMPTY } from "./constants.js";
 import {
   hiddenNames,
   isVisible,
@@ -157,22 +157,85 @@ function applyLocation(index, location) {
     if (setLocal(index, location)) refreshSubtree(index);
     return;
   }
+  startGlide(index, { location });
+}
+
+// Where a resource is drawn now, relative to its parent: the start of any glide from here.
+function drawnLocal(index) {
   const o = index * 6;
-  if (
-    world.local[o] === location.x &&
-    world.local[o + 1] === location.y &&
-    world.local[o + 2] === location.z
-  ) {
+  const local = world.local;
+  return {
+    location: { x: local[o], y: local[o + 1], z: local[o + 2] },
+    rotation: { x: local[o + 3], y: local[o + 4], z: local[o + 5] },
+  };
+}
+
+// Location and rotation glide as one, since a joint turned about its pivot changes both.
+// A message carries the rotation first and the location after: the second keeps the first's target.
+function startGlide(index, target) {
+  const now = drawnLocal(index);
+  const before = glides.get(index);
+  const to = {
+    location: target.location ?? before?.to.location ?? now.location,
+    rotation: target.rotation ?? before?.to.rotation ?? now.rotation,
+  };
+  const same = (a, b) => a.x === b.x && a.y === b.y && a.z === b.z;
+  if (same(now.location, to.location) && same(now.rotation, to.rotation)) {
     glides.delete(index);
+    return;
+  }
+  // Told again where it is already going: the glide under way carries on.
+  if (before && same(before.to.location, to.location) && same(before.to.rotation, to.rotation)) {
     return;
   }
   // No frame asked for here: the message that carried this position asked for one at its own
   // edge, and `updateGlides` keeps the loop running while anything is still easing.
-  glides.set(index, {
-    from: { x: world.local[o], y: world.local[o + 1], z: world.local[o + 2] },
-    to: { x: location.x, y: location.y, z: location.z },
-    left: glideSeconds,
-  });
+  glides.set(index, { from: now, to, left: glideSeconds });
+}
+
+// The turn about z from `from` to `to`, the short way round, in degrees.
+function turnAboutZ(from, to) {
+  return ((((to - from + 180) % 360) + 360) % 360) - 180;
+}
+
+// Part `share` of a glide. A turn about z is drawn about the one point the move leaves where it
+// was, so a link stays on its joint; without a turn, the location goes in a straight line.
+function glideAt(glide, share) {
+  const { from, to } = glide;
+  const lerp = (a, b) => a + (b - a) * share;
+  const turn = turnAboutZ(from.rotation.z, to.rotation.z);
+  const rotation = {
+    x: lerp(from.rotation.x, to.rotation.x),
+    y: lerp(from.rotation.y, to.rotation.y),
+    z: from.rotation.z + turn * share,
+  };
+  const z = lerp(from.location.z, to.location.z);
+  if (Math.abs(turn) < 1e-6) {
+    return {
+      location: {
+        x: lerp(from.location.x, to.location.x),
+        y: lerp(from.location.y, to.location.y),
+        z,
+      },
+      rotation,
+    };
+  }
+  // The centre c of the whole turn: to = c + R(turn) (from - c), solved for c.
+  const cos = Math.cos(turn * DEG);
+  const sin = Math.sin(turn * DEG);
+  const bx = to.location.x - (cos * from.location.x - sin * from.location.y);
+  const by = to.location.y - (sin * from.location.x + cos * from.location.y);
+  const det = 2 * (1 - cos);
+  const cx = ((1 - cos) * bx - sin * by) / det;
+  const cy = (sin * bx + (1 - cos) * by) / det;
+  const partCos = Math.cos(turn * share * DEG);
+  const partSin = Math.sin(turn * share * DEG);
+  const dx = from.location.x - cx;
+  const dy = from.location.y - cy;
+  return {
+    location: { x: cx + partCos * dx - partSin * dy, y: cy + partSin * dx + partCos * dy, z },
+    rotation,
+  };
 }
 
 export function onChange(listener) {
@@ -184,18 +247,12 @@ export function updateGlides(delta) {
   for (const [index, glide] of glides) {
     glide.left -= delta;
     const done = glide.left <= 0;
-    // How much of the move is still to come, so the whole of it takes `glideSeconds` whatever its
-    // length and however the frames fall.
-    const left = done ? 0 : glide.left / glideSeconds;
-    const next = done
-      ? glide.to
-      : {
-          x: glide.to.x - (glide.to.x - glide.from.x) * left,
-          y: glide.to.y - (glide.to.y - glide.from.y) * left,
-          z: glide.to.z - (glide.to.z - glide.from.z) * left,
-        };
+    // How much of the move is done, so the whole of it takes `glideSeconds` whatever its length
+    // and however the frames fall.
+    const next = done ? glide.to : glideAt(glide, 1 - glide.left / glideSeconds);
     if (done) glides.delete(index);
-    if (setLocal(index, next)) refreshSubtree(index);
+    const moved = setLocal(index, next.location);
+    if (setLocalRotation(index, next.rotation) || moved) refreshSubtree(index);
   }
   return true;
 }
@@ -204,8 +261,13 @@ export function updateGlides(delta) {
 // from an absolute matrix worked out through that transform - so an arm's links carry the gripper,
 // its fingers and their pads round with them, and all of it has to be recomputed.
 function applyRotation(index, rotation) {
-  if (!setLocalRotation(index, rotation)) return;
-  refreshSubtree(index);
+  const target = { x: rotation.x ?? 0, y: rotation.y ?? 0, z: rotation.z ?? 0 };
+  if (!glideSeconds || reducedMotion?.matches) {
+    glides.delete(index);
+    if (setLocalRotation(index, target)) refreshSubtree(index);
+    return;
+  }
+  startGlide(index, { rotation: target });
 }
 
 function setArmX(index, referenceX) {
