@@ -8,7 +8,7 @@ import asyncio
 import contextlib
 import math
 import unittest
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.brooks.precise_flex import (
@@ -17,6 +17,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexAxis,
   PreciseFlexCartesianPose,
   PreciseFlexDriver,
+  PreciseFlexError,
   PreciseFlexGripper,
   PreciseFlexRail,
 )
@@ -830,6 +831,46 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
   async def test_setup_with_rail(self):
     _, fake = await self._run_setup(has_rail=True)
     self.assert_wire(fake.sent, _SETUP)
+
+  async def test_a_failed_setup_hands_the_arm_back_and_closes_the_links(self):
+    # -3101 is the arm's reply to `state` while it pressed on something.
+    fake = _FakeController({"state": "-3101"})
+    arm = _make_arm(fake)
+    image_io, server_io = MagicMock(stop=AsyncMock()), MagicMock(stop=AsyncMock())
+    arm._vision_image_io, arm._vision_server_io = image_io, server_io
+    with self.assertRaises(PreciseFlexError):
+      await arm.setup(skip_home=True)
+    self.assertEqual(fake.sent[-3:], ["attach 0", "hp 0", "<io.write> exit"])
+    image_io.stop.assert_awaited_once()
+    server_io.stop.assert_awaited_once()
+    cast(AsyncMock, arm.io.stop).assert_awaited_once()
+
+  async def test_stop_after_a_failed_setup_keeps_the_setup_error(self):
+    fake = _FakeController({"state": "-3101"})
+    arm = _make_arm(fake)
+    with self.assertRaises(PreciseFlexError):
+      try:
+        await arm.setup(skip_home=True)
+      finally:
+        sent = len(fake.sent)
+        await arm.stop()
+    self.assertEqual(len(fake.sent), sent)
+
+  async def test_a_failure_while_connecting_closes_the_link(self):
+    fake = _FakeController({"mode 0": "-1"})
+    arm = _make_arm(fake)
+    with self.assertRaises(PreciseFlexError):
+      await arm.setup(skip_home=True)
+    cast(AsyncMock, arm.io.stop).assert_awaited_once()
+
+  async def test_the_setup_error_is_raised_when_handing_back_fails(self):
+    fake = _FakeController({"state": "-3101", "attach 0": "-1"})
+    arm = _make_arm(fake)
+    cast(AsyncMock, arm.io.stop).side_effect = OSError("closed")
+    with self.assertRaises(PreciseFlexError) as raised, self.assertLogs(level="WARNING"):
+      await arm.setup(skip_home=True)
+    self.assertEqual(raised.exception.replycode, -3101)
+    self.assertIn("hp 0", fake.sent)
 
   async def _check(self, cases: List[_Case], has_rail: bool) -> None:
     for name, call, expected, error in cases:
