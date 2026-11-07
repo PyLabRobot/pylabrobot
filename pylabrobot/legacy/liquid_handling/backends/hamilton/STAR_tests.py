@@ -17,11 +17,11 @@ from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.io.usb import USB
 from pylabrobot.legacy.arms.standard import CartesianCoords
 from pylabrobot.legacy.liquid_handling import LiquidHandler
-from pylabrobot.legacy.liquid_handling.pipette_batch_scheduling import ChannelBatch
 from pylabrobot.legacy.liquid_handling.standard import GripDirection, Mix, Pickup
 from pylabrobot.legacy.plate_reading import PlateReader
 from pylabrobot.legacy.plate_reading.chatterbox import PlateReaderChatterboxBackend
 from pylabrobot.legacy.tip_tracker import TipTracker
+from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import ChannelBatch
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   PLT_CAR_L5MD_A00,
