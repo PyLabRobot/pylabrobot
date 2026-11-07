@@ -39,6 +39,7 @@ cole_parmer/index
 curiox/index
 hamilton/index
 high_res/index
+hse/index
 inheco/index
 kbioscience/index
 kbiosystems/index
