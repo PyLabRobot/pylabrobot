@@ -276,6 +276,21 @@ class VANTAstarDriver:
       raise ValueError(f"default_read_timeout must be positive, got {value}")
     self._default_read_timeout = value
 
+  def _build_io(self, device_id: Optional[str]) -> USB:
+    """The USB link to the reader with serial number ``device_id`` (None: the first found)."""
+    return USB(
+      id_vendor=0x0483,
+      id_product=0xA29A,
+      human_readable_device_name="BMG VANTAstar",
+      serial_number=device_id,
+      read_endpoint_address=0x81,
+      write_endpoint_address=0x01,
+      configuration_callback=_configure_usb_device,
+      # The reader rejects a multi-packet command whose 64-byte packets are followed by zero-length
+      # packets; Voyager sends none.
+      zero_length_packets=False,
+    )
+
   def __init__(
     self,
     device_id: Optional[str] = None,
@@ -293,22 +308,7 @@ class VANTAstarDriver:
     """
     if io is not None and not isinstance(io, USB):
       raise TypeError(f"io must be a USB, got {type(io).__name__}")
-    self.io: USB = (
-      io
-      if io is not None
-      else USB(
-        id_vendor=0x0483,
-        id_product=0xA29A,
-        human_readable_device_name="BMG VANTAstar",
-        serial_number=device_id,
-        read_endpoint_address=0x81,
-        write_endpoint_address=0x01,
-        configuration_callback=_configure_usb_device,
-        # The reader rejects a multi-packet command whose 64-byte packets are followed by
-        # zero-length packets; Voyager sends none.
-        zero_length_packets=False,
-      )
-    )
+    self.io: USB = io if io is not None else self._build_io(device_id)
     self.name = name
     self.declared_configuration_json = declared_configuration_json
     self._lock = asyncio.Lock()
