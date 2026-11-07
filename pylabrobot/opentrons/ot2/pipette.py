@@ -3,12 +3,13 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.opentrons.tracking import track_liquid_transfer
 from pylabrobot.opentrons.types import Mount
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
@@ -53,6 +54,11 @@ _COMPATIBLE_TIP_CAPACITIES: Dict[float, set] = {
 }
 
 
+# Half the width of a tip's collar, in mm: a tip standing in a rack is counted this far round its
+# spot when nozzles without a tip pass over it.
+_TIP_COLLAR_RADIUS = 3.5
+
+
 def _require_finite_coordinate(name: str, coordinate: Coordinate) -> None:
   if not all(math.isfinite(axis) for axis in coordinate):
     raise ValueError(f"{name} coordinates must be finite")
@@ -84,6 +90,7 @@ class _OT2Pipette(ABC):
     self._spec = spec
     self._tips: Tuple[Tip, ...] = ()
     self._tip_origins: Tuple[TipSpot, ...] = ()
+    self._tip_channels: Tuple[int, ...] = ()
 
   @property
   def minimum_volume(self) -> float:
@@ -105,6 +112,25 @@ class _OT2Pipette(ABC):
   def has_tip(self) -> bool:
     """Whether the pipette holds a tip according to commands issued by this object."""
     return bool(self._tips)
+
+  @property
+  def tip_channels(self) -> Tuple[int, ...]:
+    """The nozzles carrying the mounted tips, back to front, or an empty tuple without tips."""
+    return self._tip_channels
+
+  @staticmethod
+  def _primary_of(channels: Sequence[int]) -> int:
+    """The nozzle the robot moves by for tips on ``channels``.
+
+    The back nozzle (0), or the front one when the tips are on the front nozzles: the robot's
+    partial-column layout then moves by H1.
+    """
+    return channels[-1] if channels and channels[0] != 0 else 0
+
+  @property
+  def _primary_nozzle(self) -> int:
+    """The nozzle the robot moves by for the mounted tips."""
+    return self._primary_of(self._tip_channels)
 
   def _require_active(self) -> None:
     if self.robot._require_run() is not self._run:
@@ -149,14 +175,22 @@ class _OT2Pipette(ABC):
     """Whether the tip capacity is supported by this pipette."""
     return tip.maximal_volume in _COMPATIBLE_TIP_CAPACITIES[self.maximum_volume]
 
-  def _validate_position(self, location: Coordinate) -> None:
-    """Check the reference nozzle target in the robot frame before staging an operation."""
+  def _validate_position(self, location: Coordinate, nozzle: Optional[int] = None) -> None:
+    """Check a target in the robot frame before staging an operation.
+
+    Args:
+      location: where ``nozzle`` goes.
+      nozzle: the nozzle the robot moves by. That of the mounted tips when None.
+    """
     _require_finite_coordinate("location", location)
     if location.z < 0:
       raise ValueError("location.z must be non-negative")
-    # Nozzle alignment fixes every target relative to the reference nozzle.
+    # Nozzle alignment fixes every target relative to the nozzle the robot moves by.
     # Checking its offset therefore checks the common head center for the whole selection.
-    channel_offset = self.robot.geometry.channel_y_offsets()[0] if self.num_channels == 8 else 0.0
+    nozzle = self._primary_nozzle if nozzle is None else nozzle
+    channel_offset = (
+      self.robot.geometry.channel_y_offsets()[nozzle] if self.num_channels == 8 else 0.0
+    )
     if not self.robot.geometry.can_reach_position(self.mount, location, channel_offset):
       bounds = self.robot.geometry.single_channel_reach(self.mount)
       raise ValueError(
@@ -211,23 +245,66 @@ class _OT2Pipette(ABC):
       tip_spot.get_location_wrt(self.robot.deck, "c", "c", "b") + offset
     )
 
-  def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
+  def _check_empty_nozzles(
+    self, reference: Coordinate, tip: Tip, channels: Sequence[int], what: str
+  ) -> None:
+    """Refuse a move bringing a nozzle without a tip down onto the deck. Single nozzles have none.
+
+    Args:
+      reference: where the end of the tip on the nozzle the robot moves by goes, in the deck frame.
+      tip: the tips on ``channels``.
+      channels: the nozzles carrying tips.
+      what: the operation, for the error.
+    """
+
+  async def _configure_nozzle_layout(self, channels: Optional[Sequence[int]]) -> None:
+    """Set the robot's nozzle layout for tips on the front nozzles ``channels``, or all (None).
+
+    One front tip is the SINGLE layout on H1; more are a QUADRANT from H1 back to the first of
+    ``channels``, the robot's partial column.
+    """
+    configuration: Dict[str, Any]
+    if channels is None:
+      configuration = {"style": "ALL"}
+    elif len(channels) == 1:
+      configuration = {"style": "SINGLE", "primaryNozzle": "H1"}
+    else:
+      configuration = {
+        "style": "QUADRANT",
+        "primaryNozzle": "H1",
+        "frontRightNozzle": "H1",
+        "backLeftNozzle": f"{'ABCDEFGH'[channels[0]]}1",
+      }
+    await self._run.configure_nozzle_layout(self.pipette_id, configuration)
+
+  def _check_tip_pickup(
+    self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate, channels: Sequence[int]
+  ) -> None:
     """Check the pickup target before loading labware or changing tip trackers."""
+    reference = tip_spots[-1] if channels[0] != 0 else tip_spots[0]
     self._validate_position(
-      self._tip_command_location(tip_spots[0], offset + Coordinate(z=tip.get_size_z()))
+      self._tip_command_location(reference, offset + Coordinate(z=tip.get_size_z())),
+      self._primary_of(channels),
     )
 
   async def _pick_up_tips(
     self,
     tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
+    channels: Optional[Sequence[int]] = None,
   ) -> None:
-    """Pick up one tip per nozzle with one command, then retract to traversal height."""
+    """Pick up one tip per nozzle with one command, then retract to traversal height.
+
+    ``channels`` are the nozzles taking the tips, the first ``len(tip_spots)`` when None. For the
+    front nozzles the robot's nozzle layout is set for them first, and the command names the front
+    tip's spot, which the front nozzle goes to.
+    """
     async with self.robot._operation_lock:
       self._require_active()
       if self.has_tip:
         raise RuntimeError(f"The {self.mount} pipette already has a tip")
       tip_spots = tuple(tip_spots)
+      channels = tuple(range(len(tip_spots))) if channels is None else tuple(channels)
       rack = self._tip_rack(tip_spots)
       tips = tuple(spot.get_tip() for spot in tip_spots)
       tip = tips[0]
@@ -239,10 +316,14 @@ class _OT2Pipette(ABC):
         raise ValueError("All nozzles must use the same tip type")
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
-      self._check_tip_pickup(tip_spots, tip, offset)
+      self._check_tip_pickup(tip_spots, tip, offset, channels)
+      front = channels[0] != 0
+      reference = tip_spots[-1] if front else tip_spots[0]
       tracked = [
         spot.tracker for spot in tip_spots if does_tip_tracking() and not spot.tracker.is_disabled
       ]
+      if front:
+        await self._configure_nozzle_layout(channels)
       try:
         for tracker in tracked:
           tracker.remove_tip(commit=False)
@@ -251,18 +332,21 @@ class _OT2Pipette(ABC):
         await self._run.pick_up_tip(
           self.pipette_id,
           binding.labware_id,
-          rack.get_child_identifier(tip_spots[0]),
+          rack.get_child_identifier(reference),
           offset + Coordinate(z=tip.get_size_z()),
         )
       except BaseException:
         for tracker in tracked:
           tracker.rollback()
+        if front:
+          await self._configure_nozzle_layout(None)
         raise
 
       for tracker in tracked:
         tracker.commit()
       self._tips = tips
       self._tip_origins = tip_spots
+      self._tip_channels = channels
       await self._retract_to_traversal_height()
 
   async def _drop_tips(
@@ -295,7 +379,15 @@ class _OT2Pipette(ABC):
     tip = self._tips[0]
     offset = offset or Coordinate.zero()
     _require_finite_coordinate("offset", offset)
-    self._validate_position(self._tip_command_location(tip_spots[0], offset + Coordinate(z=10)))
+    front = self._primary_nozzle != 0
+    reference = tip_spots[-1] if front else tip_spots[0]
+    self._validate_position(self._tip_command_location(reference, offset + Coordinate(z=10)))
+    self._check_empty_nozzles(
+      reference.get_location_wrt(self.robot.deck, "c", "c", "b") + offset + Coordinate(z=10),
+      tip,
+      self._tip_channels,
+      f"dropping tips into {[rack.get_child_identifier(spot) for spot in tip_spots]}",
+    )
     tracked = [
       spot.tracker for spot in tip_spots if does_tip_tracking() and not spot.tracker.is_disabled
     ]
@@ -308,7 +400,7 @@ class _OT2Pipette(ABC):
       await self._run.drop_tip(
         self.pipette_id,
         binding.labware_id,
-        rack.get_child_identifier(tip_spots[0]),
+        rack.get_child_identifier(reference),
         offset + Coordinate(z=10),
       )
     except BaseException:
@@ -320,15 +412,25 @@ class _OT2Pipette(ABC):
       tracker.commit()
     self._tips = ()
     self._tip_origins = ()
+    self._tip_channels = ()
     await self._retract_to_traversal_height()
+    if front:
+      await self._configure_nozzle_layout(None)
 
   async def _retract_to_traversal_height(self) -> None:
-    """Raise the nozzle or mounted tip from its reported position under the operation lock."""
+    """Raise the nozzle or mounted tip straight up from its reported position.
+
+    The robot stands there already, so the reach is not checked again: with tips on the front
+    nozzles over the fixed trash, the back nozzle stands beyond what the reach check allows.
+    """
     position = await self._run.get_position(self.pipette_id)
     _require_finite_coordinate("position", position)
     if position.z < self.robot.traversal_height:
-      await self._move_to(
+      await self._run.move_to(
+        self.pipette_id,
         Coordinate(position.x, position.y, self.robot.traversal_height),
+        speed=None,
+        minimum_z_height=None,
         force_direct=True,
       )
 
@@ -355,10 +457,14 @@ class _OT2Pipette(ABC):
       self._check_tip_volumes(allow_nonzero_volume)
       offset = offset or Coordinate.zero()
       _require_finite_coordinate("offset", offset)
+      front = self._primary_nozzle != 0
       await self._run.discard_tip_in_fixed_trash(self.pipette_id, offset + Coordinate(z=10))
       self._tips = ()
       self._tip_origins = ()
+      self._tip_channels = ()
       await self._retract_to_traversal_height()
+      if front:
+        await self._configure_nozzle_layout(None)
 
   def _liquid_location(
     self,
@@ -383,12 +489,22 @@ class _OT2Pipette(ABC):
     offset: Coordinate,
     liquid_height: float,
   ) -> Tuple[Tuple[VolumeTracker, ...], Coordinate]:
-    """Resolve one container per nozzle and the reference nozzle's liquid position."""
+    """Resolve one container per tip, and where the nozzle the robot moves by goes."""
     self._validate_targets(containers)
     locations = [self._liquid_location(c, offset, liquid_height) for c in containers]
     self._validate_nozzle_positions(locations)
-    self._validate_position(locations[0])
-    return tuple(c.tracker for c in containers), locations[0]
+    reference = len(locations) - 1 if self._primary_nozzle != 0 else 0
+    self._validate_position(locations[reference])
+    if self._tips:
+      self._check_empty_nozzles(
+        containers[reference].get_location_wrt(self.robot.deck, "c", "c", "cavity_bottom")
+        + offset
+        + Coordinate(z=liquid_height),
+        self._tips[0],
+        self._tip_channels,
+        f"{[container.name for container in containers]} at {liquid_height:g} mm",
+      )
+    return tuple(c.tracker for c in containers), locations[reference]
 
   async def _aspirate(
     self,
@@ -588,10 +704,16 @@ class OT2_8ChannelPipette(_OT2Pipette):
   """An eight-channel OT-2 pipette with a rigid nozzle layout.
 
   Instances are discovered and created by :meth:`OT2.setup`. Pickup targets run
-  consecutively from nozzle 0 toward nozzle 7. Subsequent targets match the mounted
-  tips in nozzle order. Volume, flow rate, liquid height, and offset
-  apply equally to every mounted tip.
+  consecutively from nozzle 0 toward nozzle 7, on the back nozzles or on the front ones
+  (``use_channels``). Subsequent targets match the mounted tips in nozzle order. Volume,
+  flow rate, liquid height, and offset apply equally to every mounted tip.
+
+  With fewer than eight tips, every move keeps the nozzles without a tip
+  ``empty_nozzle_clearance`` above whatever stands under them in the deck model.
   """
+
+  empty_nozzle_clearance: float = 2.0
+  """How far above whatever stands under them the nozzles without a tip are kept, in mm."""
 
   @property
   def num_channels(self) -> int:
@@ -636,16 +758,16 @@ class OT2_8ChannelPipette(_OT2Pipette):
     )
     return rack
 
-  def _check_head8_pickup(self, tip_spots: Sequence[TipSpot]) -> None:
-    """Reject occupied tip spots under undeclared nozzles below a contiguous selection.
+  def _check_head8_pickup(self, tip_spots: Sequence[TipSpot], channels: Sequence[int]) -> None:
+    """Reject occupied tip spots under undeclared nozzles beside a contiguous selection.
 
-    The supplied tips implicitly address channels 0 through len(tip_spots)-1.
-    Every other nozzle within the rack also picks up any tip beneath it.
+    The supplied tips address ``channels``: the back nozzles from 0, or the front ones ending
+    on 7. Every other nozzle within the rack also picks up any tip beneath it.
     """
     channel_offsets = self.robot.geometry.channel_y_offsets()
     head8_pitch = channel_offsets[0] - channel_offsets[1]
     num_nozzles = self.num_channels
-    use_channels = list(range(len(tip_spots)))
+    use_channels = list(channels)
 
     def loc(resource: Resource) -> Coordinate:
       """Locate a tip spot in the deck frame."""
@@ -689,6 +811,14 @@ class OT2_8ChannelPipette(_OT2Pipette):
       spot = spot_by_row.get(nozzle + top_row)
       if spot is not None and spot.has_tip():
         extras.append(spot)
+    if extras and use_channels[0] != 0:
+      where = ", ".join(spot.name for spot in extras)
+      raise ValueError(
+        f"OT-2 8-channel pickup would also grab undeclared tips at {where}. On the front "
+        f"nozzles the idle ones hang behind the selection, and these occupied tipspots sit "
+        f"above it within the head's 8-nozzle reach, so the hardware would pick them up too. "
+        f"Take the tips from the top of a column or clear those spots first."
+      )
     if extras:
       where = ", ".join(spot.name for spot in extras)
       raise ValueError(
@@ -698,18 +828,108 @@ class OT2_8ChannelPipette(_OT2Pipette):
         f"Extend the selection down to include them or clear those spots first."
       )
 
-  def _check_tip_pickup(self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate) -> None:
+  def _deck_obstacles(self) -> List[Tuple[str, float, float, float, float, float]]:
+    """What stands on the deck, as (name, left, right, front, back, top) boxes in the deck frame.
+
+    Each resource by its outline, its children too unless it is itemized; in a tip rack each tip
+    standing in it, by its collar, instead of the rack.
+    """
+    deck = self.robot.deck
+    boxes: List[Tuple[str, float, float, float, float, float]] = []
+
+    def add(resource: Resource) -> None:
+      """Add ``resource``'s box, or its tips' for a tip rack, and its children's."""
+      if isinstance(resource, TipRack):
+        for spot in resource.get_all_items():
+          if spot.has_tip():
+            centre = spot.get_location_wrt(deck, "c", "c", "b")
+            r = _TIP_COLLAR_RADIUS
+            boxes.append(
+              (
+                f"the tip in {resource.name}'s {resource.get_child_identifier(spot)}",
+                centre.x - r,
+                centre.x + r,
+                centre.y - r,
+                centre.y + r,
+                centre.z + spot.get_tip().get_size_z(),
+              )
+            )
+        return
+      corner = resource.get_location_wrt(deck)
+      boxes.append(
+        (
+          resource.name,
+          corner.x,
+          corner.x + resource.get_size_x(),
+          corner.y,
+          corner.y + resource.get_size_y(),
+          corner.z + resource.get_size_z(),
+        )
+      )
+      if not isinstance(resource, ItemizedResource):
+        for child in resource.children:
+          add(child)
+
+    for child in deck.children:
+      add(child)
+    return boxes
+
+  def _check_empty_nozzles(
+    self, reference: Coordinate, tip: Tip, channels: Sequence[int], what: str
+  ) -> None:
+    """Refuse a move bringing a nozzle without a tip within ``empty_nozzle_clearance`` of the deck.
+
+    The nozzles hang 9 mm apart from the one the robot moves by, their bottoms the tip's length
+    above its end, less what of the tip goes over the nozzle. Each is checked against what stands
+    under it, nearest the tips first.
+
+    Raises:
+      ValueError: Naming the nozzle and what it would come down onto.
+    """
+    if len(channels) >= self.num_channels:
+      return
+    channel_offsets = self.robot.geometry.channel_y_offsets()
+    primary = self._primary_of(channels)
+    bottom = reference.z + tip.get_size_z() - tip.fitting_depth
+    boxes = self._deck_obstacles()
+    empty = sorted(
+      (nozzle for nozzle in range(self.num_channels) if nozzle not in channels),
+      key=lambda nozzle: abs(nozzle - primary),
+    )
+    for nozzle in empty:
+      y = reference.y + channel_offsets[nozzle] - channel_offsets[primary]
+      for name, left, right, front, back, top in boxes:
+        if (
+          left <= reference.x <= right
+          and front <= y <= back
+          and bottom < top + self.empty_nozzle_clearance
+        ):
+          raise ValueError(
+            f"{what}: nozzle {nozzle}, without a tip, would come down to {bottom:.1f} mm over "
+            f"{name}, whose top stands at {top:.1f} mm; nozzles without a tip are kept "
+            f"{self.empty_nozzle_clearance:g} mm above what stands under them"
+          )
+
+  def _check_tip_pickup(
+    self, tip_spots: Sequence[TipSpot], tip: Tip, offset: Coordinate, channels: Sequence[int]
+  ) -> None:
     """Reject labware overlapping the pickup footprint near the bare nozzle height.
 
     The full nozzle span is padded by 5 mm in XY and 10 mm vertically. This is a
     conservative destination check, not a swept-path or complete pipette-body model.
+    The nozzles without a tip are then checked as every move checks them.
     """
-    super()._check_tip_pickup(tip_spots, tip, offset)
-    self._check_head8_pickup(tip_spots)
-    primary = tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b") + offset
+    super()._check_tip_pickup(tip_spots, tip, offset, channels)
+    self._check_head8_pickup(tip_spots, channels)
+    channel_offsets = self.robot.geometry.channel_y_offsets()
+    # Nozzle 0's place, from the first spot and the nozzle that goes over it.
+    primary = (
+      tip_spots[0].get_location_wrt(self.robot.deck, "c", "c", "b")
+      + offset
+      + Coordinate(y=channel_offsets[0] - channel_offsets[channels[0]])
+    )
     nozzle_z = primary.z + tip.get_size_z() - tip.fitting_depth
     x_min, x_max = primary.x - 5, primary.x + 5
-    channel_offsets = self.robot.geometry.channel_y_offsets()
     y_min = primary.y + channel_offsets[-1] - channel_offsets[0] - 5
     y_max = primary.y + 5
     for labware in self.robot.deck.slots:
@@ -732,17 +952,60 @@ class OT2_8ChannelPipette(_OT2Pipette):
           and max(c.z for c in corners) >= nozzle_z - 10
         ):
           raise ValueError(f"Eight-channel pickup footprint overlaps resource {resource.name!r}")
+    rack = tip_spots[0].parent
+    assert isinstance(rack, TipRack)  # _tip_rack has checked it
+    reference = tip_spots[-1] if channels[0] != 0 else tip_spots[0]
+    self._check_empty_nozzles(
+      reference.get_location_wrt(self.robot.deck, "c", "c", "b") + offset,
+      tip,
+      channels,
+      f"picking up {[rack.get_child_identifier(spot) for spot in tip_spots]}",
+    )
+
+  def _resolve_channels(self, count: int, use_channels: Optional[Sequence[int]]) -> Tuple[int, ...]:
+    """The nozzles taking ``count`` tips: the back ones when None, else ``use_channels``, checked.
+
+    Raises:
+      ValueError: If ``use_channels`` names another count, or nozzles that are not at one end of
+        the head without a gap.
+    """
+    if use_channels is None:
+      return tuple(range(count))
+    channels = tuple(use_channels)
+    if len(channels) != count:
+      raise ValueError(
+        f"use_channels names {len(channels)} nozzles for {count} tip spots; give one per spot"
+      )
+    back = tuple(range(count))
+    front = tuple(range(self.num_channels - count, self.num_channels))
+    if channels not in (back, front):
+      raise ValueError(
+        f"use_channels must be {list(back)} (the back nozzles) or {list(front)} (the front ones): "
+        "the eight nozzles move together, so the tips sit at one end of the head without a gap"
+      )
+    return channels
 
   async def pick_up_tips(
     self,
     tip_spots: Sequence[TipSpot],
     offset: Optional[Coordinate] = None,
+    use_channels: Optional[Sequence[int]] = None,
   ) -> None:
-    """Pick up consecutive tips using nozzles starting at 0, then retract.
+    """Pick up consecutive tips on the back or the front nozzles, then retract.
 
     Occupied tip spots under the remaining nozzles always reject the pickup.
+
+    Args:
+      tip_spots: neighbouring rows of one column, back to front, one per nozzle.
+      offset: added to each spot, in mm. None for none.
+      use_channels: the nozzles taking the tips, back to front: the first ``len(tip_spots)``
+        (the back nozzles) when None, or the last (the front ones, as ``[5, 6, 7]``). Tips on
+        the front nozzles set the robot's partial-column layout, which moves by the front nozzle
+        until the tips are dropped; they reach the front row of the deck, which the back
+        nozzles cannot with fewer than eight tips.
     """
-    await self._pick_up_tips(tip_spots, offset)
+    channels = self._resolve_channels(len(tip_spots), use_channels)
+    await self._pick_up_tips(tip_spots, offset, channels)
 
   async def drop_tips(
     self,
