@@ -51,6 +51,7 @@ class Well(Container):
     cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE,
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones=None,
+    nominal_volume: Optional[float] = None,
   ):
     """Create a new well.
 
@@ -64,6 +65,8 @@ class Well(Container):
       category: Category of the well.
       max_volume: Maximum volume of the well. If not specified, the well will be seen as a cylinder
         and the max volume will be computed based on size_x, size_y, and size_z.
+      nominal_volume: Rated working volume of the well (what it is sold and named as), in uL.
+        Defaults to `max_volume` when not given.
       compute_volume_from_height: function to compute the volume from the height relative to the
         bottom
       cross_section_type: Type of the cross section of the well. If not specified, the well will be
@@ -95,6 +98,7 @@ class Well(Container):
       size_z=size_z,
       category=category,
       max_volume=max_volume,
+      nominal_volume=nominal_volume,
       model=model,
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume,
