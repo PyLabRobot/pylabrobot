@@ -594,12 +594,14 @@ class TestUnbuildableLabwareGuard(unittest.IsolatedAsyncioTestCase):
     await _mount_tips(self.flex, self.head)
 
     commands_before = self.api.submit_command.await_count
+    defines_before = self.api.define_labware.await_count
+
     with self.assertRaises(OpentronsError):
       # An untyped script can hand a rack to a Plate parameter; that is
       # exactly the caller this guard exists for.
       await self.head.aspirate(rack, column=0, volume=20)  # type: ignore[arg-type]
 
-    self.assertEqual(self.api.define_labware.await_count, 0)
+    self.assertEqual(self.api.define_labware.await_count, defines_before)
     self.assertEqual(self.api.submit_command.await_count, commands_before)
 
   async def test_gripper_move_of_the_same_rack_still_works(self):
@@ -807,15 +809,15 @@ class TestCustomLabwareLoadFlow(unittest.IsolatedAsyncioTestCase):
     )
     self.assertTrue(any("grip_distance_from_top=8.0" in line for line in logs.output))
 
-  async def test_official_tip_rack_loads_with_zero_uploads(self):
-    for factory, load_name in (
-      (flex_96_tiprack_50ul, "opentrons_flex_96_tiprack_50ul"),
-      (flex_96_filtertiprack_50ul, "opentrons_flex_96_filtertiprack_50ul"),
-      (flex_96_tiprack_200ul, "opentrons_flex_96_tiprack_200ul"),
-      (flex_96_tiprack_1000ul, "opentrons_flex_96_tiprack_1000ul"),
+  async def test_official_tip_rack_uploads_generated_definition(self):
+    for factory in (
+      flex_96_tiprack_50ul,
+      flex_96_filtertiprack_50ul,
+      flex_96_tiprack_200ul,
+      flex_96_tiprack_1000ul,
     ):
       for with_tips in (False, True):
-        with self.subTest(load_name=load_name, with_tips=with_tips):
+        with self.subTest(factory=factory.__name__, with_tips=with_tips):
           flex, api = _flex_with_api(self)
           await flex.setup()
           rack = factory(name="rack", with_tips=with_tips)
@@ -824,13 +826,11 @@ class TestCustomLabwareLoadFlow(unittest.IsolatedAsyncioTestCase):
           flex.deck.assign_child_at_slot(rack, "C1")
           await flex._ensure_labware_loaded(rack)
 
-          api.define_labware.assert_not_awaited()
+          self.assertEqual(api.define_labware.await_count, 1)
           load_cmds = _load_labware_commands(api)
           self.assertEqual(len(load_cmds), 1)
           params = load_cmds[0].args[2]
-          self.assertEqual(params["namespace"], "opentrons")
-          self.assertEqual(params["loadName"], load_name)
-          self.assertEqual(params["version"], 1)
+          self.assertEqual(params["namespace"], "pylabrobot")
 
   async def test_container_uploads_single_cavity_definition(self):
     flex, api = _flex_with_api(self)

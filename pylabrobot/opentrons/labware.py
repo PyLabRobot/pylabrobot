@@ -42,27 +42,6 @@ _TROUGH_BOTTOM_SHAPES = {
   TroughBottomType.UNKNOWN: "flat",
 }
 
-_OFFICIAL_TIP_RACKS = {
-  "Opentrons Flex 96 Tip Rack 50 µL": "opentrons_flex_96_tiprack_50ul",
-  "Opentrons Flex 96 Filter Tip Rack 50 µL": "opentrons_flex_96_filtertiprack_50ul",
-  "Opentrons Flex 96 Tip Rack 200 µL": "opentrons_flex_96_tiprack_200ul",
-  "Opentrons Flex 96 Tip Rack 1000 µL": "opentrons_flex_96_tiprack_1000ul",
-  "Opentrons OT-2 96 Filter Tip Rack 10 µL": "opentrons_96_filtertiprack_10ul",
-  "Opentrons OT-2 96 Filter Tip Rack 20 µL": "opentrons_96_filtertiprack_20ul",
-  "Opentrons OT-2 96 Filter Tip Rack 200 µL": "opentrons_96_filtertiprack_200ul",
-  "Opentrons OT-2 96 Filter Tip Rack 1000 µL": "opentrons_96_filtertiprack_1000ul",
-  "Opentrons OT-2 96 Tip Rack 10 µL": "opentrons_96_tiprack_10ul",
-  "Opentrons OT-2 96 Tip Rack 20 µL": "opentrons_96_tiprack_20ul",
-  "Opentrons OT-2 96 Tip Rack 300 µL": "opentrons_96_tiprack_300ul",
-  "Opentrons OT-2 96 Tip Rack 1000 µL": "opentrons_96_tiprack_1000ul",
-}
-
-
-def official_tip_rack_identity(tip_rack: TipRack) -> Optional[LabwareIdentity]:
-  """Look up a rack's official definition identity for its calibration data."""
-  load_name = _OFFICIAL_TIP_RACKS.get(tip_rack.model or "")
-  return LabwareIdentity("opentrons", load_name, 1) if load_name is not None else None
-
 
 def build_tip_rack_definition(
   tip_rack: TipRack,
