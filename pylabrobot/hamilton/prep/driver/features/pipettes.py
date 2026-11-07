@@ -6545,7 +6545,7 @@ class Pipettes:
     containers: Sequence[Container],
     volumes: Optional[Sequence[float]] = None,
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
     lld_mode: Union[Pipettes.LLDMode, Sequence[Pipettes.LLDMode], None] = None,
     flow_rates: Optional[Sequence[Optional[float]]] = None,
@@ -6574,6 +6574,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
     clld_sensitivity: Optional[int] = None,
     z_air: Optional[List[float]] = None,
     tadm: Optional[PrepCmd.TadmParameters] = None,
@@ -6598,7 +6599,7 @@ class Pipettes:
       volumes: how much liquid to take from each container, in uL, corrected by the liquid class.
         One of this and `piston_volumes`.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None.
-      resource_offsets: added to where each channel goes in its container, in mm. The z shifts
+      offsets: added to where each channel goes in its container, in mm. The z shifts
         the heights. Channels sharing a container spread across it in Y when None.
       liquid_heights: where the liquid stands above each cavity bottom, in mm. None takes it from
         the tracked volume. Refused beside an LLD mode, whose search finds the surface.
@@ -6652,6 +6653,7 @@ class Pipettes:
         traverse height less each tip's overhang when None.
       x_grouping_tolerance: containers within this X distance share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
       clld_sensitivity: the capacitive search's sensitivity. `default_clld_sensitivity` when None.
       z_air: the tip bottom height to draw transport air at, in mm, in place of the pull-out
         distance. The aspirate height plus the pull-out distance when None.
@@ -6676,6 +6678,12 @@ class Pipettes:
       TooLittleVolumeError: If a tip has less room than it is to take.
       NotImplementedError: If a mode is PRESSURE or DUAL.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     containers = list(containers)
     n = len(containers)
     use_channels = use_channels if use_channels is not None else list(range(n))
@@ -6689,7 +6697,7 @@ class Pipettes:
     per_container: Dict[str, Optional[Sequence[Any]]] = {
       "volumes": volumes,
       "piston_volumes": piston_volumes,
-      "resource_offsets": resource_offsets,
+      "offsets": offsets,
       "liquid_heights": liquid_heights,
       "flow_rates": flow_rates,
       "hamilton_liquid_classes": hamilton_liquid_classes,
@@ -6763,9 +6771,7 @@ class Pipettes:
       )
     touched = [j for j in range(n) if modes[j] == self.LLDMode.ZTOUCH]
     offsets = (
-      resource_offsets
-      if resource_offsets is not None
-      else self._get_resource_offsets(containers, use_channels)
+      offsets if offsets is not None else self._get_resource_offsets(containers, use_channels)
     )
     deck = self._require_deck()
     z_cavity_bottom = [
@@ -7092,7 +7098,7 @@ class Pipettes:
     containers: Sequence[Container],
     volumes: Optional[Sequence[float]] = None,
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
     lld_mode: Union[Pipettes.LLDMode, Sequence[Pipettes.LLDMode], None] = None,
     flow_rates: Optional[Sequence[Optional[float]]] = None,
@@ -7122,6 +7128,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
     clld_sensitivity: Optional[int] = None,
     z_air: Optional[List[float]] = None,
     container_segments: Optional[List[List[PrepCmd.SegmentDescriptor]]] = None,
@@ -7143,7 +7150,7 @@ class Pipettes:
       volumes: how much liquid to put in each container, in uL, corrected by the liquid class.
         One of this and `piston_volumes`.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None.
-      resource_offsets: added to where each channel goes in its container, in mm. The z shifts
+      offsets: added to where each channel goes in its container, in mm. The z shifts
         the heights. Channels sharing a container spread across it in Y when None.
       liquid_heights: where the liquid stands above each cavity bottom, in mm. 0 when None.
         Refused beside an LLD mode, whose search finds the surface.
@@ -7200,6 +7207,7 @@ class Pipettes:
         traverse height less each tip's overhang when None.
       x_grouping_tolerance: containers within this X distance share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
       clld_sensitivity: the capacitive search's sensitivity. `default_clld_sensitivity` when None.
       z_air: the tip bottom height where each slow exit ends, in mm, in place of the pull-out
         distance. The dispense height plus the pull-out distance when None.
@@ -7220,6 +7228,12 @@ class Pipettes:
         measured, or no floor is met where a channel touched.
       TooLittleVolumeError: If a container has less room than it is to take.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     containers = list(containers)
     n = len(containers)
     use_channels = use_channels if use_channels is not None else list(range(n))
@@ -7238,7 +7252,7 @@ class Pipettes:
     per_container: Dict[str, Optional[Sequence[Any]]] = {
       "volumes": volumes,
       "piston_volumes": piston_volumes,
-      "resource_offsets": resource_offsets,
+      "offsets": offsets,
       "liquid_heights": liquid_heights,
       "flow_rates": flow_rates,
       "hamilton_liquid_classes": hamilton_liquid_classes,
@@ -7310,9 +7324,7 @@ class Pipettes:
     )
     touched = [j for j in range(n) if modes[j] == self.LLDMode.ZTOUCH]
     offsets = (
-      resource_offsets
-      if resource_offsets is not None
-      else self._get_resource_offsets(containers, use_channels)
+      offsets if offsets is not None else self._get_resource_offsets(containers, use_channels)
     )
     deck = self._require_deck()
     z_cavity_bottom = [
