@@ -195,6 +195,8 @@ class PreciseFlexDriver:
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
+    # Whether the controller link is open, so `disconnect` after a failed setup does nothing.
+    self._connected = False
     self.timeout = timeout
     # Serializes each request->reply exchange over the single shared controller socket; the
     # rationale (and why it is kept though uncontended today) is in _locked_exchange.
@@ -456,23 +458,52 @@ class PreciseFlexDriver:
     with, and, when the controller has an IntelliGuide vision module, the vision feature is built
     as ``self.vision``.
 
+    A setup that fails or is interrupted hands the arm back and closes its links, as ``disconnect``
+    does, each step on its own: the controller takes one connection and refuses the next while one
+    is open. The setup's own error is the one raised.
+
     Args:
       skip_home: If True, skip the homing step during setup.
       skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
         Mirrors STAR's ``skip_*`` setup flags.
     """
-    await self.connect()
-    configuration = await self.initialize()
-    self._create_feature_resources(configuration)
-    if not skip_home:
-      await self.home()
-    await self.arm._handle_out_of_range_axes()
-    if not skip_vision_setup and configuration.has_vision_server:
-      await self._setup_vision(self._vision_host)
+    try:
+      await self.connect()
+      configuration = await self.initialize()
+      self._create_feature_resources(configuration)
+      if not skip_home:
+        await self.home()
+      await self.arm._handle_out_of_range_axes()
+      if not skip_vision_setup and configuration.has_vision_server:
+        await self._setup_vision(self._vision_host)
+    except BaseException:
+      try:
+        for release in (self.detach, self.power_off_robot, self._exit, self._close_vision_server):
+          try:
+            await release()
+          except Exception as error:
+            logger.warning(
+              "[PreciseFlex %s] after a failed setup, %s failed: %s",
+              self.io._host,
+              release.__name__,
+              error,
+            )
+      finally:
+        try:
+          await self.io.stop()
+        except Exception as error:
+          logger.warning(
+            "[PreciseFlex %s] could not close the link after a failed setup: %s",
+            self.io._host,
+            error,
+          )
+        self._connected = False
+      raise
 
   async def connect(self) -> None:
     """Open the link and agree the response protocol. Powers nothing, moves nothing."""
     await self.io.setup()
+    self._connected = True
     await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
@@ -642,13 +673,17 @@ class PreciseFlexDriver:
   async def disconnect(self) -> None:
     """Hand the arm back and close the links. Moves nothing.
 
-    Drops high power as well as releasing the arm, because ``initialize`` raised it.
+    Drops high power as well as releasing the arm, because ``initialize`` raised it. Does nothing
+    when the link is not open, as after a setup that failed and handed the arm back.
     """
+    if not self._connected:
+      return
     await self.detach()
     await self.power_off_robot()
     await self._exit()
     await self._close_vision_server()
     await self.io.stop()
+    self._connected = False
     logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
   @evented_operation(
