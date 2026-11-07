@@ -25,6 +25,7 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.api.get_health.return_value = RobotInfo("test-ot2", "OT-2 Standard", "7.1.0")
     self.api.get_mounted_pipettes.return_value = (MountedPipette("left", "p20_single_gen2"),)
     self.api.create_run.return_value = RunInfo("run-id")
+    self.api.get_runs.return_value = ()
     self.robot = OT2("ot2.local", io=self.io)
     self.robot._api = self.api
     run_patch = patch("pylabrobot.opentrons.ot2.ot2.OpentronsRun", autospec=True)
@@ -117,6 +118,79 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     self.assertIs(self.robot._run, self.protocol_run)
     self.api.create_run.assert_awaited_once()
     self.protocol_run.load_pipette.assert_awaited_once()
+
+  async def test_setup_refuses_an_unfinished_current_run(self) -> None:
+    self.api.get_runs.return_value = (
+      RunInfo("old", "stopped", current=False),
+      RunInfo("left-open", "idle", current=True, created_at="2026-11-04T12:00:00Z"),
+    )
+
+    with self.assertRaisesRegex(RuntimeError, "unfinished run left-open \\(idle"):
+      await self.robot.setup()
+
+    self.api.create_run.assert_not_awaited()
+    self.io.stop.assert_awaited_once_with()
+    self.assertIsNone(self.robot._run)
+
+  async def test_setup_goes_ahead_beside_finished_and_earlier_runs(self) -> None:
+    self.api.get_runs.return_value = (
+      RunInfo("earlier", "idle", current=False),
+      RunInfo("finished", "succeeded", current=True),
+    )
+
+    await self.robot.setup(skip_home=True)
+
+    self.api.create_run.assert_awaited_once_with()
+
+  async def test_stop_run_stops_an_unfinished_run_and_waits_for_it(self) -> None:
+    self.api.get_run.side_effect = [
+      RunInfo("left-open", "paused"),
+      RunInfo("left-open", "stop-requested"),
+      RunInfo("left-open", "stopped"),
+    ]
+    self.robot.command_poll_interval = 0
+    await self.robot.connect()
+
+    run = await self.robot.stop_run("left-open")
+
+    self.assertEqual(run, RunInfo("left-open", "stopped"))
+    self.api.stop_run.assert_awaited_once_with("left-open")
+    self.assertEqual(self.api.get_run.await_count, 3)
+
+  async def test_stop_run_leaves_a_finished_run_as_it_is(self) -> None:
+    self.api.get_run.return_value = RunInfo("done", "succeeded")
+    await self.robot.connect()
+
+    self.assertEqual(await self.robot.stop_run("done"), RunInfo("done", "succeeded"))
+
+    self.api.stop_run.assert_not_awaited()
+
+  async def test_stop_run_reports_a_run_that_does_not_finish(self) -> None:
+    self.api.get_run.return_value = RunInfo("stuck", "stop-requested")
+    self.robot.command_poll_interval = 0
+    await self.robot.connect()
+
+    with self.assertRaisesRegex(TimeoutError, "did not finish"):
+      await self.robot.stop_run("stuck", timeout=0.01)
+
+  async def test_stop_run_refuses_the_robots_own_run(self) -> None:
+    await self.robot.setup(skip_home=True)
+    self.protocol_run.id = "run-id"
+
+    with self.assertRaisesRegex(RuntimeError, "own run"):
+      await self.robot.stop_run("run-id")
+
+    self.api.stop_run.assert_not_awaited()
+
+  async def test_home_needs_a_connection_but_no_run(self) -> None:
+    with self.assertRaisesRegex(RuntimeError, "not connected"):
+      await self.robot.home()
+
+    await self.robot.connect()
+    await self.robot.home()
+
+    self.api.home.assert_awaited_once_with()
+    self.api.create_run.assert_not_awaited()
 
   async def test_unsupported_pipette_closes_connection_before_creating_a_run(self) -> None:
     self.api.get_mounted_pipettes.return_value = (MountedPipette("left", "unsupported"),)
