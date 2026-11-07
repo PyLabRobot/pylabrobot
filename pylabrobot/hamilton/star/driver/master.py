@@ -1175,10 +1175,8 @@ class STARDriver:
     """
     self.configuration = await self.request_device_configuration()
     self._check_deck_against(self.configuration)
-    # Which device answered, and what it is running. Read into the same configuration the rest of
-    # discovery fills, so a saved one says where it came from. A device that will not answer keeps
-    # nothing rather than failing setup: the identity is for telling recordings apart, and nothing
-    # the driver does depends on it.
+    # Which device answered, and what it runs, kept in its configuration. One that will not answer
+    # keeps nothing rather than failing setup; an unread firmware date sends every PIP parameter.
     try:
       self.configuration.serial_number = await self.request_device_serial_number()
     except Exception:

@@ -12,6 +12,10 @@ from pylabrobot.hamilton.star.driver.features.iswap import iSWAPConfiguration
 from pylabrobot.hamilton.star.driver.features.pipettes import PipettesConfiguration
 from pylabrobot.hamilton.star.driver.features.x_arm import XArmConfiguration
 
+# A master built on or after this date takes the extended PIP parameters; one from 2011-03-02
+# does not (#1050).
+EXTENDED_PIP_PARAMETERS_SINCE = datetime.date(2011, 5, 12)
+
 
 @dataclass
 class DeviceConfiguration:
@@ -137,6 +141,11 @@ class DeviceConfiguration:
   """Left arm minimal Y position [mm] (yu). Default: 6.0."""
   right_arm_min_y_position: float = 6.0
   """Right arm minimal Y position [mm] (yx). Default: 6.0."""
+
+  @property
+  def takes_extended_pip_parameters(self) -> bool:
+    """Whether the master takes `ti`, `td`, `po`, TADM, second-section aspiration, `sd` and `io`."""
+    return self.firmware_date is None or self.firmware_date >= EXTENDED_PIP_PARAMETERS_SINCE
 
 
 def _restore(hint: Any, value: Any) -> Any:
