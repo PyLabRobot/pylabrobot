@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.simulator.VANTAstarSimulationDriver.measure\_z\_profile
+================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.simulator
+
+.. automethod:: VANTAstarSimulationDriver.measure_z_profile
