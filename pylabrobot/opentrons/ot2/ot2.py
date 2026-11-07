@@ -18,6 +18,7 @@ from pylabrobot.opentrons.ot2.pipette import (
 )
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import (
+  DoorStatus,
   LabwareIdentity,
   ModuleInfo,
   MountedPipette,
@@ -123,6 +124,31 @@ class OT2:
     """Read server runs without selecting, stopping, or replacing the active run."""
     self._require_connected()
     return await self._api.get_runs()
+
+  async def get_rail_lights(self) -> bool:
+    """Read whether the rail lights are on. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_rail_lights()
+
+  async def set_rail_lights(self, on: bool) -> None:
+    """Turn the rail lights on or off. Needs a connection, not a run.
+
+    Args:
+      on: True for on, False for off.
+
+    Raises:
+      TypeError: If ``on`` is not a bool.
+    """
+    if not isinstance(on, bool):
+      raise TypeError(f"on must be a bool, got {on!r}")
+    async with self._operation_lock:
+      self._require_connected()
+      await self._api.set_rail_lights(on)
+
+  async def get_door_status(self) -> DoorStatus:
+    """Read the front door's switch. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_door_status()
 
   async def setup(self, skip_home: bool = False) -> None:
     """Connect, discover and bind pipettes to a run, and optionally home."""
