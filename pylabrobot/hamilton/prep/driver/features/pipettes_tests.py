@@ -3298,6 +3298,17 @@ def test_probe_liquid_heights_deals_the_containers_in_cycles_and_rises_to_safe_z
     seeks = [c.dest.node for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekCapacitiveLld)]
     assert len(seeks) == 4 and len(set(seeks)) == 2
     assert isinstance(sent[-2], PrepCmd.PrepMoveZUpToSafe)
+    # The deprecated `resource_offsets` warns and moves the channels as `offsets` does.
+    offsets = [Coordinate(1.0, 0, 0)] * 4
+    for probe in (p.pipettes.probe_liquid_heights, p.pipettes.probe_liquid_volumes):
+      sent.clear()
+      await probe(wells, offsets=offsets)
+      given = [c for c in sent if isinstance(c, PrepCmd.PrepMoveToPosition)]
+      sent.clear()
+      with pytest.warns(DeprecationWarning):
+        await probe(wells, resource_offsets=offsets)
+      moves = [c for c in sent if isinstance(c, PrepCmd.PrepMoveToPosition)]
+      assert moves == given, probe.__name__
     await p.stop()
 
   _run(_t())
