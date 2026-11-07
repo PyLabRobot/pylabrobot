@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.simulator.VANTAstarSimulationDriver.build\_absorbance\_spectrum\_run
+=============================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.simulator
+
+.. automethod:: VANTAstarSimulationDriver.build_absorbance_spectrum_run

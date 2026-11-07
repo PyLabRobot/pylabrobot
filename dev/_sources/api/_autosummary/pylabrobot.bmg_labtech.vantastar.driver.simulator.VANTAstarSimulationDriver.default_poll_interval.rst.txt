@@ -1,0 +1,6 @@
+pylabrobot.bmg\_labtech.vantastar.driver.simulator.VANTAstarSimulationDriver.default\_poll\_interval
+====================================================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.simulator
+
+.. autoattribute:: VANTAstarSimulationDriver.default_poll_interval

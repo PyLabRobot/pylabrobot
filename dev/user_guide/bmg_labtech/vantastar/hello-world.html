@@ -881,6 +881,18 @@
 </div>
 </div>
 </section>
+<section id="simulation">
+<h3>Simulation<a class="headerlink" href="#simulation" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">VANTAstar(simulation=True)</span></code> builds a reader with nothing behind it, to run a protocol without one. Its configuration comes from a declared configuration, by default the tested reader’s recording. The drawer, the shaker and the temperature controller act at once (without a target there is no temperature). Absorbance (endpoint and spectra), fluorescence (endpoint) and luminescence reads check their arguments as a reader does and return random values: optical densities of 0-3.5, fluorescence counts up to 260,000 (750,000,000 with enhanced dynamic range). Given an earlier result as <code class="docutils literal notranslate"><span class="pre">simulated_data</span></code>, a read returns its values instead; a reader’s reads take <code class="docutils literal notranslate"><span class="pre">simulated_data</span></code> too and ignore it. Fluorescence spectra, <code class="docutils literal notranslate"><span class="pre">adjust_gain_and_focus</span></code>, <code class="docutils literal notranslate"><span class="pre">measure_z_profile</span></code> and <code class="docutils literal notranslate"><span class="pre">estimate_duration</span></code> are not simulated.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">simulated</span> <span class="o">=</span> <span class="n">VANTAstar</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"simulated_vantastar"</span><span class="p">,</span> <span class="n">simulation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">await</span> <span class="n">simulated</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
 </section>
 <section id="loading-a-plate">
 <h2>Loading a plate<a class="headerlink" href="#loading-a-plate" title="Link to this heading">#</a></h2>
@@ -1186,6 +1198,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-setup">Physical setup</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup">Setup</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#declared-configuration">Declared configuration</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation">Simulation</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#loading-a-plate">Loading a plate</a></li>

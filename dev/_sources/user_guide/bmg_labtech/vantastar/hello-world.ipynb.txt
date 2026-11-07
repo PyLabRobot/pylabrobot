@@ -117,6 +117,27 @@
   },
   {
    "cell_type": "markdown",
+   "id": "simulation-md",
+   "metadata": {},
+   "source": [
+    "### Simulation\n",
+    "\n",
+    "`VANTAstar(simulation=True)` builds a reader with nothing behind it, to run a protocol without one. Its configuration comes from a declared configuration, by default the tested reader's recording. The drawer, the shaker and the temperature controller act at once (without a target there is no temperature). Absorbance (endpoint and spectra), fluorescence (endpoint) and luminescence reads check their arguments as a reader does and return random values: optical densities of 0-3.5, fluorescence counts up to 260,000 (750,000,000 with enhanced dynamic range). Given an earlier result as `simulated_data`, a read returns its values instead; a reader's reads take `simulated_data` too and ignore it. Fluorescence spectra, `adjust_gain_and_focus`, `measure_z_profile` and `estimate_duration` are not simulated."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "simulation",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "simulated = VANTAstar(name=\"simulated_vantastar\", simulation=True)\n",
+    "await simulated.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
    "id": "plate-md",
    "metadata": {},
    "source": [

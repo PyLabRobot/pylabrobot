@@ -1,0 +1,60 @@
+﻿:orphan:
+
+
+pylabrobot.bmg\_labtech.vantastar.driver.simulator.VANTAstarSimulationDriver
+============================================================================
+
+.. currentmodule:: pylabrobot.bmg_labtech.vantastar.driver.simulator
+
+.. autoclass:: VANTAstarSimulationDriver
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarSimulationDriver.PROTOCOL_VERSION
+      ~VANTAstarSimulationDriver.default_poll_interval
+      ~VANTAstarSimulationDriver.default_read_timeout
+      ~VANTAstarSimulationDriver.estimating
+      ~VANTAstarSimulationDriver.measurement_poll_interval
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VANTAstarSimulationDriver.__init__
+      ~VANTAstarSimulationDriver.adjust_gain_and_focus
+      ~VANTAstarSimulationDriver.build_absorbance_run
+      ~VANTAstarSimulationDriver.build_absorbance_spectrum_run
+      ~VANTAstarSimulationDriver.build_fluorescence_run
+      ~VANTAstarSimulationDriver.build_fluorescence_scan_run
+      ~VANTAstarSimulationDriver.build_gain_focus
+      ~VANTAstarSimulationDriver.build_incubator
+      ~VANTAstarSimulationDriver.build_luminescence_run
+      ~VANTAstarSimulationDriver.discover
+      ~VANTAstarSimulationDriver.estimate_duration
+      ~VANTAstarSimulationDriver.estimate_run_time
+      ~VANTAstarSimulationDriver.exchange
+      ~VANTAstarSimulationDriver.format_setup_summary
+      ~VANTAstarSimulationDriver.get_temperatures
+      ~VANTAstarSimulationDriver.initialize
+      ~VANTAstarSimulationDriver.measure_z_profile
+      ~VANTAstarSimulationDriver.request_status
+      ~VANTAstarSimulationDriver.run_absorbance_spectrum
+      ~VANTAstarSimulationDriver.run_blocks
+      ~VANTAstarSimulationDriver.run_measurement
+      ~VANTAstarSimulationDriver.save_configuration
+      ~VANTAstarSimulationDriver.send_command
+      ~VANTAstarSimulationDriver.setup
+      ~VANTAstarSimulationDriver.stop
+      ~VANTAstarSimulationDriver.stop_run
+   
+   
