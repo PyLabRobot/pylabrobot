@@ -1811,10 +1811,10 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
     assert jet is not None and jet.dispense_stop_flow_rate != 5.0
     wells = [plate.get_well("A1"), plate.get_well("B1")]
     await pipettes.aspirate(wells, piston_volumes=[300.0, 300.0], liquid_heights=[3.0, 3.0])
-    await pipettes.dispense(wells, [50.0, 50.0], jet=[True, True], blow_out=[True, True])
+    await pipettes.dispense(wells, [50.0, 50.0], jets=[True, True], blow_out=[True, True])
     self.assertEqual(self._field(sent[1], "ss"), [round(jet.dispense_stop_flow_rate * 10)] * 2)
     await pipettes.dispense(
-      wells, [50.0, 50.0], jet=[True, True], blow_out=[True, True], cut_off_speeds=[4.5, 4.5]
+      wells, [50.0, 50.0], jets=[True, True], blow_out=[True, True], cut_off_speeds=[4.5, 4.5]
     )
     self.assertEqual(self._field(sent[2], "ss"), [45, 45])
 
@@ -3861,7 +3861,7 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       await self.pipettes.aspirate(
         self.wells[:1],
         [10.0],
-        resource_offsets=[Coordinate(0.0, 0.0, -1.0)],
+        offsets=[Coordinate(0.0, 0.0, -1.0)],
         lld_mode=Pipettes.LLDMode.CAPACITIVE,
       )
     self.assertEqual(len(sent), 1)
@@ -4083,7 +4083,7 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       await self.pipettes.aspirate(
         self.wells[2:3],
         [10.0],
-        resource_offsets=[Coordinate(0.0, 0.0, 2.0)],
+        offsets=[Coordinate(0.0, 0.0, 2.0)],
         lld_mode=Pipettes.LLDMode.CAPACITIVE,
       )
     self.assertEqual([c[:4] for c in sent], ["P1ZL", "C0AS"])
@@ -4505,6 +4505,23 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     # Only the mixing channel's container is read; one draw of 20 uL lowers the risen surface.
     self.assertEqual(_get_fields(sent[-1], "mh")[:2], [round(20.0 / area * 10), 0])
 
+  async def test_resource_offsets_and_jet_warn_and_send_what_offsets_and_jets_do(self):
+    offset = Coordinate(1.0, 0.0, 0.0)
+    sent = self._record("C0AS")
+    await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0], offsets=[offset])
+    with self.assertWarns(DeprecationWarning):
+      await self.pipettes.aspirate(self.wells[:1], piston_volumes=[50.0], resource_offsets=[offset])
+    await self.pipettes.dispense(
+      self.wells[3:4], piston_volumes=[50.0], offsets=[offset], jets=[True]
+    )
+    with self.assertWarns(DeprecationWarning):
+      await self.pipettes.dispense(
+        self.wells[3:4], piston_volumes=[50.0], resource_offsets=[offset], jet=[True]
+      )
+    self.assertEqual([command[:4] for command in sent], ["C0AS", "C0AS", "C0DS", "C0DS"])
+    self.assertEqual(sent[0], sent[1])
+    self.assertEqual(sent[2], sent[3])
+
   async def test_a_jet_with_blow_out_takes_the_liquid_class_fields_and_the_pistons_rest(self):
     from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
     from pylabrobot.resources.liquid import Liquid
@@ -4523,7 +4540,7 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     )
     assert water is not None
     sent = self._record()
-    await self.pipettes.dispense(self.wells[3:4], [50.0], jet=[True], blow_out=[True])
+    await self.pipettes.dispense(self.wells[3:4], [50.0], jets=[True], blow_out=[True])
     self.assertIn("dm1", sent[0])
     self.assertIn(f"dv{round(water.compute_corrected_volume(50.0) * 10):05}", sent[0])
     self.assertIn(f"ds{round(water.dispense_flow_rate * 10):04}", sent[0])
@@ -4776,7 +4793,7 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
     water = self._jet_water()
     await self.pipettes.aspirate([self.source], volumes=[321.0], hamilton_liquid_classes=[water])
     await self.pipettes.dispense(
-      [self.target], volumes=[321.0], hamilton_liquid_classes=[water], jet=[True]
+      [self.target], volumes=[321.0], hamilton_liquid_classes=[water], jets=[True]
     )
     self.assertAlmostEqual(self.target.tracker.get_used_volume(), 321.0)
 
@@ -4789,6 +4806,6 @@ class TestJetDispenseOfWhatTheAspirateDrew(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.dispensing_drive_request_uL_position(0)
     await self.pipettes.aspirate([self.source], volumes=[889.8], hamilton_liquid_classes=[water])
     await self.pipettes.dispense(
-      [self.target], volumes=[889.8], hamilton_liquid_classes=[water], jet=[True]
+      [self.target], volumes=[889.8], hamilton_liquid_classes=[water], jets=[True]
     )
     self.assertAlmostEqual(self.target.tracker.get_used_volume(), 889.8)
