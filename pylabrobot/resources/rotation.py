@@ -140,6 +140,30 @@ class Rotation(SerializableMixin):
       _multiply_quaternions(self._quaternion, other._quaternion), reference=reference
     )
 
+  def inverse(self) -> "Rotation":
+    """The rotation that undoes this one: ``self + self.inverse()`` is no rotation.
+
+    Its Euler angles are the ones nearest this rotation's angles negated, so a rotation about a
+    single axis gives exactly that angle negated.
+    """
+    w, x, y, z = self._quaternion
+    return self._from_quaternion((w, -x, -y, -z), reference=(-self.x, -self.y, -self.z))
+
+  def relative_to(self, frame: "Rotation") -> "Rotation":
+    """This rotation along the axes of `frame`: the rotation `r` with ``frame + r`` equal to it.
+
+    Its Euler angles are the ones nearest this rotation's angles less `frame`'s, so when both
+    turn about the same single axis it is exactly that difference.
+
+    Args:
+      frame: the rotation of the frame it is expressed in.
+    """
+    w, x, y, z = frame._quaternion
+    reference = (self.x - frame.x, self.y - frame.y, self.z - frame.z)
+    return self._from_quaternion(
+      _multiply_quaternions((w, -x, -y, -z), self._quaternion), reference=reference
+    )
+
   def _prepend(self, other: "Rotation") -> None:
     """Apply another rotation in the current reference frame while keeping this instance."""
     combined = other + self
