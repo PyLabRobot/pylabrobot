@@ -27,4 +27,5 @@ class DeviceCLI:
 
 DEVICE_CLIS: Mapping[str, DeviceCLI] = {
   "celigo": DeviceCLI("pylabrobot.revvity.celigo.cli", "Celigo gRPC service and inspection tools"),
+  "vspin": DeviceCLI("pylabrobot.agilent.vspin.cli", "VSpin gRPC service and inspection tools"),
 }

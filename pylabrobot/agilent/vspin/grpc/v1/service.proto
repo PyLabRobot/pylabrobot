@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package vspin.v1;
+
+import "google/protobuf/empty.proto";
+import "pylabrobot/rpc/v1/device.proto";
+import "pylabrobot/rpc/v1/jobs.proto";
+
+message VSpinConfiguration {
+  string configuration_id = 1;
+  double minimum_relative_centrifugal_force = 2;
+  double maximum_relative_centrifugal_force = 3;
+  double minimum_duration_seconds = 4;
+}
+
+message InitializationRequest {
+  string device_id = 1;
+  string request_id = 2;
+  string configuration_id = 3;
+}
+
+message SpinSettings {
+  optional double relative_centrifugal_force = 1;
+  // Time at speed, excluding acceleration and deceleration.
+  optional double duration_seconds = 2;
+  // Fractions of maximum, greater than zero and at most one.
+  optional double acceleration_fraction = 3;
+  optional double deceleration_fraction = 4;
+}
+
+message SpinRequest {
+  string device_id = 1;
+  string request_id = 2;
+  string configuration_id = 3;
+  SpinSettings settings = 4;
+}
+
+service VSpinService {
+  rpc GetConfiguration(pylabrobot.rpc.v1.DeviceRequest) returns (VSpinConfiguration);
+  // Creation is inert; use the shared JobService to start or cancel execution.
+  rpc CreateInitialization(InitializationRequest) returns (pylabrobot.rpc.v1.JobRef);
+  rpc CreateSpin(SpinRequest) returns (pylabrobot.rpc.v1.JobRef);
+  rpc GetSpinSettings(pylabrobot.rpc.v1.JobRef) returns (SpinSettings);
+  // Accepted motion survives caller disconnects and finishes before ownership is released.
+  rpc OpenDoor(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc CloseDoor(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc LockDoor(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc UnlockDoor(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc LockBucket(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc UnlockBucket(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc GoToBucket1(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+  rpc GoToBucket2(pylabrobot.rpc.v1.DeviceRequest) returns (google.protobuf.Empty);
+}
