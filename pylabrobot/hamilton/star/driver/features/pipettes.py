@@ -3649,7 +3649,7 @@ class Pipettes:
     self,
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
@@ -3658,6 +3658,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> List[float]:
     """Find the liquid surface in each container with a channel's tip, and say how high it stands.
 
@@ -3669,7 +3670,7 @@ class Pipettes:
       containers: any number; a whole plate is fine.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None,
         up to every channel.
-      resource_offsets: added to where each channel goes in its container, in mm. Planned when
+      offsets: added to where each channel goes in its container, in mm. Planned when
         None, spreading channels that share a container.
       lld_mode: how to search, one for all or one per container. Capacitive when None.
       search_speed: in mm/s.
@@ -3680,6 +3681,7 @@ class Pipettes:
       minimum_traverse_height_end: where the tips used are left, in mm. Z safety when None.
       x_grouping_tolerance: containers within this X distance share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
 
     Returns:
       How high the liquid stands above each container's cavity bottom, in mm, in the order given.
@@ -3690,6 +3692,12 @@ class Pipettes:
       RuntimeError: If a channel used carries no tip, the driver was given no deck, or liquid was
         found in some rounds and not in others.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
@@ -3713,7 +3721,7 @@ class Pipettes:
       deck,
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       x_grouping_tolerance,
       minimum_traverse_height_start,
       minimum_traverse_height_end,
@@ -3744,7 +3752,7 @@ class Pipettes:
     self,
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
@@ -3753,6 +3761,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> List[float]:
     """Find the liquid in each container as `probe_liquid_heights` does, and say how much there is.
 
@@ -3769,13 +3778,19 @@ class Pipettes:
       ValueError: If a container has no height-to-volume function, or as `probe_liquid_heights`.
       RuntimeError: As `probe_liquid_heights`.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     without = [c.name for c in containers if not c.supports_compute_height_volume_functions()]
     if without:
       raise ValueError(f"no height-to-volume function for {without}")
     heights = await self.probe_liquid_heights(
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       lld_mode,
       search_speed,
       n_replicates,
@@ -3902,7 +3917,7 @@ class Pipettes:
     self,
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
     *,
@@ -3911,6 +3926,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> List[Optional[float]]:
     """Touch the floor of each container with a channel's tip, and say how high it is.
 
@@ -3923,7 +3939,7 @@ class Pipettes:
       containers: any number; a whole plate is fine.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None,
         up to every channel.
-      resource_offsets: added to where each channel goes in its container, in mm. Planned when
+      offsets: added to where each channel goes in its container, in mm. Planned when
         None, spreading channels that share a container.
       search_speed: in mm/s.
       n_replicates: how many times each container is touched; the heights are averaged.
@@ -3934,6 +3950,7 @@ class Pipettes:
       minimum_traverse_height_end: where the tips used are left, in mm. Z safety when None.
       x_grouping_tolerance: containers within this X distance share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
 
     Returns:
       Where each floor was touched, above the container's modelled cavity bottom, in mm, in the
@@ -3945,6 +3962,12 @@ class Pipettes:
       RuntimeError: If a channel used carries no tip or old firmware, the driver was given no
         deck, or a floor was touched in some rounds and not in others.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
@@ -3958,7 +3981,7 @@ class Pipettes:
       deck,
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       x_grouping_tolerance,
       minimum_traverse_height_start,
       minimum_traverse_height_end,

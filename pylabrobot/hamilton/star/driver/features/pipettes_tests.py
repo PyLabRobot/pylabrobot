@@ -1563,18 +1563,23 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
 
   async def test_an_offset_moves_the_channel_within_its_container(self):
     wells = self._wells("A1")
-    await self.pipettes.probe_liquid_heights(wells, resource_offsets=[Coordinate(1.0, -2.0, 0)])
+    offset = Coordinate(1.0, -2.0, 0)
+    await self.pipettes.probe_liquid_heights(wells, offsets=[offset])
     assert self.xy.await_args is not None
     x, ys = self.xy.await_args.args
     centre = wells[0].get_location_wrt(self.deck, "c", "c", "b")
     self.assertAlmostEqual(x, centre.x + 1.0)
     self.assertAlmostEqual(ys[0], centre.y - 2.0)
+    # The deprecated `resource_offsets` warns and moves the channel as `offsets` does.
+    for probe in (self.pipettes.probe_liquid_heights, self.pipettes.probe_z_heights_using_ztouch):
+      self.xy.reset_mock()
+      with self.assertWarns(DeprecationWarning):
+        await probe(wells, resource_offsets=[offset])
+      self.assertEqual(self.xy.await_args.args, (x, ys), probe.__name__)
 
   async def test_offsets_must_match_the_containers(self):
     with self.assertRaises(ValueError):
-      await self.pipettes.probe_liquid_heights(
-        self._wells("A1", "B1"), resource_offsets=[Coordinate.zero()]
-      )
+      await self.pipettes.probe_liquid_heights(self._wells("A1", "B1"), offsets=[Coordinate.zero()])
     self.assertEqual(self.sent, [])
 
   async def test_volumes_come_from_each_containers_own_function(self):
@@ -1593,10 +1598,15 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     ]
     for i, tube in enumerate(tubes):
       self.deck.assign_child_resource(tube, location=Coordinate(600, 100 + 9 * i, 100))
-    self.pipettes.probe_liquid_heights = unittest.mock.AsyncMock(  # type: ignore[method-assign]
-      return_value=[12.5, 0.0]
-    )
+    heights = unittest.mock.AsyncMock(return_value=[12.5, 0.0])
+    self.pipettes.probe_liquid_heights = heights  # type: ignore[method-assign]
     self.assertEqual(await self.pipettes.probe_liquid_volumes(tubes), [125.0, 0.0])
+    # The deprecated `resource_offsets` warns and reaches the search as `offsets`.
+    offsets = [Coordinate(1.0, 0, 0)] * 2
+    with self.assertWarns(DeprecationWarning):
+      await self.pipettes.probe_liquid_volumes(tubes, resource_offsets=offsets)
+    assert heights.await_args is not None
+    self.assertEqual(heights.await_args.args[2], offsets)
 
   async def test_volumes_refuse_a_container_without_the_function(self):
     with self.assertRaises(ValueError):
