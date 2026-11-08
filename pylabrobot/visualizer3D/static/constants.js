@@ -198,7 +198,7 @@ export const GLAZED_MAX_OPACITY = 0.5;
 export const CONTENTS = new Set(["well", "tip_spot", "tube", "tip_mounting_shaft"]);
 // Drawn see-through at an opacity of their own rather than the box's or the shell's: a tip rack is
 // read by which of its positions still hold a tip, a plate by the wells standing in it.
-export const CATEGORY_OPACITY = { tip_rack: 0.7, plate: 0.25 };
+export const CATEGORY_OPACITY = { tip_rack: 0.7, plate: 0.25, workspace: 0.1 };
 
 export const ARM_EDGE = 0x1a1f24;
 export const ARM_EDGE_WIDTH_FLAT = 2.2;

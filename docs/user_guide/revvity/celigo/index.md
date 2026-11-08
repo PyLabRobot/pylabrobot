@@ -7,6 +7,7 @@ hello-world
 advanced-imaging
 scan-planning
 components-and-diagnostics
+cli
 ```
 
 [Product page](https://www.revvity.com/product/celigo-5c-config-200-bffl-5c)
@@ -23,3 +24,6 @@ Planning](scan-planning.ipynb) covers reusable scan specifications, arbitrary bl
 shapes, physical points and bounds, estimates, and inspected execution. [Hardware Components and
 Diagnostics](components-and-diagnostics.ipynb) covers low-level components, controller
 I/O, active self-tests, and laser safety.
+
+[Celigo CLI](cli.md) covers running the gRPC service and inspecting its identity,
+status, and configuration with `plr dev celigo`.

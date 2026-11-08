@@ -132,6 +132,15 @@ function sizeOrthographic(distance) {
   orthographicCamera.updateProjectionMatrix();
 }
 
+// Clip planes from how far the camera stands from what it frames. Fixed planes cut away anything
+// framed from further off than they reach: a whole facility is framed from 29 m above.
+function fitClipping(distance) {
+  perspectiveCamera.near = Math.max(distance / 1000, 0.1);
+  perspectiveCamera.far = distance * 50;
+  orthographicCamera.near = -distance * 50;
+  orthographicCamera.far = distance * 50;
+}
+
 // The axis presets live on the view helper: click an axis there and the camera animates onto it.
 // What the helper cannot do is choose a projection, so that button stays.
 export const projectionButton = document.getElementById("view-projection");
@@ -141,6 +150,7 @@ export function setProjection(kind) {
   const target = controls.target.clone();
   const position = camera.position.clone();
   const distance = position.distanceTo(target);
+  fitClipping(distance);
 
   projection = kind;
   camera = kind === "orthographic" ? orthographicCamera : perspectiveCamera;
@@ -227,13 +237,9 @@ export function frameBox(box, direction) {
 
   controls.target.copy(centre);
   camera.position.copy(centre).add(direction.clone().normalize().multiplyScalar(distance));
-  if (projection === "orthographic") {
-    fitOrthographic(w, h);
-  } else {
-    camera.near = Math.max(distance / 1000, 0.1);
-    camera.far = distance * 50;
-    camera.updateProjectionMatrix();
-  }
+  fitClipping(distance);
+  if (projection === "orthographic") fitOrthographic(w, h);
+  else camera.updateProjectionMatrix();
   // A drag leaves OrbitControls holding a rotation it has not finished applying: with damping on it
   // spends that residue over the following frames and only decays it, so it outlives the pointer
   // going up. Framing writes the camera straight to where it belongs, and the residue then turns it

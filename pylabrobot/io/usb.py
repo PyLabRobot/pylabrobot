@@ -3,7 +3,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 from pylabrobot.events import emit_event
 from pylabrobot.io.capture import Command, capturer, get_capture_or_validation_active
@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_READ_TRANSFER_SIZE = 4000
 
 
 @dataclass
@@ -57,6 +59,7 @@ class USB(IOBase):
     max_workers: int = 1,
     read_endpoint_address: Optional[int] = None,
     write_endpoint_address: Optional[int] = None,
+    zero_length_packets: bool = True,
   ):
     """Initialize an io.USB object.
 
@@ -75,6 +78,8 @@ class USB(IOBase):
       configuration_callback: A callback that takes the device object as an argument and performs
         any necessary configuration. If `None`, `dev.set_configuration()` is called.
       max_workers: The maximum number of worker threads for USB I/O operations.
+      zero_length_packets: End a write whose length is a multiple of the write endpoint's packet
+        size with a zero-length packet. Some devices reject the extra packet.
     """
 
     super().__init__()
@@ -98,6 +103,7 @@ class USB(IOBase):
     self.write_endpoint_address = write_endpoint_address
     self.configuration_callback = configuration_callback
     self.max_workers = max_workers
+    self.zero_length_packets = zero_length_packets
 
     self.dev: Optional[usb.core.Device] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -146,7 +152,7 @@ class USB(IOBase):
         write_endpoint, data, timeout=int(timeout * 1000)
       ),  # PyUSB expects timeout in milliseconds
     )
-    if len(data) % write_endpoint.wMaxPacketSize == 0:
+    if self.zero_length_packets and len(data) % write_endpoint.wMaxPacketSize == 0:
       # send a zero-length packet to indicate the end of the transfer
       await loop.run_in_executor(
         self._write_executor,
@@ -168,16 +174,31 @@ class USB(IOBase):
       data=data.decode("utf-8", errors="backslashreplace"),
     )
 
+  def _read_size(self, size: Optional[int], endpoint: Optional[int]) -> int:
+    """Use the caller's byte limit or a default buffer rounded up to whole endpoint packets."""
+    if size is not None:
+      return size
+    if self.dev is None or self.read_endpoint is None:
+      raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
+    packet_size: int = self.read_endpoint.wMaxPacketSize
+    if endpoint is not None:
+      interface = self.dev.get_active_configuration()[(0, 0)]
+      ep = usb.util.find_descriptor(interface, bEndpointAddress=endpoint)
+      if ep is None:
+        raise ValueError(f"Endpoint 0x{endpoint:02x} not found.")
+      packet_size = ep.wMaxPacketSize
+    return ((_DEFAULT_READ_TRANSFER_SIZE + packet_size - 1) // packet_size) * packet_size
+
   def _read_packet(
     self,
     size: Optional[int] = None,
     timeout: Optional[float] = None,
     endpoint: Optional[int] = None,
   ) -> Optional[bytearray]:
-    """Read a packet from the machine.
+    """Read one USB transfer, which can contain multiple endpoint packets.
 
     Args:
-      size: The maximum number of bytes to read. If `None`, read up to wMaxPacketSize bytes.
+      size: The maximum number of bytes to read. If `None`, use the default transfer size.
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `packet_read_timeout` attribute).
       endpoint: The endpoint address to read from. If `None`, use the default read endpoint.
@@ -193,23 +214,7 @@ class USB(IOBase):
     if ep is None:
       raise RuntimeError("Read endpoint not found. Call setup() first.")
 
-    # Get max packet size if size is not provided
-    if size is None:
-      if isinstance(ep, int):
-        # Find endpoint object to get max packet size
-        cfg = self.dev.get_active_configuration()
-        intf = cfg[(0, 0)]
-        ep_obj = usb.util.find_descriptor(
-          intf,
-          custom_match=lambda e: e.bEndpointAddress == ep,
-        )
-        if ep_obj is None:
-          raise ValueError(f"Endpoint 0x{ep:02x} not found.")
-        read_size = ep_obj.wMaxPacketSize
-      else:
-        read_size = ep.wMaxPacketSize
-    else:
-      read_size = size
+    read_size = self._read_size(size, endpoint)
 
     if timeout is None:
       timeout = self.packet_read_timeout
@@ -239,8 +244,8 @@ class USB(IOBase):
     Args:
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
         timeout (specified by the `read_timeout` attribute).
-      size: The maximum number of bytes to read. If `None`, read all available data until no
-        more packets arrive.
+      size: The maximum number of bytes to read. If `None`, read until a short transfer or
+        timeout, using a 4,000-byte buffer rounded up to a multiple of the endpoint packet size.
       endpoint: The endpoint address to read from. If `None`, use the configured read endpoint.
     """
 
@@ -251,22 +256,21 @@ class USB(IOBase):
       timeout = self.read_timeout
 
     def read_or_timeout() -> bytes:
-      # Attempt to read packets until timeout, or when we identify the right id.
+      """Read through the terminating short transfer or the caller's explicit byte limit."""
       timeout_time = time.time() + timeout
+      transfer_size = self._read_size(size, endpoint)
 
       while time.time() < timeout_time:
-        # read response from endpoint, and keep reading until the packet is smaller than the max
-        # packet size: if the packet is that size, it means that there may be more data to read.
         resp = bytearray()
         last_packet: Optional[bytearray] = None
-        while True:  # read while we have data, and while the last packet is the max size.
-          remaining = size - len(resp) if size is not None else None
+        while True:
+          remaining = size - len(resp) if size is not None else transfer_size
           last_packet = self._read_packet(size=remaining, endpoint=endpoint)
           if last_packet is not None:
             resp += last_packet
-          if self.read_endpoint is None:
-            raise RuntimeError("Read endpoint is None. Call setup() first.")
-          if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
+          # A transfer shorter than requested has consumed the short packet (including a ZLP).
+          # Its data length can still be an exact multiple of the endpoint packet size.
+          if last_packet is None or len(last_packet) < remaining:
             break
           if size is not None and len(resp) >= size:
             break
@@ -306,7 +310,7 @@ class USB(IOBase):
     self,
     endpoint: Optional[int] = None,
     timeout: float = 0.05,
-    size: int = 512,
+    size: Optional[int] = None,
     max_duration: float = 1,
   ) -> None:
     """Discard queued input from an endpoint until no packet arrives before the timeout."""
@@ -373,7 +377,7 @@ class USB(IOBase):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
   ) -> str:
     return " ".join(map(str, [bmRequestType, bRequest, wValue, wIndex, data_or_wLength]))
 
@@ -383,9 +387,14 @@ class USB(IOBase):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
     timeout: Optional[int] = None,
   ) -> bytearray:
+    """Send a control transfer: a read of ``data_or_wLength`` bytes, or a write of the bytes given.
+
+    Returns:
+      The bytes read; empty for a write.
+    """
     if self.dev is None:
       raise RuntimeError(f"USB device for '{self.human_readable_device_name}' is not connected.")
 
@@ -400,6 +409,8 @@ class USB(IOBase):
       data_or_wLength=data_or_wLength,
       timeout=timeout * 1000,  # timeout in ms
     )
+    # pyusb returns the data of a read, and the number of bytes sent for a write.
+    response = bytearray() if isinstance(res, int) else bytearray(res)
 
     logger.log(
       LOG_LEVEL_IO,
@@ -423,11 +434,11 @@ class USB(IOBase):
       USBCommand(
         device_id=self._unique_id,
         action="ctrl_transfer_response",
-        data=" ".join(map(str, res)),
+        data=" ".join(map(str, response)),
       )
     )
 
-    return bytearray(res)
+    return response
 
   def _setup_sync(self, empty_buffer: bool) -> None:
     """Open the device, resolve the endpoints and drain stale packets. Runs off the event loop."""
@@ -570,6 +581,8 @@ class USB(IOBase):
       d["read_endpoint_address"] = self.read_endpoint_address
     if self.write_endpoint_address is not None:
       d["write_endpoint_address"] = self.write_endpoint_address
+    if not self.zero_length_packets:
+      d["zero_length_packets"] = False
     return d
 
 
@@ -589,6 +602,7 @@ class USBValidator(USB):
     write_endpoint_address: Optional[int] = None,
     configuration_callback: Optional[Callable[["usb.core.Device"], None]] = None,
     max_workers: int = 1,
+    zero_length_packets: bool = True,
   ):
     super().__init__(
       human_readable_device_name=human_readable_device_name,
@@ -603,6 +617,7 @@ class USBValidator(USB):
       write_endpoint_address=write_endpoint_address,
       configuration_callback=configuration_callback,
       max_workers=max_workers,
+      zero_length_packets=zero_length_packets,
     )
     self.cr = cr
 
@@ -644,7 +659,7 @@ class USBValidator(USB):
     self,
     endpoint: Optional[int] = None,
     timeout: float = 0.05,
-    size: int = 512,
+    size: Optional[int] = None,
     max_duration: float = 1,
   ) -> None:
     pass
@@ -655,7 +670,7 @@ class USBValidator(USB):
     bRequest: int,
     wValue: int,
     wIndex: int,
-    data_or_wLength: int,
+    data_or_wLength: Union[int, bytes],
     timeout: Optional[int] = None,
   ) -> bytearray:
     next_command = USBCommand(**self.cr.next_command())
@@ -684,4 +699,4 @@ class USBValidator(USB):
       and next_command.action == "ctrl_transfer_response"
     ):
       raise ValidationError("next command is not ctrl_transfer_response")
-    return bytearray(map(int, next_command.data.split(" ")))
+    return bytearray(map(int, next_command.data.split()))

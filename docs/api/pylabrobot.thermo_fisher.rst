@@ -83,3 +83,41 @@ BTX Gemini X2
   :recursive:
 
     BTXHT200
+
+KingFisher Presto
+-----------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    KingFisherPresto
+    PrestoError
+    PrestoEvent
+    PrestoStatus
+    ProtocolDuration
+    ProtocolStep
+    ProtocolTimeLeft
+
+BindIt protocol files
+---------------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BdzProtocol
+    ProtocolTip
+    MixStep
+    SamplePlate
+    Reagent
+    WellGroup
+    read_bdz
+    write_bdz
+    bdz_variant

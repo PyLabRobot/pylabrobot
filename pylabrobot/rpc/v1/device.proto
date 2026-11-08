@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package pylabrobot.rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message DeviceRequest { string device_id = 1; }
+message DeviceInfo {
+  string device_id = 1;
+  string display_name = 2;
+  string device_type = 3;
+  string api_version = 4;
+  reserved 5, 6, 7;
+  string configuration_id = 8;
+  repeated string supported_operations = 9;
+  // Fully qualified service names; clients select optional capabilities explicitly.
+  repeated string services = 10;
+  string manufacturer = 11;
+  string model = 12;
+  string implementation_version = 13;
+  // Changes on server restart; revisions are ordered only within one instance.
+  string instance_id = 14;
+}
+
+enum OperationalState {
+  OPERATIONAL_STATE_UNSPECIFIED = 0;
+  OPERATIONAL_STATE_READY = 1;
+  OPERATIONAL_STATE_BUSY = 2;
+  OPERATIONAL_STATE_UNINITIALIZED = 3;
+  OPERATIONAL_STATE_INITIALIZING = 4;
+  OPERATIONAL_STATE_FAULTED = 5;
+}
+message DeviceStatus {
+  string device_id = 1;
+  OperationalState state = 2;
+  string active_job_id = 3;
+  google.protobuf.Timestamp observed_at = 4;
+  uint64 revision = 5;
+  string fault_summary = 6;
+  string instance_id = 7;
+  // Validity of this operational snapshot; not a promise of recent sensor polling.
+  bool observation_valid = 8;
+}
+
+service DeviceService {
+  rpc GetDevice(DeviceRequest) returns (DeviceInfo);
+  rpc GetStatus(DeviceRequest) returns (DeviceStatus);
+  rpc WatchStatus(DeviceRequest) returns (stream DeviceStatus);
+}

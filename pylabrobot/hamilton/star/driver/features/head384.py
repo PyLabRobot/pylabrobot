@@ -55,6 +55,10 @@ class Head384Configuration(HeadConfiguration):
   channel_rows: int = 16
 
   dispensing_drive_mm_per_increment: float = 0.00063333
+  # This head's dispensing drive counts its speed in tens of increments per second and its
+  # acceleration in thousands per second squared.
+  dispensing_drive_speed_increments_per_unit: int = 10
+  dispensing_drive_acceleration_increments_per_unit: int = 1000
 
   # This head's Y and Z drives count acceleration in thousands of increments per second squared,
   # unlike the positions and speeds they count in single ones, so these are 1000x the position
@@ -142,21 +146,20 @@ class Head384Configuration(HeadConfiguration):
   @property
   def dispensing_drive_speed_range(self) -> Tuple[float, float]:
     """Dispensing-drive speed window (uL/s)."""
-    # The drive counts its speed in tens of increments per second, so both ends are scaled.
+    per_unit = self.dispensing_drive_speed_increments_per_unit
     return (
-      self.dispensing_drive_increments_to_uL(5 * 10),
-      self.dispensing_drive_increments_to_uL(25000 * 10),
+      self.dispensing_drive_increments_to_uL(5 * per_unit),
+      self.dispensing_drive_increments_to_uL(25000 * per_unit),
     )
 
   @property
-  def dispensing_drive_speed_default(self) -> float:
-    """Dispensing-drive default speed (uL/s)."""
-    return self.dispensing_drive_increments_to_uL(50000)
-
-  @property
-  def dispensing_drive_acceleration_default(self) -> float:
-    """Dispensing-drive default acceleration (uL/s2)."""
-    return self.dispensing_drive_increments_to_uL(9000000)
+  def dispensing_drive_acceleration_range(self) -> Tuple[float, float]:
+    """Dispensing-drive acceleration window (uL/s2)."""
+    per_unit = self.dispensing_drive_acceleration_increments_per_unit
+    return (
+      self.dispensing_drive_increments_to_uL(5 * per_unit),
+      self.dispensing_drive_increments_to_uL(9355 * per_unit),
+    )
 
   @property
   def squeezer_drive_speed_default(self) -> float:
@@ -193,6 +196,17 @@ class Head384(Head):
   # ----------------------------------------
 
   # -- discovery ---------------------------------------------------------------------------------
+
+  async def discover(self):
+    """Read what head this is, then start its dispensing drive defaults from its type.
+
+    The drive documents 5000 tens of increments per second and 9000 thousands per second squared;
+    what those hold depends on the head's bore, which its type decides.
+    """
+    await super().discover()
+    c = self.configuration
+    self.default_dispensing_drive_speed = c.dispensing_drive_increments_to_uL(50000)
+    self.default_dispensing_drive_acceleration = c.dispensing_drive_increments_to_uL(9000000)
 
   def _record_hardware(self, hardware: List[str]) -> None:
     """Record whether this head runs the absolute-threshold cLLD check.

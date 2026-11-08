@@ -34,6 +34,7 @@ class TecanTip(Tip):
     category: str = "tip",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    is_conductive: Optional[bool] = None,
   ):
     """Initialize a Tecan tip with its name and firmware tip characteristics."""
     if diameter is None:
@@ -59,6 +60,7 @@ class TecanTip(Tip):
       category=category,
       model=model,
       pick_up_location=pick_up_location,
+      is_conductive=is_conductive,
     )
     self.tip_type = tip_type
 

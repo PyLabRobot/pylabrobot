@@ -9,6 +9,10 @@ import pytest
 from pylabrobot.hamilton.prep import PrepDriver, PrepSimulationDriver
 from pylabrobot.hamilton.prep.driver import prep_commands as PrepCmd
 from pylabrobot.hamilton.prep.driver.configuration import read_configuration, to_jsonable
+from pylabrobot.hamilton.prep.driver.simulator import (
+  FIRMWARE_TREE_V3_0_20_HEATER_SHAKER,
+  RECORDING_PREP_HEATER_SHAKER,
+)
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.resources.hamilton import PrepDeck, STARLetDeck
@@ -275,7 +279,11 @@ def test_setup_logs_one_summary_of_what_was_found(caplog):
   """Setup ends with one INFO block describing the device, as the STAR driver's does."""
 
   async def _run() -> None:
-    p = PrepSimulationDriver(deck=STARLetDeck())
+    p = PrepSimulationDriver(
+      deck=STARLetDeck(),
+      declared_configuration_json=RECORDING_PREP_HEATER_SHAKER,
+      firmware_tree_json=FIRMWARE_TREE_V3_0_20_HEATER_SHAKER,
+    )
     assert p.format_setup_summary() == "[Hamilton Prep] not discovered yet"
     prep_logger = logging.getLogger("pylabrobot.hamilton.prep")
     records = _Records()

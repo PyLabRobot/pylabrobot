@@ -1,6 +1,6 @@
 # Installation
 
-These instructions describe how to install PyLabRobot.
+These instructions describe how to install PyLabRobot. Python 3.10 or newer is required.
 
 Note that there are additional installation steps for using the USB interface to Hamiltons and Tecans, see {ref}`below <using-the-usb-interface>`.
 

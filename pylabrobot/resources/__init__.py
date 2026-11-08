@@ -51,7 +51,6 @@ from .resource_state import (
   all_channels_succeeded,
   finalize_tip_ops,
   finalize_volume_ops,
-  place_resource,
   queue_tip_drops,
   queue_tip_pickups,
   queue_volume_transfers,

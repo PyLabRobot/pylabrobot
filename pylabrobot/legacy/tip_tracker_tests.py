@@ -8,6 +8,7 @@ from pylabrobot.legacy.tip_tracker import (
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.hamilton import HamiltonTip, hamilton_tip_300uL
 from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
+from pylabrobot.resources.opentrons import opentrons_96_tiprack_300ul
 from pylabrobot.resources.tip import Tip
 
 
@@ -75,6 +76,64 @@ class TestTipTracker(unittest.TestCase):
     self.assertFalse(tracker.has_tip)
     with self.assertRaises(NoTipError):
       tracker.get_tip()
+
+  def test_load_committed_tip_spot_state_remains_committed(self):
+    """A restored occupied spot retains its committed tip and liquid volume."""
+    spot = opentrons_96_tiprack_300ul("tips").get_item("A1")
+    spot.tracker.get_tip().tracker.set_volume(17)
+    state = spot.serialize_state()
+
+    spot.load_state(state)
+
+    self.assertEqual(spot.serialize_state(), state)
+    spot.tracker.rollback()
+    self.assertEqual(spot.serialize_state(), state)
+
+  def test_load_pending_tip_spot_removal_preserves_rollback(self):
+    """Rollback restores a removed tip with its saved liquid volume."""
+    spot = opentrons_96_tiprack_300ul("tips").get_item("A1")
+    spot.tracker.get_tip().tracker.set_volume(17)
+    committed = spot.serialize_state()
+    spot.tracker.remove_tip(commit=False)
+    pending = spot.serialize_state()
+
+    spot.load_state(pending)
+
+    self.assertFalse(spot.tracker.has_tip)
+    self.assertEqual(spot.tracker.get_tip().name, committed["tip"]["name"])
+    spot.tracker.rollback()
+    self.assertEqual(spot.serialize_state(), committed)
+
+  def test_load_channel_tip_preserves_pending_liquid_state(self):
+    """Restoration preserves uncommitted liquid changes until explicit rollback."""
+    tracker = TipTracker("channel")
+    tracker.add_tip(self.tip)
+    self.tip.tracker.set_volume(4)
+    self.tip.tracker.add_liquid(3)
+    saved = tracker.serialize()
+
+    restored = TipTracker("restored")
+    restored.load_state(saved)
+
+    self.assertEqual(restored.serialize(), saved)
+    restored.get_tip().tracker.rollback()
+    self.assertEqual(restored.get_tip().tracker.get_used_volume(), 4)
+
+  def test_load_pending_pickup_preserves_tip_transaction(self):
+    """A pending pickup remains pending and can be rolled back after restoration."""
+    tracker = TipTracker("channel")
+    tracker.add_tip(self.tip, commit=False)
+    saved = tracker.serialize()
+
+    restored = TipTracker("restored")
+    restored.load_state(saved)
+
+    self.assertEqual(restored.serialize(), saved)
+    self.assertTrue(restored.has_tip)
+    with self.assertRaises(NoTipError):
+      restored.get_tip()
+    restored.rollback()
+    self.assertFalse(restored.has_tip)
 
   def test_a_pending_removal_keeps_the_tip_readable_until_it_commits(self):
     """A liquid handler removes a spot's tip before its backend asks the spot which tip it is."""

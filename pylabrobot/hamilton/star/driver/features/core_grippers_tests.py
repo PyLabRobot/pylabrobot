@@ -8,10 +8,22 @@ from pylabrobot.hamilton.star.device import STAR
 from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
 from pylabrobot.hamilton.star.driver.features.x_arm_tests import RECORDED_DEVICE, declaring
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
+from pylabrobot.resources.alpaqua.magnetic_racks import alpaqua_96_plateadapter_magnum_flx
 from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.corning.plates import cor_96_wellplate_2mL_Vb
 from pylabrobot.resources.errors import HasTipError
 from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck, hamilton_tip_300uL
+from pylabrobot.resources.hamilton.mfx_carriers import hamilton_mfx_carrier_L5_base
+from pylabrobot.resources.hamilton.mfx_modules import (
+  hamilton_mfx_plateholder_DWP_flat,
+  hamilton_mfx_plateholder_DWP_metal_tapped,
+)
+from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.resource_stack import ResourceStack
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.resources.trash import Trash
 
 
 class TestWiring(unittest.IsolatedAsyncioTestCase):
@@ -72,13 +84,13 @@ class TestToolFirmware(unittest.IsolatedAsyncioTestCase):
     answer = self.grippers._driver.send_command
 
     # The simulator reads the channels back as it records a command, so those reads are answered.
-    async def recorded(module: str, command: str, **kwargs: Any):
+    async def capturing(module: str, command: str, **kwargs: Any):
       if module == "C0" and command.startswith("Z"):
         wire = {k: v for k, v in kwargs.items() if len(k) == 2}
         self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
       return await answer(module=module, command=command, **kwargs)
 
-    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
   async def test_pick_up(self):
     await self.grippers._unchecked_fw_pick_up_tools(13375, 1250, 1070, 2350, 2250, 2800, 6, 7, 14)
@@ -93,7 +105,7 @@ class TestToolFirmware(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent, ["C0ZTxs00120xd1ya1250yb1070pa05pb06tp2350tz2250th2800tt14"])
 
   async def test_put_down_move_and_release_as_legacy(self):
-    await self.grippers._unchecked_fw_drop_resource(8204, 2102, 1954, 0, 500, 885, 2800, 2800)
+    await self.grippers._unchecked_fw_place_resource(8204, 2102, 1954, 0, 500, 885, 2800, 2800)
     await self.grippers._unchecked_fw_move_resource(8204, 4, 2102, 2500, 500, 2800)
     await self.grippers._unchecked_fw_release_plate()
     self.assertEqual(
@@ -106,7 +118,7 @@ class TestToolFirmware(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_put_down_with_an_x_acceleration(self):
-    await self.grippers._unchecked_fw_drop_resource(
+    await self.grippers._unchecked_fw_place_resource(
       8204, 2102, 1954, 0, 500, 885, 2800, 2800, x_acceleration_level=2
     )
     self.assertEqual(self.sent, ["C0ZRxs08204xd0xg2yj2102zj1954zi000zy0500yo0885th2800te2800"])
@@ -123,12 +135,12 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     self.sent: List[str] = []
     answer = self.grippers._driver.send_command
 
-    async def recorded(module: str, command: str, **kwargs: Any):
+    async def capturing(module: str, command: str, **kwargs: Any):
       wire = {k: v for k, v in kwargs.items() if len(k) == 2 and not isinstance(v, list)}
       self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
       return await answer(module=module, command=command, **kwargs)
 
-    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
   def tool_commands(self) -> List[str]:
     return [c for c in self.sent if c[2:4] in ("ZT", "ZS")]
@@ -230,13 +242,13 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     self.sent: List[str] = []
     answer = self.grippers._driver.send_command
 
-    async def recorded(module: str, command: str, **kwargs: Any):
+    async def capturing(module: str, command: str, **kwargs: Any):
       if command == "ZP":
         wire = {k: v for k, v in kwargs.items() if len(k) == 2}
         self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
       return await answer(module=module, command=command, **kwargs)
 
-    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
   async def check(self, **kwargs: Any) -> bool:
     return await self.grippers.probe_resource_exists_using_ztouch(
@@ -287,7 +299,7 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
 
 
 class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
-  """`pick_up_resource`, `drop_resource` and `return_resource`: the wire and the tree."""
+  """`pick_up_resource`, `place_resource` and `return_resource`: the wire and the tree."""
 
   async def asyncSetUp(self):
     self.star = STAR(simulation=True)
@@ -300,32 +312,32 @@ class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
     self.sent: List[str] = []
     answer = self.grippers._driver.send_command
 
-    async def recorded(module: str, command: str, **kwargs: Any):
+    async def capturing(module: str, command: str, **kwargs: Any):
       if command in ("ZP", "ZR"):
         wire = {k: v for k, v in kwargs.items() if len(k) == 2}
         self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
       return await answer(module=module, command=command, **kwargs)
 
-    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
   async def test_refused_without_the_tools(self):
     with self.assertRaises(RuntimeError):
-      await self.grippers.pick_up_resource(self.plate)
+      await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     self.assertEqual(self.sent, [])
 
   async def test_pick_up_sends_what_legacy_sends_and_hangs_it_on_the_front_tool(self):
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     # Legacy: the centre, 5 mm below the top, open to its width + 3.0 mm and closed to it - 3.0 mm.
     self.assertEqual(
       self.sent, ["C0ZPxs08204xd0yj1142yv0050zj1964zy0500yo0885yg0825yw15th2800te2800"]
     )
     self.assertIs(self.plate.parent, self.grippers._front_tool())
 
-  async def test_drop_into_a_site_sends_the_put_down_and_the_tree_follows(self):
+  async def test_place_into_a_site_sends_the_put_down_and_the_tree_follows(self):
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
-    await self.grippers.drop_resource(
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
+    await self.grippers.place_resource(
       self.carrier[2], press_on_distance=1.5, x_acceleration_level=2
     )
     self.assertEqual(self.sent[1], "C0ZRxs08204xd0xg2yj3062zj1964zi015zy0500yo0885th2800te2800")
@@ -334,8 +346,8 @@ class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_coordinate_puts_its_centre_bottom_there_on_the_deck(self):
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
-    await self.grippers.drop_resource(Coordinate(400.0, 200.0, 100.0))
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
+    await self.grippers.place_resource(Coordinate(400.0, 200.0, 100.0))
     # Let go 5 mm below its top: 100 + 16.1 - 5.
     self.assertEqual(self.sent[1], "C0ZRxs04000xd0yj2000zj1111zi000zy0500yo0885th2800te2800")
     self.assertIs(self.plate.parent, self.star.deck)
@@ -344,41 +356,76 @@ class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_coordinate_inside_a_carrier_is_refused_before_anything_is_sent(self):
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     site = self.carrier[2].get_location_wrt(self.star.deck, "c", "c", "b")
     with self.assertRaisesRegex(ValueError, "plate_carrier"):
-      await self.grippers.drop_resource(site)
+      await self.grippers.place_resource(site)
     self.assertEqual(len(self.sent), 1)
     self.assertIs(self.grippers._held_resource, self.plate)
 
+  async def test_an_occupied_site_is_refused_before_anything_is_sent(self):
+    self.carrier[2] = other = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="other")
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
+    with self.assertRaises(RuntimeError):
+      await self.grippers.place_resource(self.carrier[2])
+    self.assertEqual(len(self.sent), 1)
+    self.assertIs(self.grippers._held_resource, self.plate)
+    self.assertIs(self.carrier[2].resource, other)
+
   async def test_return_puts_it_back_where_it_was_taken_from(self):
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     await self.grippers.return_resource()
     self.assertEqual(self.sent[1], "C0ZRxs08204xd0yj1142zj1964zi000zy0500yo0885th2800te2800")
     self.assertIs(self.plate.parent, self.carrier[0])
 
-  async def test_drop_without_holding_raises(self):
+  async def test_place_without_holding_raises(self):
     await self.grippers.pick_up_tools()
     with self.assertRaises(RuntimeError):
-      await self.grippers.drop_resource(self.carrier[2])
+      await self.grippers.place_resource(self.carrier[2])
     with self.assertRaises(RuntimeError):
       await self.grippers.return_resource()
 
   async def test_a_second_pick_up_while_holding_is_refused(self):
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     with self.assertRaises(RuntimeError):
-      await self.grippers.pick_up_resource(self.plate)
+      await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     self.assertEqual(len(self.sent), 1)
 
   async def test_gripped_more_than_20_mm_below_its_top_is_refused(self):
+    self.carrier[1] = deep = cor_96_wellplate_2mL_Vb(name="deep")
     await self.grippers.pick_up_tools()
     with self.assertRaisesRegex(ValueError, "pipetting head"):
-      await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=20.5)
+      await self.grippers.pick_up_resource(deep, pickup_distance_from_top=20.5)
+    with self.assertRaisesRegex(ValueError, "pipetting head"):
+      await self.grippers.pick_up_resource(
+        deep, pickup_distance_from_bottom=deep.get_size_z() - 20.5
+      )
     self.assertEqual(self.sent, [])
-    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=12.0)
+    await self.grippers.pick_up_resource(deep, pickup_distance_from_top=12.0)
     self.assertEqual(len(self.sent), 1)
+
+  async def test_a_grip_from_the_bottom_sends_what_the_same_grip_from_the_top_sends(self):
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
+    await self.grippers.return_resource()
+    await self.grippers.pick_up_resource(
+      self.plate, pickup_distance_from_bottom=self.plate.get_size_z() - 5
+    )
+    await self.grippers.return_resource()
+    self.assertEqual(self.sent[2:], self.sent[:2])
+
+  async def test_a_pick_up_with_neither_or_both_distances_is_refused(self):
+    await self.grippers.pick_up_tools()
+    for from_top, from_bottom in ((None, None), (5.0, 11.1)):
+      with self.assertRaisesRegex(ValueError, "exactly one", msg=f"{from_top}, {from_bottom}"):
+        await self.grippers.pick_up_resource(
+          self.plate, pickup_distance_from_top=from_top, pickup_distance_from_bottom=from_bottom
+        )
+    self.assertEqual(self.sent, [])
+    self.assertIsNone(self.grippers._held_resource)
 
   async def test_the_grip_line_is_checked_against_its_own_reach(self):
     await self.grippers.pick_up_tools()
@@ -388,14 +435,17 @@ class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
     pipettes.configuration.z_range = (low, 196.4 + 22.0 - 0.5)
     with self.assertRaisesRegex(ValueError, "grip line reaches"):
       await self.grippers.pick_up_resource(
-        self.plate, minimum_traverse_height_start=210.0, minimum_traverse_height_end=210.0
+        self.plate,
+        pickup_distance_from_top=5,
+        minimum_traverse_height_start=210.0,
+        minimum_traverse_height_end=210.0,
       )
     pipettes.configuration.z_range = (196.4 - 2.0 + 0.5, high)
     with self.assertRaisesRegex(ValueError, "grip line reaches"):
-      await self.grippers.pick_up_resource(self.plate)
+      await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     self.assertEqual(self.sent, [])
     pipettes.configuration.z_range = (low, high)
-    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     self.assertEqual(len(self.sent), 1)
 
   async def test_out_of_range_arguments_send_nothing(self):
@@ -403,11 +453,142 @@ class TestResourceByResource(unittest.IsolatedAsyncioTestCase):
     for kwargs in ({"grip_strength": 100}, {"squeeze_mm": 50.0}, {"z_speed": 0.0}):
       with self.assertRaises(ValueError, msg=str(kwargs)):
         await self.grippers.pick_up_resource(self.plate, **kwargs)
-    await self.grippers.pick_up_resource(self.plate)
-    for drop_kwargs in ({"press_on_distance": 100.0}, {"x_acceleration_level": 6}):
-      with self.assertRaises(ValueError, msg=str(drop_kwargs)):
-        await self.grippers.drop_resource(self.carrier[2], **drop_kwargs)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
+    for place_kwargs in ({"press_on_distance": 100.0}, {"x_acceleration_level": 6}):
+      with self.assertRaises(ValueError, msg=str(place_kwargs)):
+        await self.grippers.place_resource(self.carrier[2], **place_kwargs)
     self.assertEqual(len(self.sent), 1)
+
+
+class TestPlaceOntoAPlateAdapter(unittest.IsolatedAsyncioTestCase):
+  """`place_resource` onto a `PlateAdapter`: aimed and placed where the adapter places a plate."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    source = hamilton_mfx_plateholder_DWP_metal_tapped("source_site")
+    self.star.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("source_carrier", modules={0: source}), track=10
+    )
+    self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    source.assign_child_resource(self.plate)
+    magnet_site = hamilton_mfx_plateholder_DWP_flat("magnet_site")
+    self.star.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("magnet_carrier", modules={0: magnet_site}), track=18
+    )
+    self.magnet = alpaqua_96_plateadapter_magnum_flx(name="magnet")
+    self.magnet.plate_z_offset = 0.62
+    magnet_site.assign_child_resource(self.magnet)
+    assert self.star.core_grippers is not None
+    self.grippers = self.star.core_grippers
+    self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
+
+    async def capturing(module: str, command: str, **kwargs: Any):
+      if command == "ZR":
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
+
+  async def test_the_plate_goes_where_the_adapter_places_it(self):
+    await self.grippers.pick_up_tools(front_channel=4)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
+    await self.grippers.place_resource(self.magnet)
+    # Let go 6 mm below its top, the plate sitting 28.12 mm up in the magnet.
+    self.assertEqual(self.sent, ["C0ZRxs05504xd0yj1133zj2162zi000zy0500yo0885th2800te2800"])
+    self.assertIs(self.plate.parent, self.magnet)
+    self.assertEqual(self.plate.location, self.magnet.compute_plate_location(self.plate))
+
+
+class TestPlaceByDestinationType(unittest.IsolatedAsyncioTestCase):
+  """`place_resource` into each kind of destination: the `C0 ZR` sent, and the tree."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    self.source = hamilton_mfx_plateholder_DWP_metal_tapped("source_site")
+    self.star.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("source_carrier", modules={0: self.source}), track=10
+    )
+    self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    self.source.assign_child_resource(self.plate)
+    assert self.star.core_grippers is not None
+    self.grippers = self.star.core_grippers
+    self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
+
+    async def capturing(module: str, command: str, **kwargs: Any):
+      if command == "ZR":
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      return await answer(module=module, command=command, **kwargs)
+
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
+    await self.grippers.pick_up_tools(front_channel=4)
+
+  async def test_a_rotated_holder_takes_it_turned_as_it_was(self):
+    turned = ResourceHolder(
+      "turned", size_x=127.76, size_y=85.48, size_z=5, rotation=Rotation(z=180)
+    )
+    self.star.deck.assign_child_resource(turned, location=Coordinate(600, 250, 100))
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
+    await self.grippers.place_resource(turned)
+    self.assertEqual(self.sent, ["C0ZRxs05361xd0yj2073zj1101zi000zy0500yo0885th2800te2800"])
+    self.assertIs(turned.resource, self.plate)
+    self.assertEqual(self.plate.get_absolute_rotation().z % 360, 0)
+
+  async def test_a_resource_stack_takes_it_on_top(self):
+    bottom = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="bottom")
+    stack = ResourceStack("stack", "z", [bottom])
+    self.star.deck.assign_child_resource(stack, location=Coordinate(600, 150, 100))
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
+    await self.grippers.place_resource(stack)
+    # Let go 6 mm below its top, on top of the 16.1 mm plate under it.
+    self.assertEqual(self.sent, ["C0ZRxs06639xd0yj1927zj1262zi000zy0500yo0885th2800te2800"])
+    self.assertIs(stack.get_top_item(), self.plate)
+
+  async def test_a_lid_goes_onto_a_plate(self):
+    size_x, size_y = self.plate.get_size_x(), self.plate.get_size_y()
+    lid = Lid("lid", size_x=size_x, size_y=size_y, size_z=8, nesting_z_height=3)
+    self.plate.assign_child_resource(lid)
+    site = hamilton_mfx_plateholder_DWP_metal_tapped("dest_site")
+    self.star.deck.assign_child_resource(
+      hamilton_mfx_carrier_L5_base("dest_carrier", modules={0: site}), track=18
+    )
+    other = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="other")
+    site.assign_child_resource(other)
+    await self.grippers.pick_up_resource(lid, pickup_distance_from_top=4, grip_strength=40)
+    await self.grippers.place_resource(other)
+    self.assertEqual(self.sent, ["C0ZRxs05504xd0yj1142zj2002zi000zy0500yo0885th2800te2800"])
+    self.assertIs(other.lid, lid)
+    self.assertIsNone(self.plate.lid)
+
+  async def test_a_trash_discards_it(self):
+    trash = Trash("bin", size_x=130, size_y=90, size_z=40)
+    self.star.deck.assign_child_resource(trash, location=Coordinate(600, 150, 100))
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
+    await self.grippers.place_resource(trash)
+    self.assertEqual(self.sent, ["C0ZRxs06639xd0yj1927zj1101zi000zy0500yo0885th2800te2800"])
+    self.assertIsNone(self.plate.parent)
+    self.assertIsNone(self.source.resource)
+
+  async def test_a_coordinate_puts_its_centre_bottom_there(self):
+    center = self.plate.center()
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
+    await self.grippers.place_resource(Coordinate(600 + center.x, 150 + center.y, 100))
+    self.assertEqual(self.sent, ["C0ZRxs06639xd0yj1927zj1101zi000zy0500yo0885th2800te2800"])
+    self.assertIs(self.plate.parent, self.star.deck)
+    self.assertEqual(self.plate.location, Coordinate(600, 150, 100))
+
+  async def test_drop_resource_is_a_deprecated_place_resource(self):
+    center = self.plate.center()
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
+    with self.assertWarnsRegex(DeprecationWarning, "removed in the release after next"):
+      await self.grippers.drop_resource(Coordinate(600 + center.x, 150 + center.y, 100))
+    self.assertEqual(self.sent, ["C0ZRxs06639xd0yj1927zj1101zi000zy0500yo0885th2800te2800"])
+    self.assertIs(self.plate.parent, self.star.deck)
 
 
 class TestMounting(unittest.IsolatedAsyncioTestCase):
@@ -423,13 +604,13 @@ class TestMounting(unittest.IsolatedAsyncioTestCase):
     self.sent: List[str] = []
     answer = self.grippers._driver.send_command
 
-    async def recorded(module: str, command: str, **kwargs: Any):
+    async def capturing(module: str, command: str, **kwargs: Any):
       if command in ("ZT", "ZS"):
         wire = {k: v for k, v in kwargs.items() if len(k) == 2}
         self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
       return await answer(module=module, command=command, **kwargs)
 
-    self.grippers._driver.send_command = recorded  # type: ignore[assignment]
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
   def on(self, channel: int) -> str:
     shaft = self.grippers._pipettes.shaft(channel)
@@ -516,7 +697,7 @@ class TestSimulatedChannelPositions(unittest.IsolatedAsyncioTestCase):
   async def test_a_gripped_plate_hangs_between_the_channels_over_where_it_stood(self):
     centre = self.plate.get_location_wrt(self.star.deck, "c", "c", "b")
     await self.grippers.pick_up_tools()
-    await self.grippers.pick_up_resource(self.plate)
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
     back, front = self.pair()
     self.assertAlmostEqual(back.x, centre.x, places=1)
     self.assertAlmostEqual((back.y + front.y) / 2, centre.y, places=1)

@@ -2,6 +2,7 @@ import unittest
 
 from pylabrobot.resources import (
   Coordinate,
+  Lid,
   Plate,
   PlateAdapter,
   Well,
@@ -94,3 +95,33 @@ class TestComputePlateLocation(unittest.TestCase):
     well_center = plate.get_well("H1").get_location_wrt(adapter, x="c", y="c", z="b")
     self.assertAlmostEqual(well_center.x, adapter.dx + adapter.adapter_hole_size_x / 2)
     self.assertAlmostEqual(well_center.y, adapter.dy + adapter.adapter_hole_size_y / 2)
+
+  def test_lid_is_not_taken_for_a_well(self):
+    """A plate is placed on the adapter where it goes without its lid."""
+
+    plate = Plate(
+      name="plate",
+      size_x=127.76,
+      size_y=85.48,
+      size_z=14.0,
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=12,
+        num_items_y=8,
+        dx=9.5,
+        dy=6.5,
+        dz=1.0,
+        item_dx=9.0,
+        item_dy=9.0,
+        size_x=6.0,
+        size_y=6.0,
+        size_z=10.0,
+      ),
+    )
+    without_lid = _adapter.compute_plate_location(plate)
+
+    plate.assign_child_resource(
+      Lid(name="lid", size_x=127.76, size_y=85.48, size_z=8.0, nesting_z_height=6.0)
+    )
+
+    self.assertEqual(_adapter.compute_plate_location(plate), without_lid)

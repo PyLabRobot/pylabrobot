@@ -26,6 +26,7 @@ class HamiltonCoreGripperTool(HamiltonTool):
     category: str = "core_gripper_tool",
     model: Optional[str] = None,
     pick_up_location: Optional[Coordinate] = None,
+    is_conductive: Optional[bool] = None,
   ):
     """Initialize a CO-RE gripper tool.
 
@@ -42,6 +43,7 @@ class HamiltonCoreGripperTool(HamiltonTool):
       category=category,
       model=model,
       pick_up_location=pick_up_location,
+      is_conductive=is_conductive,
     )
     self.grip_line_height = grip_line_height
     self.collar_height = collar_height
@@ -83,4 +85,5 @@ def hamilton_core_gripper_tool(name: str) -> HamiltonCoreGripperTool:
     collar_height=10.0,
     model=hamilton_core_gripper_tool.__name__,
     pick_up_location=Coordinate(x=18.0, y=4.25, z=32.0),
+    is_conductive=True,
   )

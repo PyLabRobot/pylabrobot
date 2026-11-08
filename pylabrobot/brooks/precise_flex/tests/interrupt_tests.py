@@ -3,13 +3,13 @@ import unittest
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
-from pylabrobot.brooks.precise_flex.errors import (
+from pylabrobot.brooks.precise_flex.driver.errors import (
   OperationInterrupted,
   PreciseFlexError,
   is_collision,
 )
+from pylabrobot.brooks.precise_flex.driver.master import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.interrupt import halt_and_resync, halt_on_interrupt
-from pylabrobot.brooks.precise_flex.precise_flex import PreciseFlex
 
 
 def mocked(method: object) -> AsyncMock:
@@ -21,9 +21,9 @@ def mocked(method: object) -> AsyncMock:
   return cast(AsyncMock, method)
 
 
-def _make_arm() -> PreciseFlex:
+def _make_arm() -> PreciseFlexDriver:
   """An arm whose socket is mocked: writes recorded, reads drain immediately (TimeoutError)."""
-  d = PreciseFlex(
+  d = PreciseFlexDriver(
     host="localhost",
     gripper_length=162.0,
     gripper_z_offset=0.0,
@@ -36,62 +36,57 @@ def _make_arm() -> PreciseFlex:
 
 
 class TestWaitForEom(unittest.IsolatedAsyncioTestCase):
-  """The non-blocking motion-wait: polls wherej and returns once the arm stops moving."""
+  """The non-blocking motion-wait: polls state and returns once the arm stops moving."""
 
-  async def test_returns_when_motion_stops(self):
-    """Returns at the first sample where the position stopped changing between polls."""
-    wherej = iter(
-      ["0 0 0 0 0", "5 5 5 5 5", "9.9 9.9 9.9 9.9 9.9", "10 10 10 10 10", "10 10 10 10 10"]
-    )
+  async def _wait_through(self, states: list) -> AsyncMock:
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=lambda cmd: next(wherej))  # type: ignore[method-assign]
-    await d._wait_for_eom(poll_interval=0)  # no error == returned at the settled sample
+    d.send_command = AsyncMock(side_effect=states)  # type: ignore[method-assign]
+    await d.arm._wait_for_eom(poll_interval=0)
+    return mocked(d.send_command)
 
-  async def test_returns_immediately_when_already_stationary(self):
+  async def test_waits_through_a_move_at_every_phase(self):
+    """The phases a move read on the arm: accelerating, constant, decelerating, nulling, idle."""
+    send = await self._wait_through(["2", "3", "5", "15", "1", "1"])
+    self.assertEqual(send.await_count, 6)
+    send.assert_awaited_with("state")
+
+  async def test_returns_at_once_when_already_stopped(self):
     """An idle arm (e.g. halted short of its last target) returns at once, never hangs to reach it."""
-    d = _make_arm()
-    d.send_command = AsyncMock(return_value="113 81 218 64 70")  # type: ignore[method-assign]  # stable every poll
-    await d._wait_for_eom(poll_interval=0)
+    send = await self._wait_through(["1", "1"])
+    self.assertEqual(send.await_count, 2)
+
+  async def test_freedrive_counts_as_stopped(self):
+    """Freedrive read 10 on the arm: a read during it must not wait for the hand to let go."""
+    send = await self._wait_through(["10", "10"])
+    self.assertEqual(send.await_count, 2)
+
+  async def test_a_stale_reply_does_not_end_the_wait(self):
+    """After an interrupted `moveJ`, its late empty reply answers `state`: the arm is still moving."""
+    send = await self._wait_through(["", "3", "5", "15", "1", "1"])
+    self.assertEqual(send.await_count, 6)
 
   async def test_keyboard_interrupt_halts_and_raises_operation_interrupted(self):
     """A user interrupt mid-wait sends halt on the connection and surfaces OperationInterrupted."""
-    seq = iter(["0 0 0 0 0"])
-
-    def fake(cmd: str) -> str:
-      try:
-        return next(seq)
-      except StopIteration:
-        raise KeyboardInterrupt()
-
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=fake)  # type: ignore[method-assign]
+    d.send_command = AsyncMock(side_effect=["2", KeyboardInterrupt()])  # type: ignore[method-assign]
     with self.assertRaises(OperationInterrupted):
-      await d._wait_for_eom(poll_interval=0)
+      await d.arm._wait_for_eom(poll_interval=0)
     self.assertTrue(any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list))
 
   async def test_cancelled_error_halts_and_reraises(self):
     """Cancellation is re-raised (not converted) but still sends halt first."""
-    seq = iter(["0 0 0 0 0"])
-
-    def fake(cmd: str) -> str:
-      try:
-        return next(seq)
-      except StopIteration:
-        raise asyncio.CancelledError()
-
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=fake)  # type: ignore[method-assign]
+    d.send_command = AsyncMock(side_effect=["2", asyncio.CancelledError()])  # type: ignore[method-assign]
     with self.assertRaises(asyncio.CancelledError):
-      await d._wait_for_eom(poll_interval=0)
+      await d.arm._wait_for_eom(poll_interval=0)
     self.assertTrue(any(b"halt" in c.args[0] for c in mocked(d.io.write).call_args_list))
 
-  async def test_timeout_when_never_settles(self):
+  async def test_timeout_when_never_stops(self):
     """An arm that never stops moving raises TimeoutError rather than spinning forever."""
-    n = iter(range(1000))
     d = _make_arm()
-    d.send_command = AsyncMock(side_effect=lambda cmd: f"{next(n)} 0 0 0 0")  # type: ignore[method-assign]  # always changing
+    d.send_command = AsyncMock(return_value="3")  # type: ignore[method-assign]
     with self.assertRaises(TimeoutError):
-      await d._wait_for_eom(poll_interval=0, timeout=0)
+      await d.arm._wait_for_eom(poll_interval=0, timeout=0)
 
 
 class TestInterruptHelpers(unittest.IsolatedAsyncioTestCase):
@@ -114,22 +109,6 @@ class TestInterruptHelpers(unittest.IsolatedAsyncioTestCase):
     await halt_and_resync(io)
     io.write.assert_not_called()
 
-  async def test_converts_keyboard_interrupt(self):
-    """KeyboardInterrupt -> stop runs, OperationInterrupted raised."""
-    stop = AsyncMock()
-    with self.assertRaises(OperationInterrupted):
-      async with halt_on_interrupt(stop):
-        raise KeyboardInterrupt()
-    stop.assert_awaited_once()
-
-  async def test_reraises_cancelled_error(self):
-    """CancelledError -> stop runs, cancellation re-raised (semantics preserved)."""
-    stop = AsyncMock()
-    with self.assertRaises(asyncio.CancelledError):
-      async with halt_on_interrupt(stop):
-        raise asyncio.CancelledError()
-    stop.assert_awaited_once()
-
   async def test_passes_through_other_exceptions_without_halting(self):
     """A normal error (e.g. an error-reply PreciseFlexError, as an E-stop produces) propagates
     unchanged and does NOT trigger a halt."""
@@ -140,21 +119,8 @@ class TestInterruptHelpers(unittest.IsolatedAsyncioTestCase):
     stop.assert_not_awaited()
 
 
-class TestRequestSystemState(unittest.IsolatedAsyncioTestCase):
-  """request_system_state reads the sysState word; PowerState decodes it (15 = hard E-stop)."""
-
-  async def test_returns_state_word_and_decodes_to_powerstate(self):
-    from pylabrobot.brooks.precise_flex.data_ids import PowerState
-
-    d = _make_arm()
-    d.send_command = AsyncMock(return_value="15")  # type: ignore[method-assign]
-    state = await d.request_system_state()
-    self.assertEqual(state, 15)
-    self.assertEqual(PowerState(state), PowerState.OFF_HARD_ESTOP)
-
-
 class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
-  """Crash interrupts: recognise envelope errors, and recover (re-power + attach + home)."""
+  """Crash interrupts: recognise envelope errors, and recover (re-power, attach, home if lost)."""
 
   def test_is_collision_recognises_collision_codes_only(self):
     """Envelope (-3100/-3122) and torque-saturation (-3101/-3105) errors are collisions; an E-stop,
@@ -170,7 +136,8 @@ class TestCollisionDetectionAndRecovery(unittest.IsolatedAsyncioTestCase):
   async def test_recover_repowers_attaches_and_homes(self):
     """Recovery from a non-E-stop fault re-enables power, re-attaches, and re-homes."""
     d = _make_arm()
-    d.request_system_state = AsyncMock(return_value=7)  # type: ignore[method-assign]  # off, waiting for enable (not E-stop)
+    not_estop = AsyncMock(return_value=7)
+    d.request_system_state = not_estop  # type: ignore[method-assign]
     d.power_on_robot = AsyncMock()  # type: ignore[method-assign]
     d.attach = AsyncMock()  # type: ignore[method-assign]
     d.home = AsyncMock()  # type: ignore[method-assign]

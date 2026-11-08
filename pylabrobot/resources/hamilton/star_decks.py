@@ -139,7 +139,7 @@ class HamiltonSTARDeck(HamiltonDeck):
           model="hamilton_teaching_needle_rack",
         )
         waste_block.assign_child_resource(
-          teaching_tip_rack, location=Coordinate(x=5.9, y=346.1, z=0)
+          teaching_tip_rack, location=Coordinate(x=6.75, y=346.5, z=0)
         )
     else:
       if with_trash:

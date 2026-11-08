@@ -175,7 +175,9 @@ class XPeelBackend(PeelerBackend):
     """
     self.logger.debug("Requesting status...")
     resp = await self._send_command("*stat")
-    return tuple([int(x) for x in resp[-1].split(":")[1].split(",")])  # type: ignore
+    # The ready line carries the description _send_command appends: "*ready:00,00,00 [No error]".
+    first, second, third = (int(x) for x in resp[-1].split(":", 1)[1].split()[0].split(","))
+    return first, second, third
 
   async def get_version(self):
     """Request firmware version."""
@@ -211,7 +213,9 @@ class XPeelBackend(PeelerBackend):
       f"Running peel with begin_location={begin_location}, fast={fast}, adhere_time={adhere_time}..."
     )
 
-    if adhere_time not in {2.5, 5.0, 7.5, 10.0}:
+    # The peeler takes the adhere time as a code: 1-4 for 2.5, 5.0, 7.5 and 10.0 seconds.
+    adhere_time_code = {2.5: 1, 5.0: 2, 7.5: 3, 10.0: 4}.get(adhere_time)
+    if adhere_time_code is None:
       raise ValueError("adhere_time must be one of: 2.5, 5.0, 7.5, 10.0")
     if begin_location not in {-2, 0, 2, 4}:
       raise ValueError("begin_location must be one of: -2, 0, 2, 4")
@@ -229,7 +233,7 @@ class XPeelBackend(PeelerBackend):
 
     if parameter_set not in range(1, 10):
       raise ValueError("parameter_set must be in 1-9")
-    cmd = f"*xpeel:{parameter_set}{adhere_time}"
+    cmd = f"*xpeel:{parameter_set}{adhere_time_code}"
     return await self._send_command(
       cmd,
       expect_ack=True,
