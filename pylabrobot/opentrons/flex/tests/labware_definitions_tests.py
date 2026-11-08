@@ -335,11 +335,11 @@ class TestBuildPlateDefinition(unittest.TestCase):
 class TestBuildTipRackDefinition(unittest.TestCase):
   """build_tip_rack_definition maps rack geometry and the prototype tip."""
 
-  def test_ot2_defaults_keep_diagonal_diameter_and_empty_group_metadata(self):
+  def test_ot2_uses_spot_diameter_and_empty_group_metadata(self):
     rack = _tip_rack()
     definition = build_tip_rack_definition(rack, rack.get_item("A1").get_tip(), "custom")
 
-    self.assertAlmostEqual(definition["wells"]["A1"]["diameter"], 7.0710678118654755)
+    self.assertAlmostEqual(definition["wells"]["A1"]["diameter"], 5.0)
     self.assertEqual(definition["metadata"]["displayName"], rack.name)
     self.assertEqual(definition["parameters"]["loadName"], "custom")
     self.assertEqual(definition["groups"][0]["metadata"], {})

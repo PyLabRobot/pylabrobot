@@ -1,6 +1,5 @@
 """PLR labware conversion and bindings scoped to one Opentrons run."""
 
-import math
 import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Optional, Tuple, cast
@@ -53,8 +52,8 @@ def build_tip_rack_definition(
 ) -> Dict[str, Any]:
   """Build a tip-rack definition from PLR geometry.
 
-  Defaults to OT-2's diagonal tip-spot diameter and empty group metadata.
-  ``for_flex`` uses the spot width as the diameter and adds group metadata.
+  The tip spot supplies the well diameter and depth. A spot with no depth
+  uses the prototype tip's length. ``for_flex`` adds group metadata.
   Rotated racks or spots and tips seated below the rack's base are rejected.
   If omitted, the tip comes from A1 and the load name is a random UUID.
   ``grip_distance_from_top`` adds a gripper height to the definition.
@@ -111,17 +110,12 @@ def build_tip_rack_definition(
     },
     "wells": {
       well_names[child.name]: {
-        "depth": tip.get_size_z(),
+        "depth": child.get_size_z() or tip.get_size_z(),
         "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
         "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
         "z": cast(Coordinate, child.location).z,
         "shape": "circular",
-        "diameter": child.get_size_x()
-        if for_flex
-        else math.hypot(
-          child.get_absolute_size_x(),
-          child.get_absolute_size_y(),
-        ),
+        "diameter": child.get_size_x(),
         "totalLiquidVolume": tip.maximal_volume,
       }
       for child in tip_spots
