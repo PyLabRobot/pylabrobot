@@ -77,7 +77,12 @@ class Carrier(Resource, Generic[S]):
     super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def assign_resource_to_site(self, resource: Resource, spot: int):
-    if self.sites[spot].resource is not None:
+    # A stack standing on the site takes the resource on top.
+    site_resource = self.sites[spot].resource
+    if isinstance(site_resource, ResourceStack):
+      site_resource.assign_child_resource(resource=resource)
+      return
+    if site_resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
     self.sites[spot].assign_child_resource(resource)
 
