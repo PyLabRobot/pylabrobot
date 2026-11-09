@@ -1,0 +1,619 @@
+"""The Mantis driver: the link on the FTDI's interface B, discovery and the device reads.
+
+Every command sent here reads the device; the features in ``features/`` send the commands that
+act. Reads return the device's units. The motor and pressure reads arrive with the arm and pump
+features.
+"""
+
+import asyncio
+import json
+import logging
+import struct
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from pylabrobot.io.ftdi import FTDI
+
+from .configuration import (
+  FITTED_FIELDS,
+  RECORDING_MANTIS_V3,
+  RECORDING_MANTIS_V4,
+  UNIT_BLOCKS,
+  DeviceConfiguration,
+  compute_generation,
+  configuration_to_json,
+  read_configuration,
+)
+from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
+from .errors import (
+  CommandRefusedError,
+  FrameError,
+  MantisConfigurationError,
+  MantisConnectionLostError,
+  MantisNotConnectedError,
+  MantisTimeoutError,
+)
+from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
+from .features.rfid import RFID_BAUD_RATE, RFID_FTDI_INTERFACE, Rfid, _initialize_rfid_module
+from .framing import (
+  ABSOLUTE_POSITION_SENSOR_BOARD,
+  FIRST_EVENT_CODE,
+  LC3_BOARD,
+  MOTION_BOARD,
+  PRESSURE_BOARD,
+  build_frame,
+  decode_string,
+  parse_frame,
+  split_frames,
+)
+from .oem_config import _load_unit_configuration
+
+logger = logging.getLogger(__name__)
+
+MOTORS = (0, 1, 2)
+
+
+class MantisDriver:
+  """Talks to a Mantis: one command in flight, events logged as they come."""
+
+  def _build_io(self, *, device_id: Optional[str]) -> FTDI:
+    """Build the link to the Mantis ``device_id`` names, or to the first one found."""
+    return FTDI(
+      human_readable_device_name="Formulatrix Mantis",
+      device_id=device_id,
+      vid=0x0403,
+      pid=0x6010,
+      interface_select=2,  # interface B carries the command link
+    )
+
+  def _build_rfid_io(self, *, device_id: Optional[str]) -> Optional[FTDI]:
+    """Build the link to the RFID reader, interface A of the same FTDI bridge."""
+    return FTDI(
+      human_readable_device_name="Formulatrix Mantis RFID reader",
+      device_id=device_id,
+      vid=0x0403,
+      pid=0x6010,
+      interface_select=RFID_FTDI_INTERFACE,
+    )
+
+  def __init__(
+    self,
+    *,
+    device_id: Optional[str] = None,
+    io: Optional[FTDI] = None,
+    rfid_io: Optional[FTDI] = None,
+    name: str = "Mantis",
+    declared_configuration_json: Optional[str] = None,
+    oem_config_directory: Optional[str] = None,
+  ):
+    """
+    Args:
+      device_id: the FTDI serial number. None uses the first Mantis found.
+      io: an already-built ``FTDI`` for interface B, used instead of building one.
+      rfid_io: an already-built ``FTDI`` for interface A, the RFID reader. None builds one for
+        ``device_id``, unless ``io`` is given: then there is no RFID reader.
+      name: the device name, heading its log messages.
+      declared_configuration_json: a file ``save_configuration`` wrote. Setup refuses a device
+        that disagrees with its ``device`` block on what is fitted (``FITTED_FIELDS``).
+      oem_config_directory: the unit's vendor ``Data/Device/Configs`` folder, read at every setup.
+
+    The unit's own values (``UNIT_BLOCKS``) come from ``oem_config_directory`` and the declared
+    file; where both have a block, they must agree. A block neither has comes from the
+    generation's recording, with a warning: another unit's values, less accurate on this one.
+    """
+    self.io: FTDI = io if io is not None else self._build_io(device_id=device_id)
+    self.name = name
+    self.declared_configuration_json = declared_configuration_json
+    self.oem_config_directory = oem_config_directory
+    self._unit_blocks: Dict[str, Dict[str, Any]] = {}
+    self._unit_blocks_from_recording: Set[str] = set()
+    self.configuration = DeviceConfiguration()
+    self._default_read_timeout = 5.0  # PyLabRobot design choice; replies take under 0.1 s
+    self._lock = asyncio.Lock()
+    self._packet_number = 0
+    self._buffer = bytearray()
+    self._pending: Optional[Tuple[int, int, "asyncio.Future[Tuple[int, bytes]]"]] = None
+    self._event_waiters: List[Tuple[int, int, "asyncio.Future[bytes]"]] = []
+    self._reader: Optional["asyncio.Task[None]"] = None
+    self.rfid_io: Optional[FTDI] = (
+      rfid_io if rfid_io is not None or io is not None else self._build_rfid_io(device_id=device_id)
+    )
+    self.plate_clamp: Optional[PlateClamp] = None
+    self.rfid: Optional[Rfid] = None
+    self._rfid_link_open = False
+    self._connected = False
+
+  @property
+  def default_read_timeout(self) -> float:
+    """Seconds one attempt of a command waits for its reply when ``timeout`` is None."""
+    return self._default_read_timeout
+
+  @default_read_timeout.setter
+  def default_read_timeout(self, value: float) -> None:
+    if value <= 0:
+      raise ValueError(f"default_read_timeout must be positive, got {value}")
+    self._default_read_timeout = value
+
+  # -- link -----------------------------------------------------------------
+
+  async def _set_up_line(self) -> None:
+    """Reset the bridge and set 115 200 baud, 8N1, RTS/CTS, RTS on; purge both buffers."""
+    await self.io.usb_reset()
+    await self.io.set_baudrate(baudrate=115_200)
+    await self.io.set_line_property(bits=8, stopbits=0, parity=0)
+    await self.io.set_flowctrl(flowctrl=0x100)  # RTS/CTS
+    await self.io.set_rts(level=True)
+    await self.io.set_latency_timer(latency=2)  # PyLabRobot design choice, in ms
+    await self.io.usb_purge_rx_buffer()
+    await self.io.usb_purge_tx_buffer()
+
+  def _handle_event(self, *, board: int, code: int, payload: bytes) -> None:
+    """Log an event and hand it to every waiter for its board and code."""
+    logger.info("[%s] event 0x%04x from board %d: %s", self.name, code, board, payload.hex())
+    waiting = self._event_waiters
+    self._event_waiters = []
+    for waiter_board, waiter_code, future in waiting:
+      if (waiter_board, waiter_code) != (board, code):
+        self._event_waiters.append((waiter_board, waiter_code, future))
+      elif not future.done():
+        future.set_result(payload)
+
+  def _handle_frame(self, *, frame: bytes) -> None:
+    """Route one device frame: an event by its board and code, a reply to the command it echoes."""
+    packet_number, board, code, payload = parse_frame(frame=frame)
+    # The code is an int16: from 0x0200 an event, negative (0x8000 up) a reply's device error.
+    if FIRST_EVENT_CODE <= code < 0x8000:
+      self._handle_event(board=board, code=code, payload=payload)
+      return
+    if self._pending is not None:
+      pending_packet_number, pending_board, future = self._pending
+      if (pending_packet_number, pending_board) == (packet_number, board) and not future.done():
+        future.set_result((code, payload))
+        return
+    logger.debug("[%s] unmatched reply ignored: %s", self.name, frame.hex())
+
+  async def _read_frames(self) -> None:
+    """Read the link until cancelled, routing every frame; runs from setup to stop.
+
+    A failed read ends it: the failure is logged and handed to the command in flight and to every
+    event waiter.
+    """
+    while True:
+      try:
+        data = await self.io.read(num_bytes=1024)
+      except Exception as error:
+        logger.error("[%s] reading the link failed: %r", self.name, error)
+        lost = MantisConnectionLostError(f"{self.name}: reading the link failed: {error!r}")
+        lost.__cause__ = error
+        if self._pending is not None:
+          _, _, future = self._pending
+          if not future.done():
+            future.set_exception(lost)
+        waiting, self._event_waiters = self._event_waiters, []
+        for _, _, waiter in waiting:
+          if not waiter.done():
+            waiter.set_exception(lost)
+        raise
+      if not data:
+        await asyncio.sleep(0.01)  # PyLabRobot design choice: poll every 10 ms
+        continue
+      self._buffer.extend(data)
+      for frame in split_frames(buffer=self._buffer):
+        try:
+          self._handle_frame(frame=frame)
+        except FrameError as error:
+          logger.warning("[%s] frame dropped: %s", self.name, error)
+
+  async def _write_frame(self, *, frame: bytes) -> None:
+    """Write one frame to the link.
+
+    Raises:
+      MantisNotConnectedError: if the driver is not set up.
+      MantisConnectionLostError: if reading the link has failed.
+    """
+    if self._reader is None:
+      raise MantisNotConnectedError(f"{self.name} is not set up; call setup() first")
+    if self._reader.done():
+      failure = None if self._reader.cancelled() else self._reader.exception()
+      raise MantisConnectionLostError(
+        f"{self.name}: reading the link has failed; call setup() again"
+      ) from failure
+    await self.io.write(frame)
+
+  async def _send_command(
+    self,
+    *,
+    board: int,
+    command: int,
+    payload: bytes = b"",
+    timeout: Optional[float] = None,
+    attempts: int = 1,
+  ) -> bytes:
+    """Send one command and return its reply's payload; one command is in flight at a time.
+
+    A command is sent once unless ``attempts`` says otherwise; a read passes ``attempts=3`` and is
+    resent with the same packet number, as the device answers a resend like the first send.
+
+    Args:
+      board: the board the command goes to.
+      command: the command number.
+      payload: the command's arguments.
+      timeout: seconds per attempt; None uses ``default_read_timeout``.
+      attempts: how often the command is sent before giving up.
+
+    Raises:
+      MantisNotConnectedError: if the driver is not set up, or it stopped.
+      MantisConnectionLostError: if reading the link has failed.
+      MantisTimeoutError: if no attempt got a reply.
+      CommandRefusedError: if the reply's status is not 0.
+    """
+    timeout = self.default_read_timeout if timeout is None else timeout
+    async with self._lock:
+      packet_number = self._packet_number
+      self._packet_number = (self._packet_number + 1) & 0xFFFF
+      frame = build_frame(
+        packet_number=packet_number, board=board, command=command, payload=payload
+      )
+      future: "asyncio.Future[Tuple[int, bytes]]" = asyncio.get_running_loop().create_future()
+      self._pending = (packet_number, board, future)
+      try:
+        for attempt in range(attempts):
+          if attempt > 0:
+            logger.warning(
+              "[%s] no reply to board %d command %d; resending", self.name, board, command
+            )
+          await self._write_frame(frame=frame)
+          try:
+            code, reply = await asyncio.wait_for(asyncio.shield(future), timeout)
+            break
+          except asyncio.TimeoutError:
+            continue
+        else:
+          raise MantisTimeoutError(
+            f"{self.name}: no reply to board {board} command {command} after {attempts} "
+            f"attempt(s) of {timeout} s"
+          )
+      finally:
+        self._pending = None
+    if code != 0:
+      status = code - 0x10000 if code >= 0x8000 else code
+      message = f"{self.name}: board {board} refused command {command} with status {status}"
+      if status < 0:
+        try:
+          message += f": {decode_string(payload=reply)}"
+        except (FrameError, UnicodeDecodeError):
+          message += f" ({reply.hex()})"
+      raise CommandRefusedError(message, board=board, command=command, status=status)
+    return reply
+
+  def _expect_event(self, *, board: int, code: int) -> "asyncio.Future[bytes]":
+    """Register a waiter for the next event with ``board`` and ``code``, before the command that
+    causes it is sent; pass it to ``_wait_for_event``."""
+    future: "asyncio.Future[bytes]" = asyncio.get_running_loop().create_future()
+    self._event_waiters.append((board, code, future))
+    return future
+
+  async def _wait_for_event(self, *, waiter: "asyncio.Future[bytes]", timeout: float) -> bytes:
+    """Wait for the event ``waiter`` was registered for and return its payload.
+
+    Raises:
+      MantisTimeoutError: if the event does not come within ``timeout`` seconds.
+      MantisNotConnectedError: if the driver stops first.
+      MantisConnectionLostError: if reading the link fails first.
+    """
+    try:
+      return await asyncio.wait_for(waiter, timeout)
+    except asyncio.TimeoutError as error:
+      raise MantisTimeoutError(f"{self.name}: no event within {timeout} s") from error
+    finally:
+      self._event_waiters = [
+        (board, code, future) for board, code, future in self._event_waiters if future is not waiter
+      ]
+
+  # -- device reads ---------------------------------------------------------
+
+  def _check_index(self, *, name: str, value: int, allowed: Tuple[int, ...]) -> None:
+    """Raise ``ValueError`` if ``value`` is not one of ``allowed``, before anything is sent."""
+    if value not in allowed:
+      raise ValueError(f"{name} must be one of {allowed}, got {value}")
+
+  async def request_firmware_version(self, *, board: int = MOTION_BOARD) -> str:
+    """The firmware version of a board.
+
+    Args:
+      board: 0 (motion), 10 (pressure), 11 (absolute position sensors) or 12 (LC3).
+    """
+    self._check_index(
+      name="board",
+      value=board,
+      allowed=(MOTION_BOARD, PRESSURE_BOARD, ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD),
+    )
+    return decode_string(payload=await self._send_command(board=board, command=1, attempts=3))
+
+  async def request_name(self) -> str:
+    """The name the motion firmware reports, ``LiquidHandler`` on the v4 we have run.
+
+    Whether it differs between units is not known; it does not identify this Mantis.
+    """
+    return decode_string(
+      payload=await self._send_command(board=MOTION_BOARD, command=2, attempts=3)
+    )
+
+  async def request_motor_limits(self, *, motor: int) -> Tuple[float, float]:
+    """A motor's (lower, upper) limit.
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=10, payload=struct.pack("<h", motor), attempts=3
+    )
+    lower, upper = struct.unpack_from("<dd", reply)
+    return lower, upper
+
+  # -- discovery and setup --------------------------------------------------
+
+  async def _request_configuration(self) -> DeviceConfiguration:
+    """Read the firmware versions and the motor limits off the device.
+
+    Only the motion board must answer. Each other board gets one attempt; one that times out,
+    refuses or answers a malformed version is absent, not a fault.
+    """
+    firmware_versions: Dict[int, Optional[str]] = {
+      MOTION_BOARD: await self.request_firmware_version(board=MOTION_BOARD)
+    }
+    for board in (PRESSURE_BOARD, ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD):
+      try:
+        reply = await self._send_command(board=board, command=1, attempts=1)
+        firmware_versions[board] = decode_string(payload=reply)
+      except (TimeoutError, CommandRefusedError, FrameError, UnicodeDecodeError) as error:
+        logger.info("[%s] board %d taken as absent: %r", self.name, board, error)
+        firmware_versions[board] = None
+    return DeviceConfiguration(
+      generation=compute_generation(firmware_versions=firmware_versions),
+      firmware_versions=firmware_versions,
+      motor_limits={motor: await self.request_motor_limits(motor=motor) for motor in MOTORS},
+    )
+
+  def _discover_features(self) -> None:
+    """Build the features the configuration says are fitted, with the unit's values.
+
+    A feature already built is kept.
+
+    Raises:
+      MantisConfigurationError: if the ``plate_clamp`` block is malformed.
+    """
+    if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
+      levels: Optional[Dict[int, Tuple[float, int]]] = None
+      block = self._unit_blocks.get("plate_clamp")
+      if block is not None:
+        try:
+          levels = {
+            int(level): (float(pwm), int(timeout_ms))
+            for level, (pwm, timeout_ms) in block["levels"].items()
+          }
+        except (KeyError, TypeError, ValueError) as error:
+          raise MantisConfigurationError(f"malformed plate_clamp block: {error!r}") from error
+      self.plate_clamp = PlateClamp(driver=self, levels=levels)
+
+  def _check_declared_configuration(self) -> None:
+    """Compare what is fitted with the declared configuration's ``device`` block, if there is one.
+
+    Raises:
+      MantisConfigurationError: if the device and the declaration disagree on what is fitted.
+    """
+    if self.declared_configuration_json is None:
+      return
+    declared = read_configuration(path=self.declared_configuration_json).get("device")
+    if declared is None:
+      return
+    answered = configuration_to_json(configuration=self.configuration)
+    differences = [
+      f"{field}: declared {declared.get(field)!r}, device {answered[field]!r}"
+      for field in FITTED_FIELDS
+      if declared.get(field) != answered[field]
+    ]
+    # A board the declaration lists with a version must answer; versions are not compared.
+    differences += [
+      f"board {board}: declared {version!r}, device did not answer"
+      for board, version in declared.get("firmware_versions", {}).items()
+      if version is not None and answered["firmware_versions"].get(board) is None
+    ]
+    if differences:
+      raise MantisConfigurationError(
+        f"{self.name} does not match {self.declared_configuration_json}: " + "; ".join(differences)
+      )
+
+  async def discover(self) -> None:
+    """Read the configuration into ``configuration``, check it against the declared one, then
+    build the features it lists, and the RFID reader if it answers on interface A.
+
+    The reader is set up again after every opening of the link; one that fails is absent.
+
+    Raises:
+      MantisConfigurationError: if the device does not match the declared configuration, the
+        unit's folder and declared file disagree on a block, or a block is malformed.
+    """
+    self.configuration = await self._request_configuration()
+    self._check_declared_configuration()
+    # The unit's blocks: its folder and its declared file must agree; a recording fills the rest.
+    folder = (
+      _load_unit_configuration(oem_config_directory=self.oem_config_directory)
+      if self.oem_config_directory is not None
+      else {}
+    )
+    declared = (
+      read_configuration(path=self.declared_configuration_json)
+      if self.declared_configuration_json is not None
+      else {}
+    )
+    recording_path = (
+      RECORDING_MANTIS_V4 if self.configuration.generation == "v4" else RECORDING_MANTIS_V3
+    )
+    recording = read_configuration(path=recording_path)
+    differences = [
+      f"{block}: declared {declared[block]!r}, folder {folder[block]!r}"
+      for block in UNIT_BLOCKS
+      if block in folder
+      and block in declared
+      and json.loads(json.dumps(folder[block])) != json.loads(json.dumps(declared[block]))
+    ]
+    if differences:
+      raise MantisConfigurationError(
+        f"{self.oem_config_directory} and {self.declared_configuration_json} disagree: "
+        + "; ".join(differences)
+      )
+    self._unit_blocks, self._unit_blocks_from_recording = {}, set()
+    for block in UNIT_BLOCKS:
+      if block in folder or block in declared:
+        self._unit_blocks[block] = folder[block] if block in folder else declared[block]
+      elif block in recording:
+        self._unit_blocks[block] = recording[block]
+        self._unit_blocks_from_recording.add(block)
+        logger.warning(
+          "[%s] %s: none of this unit's values given; using %s's, less accurate on this unit",
+          self.name,
+          block,
+          recording_path,
+        )
+    self._discover_features()
+    if self.rfid is None and self.rfid_io is not None and self._rfid_link_open:
+      try:
+        await _initialize_rfid_module(io=self.rfid_io)
+      except Exception as error:
+        logger.info("[%s] no RFID reader: %r", self.name, error)
+        return
+      slot_to_antenna: Optional[Dict[int, int]] = None
+      multiplexer_delay_raw = 0.0  # unused while slot_to_antenna is None: every read refuses
+      rfid_block = self._unit_blocks.get("rfid")
+      if rfid_block is not None:
+        try:
+          slot_to_antenna = {
+            int(slot): int(antenna) for slot, antenna in rfid_block["slot_to_antenna"].items()
+          }
+          multiplexer_delay_raw = float(rfid_block["multiplexer_delay_raw"])
+        except (KeyError, TypeError, ValueError) as error:
+          raise MantisConfigurationError(f"malformed rfid block: {error!r}") from error
+      self.rfid = Rfid(
+        driver=self, slot_to_antenna=slot_to_antenna, multiplexer_delay_raw=multiplexer_delay_raw
+      )
+
+  def _check_firmware_compatibility(self) -> None:
+    """Log a warning if the boards' firmware versions are not confirmed for the generation."""
+    generation = self.configuration.generation
+    confirmed = CONFIRMED_FIRMWARE_VERSIONS.get(generation or "", ())
+    if self.configuration.firmware_versions not in confirmed:
+      logger.warning(
+        "[%s] firmware %s on a Mantis %s is not confirmed; please report how it works",
+        self.name,
+        self.configuration.firmware_versions,
+        generation,
+      )
+
+  def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
+    """Write what this device reported to a file, to be declared later
+    (``declared_configuration_json``), with the unit's blocks; none taken from a recording.
+
+    Args:
+      path: where to write it.
+      indent: how far to indent the JSON, or None to write it on one line.
+
+    Raises:
+      MantisNotConnectedError: if nothing has been read off the device yet.
+    """
+    if self.configuration.generation is None:
+      raise MantisNotConnectedError("nothing read off the device yet; call `setup` first")
+    saved: Dict[str, Any] = {"device": configuration_to_json(configuration=self.configuration)}
+    for block, values in self._unit_blocks.items():
+      if block not in self._unit_blocks_from_recording:
+        saved[block] = values
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(saved, f, indent=indent)
+      f.write("\n")
+
+  async def _open(self) -> None:
+    """Open the link, set up the line and start reading it; then open the RFID reader's link."""
+    await self.io.setup()
+    await self._set_up_line()
+    self._buffer.clear()
+    self._reader = asyncio.create_task(self._read_frames())
+    logger.info("[%s] connected to FTDI %s", self.name, self.io.device_id)
+    if self.rfid_io is not None:
+      # The reader is optional: a link that does not open leaves it absent, not setup failed.
+      try:
+        await self.rfid_io.setup()
+        await self.rfid_io.set_baudrate(baudrate=RFID_BAUD_RATE)
+        await self.rfid_io.set_line_property(bits=8, stopbits=0, parity=0)  # 8N1
+        self._rfid_link_open = True
+      except Exception:
+        logger.warning("[%s] the RFID reader's link did not open", self.name, exc_info=True)
+
+  async def _close(self) -> None:
+    """Stop reading the link and close it, then close the RFID reader's link."""
+    reader, self._reader = self._reader, None
+    if reader is not None:
+      reader.cancel()
+      try:
+        await reader
+      except asyncio.CancelledError:
+        pass
+      except Exception:
+        logger.warning("[%s] the link reader had failed", self.name, exc_info=True)
+    self.rfid = None  # the reader is set up again when the link reopens
+    rfid_link_open, self._rfid_link_open = self._rfid_link_open, False
+    try:
+      await self.io.stop()
+    finally:
+      if self.rfid_io is not None and rfid_link_open:
+        try:
+          await self.rfid_io.stop()
+        except Exception:
+          logger.warning("[%s] the RFID reader's link did not close", self.name, exc_info=True)
+
+  async def stop(self) -> None:
+    """Fail the command in flight and every event waiter, release the plate clamp, stop reading
+    the link and close it. Each step runs whether or not the one before it succeeded."""
+    stopped = f"{self.name} stopped"
+    if self._pending is not None:
+      _, _, future = self._pending
+      if not future.done():
+        future.set_exception(MantisNotConnectedError(stopped))
+    waiting, self._event_waiters = self._event_waiters, []
+    for _, _, waiter in waiting:
+      if not waiter.done():
+        waiter.set_exception(MantisNotConnectedError(stopped))
+    if self.plate_clamp is not None and self._connected:
+      try:
+        if await self.plate_clamp.request_state(attempts=1) != UNCLAMPING_DONE:
+          await self.plate_clamp.unlock()
+      except Exception:
+        logger.warning("[%s] could not release the plate clamp", self.name, exc_info=True)
+    self._connected = False
+    await self._close()
+
+  async def setup(self) -> None:
+    """Open the link if it is not open, read the device's configuration and check it.
+
+    Raises:
+      MantisConfigurationError: if the device does not match the declared configuration.
+    """
+    if self._reader is not None and self._reader.done():
+      await self.stop()  # reading the link failed: close it before opening it again
+    try:
+      if not self._connected:
+        await self._open()
+        self._connected = True
+      await self.discover()
+    except BaseException:
+      try:
+        await self.stop()
+      except Exception:
+        logger.warning("[%s] stop after a failed setup failed", self.name, exc_info=True)
+      raise
+    self._check_firmware_compatibility()
+    logger.info(
+      "[%s] generation %s, firmware %s",
+      self.name,
+      self.configuration.generation,
+      self.configuration.firmware_versions,
+    )

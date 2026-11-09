@@ -428,13 +428,26 @@
   },
   {
     "id": "formulatrix-mantis",
+    "needs_hardware_testing": true,
     "vendor": "Formulatrix",
     "name": "Mantis",
+    "models": [
+      {
+        "name": "v3"
+      },
+      {
+        "name": "v4"
+      }
+    ],
     "kind": "bulk dispenser",
     "capabilities": [
       "dispensing"
     ],
     "status": "wip",
+    "api": "pylabrobot.formulatrix.Mantis",
+    "api_version": "v1",
+    "code_slug": "formulatrix/mantis",
+    "doc_slug": "formulatrix/mantis/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/"
   },
