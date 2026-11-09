@@ -1413,8 +1413,8 @@ class HamiltonSTARDeck extends Deck {
       })
     );
 
-    // Draw vertical rails as lines
-    for (let i = 0; i < this.num_tracks; i++) {
+    // Draw vertical rails as lines: each track's left edge, then the last track's right edge
+    for (let i = 0; i <= this.num_tracks; i++) {
       const railBottomTickHeight = 10;
       const rail = new Konva.Line({
         points: [
@@ -1430,7 +1430,7 @@ class HamiltonSTARDeck extends Deck {
 
       // Add a text label every 5 rails. Rails are 1-indexed.
       // Keep in mind that the stage is flipped vertically.
-      if ((i + 1) % 5 === 0 || i === 0) {
+      if (i < this.num_tracks && ((i + 1) % 5 === 0 || i === 0)) {
         const railLabel = new Konva.Text({
           x: 100 + i * 22.5 + 11.25, // center of rail (between lines)
           y: 50,

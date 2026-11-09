@@ -5,7 +5,7 @@ Skipped where there is no Chrome to drive, so it is a no-op on a computer withou
 
 import unittest
 
-from pylabrobot.resources.hamilton import STARLetDeck
+from pylabrobot.resources.hamilton import STARDeck
 from pylabrobot.visualizer import Visualizer
 from pylabrobot.visualizer3D.browser_tests import CHROME, Browser
 
@@ -15,20 +15,23 @@ class HamiltonDeckBrowserTests(unittest.IsolatedAsyncioTestCase):
   """A Hamilton deck, served by a real `Visualizer` to a real page."""
 
   async def test_a_star_deck_draws_its_tracks(self) -> None:
-    """One rail line per serialized track, numbered, and shown in the attribute panel."""
-    vis = Visualizer(STARLetDeck(), ws_port=0, fs_port=0, open_browser=False)
+    """One line per track plus one closing the last, numbered, and shown in the attribute panel."""
+    vis = Visualizer(STARDeck(), ws_port=0, fs_port=0, open_browser=False)
     await vis.setup()
     self.addAsyncCleanup(vis.stop)
     async with Browser() as browser:
       await browser.open(f"http://{vis.host}:{vis.fs_port}/")
-      await browser.settle("document.readyState === 'complete'", 30)
+      try:
+        await browser.settle("document.readyState === 'complete'", 30)
+      except AssertionError:
+        self.skipTest("a CDN the page loads from has not answered after 30 s")
       if not await browser.evaluate("typeof Konva !== 'undefined'"):
         self.skipTest("the page loads Konva from a CDN, which cannot be reached from here")
       await browser.settle("getDeck()?.mainShape !== undefined", 30)
       labels = await browser.evaluate(
         "getDeck().mainShape.find('Text').map((t) => Number(t.text()))"
       )
-      self.assertEqual(labels, [1, 5, 10, 15, 20, 25, 30])
-      self.assertEqual(await browser.evaluate("getDeck().mainShape.find('Line').length"), 30)
+      self.assertEqual(labels, [1, *range(5, 55, 5)])
+      self.assertEqual(await browser.evaluate("getDeck().mainShape.find('Line').length"), 55)
       panel = await browser.evaluate("getUmlAttributes(getDeck())")
-      self.assertIn({"key": "num_tracks", "value": 30}, panel)
+      self.assertIn({"key": "num_tracks", "value": 54}, panel)
