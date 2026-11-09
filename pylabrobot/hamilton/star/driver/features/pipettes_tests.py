@@ -2804,9 +2804,11 @@ class TestNestedTipRacksGroundTruth(unittest.IsolatedAsyncioTestCase):
           )
           ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
           deck.assign_child_resource(ntr_carrier, location=Coordinate(752.5, 63, 100))
-          holder = module if holder_name == "ntr4_module" else ntr_carrier.sites[site]
           rack = rack_fn(f"{holder_name}_{size}")
-          holder.assign_child_resource(rack)
+          if holder_name == "ntr4_module":
+            module.assign_child_resource(resource=rack)
+          else:
+            ntr_carrier[site] = rack
           sent.clear()
 
           spots = rack["A1:H1"]
