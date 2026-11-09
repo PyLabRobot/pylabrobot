@@ -283,8 +283,8 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
       [
         "X0XPla08204lr3lw7",
         "C0JYyp4050 3783 3516 3249 2982 2715 1480 0805",
-        "P7ZHzb27685za20079zv11652zr075zu05593cg001cf000",
-        "P8ZHzb27685za20079zv11652zr075zu05593cg001cf000",
+        "P7ZHzb27685za20079zv11652zr019zu03729cg015cf000",
+        "P8ZHzb27685za20079zv11652zr019zu03729cg015cf000",
         "C0JZzp3347 3347 3347 3347 3347 3347 2750 2750",
       ],
     )
@@ -340,7 +340,7 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
       await self.check(gripper_y_margin=9, enable_recovery=False)
     self.assertEqual(
       [command for command in self.sent if "ZH" in command or "ZA" in command][-2:],
-      ["P7ZHzb28152za20079zv11652zr075zu05593cg001cf000", "C0ZA"],
+      ["P7ZHzb28152za20079zv11652zr019zu03729cg015cf000", "C0ZA"],
     )
 
   async def test_recovery_checks_again_on_yes_and_aborts_on_abort(self):

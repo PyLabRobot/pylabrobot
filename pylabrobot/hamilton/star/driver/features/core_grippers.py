@@ -1017,10 +1017,10 @@ class CoreGrippers:
     minimum_traverse_height_end: Optional[float] = None,
     enable_recovery: bool = True,
     *,
-    search_speed: float = 60.0,
+    search_speed: float = 40.0,
     approach_speed: float = 125.0,
-    acceleration: float = 800.0,
-    detection_limiter_pwm: int = 1,
+    acceleration: float = 200.0,
+    detection_limiter_pwm: int = 15,
     push_force_pwm: int = 0,
   ) -> bool:
     """Z-touch both tools down where the open jaws would land: meeting `resource` is finding it.
