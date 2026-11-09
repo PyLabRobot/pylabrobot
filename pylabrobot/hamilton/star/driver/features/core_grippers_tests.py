@@ -1,11 +1,14 @@
+import asyncio
 import dataclasses
+import re
 import unittest
+import unittest.mock
 from typing import Any, List
 
-from pylabrobot.hamilton.protocol.text.framing import assemble_command
+from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import STAR
-from pylabrobot.hamilton.star.driver.errors import HardwareError, STARFirmwareError
+from pylabrobot.hamilton.star.driver.errors import check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.x_arm_tests import RECORDED_DEVICE, declaring
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.alpaqua.magnetic_racks import alpaqua_96_plateadapter_magnum_flx
@@ -20,6 +23,7 @@ from pylabrobot.resources.hamilton.mfx_modules import (
   hamilton_mfx_plateholder_DWP_metal_tapped,
 )
 from pylabrobot.resources.lid import Lid
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.rotation import Rotation
@@ -221,14 +225,8 @@ class TestPickUpAndDropTools(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(self.grippers._tools_taken_from)
 
 
-def z_drive_stalled(trace: int = 62) -> STARFirmwareError:
-  """What a channel answers when its Z drive stalls: trace 62."""
-  error = HardwareError("Z-drive movement error", trace, "P8ZPer02/62", "P8")
-  return STARFirmwareError({"Pipetting channel 8": error}, "C0ZPer99/00 P8ZPer02/62")
-
-
 class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
-  """Legacy's presence check: the jaws pushed down onto a plate stall on it."""
+  """Both tools z-touch down together where the open jaws would land on the plate."""
 
   async def asyncSetUp(self):
     self.star = STAR(simulation=True)
@@ -242,57 +240,155 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
     self.sent: List[str] = []
     answer = self.grippers._driver.send_command
 
+    # Channels with a z-touch in flight; whether two ever were at once.
+    self.searching: List[str] = []
+    self.searched_together = False
+
     async def capturing(module: str, command: str, **kwargs: Any):
-      if command == "ZP":
+      if command in ("XP", "JY", "ZH", "JZ", "ZA", "ZP"):
         wire = {k: v for k, v in kwargs.items() if len(k) == 2}
         self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
-      return await answer(module=module, command=command, **kwargs)
+      if command != "ZH":
+        return await answer(module=module, command=command, **kwargs)
+      self.searching.append(module)
+      await asyncio.sleep(0)
+      self.searched_together |= len(self.searching) > 1
+      try:
+        return await answer(module=module, command=command, **kwargs)
+      finally:
+        self.searching.remove(module)
 
     self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
   async def check(self, **kwargs: Any) -> bool:
     return await self.grippers.probe_resource_exists_using_ztouch(
-      self.location, self.plate, **kwargs
+      location=self.location, resource=self.plate, **kwargs
     )
+
+  async def pick_up_tools(self) -> None:
+    await self.grippers.pick_up_tools()
+    self.sent.clear()
 
   async def test_refused_without_the_tools(self):
     with self.assertRaises(RuntimeError):
       await self.check(gripper_y_margin=9, enable_recovery=False)
 
-  async def test_sends_what_legacy_sends_and_nothing_found_is_false(self):
-    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+  async def test_nothing_there_touches_with_both_tools_to_the_centre_and_is_false(self):
+    await self.pick_up_tools()
+    self.plate.unassign()
     heights = {"minimum_traverse_height_start": 275.0, "minimum_traverse_height_end": 275.0}
     self.assertFalse(await self.check(gripper_y_margin=9, enable_recovery=False, **heights))
+    # Over the centre, 9 mm inside each wall; the grip line from 275 mm to the centre's 193.4 mm.
     self.assertEqual(
-      self.sent, ["C0ZPxs08204xd0yj1142yv0050zj1934zy0600yo0675yg0675yw20th2750te2750"]
+      self.sent,
+      [
+        "X0XPla08204lr3lw7",
+        "C0JYyp4050 3783 3516 3249 2982 2715 1480 0805",
+        "P7ZHzb27685za20079zv11652zr019zu03729cg015cf000",
+        "P8ZHzb27685za20079zv11652zr019zu03729cg015cf000",
+        "C0JZzp3347 3347 3347 3347 3347 3347 2750 2750",
+      ],
     )
 
+  async def test_nothing_there_answered_with_error_63_at_the_end_is_false(self):
+    await self.pick_up_tools()
+    self.plate.unassign()
+    end = 20079
+    # As a device answered over an empty site: error 63, then each channel 22 and 19 increments
+    # past the end.
+    replies = {
+      "P7ZH": "P7ZHid0251er63rz+00000",
+      "P8ZH": "P8ZHid0252er63rz+00000",
+      "P7RZ": f"P7RZid0253rz+{end - 22:05} +{end - 21:05}",
+      "P8RZ": f"P8RZid0254rz+{end - 19:05} +{end - 19:05}",
+    }
+    searched = set()
+    capturing = self.grippers._driver.send_command
+
+    async def answering(module: str, command: str, **kwargs: Any):
+      reply = replies.get(module + command)
+      if reply is None or (command == "RZ" and module not in searched):
+        return await capturing(module=module, command=command, **kwargs)
+      if command == "ZH":
+        searched.add(module)
+        await capturing(module=module, command=command, **kwargs)
+        check_fw_string_error(reply)
+      return parse_fw_string(reply, kwargs["fmt"])
+
+    self.grippers._driver.send_command = answering  # type: ignore[assignment]
+    logger = "pylabrobot.hamilton.star.driver.features.core_grippers"
+    with self.assertLogs(logger, level="INFO") as logs:
+      self.assertFalse(await self.check(gripper_y_margin=9, enable_recovery=False))
+    self.assertIn("'plate' not found", logs.output[-1])
+    self.assertEqual([command[11:18] for command in self.sent if "ZH" in command], [f"za{end}"] * 2)
+
   async def test_the_heights_default_to_the_traverse_height(self):
-    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+    await self.pick_up_tools()
+    self.plate.unassign()
     await self.check(gripper_y_margin=9, enable_recovery=False)
-    self.assertTrue(self.sent[0].endswith("th2800te2800"), self.sent[0])
+    # The search starts at 280 mm and the channels end there.
+    touches = [command[4:11] for command in self.sent if "ZH" in command]
+    self.assertEqual(touches, ["zb28152", "zb28152"])
+    self.assertTrue(self.sent[-1].endswith("2800 2800"), self.sent[-1])
 
-  async def test_a_stalled_z_drive_is_found(self):
-    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
-
-    async def stalls(**kwargs: Any):
-      raise z_drive_stalled()
-
-    self.grippers._unchecked_fw_pick_up_resource = stalls  # type: ignore[method-assign, assignment]
+  async def test_a_plate_there_is_met_by_both_tools_and_found(self):
+    await self.pick_up_tools()
     self.assertTrue(await self.check(gripper_y_margin=9, enable_recovery=False))
+    self.assertEqual([command[:4] for command in self.sent if "ZH" in command], ["P7ZH", "P8ZH"])
+    self.assertTrue(self.searched_together)
+    self.assertFalse([command for command in self.sent if command.startswith("C0ZP")])
+    self.assertTrue(self.sent[-1].endswith("2800 2800"), self.sent[-1])
 
-  async def test_any_other_error_raises(self):
-    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+  async def test_one_tool_meeting_something_is_found(self):
+    await self.pick_up_tools()
+    site = self.plate.parent
+    assert site is not None
+    self.plate.unassign()
+    # A post under the back tool only, which lands at y 147.95, 9 mm inside the back wall.
+    post = Resource(name="post", size_x=10, size_y=10, size_z=20)
+    corner = Coordinate(820.4 - 5, 147.95 - 5, 0) - site.get_location_wrt(self.star.deck)
+    site.assign_child_resource(post, location=Coordinate(corner.x, corner.y, 0))
+    logger = "pylabrobot.hamilton.star.driver.features.core_grippers"
+    with self.assertLogs(logger, level="INFO") as logs:
+      self.assertTrue(await self.check(gripper_y_margin=9, enable_recovery=False))
+    met = re.search(
+      r"the back tool met it at ([\d.]+) mm, the front tool met nothing", logs.output[-1]
+    )
+    assert met is not None, logs.output[-1]
+    top = post.get_location_wrt(self.star.deck, z="t").z
+    self.assertAlmostEqual(float(met.group(1)), top, delta=0.05)
 
-    async def fails(**kwargs: Any):
-      raise z_drive_stalled(trace=61)
+  async def test_a_failed_search_waits_for_the_other_goes_to_safe_z_and_raises(self):
+    await self.pick_up_tools()
+    pipettes = self.grippers._pipettes
+    search = pipettes._ztouch_search
 
-    self.grippers._unchecked_fw_pick_up_resource = fails  # type: ignore[method-assign, assignment]
-    with self.assertRaises(ValueError):
+    async def front_fails(channel: int, **kwargs: Any) -> float:
+      if channel == self.grippers._front_channel:
+        raise RuntimeError("the front search")
+      return await search(channel=channel, **kwargs)
+
+    pipettes._ztouch_search = front_fails  # type: ignore[method-assign, assignment]
+    with self.assertRaises(RuntimeError):
       await self.check(gripper_y_margin=9, enable_recovery=False)
+    self.assertEqual(
+      [command for command in self.sent if "ZH" in command or "ZA" in command][-2:],
+      ["P7ZHzb28152za20079zv11652zr019zu03729cg015cf000", "C0ZA"],
+    )
+
+  async def test_recovery_checks_again_on_yes_and_aborts_on_abort(self):
+    await self.pick_up_tools()
+    self.plate.unassign()
+    answers = unittest.mock.Mock(side_effect=["yes", "abort"])
+    with unittest.mock.patch("builtins.input", answers), unittest.mock.patch("builtins.print"):
+      with self.assertRaises(ValueError):
+        await self.check(gripper_y_margin=9, enable_recovery=True)
+    self.assertEqual(answers.call_count, 2)
+    touches = [command[:4] for command in self.sent if "ZH" in command]
+    self.assertEqual(touches, ["P7ZH", "P8ZH", "P7ZH", "P8ZH"])
 
   async def test_a_width_out_of_range_sends_nothing(self):
-    await self.grippers.pick_up_tools_at_location(1337.5, 225.0, 107.0, 125.0)
+    await self.pick_up_tools()
     with self.assertRaises(ValueError):
       await self.check(gripper_y_margin=40, enable_recovery=False)
     self.assertEqual(self.sent, [])

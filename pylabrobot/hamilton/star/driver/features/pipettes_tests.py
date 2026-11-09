@@ -5,7 +5,7 @@ import unittest
 import unittest.mock
 from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
 
-from pylabrobot.hamilton.protocol.text.framing import assemble_command
+from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError, check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.pipettes import (
@@ -1010,6 +1010,59 @@ class TestZTouchProbing(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(await self.pipettes.probe_z_using_ztouch(0))
     self.back_off.assert_awaited_once()
 
+  def _answer_with_recorded_replies(self, ztouch_reply: str, position_reply: str) -> None:
+    """Answer `Px ZH` and `Px RZ` with the replies a device gave."""
+
+    async def recorded(module: str, command: str, fmt: str = "", **kwargs: Any):
+      self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+      reply = ztouch_reply if command == "ZH" else position_reply
+      check_fw_string_error(reply)
+      return parse_fw_string(reply, fmt)
+
+    self.pipettes._driver.send_command = recorded  # type: ignore[assignment]
+
+  async def _touch_over_an_empty_site(self, end: float, **kwargs: Any) -> Optional[float]:
+    """Channel 7's z-touch over an empty NTR carrier site, from stop disc 277.0 mm to `end`."""
+    return await self.pipettes.probe_z_using_ztouch(
+      7,
+      search_start_position=round(277.0 - 51.9, 2),
+      search_end_position=round(end - 51.9, 2),
+      **kwargs,
+    )
+
+  async def test_a_search_that_stopped_just_above_its_end_met_nothing(self):
+    self._answer_with_recorded_replies("P8ZHid0317er00rz+15046", "P8RZid0325rz+14946 +15046")
+    self.assertIsNone(await self._touch_over_an_empty_site(161.0, search_speed=15.0))
+    self.assertEqual(self.sent, ["P8ZHzb25821za15008zv11652zr075zu01398cg001cf000"])
+
+  async def test_error_63_with_the_channel_at_the_end_met_nothing(self):
+    # 1.06, 0.14 and 0.13 mm past the end.
+    search_to_171 = {"search_speed": 20.0, "acceleration": 200.0, "detection_limiter_pwm": 5}
+    for end, kwargs, ztouch, position in (
+      (161.0, {"search_speed": 15.0}, "P8ZHid0442er63rz+00000", "P8RZid0450rz+14909 +14914"),
+      (171.0, search_to_171, "P8ZHid0565er63rz+00000", "P8RZid0573rz+15927 +15927"),
+      (171.0, search_to_171, "P8ZHid0472er63rz+00000", "P8RZid0480rz+15928 +15928"),
+    ):
+      self.sent.clear()
+      self.back_off.reset_mock()
+      self._answer_with_recorded_replies(ztouch, position)
+      self.assertIsNone(await self._touch_over_an_empty_site(end, **kwargs))
+      # Where it stands is read before anything moves; the back-off starts from there.
+      self.assertEqual([command[:4] for command in self.sent], ["P8ZH", "P8RZ"])
+      read = self.pipettes.configuration.z_drive_increments_to_mm(
+        parse_fw_string(position, "rz######")["rz"]
+      )
+      self.back_off.assert_awaited_once_with(7, round(read + 2.0, 2))
+    self.assertEqual(self.sent[0], "P8ZHzb25821za15940zv11652zr019zu01864cg005cf000")
+    self.safe_z.assert_not_awaited()
+
+  async def test_error_63_with_the_channel_above_the_end_is_raised(self):
+    # The channel stands 2.41 mm above the end: it stopped mid-search.
+    self._answer_with_recorded_replies("P8ZHid0442er63rz+00000", "P8RZid0327rz+15233 +15233")
+    with self.assertRaises(STARFirmwareError):
+      await self._touch_over_an_empty_site(161.0, search_speed=15.0)
+    self.safe_z.assert_awaited_once()
+
   async def test_a_50_uL_tip_under_a_z_touch_is_a_warning(self):
     from pylabrobot.resources.hamilton.tip_creators import hamilton_tip_50uL
 
@@ -1269,7 +1322,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
       module: str, command: str, fmt: Optional[Any] = None, read_timeout: float = 0, **kwargs: Any
     ):
       self.sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
-      if command in ("ZL", "ZE") and self.fail_with.get(module):
+      if command in ("ZL", "ZE", "ZH") and self.fail_with.get(module):
         reply = self.fail_with[module].pop(0)
         if reply is not None:
           check_fw_string_error(reply)
@@ -1567,6 +1620,28 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     self.rz = self.pipettes.configuration.z_drive_mm_to_increments(round(bottom - 10.0 + 51.9, 2))
     self.assertEqual(await self.pipettes.probe_z_heights_using_ztouch(wells), [None])
+
+  async def test_error_63_with_the_channel_at_the_end_is_a_floor_out_of_reach(self):
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    wells = self._wells("A1")
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    c = self.pipettes.configuration
+    end = c.z_drive_mm_to_increments(round(bottom - 10.0 + 51.9, 2))
+    self.fail_with["P1"] = ["P1ZHid0615er63rz+00000"]
+    # Once searched, 8 increments past the end, as the channel stood after that reply.
+    self.pipettes.request_stop_disc_z_position = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      side_effect=lambda channel: (
+        c.z_drive_increments_to_mm(end - 8) if "P1ZH" in (sent[:4] for sent in self.sent) else 334.7
+      )
+    )
+    self.assertEqual(await self.pipettes.probe_z_heights_using_ztouch(wells), [None])
+
+  async def test_error_63_with_the_channel_above_the_end_is_raised_after_coming_up(self):
+    self.pipettes._record_where_they_stopped = unittest.mock.AsyncMock()  # type: ignore[method-assign]
+    self.fail_with["P1"] = ["P1ZHid0615er63rz+00000"]
+    with self.assertRaises(STARFirmwareError):
+      await self.pipettes.probe_z_heights_using_ztouch(self._wells("A1"))
+    self.assertEqual(self.safe_z.await_count, 2)
 
   async def test_an_interrupted_batch_brings_the_channels_up_before_it_propagates(self):
     self.pipettes._probe_batch_liquid_heights = unittest.mock.AsyncMock(  # type: ignore[method-assign]
