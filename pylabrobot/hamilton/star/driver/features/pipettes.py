@@ -437,9 +437,11 @@ class Pipettes:
   # A Z-touch dispense lifts the tip this far off the cavity bottom it touched, in mm, so the
   # orifice is not sealed on it.
   ztouch_dispense_height_above_bottom: float = 0.2
-  # A drive that ran to the search limit lands a few hundredths off it: a stop this close to the
-  # limit, in mm, reached it and met nothing.
-  _ztouch_end_allowance: float = 0.1
+  # A z-touch that ran to its end met nothing: it stops up to this far above the end, in mm (0.41
+  # seen; floors were touched from 1.23 up), ...
+  _ztouch_end_allowance: float = 0.5
+  # ... or, answered with error 63, its position read lands up to this far past it (0.13 to 1.06).
+  _ztouch_past_end_allowance: float = 1.1
 
   def __init__(self, driver: "STARDriver", configuration: Optional[PipettesConfiguration] = None):
     """
@@ -3179,11 +3181,12 @@ class Pipettes:
       push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
 
     Returns:
-      The stop disc height where the search stopped, in mm.
+      The stop disc height where the search stopped, in mm. After error 63 (limit stop not
+      found), the channel's own position, where it ran to the end.
 
     Raises:
       ValueError: If a field is out of the drive's range.
-      STARFirmwareError: As the channel answers.
+      STARFirmwareError: As the channel answers, but error 63 with the channel at the end.
     """
     c = self.configuration
     end = c.z_drive_mm_to_increments(end_position)
@@ -3202,16 +3205,30 @@ class Pipettes:
     ):
       if not low <= checked <= high:
         raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
-    stopped_at = await self._unchecked_fw_probe_z_using_ztouch(
-      channel,
-      start_position=start,
-      end_position=end,
-      search_speed=speed,
-      approach_speed=approach,
-      acceleration=ramp,
-      detection_limiter_pwm=detection_limiter_pwm,
-      push_force_pwm=push_force_pwm,
-    )
+    try:
+      stopped_at = await self._unchecked_fw_probe_z_using_ztouch(
+        channel,
+        start_position=start,
+        end_position=end,
+        search_speed=speed,
+        approach_speed=approach,
+        acceleration=ramp,
+        detection_limiter_pwm=detection_limiter_pwm,
+        push_force_pwm=push_force_pwm,
+      )
+    except STARFirmwareError as error:
+      module = self.channel_id(channel=channel)
+      if not error.errors or any(
+        e.raw_module != module or e.trace_information != 63 for e in error.errors.values()
+      ):
+        raise
+      # Error 63 answers no position: read where the channel stands.
+      stop_disc = await self.request_stop_disc_z_position(channel=channel)
+      if not (
+        -self._ztouch_past_end_allowance <= stop_disc - end_position <= self._ztouch_end_allowance
+      ):
+        raise
+      return stop_disc
     return c.z_drive_increments_to_mm(stopped_at)
 
   def _require_ztouch_firmware(self, channel: int) -> None:
@@ -3645,7 +3662,7 @@ class Pipettes:
     self,
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
@@ -3654,6 +3671,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> List[float]:
     """Find the liquid surface in each container with a channel's tip, and say how high it stands.
 
@@ -3665,7 +3683,7 @@ class Pipettes:
       containers: any number; a whole plate is fine.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None,
         up to every channel.
-      resource_offsets: added to where each channel goes in its container, in mm. Planned when
+      offsets: added to where each channel goes in its container, in mm. Planned when
         None, spreading channels that share a container.
       lld_mode: how to search, one for all or one per container. Capacitive when None.
       search_speed: in mm/s.
@@ -3676,6 +3694,7 @@ class Pipettes:
       minimum_traverse_height_end: where the tips used are left, in mm. Z safety when None.
       x_grouping_tolerance: containers within this X distance share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
 
     Returns:
       How high the liquid stands above each container's cavity bottom, in mm, in the order given.
@@ -3686,6 +3705,12 @@ class Pipettes:
       RuntimeError: If a channel used carries no tip, the driver was given no deck, or liquid was
         found in some rounds and not in others.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
@@ -3709,7 +3734,7 @@ class Pipettes:
       deck,
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       x_grouping_tolerance,
       minimum_traverse_height_start,
       minimum_traverse_height_end,
@@ -3740,7 +3765,7 @@ class Pipettes:
     self,
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
@@ -3749,6 +3774,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> List[float]:
     """Find the liquid in each container as `probe_liquid_heights` does, and say how much there is.
 
@@ -3765,13 +3791,19 @@ class Pipettes:
       ValueError: If a container has no height-to-volume function, or as `probe_liquid_heights`.
       RuntimeError: As `probe_liquid_heights`.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     without = [c.name for c in containers if not c.supports_compute_height_volume_functions()]
     if without:
       raise ValueError(f"no height-to-volume function for {without}")
     heights = await self.probe_liquid_heights(
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       lld_mode,
       search_speed,
       n_replicates,
@@ -3898,7 +3930,7 @@ class Pipettes:
     self,
     containers: Sequence[Container],
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     search_speed: float = 10.0,
     n_replicates: int = 1,
     *,
@@ -3907,6 +3939,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> List[Optional[float]]:
     """Touch the floor of each container with a channel's tip, and say how high it is.
 
@@ -3919,7 +3952,7 @@ class Pipettes:
       containers: any number; a whole plate is fine.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None,
         up to every channel.
-      resource_offsets: added to where each channel goes in its container, in mm. Planned when
+      offsets: added to where each channel goes in its container, in mm. Planned when
         None, spreading channels that share a container.
       search_speed: in mm/s.
       n_replicates: how many times each container is touched; the heights are averaged.
@@ -3930,6 +3963,7 @@ class Pipettes:
       minimum_traverse_height_end: where the tips used are left, in mm. Z safety when None.
       x_grouping_tolerance: containers within this X distance share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
 
     Returns:
       Where each floor was touched, above the container's modelled cavity bottom, in mm, in the
@@ -3941,6 +3975,12 @@ class Pipettes:
       RuntimeError: If a channel used carries no tip or old firmware, the driver was given no
         deck, or a floor was touched in some rounds and not in others.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
@@ -3954,7 +3994,7 @@ class Pipettes:
       deck,
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       x_grouping_tolerance,
       minimum_traverse_height_start,
       minimum_traverse_height_end,
@@ -6103,7 +6143,7 @@ class Pipettes:
     containers: Sequence[Container],
     volumes: Optional[Sequence[float]] = None,
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
     lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     flow_rates: Optional[Sequence[float]] = None,
@@ -6134,6 +6174,7 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
   ) -> None:
     """Draw liquid from each container with a channel's tip.
 
@@ -6160,7 +6201,7 @@ class Pipettes:
       volumes: liquid to take from each container, corrected by a liquid class. One of this and
         `piston_volumes`.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None.
-      resource_offsets: offset of each channel in its container, in mm. Planned when None. The z
+      offsets: offset of each channel in its container, in mm. Planned when None. The z
         shifts the heights.
       liquid_heights: where each OFF draw goes, above the cavity bottom, in mm. The cavity bottom
         when None. Refused for a container with an LLD mode, whose search finds the surface.
@@ -6213,6 +6254,7 @@ class Pipettes:
         when None.
       x_grouping_tolerance: X distance within which containers share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
 
     Raises:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
@@ -6227,6 +6269,12 @@ class Pipettes:
       NotImplementedError: DUAL.
       TooLittleVolumeError: A tip without room for what it is to draw.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
@@ -6350,7 +6398,7 @@ class Pipettes:
       "minimum_allowed_z_positions_during", minimum_allowed_z_positions_during, n
     )
     floors, sent_floors, tops, searches, surfaces = self._get_pipetting_heights(
-      deck, containers, resource_offsets, given_floors, heights, modes, searched
+      deck, containers, offsets, given_floors, heights, modes, searched
     )
     tracking = does_volume_tracking()
     following = per_container("surface_following_distances", surface_following_distances, n)
@@ -6358,7 +6406,7 @@ class Pipettes:
       deck,
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       x_grouping_tolerance,
       start,
       end,
@@ -6939,14 +6987,13 @@ class Pipettes:
     containers: Sequence[Container],
     volumes: Optional[Sequence[float]] = None,
     use_channels: Optional[List[int]] = None,
-    resource_offsets: Optional[List[Coordinate]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     liquid_heights: Optional[Sequence[Optional[float]]] = None,
     lld_mode: Union[LLDMode, Sequence[LLDMode], None] = None,
     flow_rates: Optional[Sequence[float]] = None,
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
-    jet: Optional[Sequence[bool]] = None,
-    blow_out: Optional[Sequence[bool]] = None,
+    jets: Optional[Sequence[bool]] = None,
     empty: Optional[Sequence[bool]] = None,
     piston_volumes: Optional[Sequence[float]] = None,
     search_speed: float = 10.0,
@@ -6972,6 +7019,9 @@ class Pipettes:
     minimum_traverse_height_during: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     x_grouping_tolerance: Optional[float] = None,
+    resource_offsets: Optional[List[Coordinate]] = None,
+    jet: Optional[Sequence[bool]] = None,
+    blow_out: Optional[Sequence[bool]] = None,
   ) -> None:
     """Dispense liquid into each container from a channel's tip.
 
@@ -6984,17 +7034,18 @@ class Pipettes:
     dispenses `ztouch_dispense_height_above_bottom` above it; PRESSURE
     and DUAL are for aspirating. A dispense past what a tip holds goes ahead and pushes air,
     with a warning. `volumes` with a liquid class, which corrects the piston volume and fills
-    what is not given, or `piston_volumes` as given; `jet`, `blow_out` and `empty` pick the
-    firmware's mode. The tracker books what moved per batch, before its command, committed on
-    success; it never places a tip. Keyword arguments in the order the dispense runs;
-    per-container lists in the containers' order.
+    what is not given, or `piston_volumes` as given; `jets`, `blow_out_air_volumes` and `empty`
+    pick the firmware's mode, a blow-out mode where the air, given or from a given class, is over
+    0. The tracker books what moved per batch, before its command, committed on success; it never
+    places a tip. Keyword arguments in the order the dispense runs; per-container lists in the
+    containers' order.
 
     Args:
       containers: any number.
       volumes: liquid to put into each container, corrected by a liquid class. One of this and
         `piston_volumes`.
       use_channels: which channels, 0-indexed from the back. The first len(containers) when None.
-      resource_offsets: offset of each channel in its container, in mm. Planned when None. The z
+      offsets: offset of each channel in its container, in mm. Planned when None. The z
         shifts the heights.
       liquid_heights: where each OFF dispense goes, above the cavity bottom, in mm. The cavity
         bottom when None. Refused for a container with an LLD mode, whose search finds the surface.
@@ -7002,10 +7053,9 @@ class Pipettes:
         container. OFF goes to the height given. PRESSURE and DUAL refuse. OFF when None;
         CAPACITIVE under `auto_surface_following`.
       flow_rates: in uL/s. The class's, else 120.0, when None.
-      hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jet`
+      hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jets`
         and `blow_out` when None.
-      jet: whether each dispense is a jet from above the liquid. False when None: at the surface.
-      blow_out: whether the blow-out air follows the liquid out. False when None.
+      jets: whether each dispense is a jet from above the liquid. False when None: at the surface.
       empty: whether the tip is emptied where it stands, air and all; the model then books what
         the tip holds. False when None.
       piston_volumes: what each piston pushes out, in uL, as given. One of this and `volumes`.
@@ -7029,8 +7079,8 @@ class Pipettes:
       second_section_heights: height of each container's narrower lower section, in mm. 3.2 when
         None.
       second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
-      blow_out_air_volumes: air pushed out after the liquid in a blow-out mode, in uL. The
-        class's, else 0.0, when None.
+      blow_out_air_volumes: air pushed out after the liquid, in uL; over 0, given or from a given
+        class, is a blow-out mode. The class's, else 0.0, when None.
       post_mixes: a `Mix` per container, mixed after the dispense, None for no mixing. Its auto
         surface following needs a surface, as the call's.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
@@ -7048,23 +7098,51 @@ class Pipettes:
         when None.
       x_grouping_tolerance: X distance within which containers share a batch, in mm.
         `default_x_grouping_tolerance` when None.
+      resource_offsets: deprecated, use `offsets`.
+      jet: deprecated, use `jets`.
+      blow_out: deprecated, give `blow_out_air_volumes`.
 
     Raises:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
         liquid height beside an LLD mode, a pressure or dual LLD mode, a piston pushed past its
-        bottom limit, a container without room for them, or auto surface following beside a
+        bottom limit, a container without room for them, auto surface following beside a
         distance, under OFF without a liquid height, or over a surface outside the container's
-        height-volume data.
+        height-volume data, or `blow_out` contradicting `blow_out_air_volumes`.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
         container without height-volume functions under CAPACITIVE or auto surface following, no
         liquid found where the channels searched, a container the search found without the room,
         or no floor met where they touched.
     """
+    if resource_offsets is not None:
+      warnings.warn(
+        "`resource_offsets` is deprecated, use `offsets`.", DeprecationWarning, stacklevel=2
+      )
+      if offsets is None:
+        offsets = resource_offsets
+    if jet is not None:
+      warnings.warn("`jet` is deprecated, use `jets`.", DeprecationWarning, stacklevel=2)
+      if jets is None:
+        jets = jet
+    if blow_out is not None:
+      warnings.warn(
+        "`blow_out` is deprecated, give `blow_out_air_volumes`.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
     n = len(containers)
+    blow_out = per_container("blow_out", blow_out, n)
+    blow_out_air_volumes = per_container("blow_out_air_volumes", blow_out_air_volumes, n)
+    if blow_out is not None and blow_out_air_volumes is not None:
+      for job, air in enumerate(blow_out_air_volumes):
+        if air is not None and blow_out[job] != (air > 0):
+          raise ValueError(
+            f"blow_out={blow_out[job]} contradicts blow_out_air_volumes={air} for "
+            f"{containers[job].name}; give only blow_out_air_volumes"
+          )
     # As legacy travels: at the default height, not Z safety, unless told otherwise.
     default = self.default_minimum_traverse_height
     start = default if minimum_traverse_height_start is None else minimum_traverse_height_start
@@ -7098,12 +7176,8 @@ class Pipettes:
         sorted({channel_of[job] for job in touched}),
         [containers[job].name for job in touched],
       )
-    jets = per_container("jet", jet, n) or [False] * n
-    blow_outs = per_container("blow_out", blow_out, n) or [False] * n
+    jets = per_container("jets", jets, n) or [False] * n
     empties = per_container("empty", empty, n) or [False] * n
-    dispensing_modes = [
-      self._get_dispensing_mode(jets[job], blow_outs[job], empties[job]) for job in range(n)
-    ]
     liquid, pushed, classes = get_volumes_and_classes(
       containers,
       channel_of,
@@ -7112,7 +7186,7 @@ class Pipettes:
       piston_volumes,
       hamilton_liquid_classes,
       jets,
-      blow_outs,
+      blow_out or [False] * n,
     )
     # An empty pushes out whatever the tip holds: that is what moves, whatever volume was asked.
     liquid = [tips[job].tracker.volume if empties[job] else liquid[job] for job in range(n)]
@@ -7146,6 +7220,13 @@ class Pipettes:
     # then draws this dispense's transport air, after an empty too. The stop-back leaves it there.
     transport_air = per_container_settings["transport_air_volumes"] or [0.0] * n
     blow_out_air = per_container_settings["blow_out_air_volumes"] or [0.0] * n
+    # Air after the liquid, given or from a given class, is a blow-out mode; a looked-up class's
+    # air leaves the mode as it was, and a deprecated `blow_out` still decides.
+    deciding_air = blow_out_air if hamilton_liquid_classes is not None else blow_out_air_volumes
+    blow_outs = blow_out or [(air or 0.0) > 0 for air in deciding_air or [None] * n]
+    dispensing_modes = [
+      self._get_dispensing_mode(jets[job], blow_outs[job], empties[job]) for job in range(n)
+    ]
     # From where it stands, each piston has to have the travel for its dispenses, and each
     # container the room for them, cycle by cycle.
     c = self.configuration
@@ -7182,7 +7263,7 @@ class Pipettes:
       "minimum_allowed_z_positions_during", minimum_allowed_z_positions_during, n
     )
     floors, sent_floors, tops, searches, surfaces = self._get_pipetting_heights(
-      deck, containers, resource_offsets, given_floors, heights, modes, searched
+      deck, containers, offsets, given_floors, heights, modes, searched
     )
     tracking = does_volume_tracking()
     following = per_container("surface_following_distances", surface_following_distances, n)
@@ -7190,7 +7271,7 @@ class Pipettes:
       deck,
       containers,
       use_channels,
-      resource_offsets,
+      offsets,
       x_grouping_tolerance,
       start,
       end,

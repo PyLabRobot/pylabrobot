@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 from pylabrobot.lib.luminescence.results import LuminescenceResult
 from pylabrobot.resources import Plate, Well
@@ -32,48 +32,23 @@ class Luminescence(Measurement):
   Reached as ``driver.luminescence``.
   """
 
-  async def measure(
+  def _build_measure(
     self,
-    *,
-    integration_time: float = 0.8,
-    gain: Optional[int] = None,
-    aperture_distance: float = DEFAULT_APERTURE_DISTANCE,
-    monochromator: MonochromatorSettings = LUMINESCENCE_NO_FILTER,
-    plate: Optional[Plate] = None,
-    wells: Optional[Sequence[Well]] = None,
-    measurement_settings: Optional[MeasurementSettings] = None,
-    shake_settings: Optional[ShakeSettings] = None,
-    timeout: float = 600.0,
-  ) -> LuminescenceResult:
-    """Measure the luminescence of the plate from the top (endpoint).  NOT TESTED on a reader with
-    luminescence; a reader without the luminescence module refuses it (``CommandRefusedError``, quit
-    code 205).
-
-    The defaults are those of Voyager's luminescence protocol: all the emitted light, automatic
-    gain, 0.8 s per well, 0.5 mm aperture distance, 20 ms settling.  Neither the command nor the
-    decoding of its data has run on a reader with luminescence.  Please report how it behaves.
-
-    Args:
-      integration_time: seconds of light collection per well (0.01-655.35, 10 ms steps).
-      gain: the detector gain; None for the reader's automatic gain.
-      aperture_distance: mm between the top optic's aperture and the plate (0.01 mm steps).
-      monochromator: the emission settings; the default reads all the emitted light, as
-        Voyager's luminescence protocol does.
-      plate: the plate to measure; None uses the plate on the plate holder.
-      wells: the wells to measure; None measures every well.
-      measurement_settings: how to read; None reads with the defaults (20 ms settling).  Its
-        ``flashes`` and ``well_scan`` do not apply: a luminescence read integrates at the centre.
-      shake_settings: shake the plate before the read; None does not shake.
-      timeout: seconds the run may take.
-
-    Returns:
-      The counts of the measured wells.
+    integration_time: float,
+    gain: Optional[int],
+    aperture_distance: float,
+    monochromator: MonochromatorSettings,
+    plate: Optional[Plate],
+    wells: Optional[Sequence[Well]],
+    measurement_settings: Optional[MeasurementSettings],
+  ) -> Tuple[Plate, MeasurementSettings, List[Tuple[int, int]], bytes]:
+    """Check a read and build its RUN fields: the plate, the settings, the measured wells (row,
+    column) and the fields.
 
     Raises:
-      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      RuntimeError: if no plate is on the plate holder.
       ValueError: if an argument is out of range.
     """
-    logger.warning("luminescence has not been tested on a VANTAstar; please report how it behaves")
     if not 0.01 <= integration_time <= 655.35:
       raise ValueError(f"integration_time must be 0.01-655.35 s, got {integration_time}")
     if measurement_settings is not None and (
@@ -98,6 +73,56 @@ class Luminescence(Measurement):
       corner=settings.corner,
       reading_direction=settings.reading_direction,
       bidirectional=settings.bidirectional,
+    )
+    return plate, settings, measured, parameters
+
+  async def measure(
+    self,
+    *,
+    integration_time: float = 0.8,
+    gain: Optional[int] = None,
+    aperture_distance: float = DEFAULT_APERTURE_DISTANCE,
+    monochromator: MonochromatorSettings = LUMINESCENCE_NO_FILTER,
+    plate: Optional[Plate] = None,
+    wells: Optional[Sequence[Well]] = None,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[LuminescenceResult] = None,
+    timeout: float = 600.0,
+  ) -> LuminescenceResult:
+    """Measure the luminescence of the plate from the top (endpoint).  NOT TESTED on a reader with
+    luminescence; a reader without the luminescence module refuses it (``CommandRefusedError``, quit
+    code 205).
+
+    The defaults are those of Voyager's luminescence protocol: all the emitted light, automatic
+    gain, 0.8 s per well, 0.5 mm aperture distance, 20 ms settling.  Neither the command nor the
+    decoding of its data has run on a reader with luminescence.  Please report how it behaves.
+
+    Args:
+      integration_time: seconds of light collection per well (0.01-655.35, 10 ms steps).
+      gain: the detector gain; None for the reader's automatic gain.
+      aperture_distance: mm between the top optic's aperture and the plate (0.01 mm steps).
+      monochromator: the emission settings; the default reads all the emitted light, as
+        Voyager's luminescence protocol does.
+      plate: the plate to measure; None uses the plate on the plate holder.
+      wells: the wells to measure; None measures every well.
+      measurement_settings: how to read; None reads with the defaults (20 ms settling).  Its
+        ``flashes`` and ``well_scan`` do not apply: a luminescence read integrates at the centre.
+      shake_settings: shake the plate before the read; None does not shake.
+      simulated_data: ignored by a reader; a simulated one (``VANTAstar(simulation=True)``)
+        reads its values from it.
+      timeout: seconds the run may take.
+
+    Returns:
+      The counts of the measured wells.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      ValueError: if an argument is out of range.
+    """
+    logger.warning("luminescence has not been tested on a VANTAstar; please report how it behaves")
+    _, settings, measured, parameters = self._build_measure(
+      integration_time, gain, aperture_distance, monochromator, plate, wells, measurement_settings
     )
     await self._prepare(settings, shake_settings)
     start = datetime.now()
