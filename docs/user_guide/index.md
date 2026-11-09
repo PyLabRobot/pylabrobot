@@ -50,6 +50,7 @@ opentrons/index
 qinstruments/index
 revvity/index
 sartorius/index
+tecan/index
 thermo_fisher/index
 ufactory/index
 ```
