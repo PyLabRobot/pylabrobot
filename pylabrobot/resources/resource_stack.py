@@ -78,6 +78,19 @@ class ResourceStack(Resource):
     for resource in resources:
       self.assign_child_resource(resource)
 
+  def serialize(self) -> dict:
+    return {**super().serialize(), "direction": self.direction}
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "ResourceStack":
+    """Rebuild a stack. Its sizes follow from its children and its category is fixed."""
+    data = {
+      key: value
+      for key, value in data.items()
+      if key not in ("size_x", "size_y", "size_z", "category")
+    }
+    return super().deserialize(data=data, allow_marshal=allow_marshal)
+
   def get_size_x(self) -> float:
     """Get local size in the x direction."""
     if len(self.children) == 0:

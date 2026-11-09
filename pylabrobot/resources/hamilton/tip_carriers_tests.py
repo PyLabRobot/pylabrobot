@@ -247,24 +247,24 @@ class NestedTipCarrierTests(unittest.TestCase):
     # Each rack in a nest stands its 16 mm stacking height above the one below, so the top rack's
     # A1 is at 184.0 + 16 per rack below it. Derived: no capture has picked up from a nest.
     module = hamilton_mfx_resourceholder_ntr("module")
+    module.assign_child_resource(resource=ResourceStack(name="module_stack", direction="z"))
     mfx = hamilton_mfx_carrier_L5_base("mfx", modules={3: module})
     ntr_carrier = hamilton_tip_carrier_L5_ntr_a00("ntr_carrier")
-    for holder, carrier, location, racks, a1 in [
-      (module, mfx, Coordinate(932.5, 63, 100), 4, Coordinate(950.5, 434.0, 184.0 + 3 * 16)),
+    for stack, carrier, location, racks, a1 in [
+      (module.resource, mfx, Coordinate(932.5, 63, 100), 4, Coordinate(950.5, 434.0, 232.0)),
       (
-        ntr_carrier.sites[1],
+        ntr_carrier[1].resource,
         ntr_carrier,
         Coordinate(752.5, 63, 100),
         2,
         Coordinate(770.4, 241.8, 200.0),
       ),
     ]:
-      with self.subTest(holder=holder.name, racks=racks):
+      assert isinstance(stack, ResourceStack)
+      with self.subTest(stack=stack.name, racks=racks):
         deck = STARDeck()
-        stack = ResourceStack(f"stack_{racks}", direction="z")
-        holder.assign_child_resource(stack)
         for i in range(racks):
-          stack.assign_child_resource(hamilton_96_tiprack_50uL_NTR(f"{holder.name}_ntr{i}"))
+          stack.assign_child_resource(resource=hamilton_96_tiprack_50uL_NTR(f"{stack.name}_ntr{i}"))
         deck.assign_child_resource(carrier, location=location)
         self.assertAlmostEqual(stack.get_size_z(), 55 + (racks - 1) * 16)
         top = stack.get_top_item()
@@ -287,6 +287,30 @@ class NestedTipCarrierTests(unittest.TestCase):
         self.assertAlmostEqual(
           spot.get_location_wrt(rack).z + tip.collar_height - tip.get_size_z(), tip_end, delta=0.15
         )
+
+  def test_each_site_holds_an_empty_stack(self):
+    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
+    for index, site in carrier.sites.items():
+      stack = site.resource
+      assert isinstance(stack, ResourceStack)
+      self.assertEqual(stack.name, f"carrier-stack-{index}")
+      self.assertEqual(stack.direction, "z")
+      self.assertEqual(stack.children, [])
+
+  def test_assigning_to_a_site_nests_onto_its_stack(self):
+    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
+    carrier[0] = bottom = hamilton_96_tiprack_300uL_NTR("bottom")
+    carrier[0] = top = hamilton_96_tiprack_300uL_NTR("top")
+    stack = carrier[0].resource
+    assert isinstance(stack, ResourceStack)
+    self.assertEqual(stack.children, [bottom, top])
+    self.assertAlmostEqual(top.get_location_wrt(stack).z - bottom.get_location_wrt(stack).z, 16)
+
+  def test_serialize_round_trip(self):
+    carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")
+    carrier[0] = hamilton_96_tiprack_300uL_NTR("bottom")
+    carrier[0] = hamilton_96_tiprack_300uL_NTR("top")
+    self.assertEqual(Resource.deserialize(data=carrier.serialize()), carrier)
 
   def test_the_carrier_stands_29_mm_above_its_sites(self):
     carrier = hamilton_tip_carrier_L5_ntr_a00("carrier")

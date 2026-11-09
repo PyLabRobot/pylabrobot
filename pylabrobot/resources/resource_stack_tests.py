@@ -114,6 +114,21 @@ class ResourceStackTests(unittest.TestCase):
     assert top_item is not None
     self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 1))
 
+  def test_serialize_round_trip(self):
+    stack = ResourceStack(
+      name="stack",
+      direction="z",
+      resources=[
+        Resource("A", size_x=10, size_y=10, size_z=10),
+        Resource("B", size_x=10, size_y=10, size_z=10),
+      ],
+    )
+    copy = ResourceStack.deserialize(data=stack.serialize())
+    self.assertEqual(copy, stack)
+    self.assertEqual(copy.direction, "z")
+    self.assertEqual([child.name for child in copy.children], ["B", "A"])
+    self.assertEqual(copy.get_resource("A").location, Coordinate(0, 0, 10))
+
 
 class ResourceStackPlateNestingTests(unittest.TestCase):
   """Bare plates with a known `stacking_z_height` should nest into one another in a z-stack."""
