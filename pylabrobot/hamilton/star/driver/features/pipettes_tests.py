@@ -1821,10 +1821,16 @@ class TestEachTipsWaterClass(unittest.IsolatedAsyncioTestCase):
     assert jet is not None and jet.dispense_stop_flow_rate != 5.0
     wells = [plate.get_well("A1"), plate.get_well("B1")]
     await pipettes.aspirate(wells, piston_volumes=[300.0, 300.0], liquid_heights=[3.0, 3.0])
-    await pipettes.dispense(wells, [50.0, 50.0], jets=[True, True], blow_out=[True, True])
+    await pipettes.dispense(
+      wells, [50.0, 50.0], hamilton_liquid_classes=[jet] * 2, jets=[True, True]
+    )
     self.assertEqual(self._field(sent[1], "ss"), [round(jet.dispense_stop_flow_rate * 10)] * 2)
     await pipettes.dispense(
-      wells, [50.0, 50.0], jets=[True, True], blow_out=[True, True], cut_off_speeds=[4.5, 4.5]
+      wells,
+      [50.0, 50.0],
+      hamilton_liquid_classes=[jet] * 2,
+      jets=[True, True],
+      cut_off_speeds=[4.5, 4.5],
     )
     self.assertEqual(self._field(sent[2], "ss"), [45, 45])
 
@@ -4532,6 +4538,56 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     self.assertEqual(sent[0], sent[1])
     self.assertEqual(sent[2], sent[3])
 
+  async def test_the_mode_follows_the_blow_out_air_and_an_empty_wins(self):
+    await self.pipettes.aspirate(
+      self.wells[:3], piston_volumes=[30.0] * 3, blow_out_air_volumes=[10.0] * 3
+    )
+    before = self.pipettes.piston_positions[:2]
+    sent = self._record()
+    await self.pipettes.dispense(
+      self.wells[:3],
+      piston_volumes=[10.0] * 3,
+      blow_out_air_volumes=[0.0, 5.0, 5.0],
+      empty=[False, False, True],
+    )
+    self.assertIn("dm2 3 4", sent[0])
+    # Only the blow-out mode pushes its air out after the liquid.
+    after = self.pipettes.piston_positions[:2]
+    self.assertEqual([b - a for b, a in zip(before, after)], [10.0, 15.0])
+    self.assertEqual((await self.pipettes.dispensing_drives_request_uL_positions())[:2], after)
+    await self.pipettes.dispense(
+      self.wells[:2], piston_volumes=[10.0] * 2, jets=[True] * 2, blow_out_air_volumes=[0.0, 5.0]
+    )
+    self.assertIn("dm0 1", sent[1])
+
+  async def test_a_deprecated_blow_out_warns_and_picks_the_mode_unless_the_air_contradicts_it(self):
+    from pylabrobot.hamilton.star.liquid_classes.mapping import (
+      StandardVolumeFilter_Water_DispenseJet_Empty as jet,
+    )
+
+    await self.pipettes.aspirate(self.wells[:2], piston_volumes=[100.0] * 2)
+    sent = self._record()
+    # The class's air is over 0: the flag still decides where it is given and the air is not.
+    with self.assertWarns(DeprecationWarning):
+      await self.pipettes.dispense(
+        self.wells[2:4],
+        [10.0] * 2,
+        hamilton_liquid_classes=[jet] * 2,
+        jets=[True] * 2,
+        blow_out=[True, False],
+      )
+    self.assertIn("dm1 0", sent[0])
+    sent = self._record("C0", "P")
+    for flag, air in ((True, 0.0), (False, 5.0)):
+      with self.assertWarns(DeprecationWarning), self.assertRaisesRegex(ValueError, "contradicts"):
+        await self.pipettes.dispense(
+          self.wells[2:4],
+          piston_volumes=[10.0] * 2,
+          blow_out=[True, flag],
+          blow_out_air_volumes=[5.0, air],
+        )
+    self.assertEqual(sent, [])
+
   async def test_a_jet_with_blow_out_takes_the_liquid_class_fields_and_the_pistons_rest(self):
     from pylabrobot.hamilton.star.liquid_classes.mapping import get_star_liquid_class
     from pylabrobot.resources.liquid import Liquid
@@ -4550,7 +4606,9 @@ class TestDispenseInSimulation(_SimulatedPlateWithWater):
     )
     assert water is not None
     sent = self._record()
-    await self.pipettes.dispense(self.wells[3:4], [50.0], jets=[True], blow_out=[True])
+    await self.pipettes.dispense(
+      self.wells[3:4], [50.0], hamilton_liquid_classes=[water], jets=[True]
+    )
     self.assertIn("dm1", sent[0])
     self.assertIn(f"dv{round(water.compute_corrected_volume(50.0) * 10):05}", sent[0])
     self.assertIn(f"ds{round(water.dispense_flow_rate * 10):04}", sent[0])
