@@ -12,7 +12,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | - | - | - |
 | 'TIP_CAR_480_A00'<br>Part no.: 182085<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182085) <br>Carrier for 5x 96 tip (10μl, 50μl, 300μl, 1000μl) racks or 5x 24 tip (5ml) racks (6T) | ![](img/hamilton/TIP_CAR_480_A00_182085.jpg) | `hamilton_tip_carrier_L5` |
 | 'TIP_CAR_288_C00'<br>Part no.: 182060<br>[manufacturer website](https://www.hamiltoncompany.com/other-robotics/182060) <br>Carrier for 3x 96 tip (10μl, 50μl, 300μl, 1000μl) racks or 3x 24 tip (5ml) racks (4T) | ![](img/hamilton/TIP_CAR_288_C00.jpg.avif) | `TIP_CAR_288_C00` |
-| 'TIP_CAR_NTR_A00'<br>Part no.: 182074<br>Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR) (6T) | | `hamilton_tip_carrier_L5_ntr_a00` |
+| 'TIP_CAR_NTR_A00'<br>Part no.: 182074<br>Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR) (6T). Each site holds a z `ResourceStack`; `carrier[i] = rack` nests a rack onto it. | | `hamilton_tip_carrier_L5_ntr_a00` |
 
 ### Plate carriers
 
