@@ -1404,7 +1404,13 @@ class STARDriver:
       if already_initialized:
         # Said, not acted on: initializing discards whatever is mounted and moves the channels,
         # which is not something to do off a reading. The caller decides.
-        await self._channels_keep_no_reference(arm)
+        no_reference = await self._channels_keep_no_reference(arm)
+        if any(tips) and not no_reference and arm.core_grippers is not None:
+          # Initializing would discard CoRe gripper tools with the tips: they go back first.
+          await arm.core_grippers.return_tools()
+          tips = await arm.pipettes.sense_tip_presence()
+        if any(tips):
+          await arm.pipettes.move_to_safe_z()
       if not already_initialized or any(tips):
         logger.debug(
           "channels: %d of %d carrying tips, device %s - initializing",
