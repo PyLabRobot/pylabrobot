@@ -5,9 +5,10 @@ import unittest
 import unittest.mock
 from typing import Any, List
 
-from pylabrobot.hamilton.protocol.text.framing import assemble_command
+from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
 from pylabrobot.hamilton.star.device import STAR
+from pylabrobot.hamilton.star.driver.errors import check_fw_string_error
 from pylabrobot.hamilton.star.driver.features.x_arm_tests import RECORDED_DEVICE, declaring
 from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.resources.alpaqua.magnetic_racks import alpaqua_96_plateadapter_magnum_flx
@@ -288,6 +289,38 @@ class TestCheckResourceExists(unittest.IsolatedAsyncioTestCase):
         "C0JZzp3347 3347 3347 3347 3347 3347 2750 2750",
       ],
     )
+
+  async def test_nothing_there_answered_with_error_63_at_the_end_is_false(self):
+    await self.pick_up_tools()
+    self.plate.unassign()
+    end = 20079
+    # As a device answered over an empty site: error 63, then each channel 22 and 19 increments
+    # past the end.
+    replies = {
+      "P7ZH": "P7ZHid0251er63rz+00000",
+      "P8ZH": "P8ZHid0252er63rz+00000",
+      "P7RZ": f"P7RZid0253rz+{end - 22:05} +{end - 21:05}",
+      "P8RZ": f"P8RZid0254rz+{end - 19:05} +{end - 19:05}",
+    }
+    searched = set()
+    capturing = self.grippers._driver.send_command
+
+    async def answering(module: str, command: str, **kwargs: Any):
+      reply = replies.get(module + command)
+      if reply is None or (command == "RZ" and module not in searched):
+        return await capturing(module=module, command=command, **kwargs)
+      if command == "ZH":
+        searched.add(module)
+        await capturing(module=module, command=command, **kwargs)
+        check_fw_string_error(reply)
+      return parse_fw_string(reply, kwargs["fmt"])
+
+    self.grippers._driver.send_command = answering  # type: ignore[assignment]
+    logger = "pylabrobot.hamilton.star.driver.features.core_grippers"
+    with self.assertLogs(logger, level="INFO") as logs:
+      self.assertFalse(await self.check(gripper_y_margin=9, enable_recovery=False))
+    self.assertIn("'plate' not found", logs.output[-1])
+    self.assertEqual([command[11:18] for command in self.sent if "ZH" in command], [f"za{end}"] * 2)
 
   async def test_the_heights_default_to_the_traverse_height(self):
     await self.pick_up_tools()
