@@ -925,7 +925,7 @@ function getSnappingGrid(x, y, width, height) {
       snappingLines.resourceX = deck.location.x;
     }
 
-    for (let rail = 0; rail < deck.num_rails; rail++) {
+    for (let rail = 0; rail < deck.num_tracks; rail++) {
       const railX = railOffset + 22.5 * rail;
       if (Math.abs(x - railX) < SNAP_MARGIN) {
         snappingLines.resourceX = railX;
@@ -1359,8 +1359,8 @@ class Deck extends Resource {
 class HamiltonSTARDeck extends Deck {
   constructor(resourceData) {
     super(resourceData, undefined);
-    const { num_rails } = resourceData;
-    this.num_rails = num_rails;
+    const { num_tracks } = resourceData;
+    this.num_tracks = num_tracks;
     this.railHeight = 497;
   }
 
@@ -1413,8 +1413,8 @@ class HamiltonSTARDeck extends Deck {
       })
     );
 
-    // Draw vertical rails as lines
-    for (let i = 0; i < this.num_rails; i++) {
+    // Draw vertical rails as lines: each track's left edge, then the last track's right edge
+    for (let i = 0; i <= this.num_tracks; i++) {
       const railBottomTickHeight = 10;
       const rail = new Konva.Line({
         points: [
@@ -1430,7 +1430,7 @@ class HamiltonSTARDeck extends Deck {
 
       // Add a text label every 5 rails. Rails are 1-indexed.
       // Keep in mind that the stage is flipped vertically.
-      if ((i + 1) % 5 === 0 || i === 0) {
+      if (i < this.num_tracks && ((i + 1) % 5 === 0 || i === 0)) {
         const railLabel = new Konva.Text({
           x: 100 + i * 22.5 + 11.25, // center of rail (between lines)
           y: 50,
@@ -1450,7 +1450,7 @@ class HamiltonSTARDeck extends Deck {
     return {
       ...super.serialize(),
       ...{
-        num_rails: this.num_rails,
+        num_tracks: this.num_tracks,
         with_trash: false,
         with_trash96: false,
       },
@@ -1464,10 +1464,10 @@ class VantageDeck extends Deck {
     const { size } = resourceData;
     this.size = size;
     if (size === 1.3) {
-      this.num_rails = 54;
+      this.num_tracks = 54;
     } else {
       alert(`Unsupported Vantage Deck size: ${size}. Only 1.3 is supported.`);
-      this.num_rails = 0;
+      this.num_tracks = 0;
     }
     this.railHeight = 497;
   }
@@ -1518,7 +1518,7 @@ class VantageDeck extends Deck {
       })
     );
 
-    for (let i = 0; i < this.num_rails; i++) {
+    for (let i = 0; i < this.num_tracks; i++) {
       const railX = 32.5 + i * 22.5;
       const railBottomTickHeight = 10;
       const rail = new Konva.Line({
@@ -5004,7 +5004,7 @@ function getUmlAttributes(resource) {
   }
   // HamiltonSTARDeck
   if (resource instanceof HamiltonSTARDeck) {
-    attrs.push({ key: "num_rails", value: resource.num_rails });
+    attrs.push({ key: "num_tracks", value: resource.num_tracks });
   }
   // PlateAdapter
   if (resource instanceof PlateAdapter) {
