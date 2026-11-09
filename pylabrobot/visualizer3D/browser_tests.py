@@ -28,6 +28,8 @@ import websockets
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.resources.hamilton import hamilton_96_tiprack_50uL_NTR
+from pylabrobot.resources.hamilton.star_decks import STARDeck, STARLetDeck
+from pylabrobot.resources.hamilton.vantage_decks import VantageDeck
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
@@ -762,6 +764,27 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(self.viewer.rebuilds, 1, "the arrival did not cost the scene it must")
       self.assertGreater(len(seen), 0, "nothing was sampled while the scene was rebuilt")
       self.assertEqual(min(seen), drawn, f"the models went away and came back: {seen}")
+
+  async def test_a_deck_marks_the_far_edge_of_its_last_track_if_it_reaches_that_far(self):
+    """A STAR-family deck and its loading tray close their last track, with no number on that mark.
+    The edge of a Vantage's last track is past the end of the deck, so it has no such mark."""
+    starlet = STARLetDeck(name="starlet")
+    starlet.get_or_create_autoload_loading_tray("starlet_tray")
+    decks = (starlet, STARDeck(name="star"), VantageDeck(size=1.3, name="vantage"))
+    for i, deck in enumerate(decks):
+      self.facility.assign_child_resource(deck, location=Coordinate(0, 1000 * i, 0))
+    async with Browser() as browser:
+      await self.page(browser, ready="vantage")
+      await browser.evaluate("import('./marks.js').then((marks) => { window.marks = marks; })")
+      await browser.settle("window.marks?.gridMarks.length === 4", 10)
+      drawn = await browser.evaluate(
+        "window.marks.gridMarks.map((group) => {"
+        " const solid = group.children.find((child) => child.userData.mark === 'solid');"
+        " const { position } = solid.geometry.attributes;"
+        " return [position.count / 2, position.getX(position.count - 1)]; })"
+      )
+      self.assertEqual(drawn, [[31, 775], [31, 779], [55, 1315], [54, 1225]])
+      self.assertEqual(await browser.evaluate("window.marks.gridLabels.length"), 7 + 7 + 11 + 11)
 
   async def test_a_facility_framed_from_far_off_is_drawn(self):
     """Both cameras had fixed clip planes - 20 m deep - and only the perspective one was refitted

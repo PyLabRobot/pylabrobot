@@ -515,6 +515,11 @@ export function buildGridMarks() {
         group.add(sprite);
       }
     }
+    // The last position's far edge: no position starts there, so it has no number.
+    if (grid.closing_mark) {
+      const x = ox + grid.count * grid.spacing;
+      points.push(x, front, z, x, oy + grid.extent, z);
+    }
 
     // Access bands: two lines each, spanning the surface, labelled at the near edge.
     const bands = modelOf(index).bands ?? [];
