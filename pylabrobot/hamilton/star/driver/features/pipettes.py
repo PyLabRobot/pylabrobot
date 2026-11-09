@@ -437,9 +437,11 @@ class Pipettes:
   # A Z-touch dispense lifts the tip this far off the cavity bottom it touched, in mm, so the
   # orifice is not sealed on it.
   ztouch_dispense_height_above_bottom: float = 0.2
-  # A drive that ran to the search limit lands a few hundredths off it: a stop this close to the
-  # limit, in mm, reached it and met nothing.
-  _ztouch_end_allowance: float = 0.1
+  # A z-touch that ran to its end met nothing: it stops up to this far above the end, in mm (0.41
+  # seen; floors were touched from 1.23 up), ...
+  _ztouch_end_allowance: float = 0.5
+  # ... or, answered with error 63, its position read lands up to this far past it (0.13 to 1.06).
+  _ztouch_past_end_allowance: float = 1.1
 
   def __init__(self, driver: "STARDriver", configuration: Optional[PipettesConfiguration] = None):
     """
@@ -3179,11 +3181,12 @@ class Pipettes:
       push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
 
     Returns:
-      The stop disc height where the search stopped, in mm.
+      The stop disc height where the search stopped, in mm. After error 63 (limit stop not
+      found), the channel's own position, where it ran to the end.
 
     Raises:
       ValueError: If a field is out of the drive's range.
-      STARFirmwareError: As the channel answers.
+      STARFirmwareError: As the channel answers, but error 63 with the channel at the end.
     """
     c = self.configuration
     end = c.z_drive_mm_to_increments(end_position)
@@ -3202,16 +3205,30 @@ class Pipettes:
     ):
       if not low <= checked <= high:
         raise ValueError(f"{name} must be between {low} and {high}, is {checked}")
-    stopped_at = await self._unchecked_fw_probe_z_using_ztouch(
-      channel,
-      start_position=start,
-      end_position=end,
-      search_speed=speed,
-      approach_speed=approach,
-      acceleration=ramp,
-      detection_limiter_pwm=detection_limiter_pwm,
-      push_force_pwm=push_force_pwm,
-    )
+    try:
+      stopped_at = await self._unchecked_fw_probe_z_using_ztouch(
+        channel,
+        start_position=start,
+        end_position=end,
+        search_speed=speed,
+        approach_speed=approach,
+        acceleration=ramp,
+        detection_limiter_pwm=detection_limiter_pwm,
+        push_force_pwm=push_force_pwm,
+      )
+    except STARFirmwareError as error:
+      module = self.channel_id(channel=channel)
+      if not error.errors or any(
+        e.raw_module != module or e.trace_information != 63 for e in error.errors.values()
+      ):
+        raise
+      # Error 63 answers no position: read where the channel stands.
+      stop_disc = await self.request_stop_disc_z_position(channel=channel)
+      if not (
+        -self._ztouch_past_end_allowance <= stop_disc - end_position <= self._ztouch_end_allowance
+      ):
+        raise
+      return stop_disc
     return c.z_drive_increments_to_mm(stopped_at)
 
   def _require_ztouch_firmware(self, channel: int) -> None:
