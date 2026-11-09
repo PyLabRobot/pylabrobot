@@ -3,7 +3,7 @@ import dataclasses
 import re
 import unittest
 import unittest.mock
-from typing import Any, List
+from typing import Any, Dict, List
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
@@ -759,6 +759,89 @@ class TestMounting(unittest.IsolatedAsyncioTestCase):
       await self.grippers.pick_up_tools()
     self.assertFalse(self.grippers.tools_mounted)
     self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
+
+
+class TestReturningToolsTheModelLost(unittest.IsolatedAsyncioTestCase):
+  """After a restart the model holds no tools; the channels' overhangs say which carry them."""
+
+  async def asyncSetUp(self):
+    self.star = STAR(simulation=True)
+    await self.star.setup()
+    assert self.star.core_grippers is not None
+    self.grippers = self.star.core_grippers
+    self.holder = self.grippers._holder()
+    self.parked = {tool.name: tool.location for tool in self.holder.children}
+    self.sent: List[str] = []
+    answer = self.grippers._driver.send_command
+
+    async def capturing(module: str, command: str, **kwargs: Any):
+      if command in ("ZS", "DI", "ZA"):
+        self.sent.append(f"{module}{command}")
+      return await answer(module=module, command=command, **kwargs)
+
+    self.grippers._driver.send_command = capturing  # type: ignore[assignment]
+
+  def reading(self, overhangs: Dict[int, float]) -> None:
+    """What each channel reads below its stop disc, in mm; the others sense nothing."""
+    pipettes = self.grippers._pipettes
+
+    async def sense_tip_presence() -> List[int]:
+      return [int(channel in overhangs) for channel in range(pipettes.num_channels)]
+
+    async def request_tip_overhang(channel: int) -> float:
+      return overhangs[channel]
+
+    pipettes.sense_tip_presence = sense_tip_presence  # type: ignore[method-assign]
+    pipettes.request_tip_overhang = request_tip_overhang  # type: ignore[method-assign]
+
+  async def test_a_neighbouring_pair_at_the_tool_overhang_goes_back_to_the_holder(self):
+    self.reading({6: 22.0, 7: 22.0})
+    await self.grippers.return_tools()
+    self.assertEqual(self.sent, ["C0ZS", "C0ZA"])
+    self.assertFalse(self.grippers.tools_mounted)
+    self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
+
+  async def test_any_neighbouring_pair_is_found(self):
+    self.reading({1: 51.9, 3: 22.0, 4: 22.0})
+    await self.grippers.return_tools()
+    self.assertEqual(self.sent, ["C0ZS", "C0ZA"])
+
+  async def test_tips_alone_are_left_on(self):
+    self.reading({0: 51.9, 1: 42.4})
+    await self.grippers.return_tools()
+    self.assertEqual(self.sent, [])
+
+  async def test_anything_but_one_neighbouring_pair_at_22_is_left_on(self):
+    for overhangs in (
+      {6: 21.9, 7: 22.0},
+      {7: 22.0},
+      {4: 22.0, 6: 22.0},
+      {5: 21.9, 6: 21.9},
+      {5: 22.0, 6: 22.0, 7: 22.0},
+    ):
+      with self.subTest(overhangs=overhangs):
+        self.reading(overhangs)
+        await self.grippers.return_tools()
+        self.assertEqual(self.sent, [])
+        self.assertFalse(self.grippers.tools_mounted)
+
+  async def test_setup_returns_them_before_initializing_the_channels(self):
+    self.reading({6: 22.0, 7: 22.0})
+    arm = self.grippers.arm
+    returned = self.grippers.return_tools
+
+    async def return_tools() -> None:
+      await returned()
+      self.reading({0: 51.9})  # a tip left on channel 0, for the initialization to discard
+
+    self.grippers.return_tools = return_tools  # type: ignore[method-assign]
+    await self.grippers._driver._initialize_arm(arm, already_initialized=True)
+    self.assertEqual(self.sent[:4], ["C0ZS", "C0ZA", "C0ZA", "C0DI"])
+
+  async def test_setup_raises_to_safe_z_and_initializes_when_they_are_not_the_tools(self):
+    self.reading({6: 21.9, 7: 22.0})
+    await self.grippers._driver._initialize_arm(self.grippers.arm, already_initialized=True)
+    self.assertEqual(self.sent[:2], ["C0ZA", "C0DI"])
 
 
 class TestSimulatedChannelPositions(unittest.IsolatedAsyncioTestCase):
