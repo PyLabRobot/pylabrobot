@@ -560,15 +560,18 @@ class CoreGrippers:
   async def return_tools(self) -> None:
     """Put the tools back in their holder, if mounted.
 
-    With none mounted in the model, e.g. after a restart, the channels are asked. Two neighbouring
-    channels reading exactly the tools' overhang, and no other channel within 0.1 mm of it, hold
-    them, as `pick_up_tools` would have mounted them from the deck's holder; anything else is left
-    on the channels. A drop that fails leaves the channels holding them, and the model says so.
+    With nothing taken in the model, two neighbouring channels reading exactly the tools' overhang,
+    and no other within 0.1 mm of it, are taken to hold them. A drop that fails leaves the channels
+    holding them, and the model says so.
     """
     if not self._tools_mounted:
+      if self._tools_taken_from is not None:
+        return
       pipettes = self._pipettes
       sensed = [channel for channel, on in enumerate(await pipettes.sense_tip_presence()) if on]
-      overhangs = {channel: await pipettes.request_tip_overhang(channel) for channel in sensed}
+      overhangs = {
+        channel: await pipettes.request_tip_overhang(channel=channel) for channel in sensed
+      }
       near = [
         channel
         for channel in sensed
@@ -576,48 +579,46 @@ class CoreGrippers:
       ]
       if not near:
         return
-      if (
-        len(near) != 2
-        or near[1] != near[0] + 1
-        or any(overhangs[channel] != _CORE_GRIPPER_TOOL_OVERHANG for channel in near)
-      ):
+      readings = [overhangs[channel] for channel in near]
+      if len(near) != 2 or near[1] != near[0] + 1 or set(readings) != {_CORE_GRIPPER_TOOL_OVERHANG}:
         logger.warning(
           "channels %s read %s mm below the stop disc: not the two neighbouring CoRe gripper tools "
           "at %s mm, so nothing is returned",
           near,
-          [overhangs[channel] for channel in near],
+          readings,
           _CORE_GRIPPER_TOOL_OVERHANG,
         )
         return
-      # As `pick_up_tools` takes them: the holder's centre x, its channel y centres, the tops.
-      holder = self._holder()
-      tools = [child for child in holder.children if isinstance(child, HeadTool)]
-      if not tools:
-        raise TypeError("the holder carries no CO-RE grip tools to put the mounted ones back as")
-      deck = self._deck
-      loc = holder.get_location_wrt(deck, x="c")
-      top = max(tool.get_location_wrt(deck, z="t").z for tool in tools)
-      self._back_channel, self._front_channel = near
-      self._tools_taken_from = (
-        loc.x,
-        loc.y + holder.back_channel_y_center,
-        loc.y + holder.front_channel_y_center,
-        top,
-        top - 10.0,
-      )
-      self._parked_tools = [(tool, tool.parent, tool.location) for tool in tools]
-      rear_first = sorted(tools, key=lambda tool: tool.get_location_wrt(deck, y="c").y)
-      for channel, tool in zip(near, reversed(rear_first)):
-        shaft = pipettes.shaft(channel)
-        if shaft is not None:
-          shaft.mount_tip(tool)
-      self._tools_mounted = True
       logger.warning(
         "channels %d and %d hold CoRe gripper tools the model did not know of (%s mm below the "
         "stop disc): returning them to their holder",
         *near,
-        [overhangs[channel] for channel in near],
+        readings,
       )
+      # Where `pick_up_tools` takes them from; the model already has them in the holder.
+      holder = self._holder()
+      location = holder.get_location_wrt(self._deck, x="c")
+      top = max(
+        tool.get_location_wrt(self._deck, z="t").z
+        for tool in holder.children
+        if isinstance(tool, HeadTool)
+      )
+      self._back_channel, self._front_channel = near
+      self._tools_taken_from = (
+        location.x,
+        location.y + holder.back_channel_y_center,
+        location.y + holder.front_channel_y_center,
+        top,
+        top - 10.0,
+      )
+      try:
+        await self.drop_tools()
+      except BaseException:
+        # Not known whether they went back: the next call reads the channels again.
+        self._tools_taken_from = None
+        self._back_channel = self._front_channel = None
+        raise
+      return
     await self.drop_tools()
     self._tools_mounted = False
     self._park_tools()

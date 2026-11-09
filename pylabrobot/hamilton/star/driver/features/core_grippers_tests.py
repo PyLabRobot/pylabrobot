@@ -764,6 +764,8 @@ class TestMounting(unittest.IsolatedAsyncioTestCase):
 class TestReturningToolsTheModelLost(unittest.IsolatedAsyncioTestCase):
   """After a restart the model holds no tools; the channels' overhangs say which carry them."""
 
+  RETURN = "C0ZSxs13375xd0ya1250yb1070tp2150tz2050th2800te2800"
+
   async def asyncSetUp(self):
     self.star = STAR(simulation=True)
     await self.star.setup()
@@ -772,12 +774,20 @@ class TestReturningToolsTheModelLost(unittest.IsolatedAsyncioTestCase):
     self.holder = self.grippers._holder()
     self.parked = {tool.name: tool.location for tool in self.holder.children}
     self.sent: List[str] = []
+    # what the channels read once the tools are back
+    self.left_on: Dict[int, float] = {}
     answer = self.grippers._driver.send_command
 
     async def capturing(module: str, command: str, **kwargs: Any):
-      if command in ("ZS", "DI", "ZA"):
+      if command == "ZS":
+        wire = {k: v for k, v in kwargs.items() if len(k) == 2}
+        self.sent.append(assemble_command(module=module, command=command, id_=None, **wire))
+      elif command in ("DI", "ZA"):
         self.sent.append(f"{module}{command}")
-      return await answer(module=module, command=command, **kwargs)
+      answered = await answer(module=module, command=command, **kwargs)
+      if command == "ZS":
+        self.reading(overhangs=self.left_on)
+      return answered
 
     self.grippers._driver.send_command = capturing  # type: ignore[assignment]
 
@@ -795,52 +805,69 @@ class TestReturningToolsTheModelLost(unittest.IsolatedAsyncioTestCase):
     pipettes.request_tip_overhang = request_tip_overhang  # type: ignore[method-assign]
 
   async def test_a_neighbouring_pair_at_the_tool_overhang_goes_back_to_the_holder(self):
-    self.reading({6: 22.0, 7: 22.0})
-    await self.grippers.return_tools()
-    self.assertEqual(self.sent, ["C0ZS", "C0ZA"])
+    self.reading(overhangs={6: 22.0, 7: 22.0})
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.core_grippers", "WARNING"
+    ) as log:
+      await self.grippers.return_tools()
+    self.assertIn("channels 6 and 7 hold CoRe gripper tools", log.output[0])
+    self.assertEqual(self.sent, [self.RETURN, "C0ZA"])
+    self.assertIsNone(self.grippers._tools_taken_from)
     self.assertFalse(self.grippers.tools_mounted)
     self.assertEqual({tool.name: tool.location for tool in self.holder.children}, self.parked)
 
   async def test_any_neighbouring_pair_is_found(self):
-    self.reading({1: 51.9, 3: 22.0, 4: 22.0})
-    await self.grippers.return_tools()
-    self.assertEqual(self.sent, ["C0ZS", "C0ZA"])
+    self.reading(overhangs={1: 51.9, 3: 22.0, 4: 22.0})
+    with self.assertLogs(
+      "pylabrobot.hamilton.star.driver.features.core_grippers", "WARNING"
+    ) as log:
+      await self.grippers.return_tools()
+    self.assertIn("channels 3 and 4 hold CoRe gripper tools", log.output[0])
+    self.assertEqual(self.sent, [self.RETURN, "C0ZA"])
 
   async def test_tips_alone_are_left_on(self):
-    self.reading({0: 51.9, 1: 42.4})
+    self.reading(overhangs={0: 51.9, 1: 42.4, 2: 22.2})
     await self.grippers.return_tools()
     self.assertEqual(self.sent, [])
 
-  async def test_anything_but_one_neighbouring_pair_at_22_is_left_on(self):
+  async def test_anything_but_one_neighbouring_pair_at_22_is_left_on_with_a_warning(self):
     for overhangs in (
       {6: 21.9, 7: 22.0},
+      {6: 22.0, 7: 22.1},
       {7: 22.0},
       {4: 22.0, 6: 22.0},
-      {5: 21.9, 6: 21.9},
       {5: 22.0, 6: 22.0, 7: 22.0},
     ):
       with self.subTest(overhangs=overhangs):
-        self.reading(overhangs)
-        await self.grippers.return_tools()
+        self.reading(overhangs=overhangs)
+        with self.assertLogs(
+          "pylabrobot.hamilton.star.driver.features.core_grippers", "WARNING"
+        ) as log:
+          await self.grippers.return_tools()
+        self.assertIn("nothing is returned", log.output[0])
         self.assertEqual(self.sent, [])
-        self.assertFalse(self.grippers.tools_mounted)
 
-  async def test_setup_returns_them_before_initializing_the_channels(self):
-    self.reading({6: 22.0, 7: 22.0})
-    arm = self.grippers.arm
-    returned = self.grippers.return_tools
+  async def test_tools_taken_from_elsewhere_are_not_sent_to_the_holder(self):
+    self.grippers._tools_taken_from = (500.0, 200.0, 180.0, 150.0, 140.0)
+    self.reading(overhangs={6: 22.0, 7: 22.0})
+    await self.grippers.return_tools()
+    self.assertEqual(self.sent, [])
 
-    async def return_tools() -> None:
-      await returned()
-      self.reading({0: 51.9})  # a tip left on channel 0, for the initialization to discard
+  async def test_setup_returns_them_and_initializes_nothing_when_only_they_were_on(self):
+    self.reading(overhangs={6: 22.0, 7: 22.0})
+    await self.grippers._driver._initialize_arm(arm=self.grippers.arm, already_initialized=True)
+    self.assertEqual(self.sent[:2], [self.RETURN, "C0ZA"])
+    self.assertNotIn("C0DI", self.sent)
 
-    self.grippers.return_tools = return_tools  # type: ignore[method-assign]
-    await self.grippers._driver._initialize_arm(arm, already_initialized=True)
-    self.assertEqual(self.sent[:4], ["C0ZS", "C0ZA", "C0ZA", "C0DI"])
+  async def test_setup_returns_them_before_initializing_the_tips_left_on(self):
+    self.reading(overhangs={0: 51.9, 6: 22.0, 7: 22.0})
+    self.left_on = {0: 51.9}
+    await self.grippers._driver._initialize_arm(arm=self.grippers.arm, already_initialized=True)
+    self.assertEqual(self.sent[:4], [self.RETURN, "C0ZA", "C0ZA", "C0DI"])
 
   async def test_setup_raises_to_safe_z_and_initializes_when_they_are_not_the_tools(self):
-    self.reading({6: 21.9, 7: 22.0})
-    await self.grippers._driver._initialize_arm(self.grippers.arm, already_initialized=True)
+    self.reading(overhangs={6: 21.9, 7: 22.0})
+    await self.grippers._driver._initialize_arm(arm=self.grippers.arm, already_initialized=True)
     self.assertEqual(self.sent[:2], ["C0ZA", "C0DI"])
 
 
