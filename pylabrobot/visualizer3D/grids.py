@@ -104,7 +104,6 @@ def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
   # seated on the line (sharing its y), or the resource's own depth when nothing stands on it.
   try:
     depth = resource.get_absolute_size_y()
-    width = resource.get_absolute_size_x()
   except Exception:
     return None
 
@@ -128,5 +127,5 @@ def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
     "label": word,
     # Each mark is a position's near edge, so the last position's far edge needs one of its own,
     # unless the resource ends first.
-    "closing_mark": first.x + count * spacing <= width,
+    "closing_mark": first.x + count * spacing <= resource.get_size_x(),
   }

@@ -767,24 +767,26 @@ class BrowserTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_deck_marks_the_far_edge_of_its_last_track_if_it_reaches_that_far(self):
     """A STAR-family deck and its loading tray close their last track, with no number on that mark.
-    The edge of a Vantage's last track is past the end of the deck, so it has no such mark."""
+    A Vantage's last track ends past the end of its deck, turned or not, so it has no such mark."""
     starlet = STARLetDeck(name="starlet")
     starlet.get_or_create_autoload_loading_tray("starlet_tray")
-    decks = (starlet, STARDeck(name="star"), VantageDeck(size=1.3, name="vantage"))
+    turned = VantageDeck(size=1.3, name="turned_vantage", with_trash=False)
+    turned.rotate(z=37.5)
+    decks = (starlet, STARDeck(name="star"), VantageDeck(size=1.3, name="vantage"), turned)
     for i, deck in enumerate(decks):
       self.facility.assign_child_resource(deck, location=Coordinate(0, 1000 * i, 0))
     async with Browser() as browser:
-      await self.page(browser, ready="vantage")
+      await self.page(browser, ready="turned_vantage")
       await browser.evaluate("import('./marks.js').then((marks) => { window.marks = marks; })")
-      await browser.settle("window.marks?.gridMarks.length === 4", 10)
+      await browser.settle("window.marks?.gridMarks.length === 5", 10)
       drawn = await browser.evaluate(
         "window.marks.gridMarks.map((group) => {"
         " const solid = group.children.find((child) => child.userData.mark === 'solid');"
         " const { position } = solid.geometry.attributes;"
         " return [position.count / 2, position.getX(position.count - 1)]; })"
       )
-      self.assertEqual(drawn, [[31, 775], [31, 779], [55, 1315], [54, 1225]])
-      self.assertEqual(await browser.evaluate("window.marks.gridLabels.length"), 7 + 7 + 11 + 11)
+      self.assertEqual(drawn, [[31, 775], [31, 779], [55, 1315], [54, 1225], [54, 1225]])
+      self.assertEqual(await browser.evaluate("window.marks.gridLabels.length"), 7 + 7 + 3 * 11)
 
   async def test_a_facility_framed_from_far_off_is_drawn(self):
     """Both cameras had fixed clip planes - 20 m deep - and only the perspective one was refitted
