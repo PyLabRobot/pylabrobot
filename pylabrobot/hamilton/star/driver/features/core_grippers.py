@@ -612,7 +612,12 @@ class CoreGrippers:
         if shaft is not None:
           shaft.mount_tip(tool)
       self._tools_mounted = True
-      logger.info("channels %d and %d hold the CoRe gripper tools: returning them", *near)
+      logger.warning(
+        "channels %d and %d hold CoRe gripper tools the model did not know of (%s mm below the "
+        "stop disc): returning them to their holder",
+        *near,
+        [overhangs[channel] for channel in near],
+      )
     await self.drop_tools()
     self._tools_mounted = False
     self._park_tools()
