@@ -28,6 +28,7 @@ from typing import (
 )
 
 from pylabrobot.events import coordinate_reference, evented_operation
+from pylabrobot.io.socket import Socket
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.manipulator import LinkBody
@@ -46,7 +47,10 @@ from ...kinematics import (
   WorkEnvelope,
   Wrist,
 )
-from ...resource_model.pf400_end_effector import GRIPPER_BODY_OUTLINE
+from ...resource_model.pf400_end_effector import (
+  GRIPPER_BACK_FLAT_BELOW_FLANGE_PLANE,
+  GRIPPER_BODY_OUTLINE,
+)
 from ...resource_model.pf400_manipulator import (
   BASE_PLATE_SIZE,
   SHOULDER_AXIS,
@@ -66,6 +70,16 @@ logger = logging.getLogger(__name__)
 BLEND_IN_RANGE = -1
 # `state` values with no motion under way: halted, idle and jog (freedrive).
 _STOPPED_MOTION_STATES = ("0", "1", "10")
+# The controller's second port: it answers while a command holds the first.
+_STATUS_PORT = 10000
+# `HeightDetect`'s reply when the search reached its limit without meeting anything.
+_ZTOUCH_NOTHING_MET = -2101
+# The licence bit for Z height detection, in the first word of DataID 112.
+_ZTOUCH_LICENCE_BIT = 14
+# How far above a surface a search must start, and the slowest system speed it runs at, in its
+# maker's terms: mm, and percent.
+_ZTOUCH_MINIMUM_SEARCH_DISTANCE = 10.0
+_ZTOUCH_MINIMUM_SEARCH_SPEED_PERCENT = 5
 # How near the column the gripper may be sent, in mm, seen from above; and how near the base plate,
 # seen from above or from its top face, whichever is further.
 _COLUMN_CLEARANCE = 5.0
@@ -199,6 +213,8 @@ class PreciseFlexArm:
   # What the driver sends when a caller leaves the value out. Tune one arm by assigning on the
   # instance, or every arm by assigning on the class.
   default_recovery_speed_percent: float = 20.0
+  _default_ztouch_search_speed_percent: int = 50
+  _default_ztouch_approach_speed_percent: float = 75.0
 
   # Parked orientations: planar folds, named for the way the gripper points. Z, gripper and rail are
   # left out: ``park()`` fills Z from the travel, and a held plate or a rail is not disturbed.
@@ -369,21 +385,8 @@ class PreciseFlexArm:
   ) -> tuple[float, float, float, float, float, float]:
     if len(parts) != 6:
       raise PreciseFlexError(-1, "Unexpected response format for Cartesian coordinates.")
-    return (
-      float(parts[0]),
-      float(parts[1]),
-      float(parts[2]),
-      float(parts[3]),
-      float(parts[4]),
-      float(parts[5]),
-    )
-
-  async def _request_state(
-    self,
-  ) -> tuple[JointState, PreciseFlexCartesianPose]:
-    """Single-query snapshot of joint state and the derived Cartesian pose."""
-    joints = await self.request_joint_state()
-    return joints, kinematics.fk(joints, self._driver._kinematics_params)
+    x, y, z, yaw, pitch, roll = map(float, parts)
+    return (x, y, z, yaw, pitch, roll)
 
   # -- motion primitives ---------------------------------------------------------------------------
 
@@ -1060,8 +1063,7 @@ class PreciseFlexArm:
     parts = data.split()
     if len(parts) != 6:
       raise PreciseFlexError(-1, "Unexpected response format from tool command.")
-    x, y, z, yaw, pitch, roll = self._parse_xyz_response(parts)
-    return (x, y, z, yaw, pitch, roll)
+    return self._parse_xyz_response(parts)
 
   async def _set_tool_transformation_values(
     self, x: float, y: float, z: float, yaw: float, pitch: float, roll: float
@@ -1679,8 +1681,7 @@ class PreciseFlexArm:
 
   async def request_gripper_pose(self) -> PreciseFlexCartesianPose:
     """Get the current pose using our kinematics model (no firmware `wherec`)."""
-    _, pose = await self._request_state()
-    return pose
+    return kinematics.fk(await self.request_joint_state(), self._driver._kinematics_params)
 
   async def request_pose(self) -> PreciseFlexPose:
     """Where every joint of the arm is, worked out from the joint state; nothing else is asked."""
@@ -1729,7 +1730,7 @@ class PreciseFlexArm:
       direction: Approach direction, applied as the pose's z rotation in degrees.
       speed_percent: Movement speed override as a percentage (0-100). If None, uses the current
         speed setting. It stays set afterwards; use ``at_speed`` to scope a speed to one move.
-      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+      orientation: Elbow orientation (``"left"`` or ``"right"``). If None, the robot
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
@@ -1908,7 +1909,7 @@ class PreciseFlexArm:
     return self._parse_angles_response(parts)
 
   async def set_station_to_current_joint_state(self, station_index: int) -> None:
-    """Record the current position of the selected robot into the specified Location as angles.
+    """Store the current position of the selected robot into the specified Location as angles.
 
     The Location is automatically set to type "angles".
 
@@ -1920,7 +1921,7 @@ class PreciseFlexArm:
   async def _unchecked_fw_set_station_to_current_cartesian_location(
     self, station_index: int
   ) -> None:
-    """Record the current position of the selected robot into the specified Location as Cartesian.
+    """Store the current position of the selected robot into the specified Location as Cartesian.
 
     The Location object is automatically set to type "Cartesian".
     Can be used to change the pallet origin (index 1,1,1) value.
@@ -2168,7 +2169,7 @@ class PreciseFlexArm:
       finger_speed_percent: Finger closing speed as a percentage (0-100).
         ``default_finger_speed_percent`` when None.
       grasp_force: Grasp force in Newtons. ``default_grasp_force`` when None.
-      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+      orientation: Elbow orientation (``"left"`` or ``"right"``). If None, the robot
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
@@ -2236,7 +2237,7 @@ class PreciseFlexArm:
       location: Cartesian location to drop at.
       direction: Approach direction, applied as the pose's z rotation in degrees.
       resource_width: Width of the held resource, in mm.
-      orientation: Elbow orientation (``"lefty"`` or ``"righty"``). If None, the robot
+      orientation: Elbow orientation (``"left"`` or ``"right"``). If None, the robot
         picks the closest configuration.
       wrist: Wrist configuration. If None, the robot picks the closest configuration.
       rail_position: Linear rail position in mm. Required when the arm has a rail.
@@ -2310,6 +2311,237 @@ class PreciseFlexArm:
   async def _unchecked_fw_park(self) -> None:
     """Move to the controller's own safe position (``movetosafe``). Nothing is guarded."""
     await self._driver.send_command("movetosafe")
+
+  def _check_ztouch_search_speed(self, speed_percent: int) -> None:
+    """Raise unless a ZTouch search may run at this system speed."""
+    if not _ZTOUCH_MINIMUM_SEARCH_SPEED_PERCENT <= speed_percent <= 100:
+      raise ValueError(
+        f"search speed must be between {_ZTOUCH_MINIMUM_SEARCH_SPEED_PERCENT} and 100 percent, "
+        f"is {speed_percent}"
+      )
+
+  def _check_ztouch_approach_speed(self, speed_percent: float) -> None:
+    """Raise unless the moves down to a ZTouch search and to its rest may run at this speed."""
+    if not 0 < speed_percent <= 100:
+      raise ValueError(
+        f"approach speed must be above 0 and at most 100 percent, is {speed_percent}"
+      )
+
+  @property
+  def default_ztouch_search_speed_percent(self) -> int:
+    """System speed of a ZTouch search whose `search_speed_percent` is None."""
+    return self._default_ztouch_search_speed_percent
+
+  @default_ztouch_search_speed_percent.setter
+  def default_ztouch_search_speed_percent(self, speed_percent: int) -> None:
+    self._check_ztouch_search_speed(speed_percent)
+    self._default_ztouch_search_speed_percent = speed_percent
+
+  @property
+  def default_ztouch_approach_speed_percent(self) -> float:
+    """Profile speed down to a ZTouch search and to its rest, when `approach_speed_percent` is
+    None."""
+    return self._default_ztouch_approach_speed_percent
+
+  @default_ztouch_approach_speed_percent.setter
+  def default_ztouch_approach_speed_percent(self, speed_percent: float) -> None:
+    self._check_ztouch_approach_speed(speed_percent)
+    self._default_ztouch_approach_speed_percent = speed_percent
+
+  async def _require_ztouch_licence(self) -> None:
+    """Raise unless the controller is licensed for Z height detection."""
+    licences = int(await self._driver.send_command("pd 112 0 0 1"))
+    if not licences >> _ZTOUCH_LICENCE_BIT & 1:
+      raise RuntimeError("this controller has no licence for Z height detection")
+
+  def _get_back_flat_above_z_joint(self) -> float:
+    """How far the gripper's back flat stands above the Z joint's reading, in mm."""
+    intelliguide = "v23" if self._driver.configuration.has_vision_gripper else "s23"
+    return SHOULDER_AXIS.z - GRIPPER_BACK_FLAT_BELOW_FLANGE_PLANE[intelliguide]
+
+  async def _unchecked_fw_probe_z_using_ztouch(
+    self, quick_mode: int, search_limit: float, maximum_force: float, read_timeout: float
+  ) -> float:
+    """Send ``HeightDetect``, which holds the connection until it ends. Nothing is guarded.
+
+    Args:
+      quick_mode: 1 measures on the way down; 2 measures again on the way up.
+      search_limit: how far it may travel from where it stands, in mm; negative.
+      maximum_force: the force at which it stops, in N; negative.
+      read_timeout: how long to wait for the reply, in seconds; the connection's own after.
+
+    Returns:
+      The Z joint where it worked out the contact was, in mm.
+    """
+    io = self._driver.io
+    usual_timeout, io._read_timeout = io._read_timeout, read_timeout
+    try:
+      return float(
+        await self._driver.send_command(f"HeightDetect {quick_mode} {search_limit} {maximum_force}")
+      )
+    finally:
+      io._read_timeout = usual_timeout
+
+  async def _stop_ztouch_search(self) -> None:
+    """Stop an interrupted search and discard its reply, so the next command gets its own.
+
+    The search holds the connection, so ``halt`` goes on the second port. The arm then rises by
+    itself and the search answers with a height that is false: a halt reads as contact.
+    """
+    status = Socket(
+      human_readable_device_name="Precise Flex status",
+      host=self._driver.io._host,
+      port=_STATUS_PORT,
+    )
+    try:
+      await status.setup()
+      await status.write(b"selectrobot 1\nhalt\n")
+    except Exception:  # without the halt the arm still stops at the search's checked end
+      logger.warning("[PreciseFlex %s] could not halt the search", self._driver.io._host)
+    finally:
+      await status.stop()
+    try:
+      async with self._driver._io_lock:
+        await self._driver.io.readline()
+    except TimeoutError:
+      logger.warning(
+        "[PreciseFlex %s] no reply from the stopped search: reconnect before the next command",
+        self._driver.io._host,
+      )
+
+  @evented_operation(
+    "precise_flex.probe_z_using_ztouch",
+    lambda self, *, search_start_position=None, search_end_position=None, approach_speed_percent=None, search_speed_percent=None, detection_force=15.0, perform_second_measurement_on_lift_off=False, post_detection_distance=2.0, move_to_parking_position_after=False, read_timeout=120.0: {
+      "device": self._driver._controller_reference(),
+      "search_start_position": search_start_position,
+      "search_end_position": search_end_position,
+      "detection_force": float(detection_force),
+      "perform_second_measurement_on_lift_off": perform_second_measurement_on_lift_off,
+    },
+  )
+  async def probe_z_using_ztouch(
+    self,
+    *,
+    search_start_position: Optional[float] = None,
+    search_end_position: Optional[float] = None,
+    approach_speed_percent: Optional[float] = None,
+    search_speed_percent: Optional[int] = None,
+    detection_force: float = 15.0,
+    perform_second_measurement_on_lift_off: bool = False,
+    post_detection_distance: float = 2.0,
+    move_to_parking_position_after: bool = False,
+    read_timeout: float = 120.0,
+  ) -> Optional[float]:
+    """Lower the arm until the gripper presses on something, and read the height.
+
+    Stand the wrist joint over the target, not the fingers: the gripper's back flat presses on it.
+    Heights are the back flat's, above the surface the base plate stands on. The controller does not
+    know what touched, so a target under another part reads wrong by the difference.
+
+    Args:
+      search_start_position: back flat height the search starts from, in mm; reached by a checked
+        move. Where the arm stands when None.
+      search_end_position: lowest back flat height, in mm. The Z joint's soft limit when None.
+      approach_speed_percent: profile speed down to the start and to the rest after.
+        ``default_ztouch_approach_speed_percent`` when None.
+      search_speed_percent: system speed during the search, put back after.
+        ``default_ztouch_search_speed_percent`` when None. The search has no speed of its own.
+      detection_force: the force at which the search stops, in N.
+      perform_second_measurement_on_lift_off: whether to measure again while lifting off.
+      post_detection_distance: where to rest above what it met, in mm. Not moved when 0, or when the
+        search met nothing.
+      move_to_parking_position_after: whether to park afterwards, instead of resting.
+      read_timeout: how long to wait for the search to end, in seconds. A second measurement on
+        lift-off doubles the time: a 90 mm search at 20 percent takes 13 s, 27 s with it.
+
+    Returns:
+      The back flat height where it pressed, in mm, or None if it reached the end. A halt from
+      elsewhere also returns a height, with nothing met: the reply looks the same.
+
+    Raises:
+      RuntimeError: If the controller has no licence for Z height detection.
+      ValueError: If an argument is out of range, or the way down would hit the column or the base
+        plate.
+      OperationInterrupted: On a user interrupt; the arm is halted and rises by itself.
+      TimeoutError: If the search outlasts `read_timeout`. It is then stopped.
+    """
+    offset = self._get_back_flat_above_z_joint()
+    if detection_force <= 0:
+      raise ValueError(f"detection_force must be above 0 N, is {detection_force}")
+    if post_detection_distance < 0:
+      raise ValueError(
+        f"post_detection_distance must not be negative, is {post_detection_distance}"
+      )
+    if read_timeout <= 0:
+      raise ValueError(f"read_timeout must be above 0 s, is {read_timeout}")
+    if approach_speed_percent is None:
+      approach_speed_percent = self.default_ztouch_approach_speed_percent
+    self._check_ztouch_approach_speed(approach_speed_percent)
+    if search_speed_percent is None:
+      search_speed_percent = self.default_ztouch_search_speed_percent
+    self._check_ztouch_search_speed(search_speed_percent)
+    await self._require_ztouch_licence()
+    usual_speed = await self.request_monitor_speed()
+
+    current = await self.request_joint_state()
+    lowest, highest = self._get_soft_limits()[PreciseFlexAxis.BASE]
+    floor = lowest + offset
+    start = current[PreciseFlexAxis.BASE] + offset
+    if search_start_position is not None:
+      start = search_start_position
+    end = floor if search_end_position is None else search_end_position
+    if not floor <= end <= highest + offset:
+      raise ValueError(
+        f"search_end_position must be between {floor} and {highest + offset} mm, is {end}"
+      )
+    if start - end < _ZTOUCH_MINIMUM_SEARCH_DISTANCE:
+      raise ValueError(
+        f"the search must run at least {_ZTOUCH_MINIMUM_SEARCH_DISTANCE} mm, "
+        f"from {start} down to {end} mm"
+      )
+
+    if search_start_position is not None:
+      async with self.at_speed(approach_speed_percent):
+        await self.move_to_joint_state({PreciseFlexAxis.BASE: start - offset})
+
+    quick_mode = 2 if perform_second_measurement_on_lift_off else 1
+    contact: List[Optional[float]] = [None]
+
+    def build_targets(joints: JointState) -> List[JointState]:
+      return [{**joints, PreciseFlexAxis.BASE: end - offset}]
+
+    async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
+      limit = round(end - start, 3)
+      async with halt_on_interrupt(self._stop_ztouch_search):
+        try:
+          contact[0] = await self._unchecked_fw_probe_z_using_ztouch(
+            quick_mode=quick_mode,
+            search_limit=limit,
+            maximum_force=-float(detection_force),
+            read_timeout=read_timeout,
+          )
+        except TimeoutError:
+          await self._stop_ztouch_search()
+          raise
+        except PreciseFlexError as error:
+          if error.replycode != _ZTOUCH_NOTHING_MET:
+            raise
+
+    await self.set_monitor_speed(search_speed_percent)
+    try:
+      await self._guarded_move(build_targets, unchecked_fw_move, retry_out_of_range=False)
+    finally:
+      await self.set_monitor_speed(usual_speed)
+
+    pressed = None if contact[0] is None else round(contact[0] + offset, 2)
+    if move_to_parking_position_after:
+      await self.park()
+    elif pressed is not None and post_detection_distance > 0:
+      async with self.at_speed(approach_speed_percent):
+        await self.move_to_joint_state(
+          {PreciseFlexAxis.BASE: round(pressed + post_detection_distance - offset, 2)}
+        )
+    return pressed
 
   @evented_operation(
     "precise_flex.park",

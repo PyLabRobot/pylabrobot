@@ -50,17 +50,14 @@ class PreciseFlexRail:
     """
     await self._driver.send_command(f"Rail {station_id} {rail_position}")
 
-  async def _unchecked_fw_move_rail(self, station_id: Optional[int] = None, mode: int = 1) -> None:
+  async def _unchecked_fw_move_rail(self, station_id: int, mode: int = 1) -> None:
     """Move the rail to the position stored at the specified station.
 
     Args:
       station_id: The station index whose rail position to move to.
       mode: Motion mode (0 = normal).
     """
-    if station_id is not None:
-      await self._driver.send_command(f"MoveRail {station_id} {mode}")
-    else:
-      await self._driver.send_command(f"MoveRail {mode}")
+    await self._driver.send_command(f"MoveRail {station_id} {mode}")
 
   # -- rail motion ---------------------------------------------------------------------------------
 
