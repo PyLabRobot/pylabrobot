@@ -56,17 +56,24 @@ nav.navbar .container-fluid {
   color: #333;
   text-decoration: none;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.brand-logo {
+  height: 42px;
+  margin-right: 8px;
 }
 
 .brand-tag {
-  font-size: 12px;
+  margin-left: 8px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #1a4b8c;
   background: #cfe2ff;
-  border-radius: 4px;
-  padding: 2px 5px;
-  vertical-align: 3px;
+  border-radius: 5px;
+  padding: 3px 7px;
 }
 
 #source-filename {
@@ -91,8 +98,8 @@ nav.navbar .container-fluid {
 
 .toolbar-left-toggle,
 .toolbar-right-toggle {
-  width: 46px;
-  min-width: 46px;
+  width: 47px;
+  min-width: 47px;
   height: 100%;
   display: flex;
   align-items: center;

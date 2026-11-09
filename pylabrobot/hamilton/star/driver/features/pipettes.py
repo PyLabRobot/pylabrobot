@@ -6977,7 +6977,6 @@ class Pipettes:
     *,
     hamilton_liquid_classes: Optional[Sequence[HamiltonLiquidClass]] = None,
     jets: Optional[Sequence[bool]] = None,
-    blow_out: Optional[Sequence[bool]] = None,
     empty: Optional[Sequence[bool]] = None,
     piston_volumes: Optional[Sequence[float]] = None,
     search_speed: float = 10.0,
@@ -7005,6 +7004,7 @@ class Pipettes:
     x_grouping_tolerance: Optional[float] = None,
     resource_offsets: Optional[List[Coordinate]] = None,
     jet: Optional[Sequence[bool]] = None,
+    blow_out: Optional[Sequence[bool]] = None,
   ) -> None:
     """Dispense liquid into each container from a channel's tip.
 
@@ -7017,10 +7017,11 @@ class Pipettes:
     dispenses `ztouch_dispense_height_above_bottom` above it; PRESSURE
     and DUAL are for aspirating. A dispense past what a tip holds goes ahead and pushes air,
     with a warning. `volumes` with a liquid class, which corrects the piston volume and fills
-    what is not given, or `piston_volumes` as given; `jets`, `blow_out` and `empty` pick the
-    firmware's mode. The tracker books what moved per batch, before its command, committed on
-    success; it never places a tip. Keyword arguments in the order the dispense runs;
-    per-container lists in the containers' order.
+    what is not given, or `piston_volumes` as given; `jets`, `blow_out_air_volumes` and `empty`
+    pick the firmware's mode, a blow-out mode where the air, given or from a given class, is over
+    0. The tracker books what moved per batch, before its command, committed on success; it never
+    places a tip. Keyword arguments in the order the dispense runs; per-container lists in the
+    containers' order.
 
     Args:
       containers: any number.
@@ -7038,7 +7039,6 @@ class Pipettes:
       hamilton_liquid_classes: one per container. Looked up for the channel's tip, water, `jets`
         and `blow_out` when None.
       jets: whether each dispense is a jet from above the liquid. False when None: at the surface.
-      blow_out: whether the blow-out air follows the liquid out. False when None.
       empty: whether the tip is emptied where it stands, air and all; the model then books what
         the tip holds. False when None.
       piston_volumes: what each piston pushes out, in uL, as given. One of this and `volumes`.
@@ -7062,8 +7062,8 @@ class Pipettes:
       second_section_heights: height of each container's narrower lower section, in mm. 3.2 when
         None.
       second_section_ratios: that section's bottom to top ratio, in tenths. 618.0 when None.
-      blow_out_air_volumes: air pushed out after the liquid in a blow-out mode, in uL. The
-        class's, else 0.0, when None.
+      blow_out_air_volumes: air pushed out after the liquid, in uL; over 0, given or from a given
+        class, is a blow-out mode. The class's, else 0.0, when None.
       post_mixes: a `Mix` per container, mixed after the dispense, None for no mixing. Its auto
         surface following needs a surface, as the call's.
       mix_positions_from_liquid_surface: mixing depth under the surface, in mm, per container. 0.0
@@ -7083,14 +7083,15 @@ class Pipettes:
         `default_x_grouping_tolerance` when None.
       resource_offsets: deprecated, use `offsets`.
       jet: deprecated, use `jets`.
+      blow_out: deprecated, give `blow_out_air_volumes`.
 
     Raises:
       ValueError: An argument out of range, lists that do not match, both or neither of `volumes`
         and `piston_volumes`, a class beside `piston_volumes`, no class for a channel's tip, a
         liquid height beside an LLD mode, a pressure or dual LLD mode, a piston pushed past its
-        bottom limit, a container without room for them, or auto surface following beside a
+        bottom limit, a container without room for them, auto surface following beside a
         distance, under OFF without a liquid height, or over a surface outside the container's
-        height-volume data.
+        height-volume data, or `blow_out` contradicting `blow_out_air_volumes`.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
         container without height-volume functions under CAPACITIVE or auto surface following, no
         liquid found where the channels searched, a container the search found without the room,
@@ -7106,10 +7107,25 @@ class Pipettes:
       warnings.warn("`jet` is deprecated, use `jets`.", DeprecationWarning, stacklevel=2)
       if jets is None:
         jets = jet
+    if blow_out is not None:
+      warnings.warn(
+        "`blow_out` is deprecated, give `blow_out_air_volumes`.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("containers are placed from the deck; this driver was given none")
     n = len(containers)
+    blow_out = per_container("blow_out", blow_out, n)
+    blow_out_air_volumes = per_container("blow_out_air_volumes", blow_out_air_volumes, n)
+    if blow_out is not None and blow_out_air_volumes is not None:
+      for job, air in enumerate(blow_out_air_volumes):
+        if air is not None and blow_out[job] != (air > 0):
+          raise ValueError(
+            f"blow_out={blow_out[job]} contradicts blow_out_air_volumes={air} for "
+            f"{containers[job].name}; give only blow_out_air_volumes"
+          )
     # As legacy travels: at the default height, not Z safety, unless told otherwise.
     default = self.default_minimum_traverse_height
     start = default if minimum_traverse_height_start is None else minimum_traverse_height_start
@@ -7144,11 +7160,7 @@ class Pipettes:
         [containers[job].name for job in touched],
       )
     jets = per_container("jets", jets, n) or [False] * n
-    blow_outs = per_container("blow_out", blow_out, n) or [False] * n
     empties = per_container("empty", empty, n) or [False] * n
-    dispensing_modes = [
-      self._get_dispensing_mode(jets[job], blow_outs[job], empties[job]) for job in range(n)
-    ]
     liquid, pushed, classes = get_volumes_and_classes(
       containers,
       channel_of,
@@ -7157,7 +7169,7 @@ class Pipettes:
       piston_volumes,
       hamilton_liquid_classes,
       jets,
-      blow_outs,
+      blow_out or [False] * n,
     )
     # An empty pushes out whatever the tip holds: that is what moves, whatever volume was asked.
     liquid = [tips[job].tracker.volume if empties[job] else liquid[job] for job in range(n)]
@@ -7191,6 +7203,13 @@ class Pipettes:
     # then draws this dispense's transport air, after an empty too. The stop-back leaves it there.
     transport_air = per_container_settings["transport_air_volumes"] or [0.0] * n
     blow_out_air = per_container_settings["blow_out_air_volumes"] or [0.0] * n
+    # Air after the liquid, given or from a given class, is a blow-out mode; a looked-up class's
+    # air leaves the mode as it was, and a deprecated `blow_out` still decides.
+    deciding_air = blow_out_air if hamilton_liquid_classes is not None else blow_out_air_volumes
+    blow_outs = blow_out or [(air or 0.0) > 0 for air in deciding_air or [None] * n]
+    dispensing_modes = [
+      self._get_dispensing_mode(jets[job], blow_outs[job], empties[job]) for job in range(n)
+    ]
     # From where it stands, each piston has to have the travel for its dispenses, and each
     # container the room for them, cycle by cycle.
     c = self.configuration
