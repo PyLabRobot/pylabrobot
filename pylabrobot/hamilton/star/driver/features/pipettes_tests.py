@@ -1172,6 +1172,79 @@ class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(await self.pipettes.probe_z_using_ztouch(0))
 
 
+class TestZTouchOnSolidsInSimulation(unittest.IsolatedAsyncioTestCase):
+  """A simulated touch stops on the highest surface under the tip, as a device's does.
+
+  A tip on channel 0 over an NTR carrier: site 0 empty, site 1 an empty rack, site 2 a stack of
+  three nested empty racks.
+  """
+
+  async def asyncSetUp(self):
+    from pylabrobot.resources import ResourceStack
+    from pylabrobot.resources.hamilton import (
+      hamilton_96_tiprack_300uL_NTR,
+      hamilton_tip_300uL,
+      hamilton_tip_carrier_L5_ntr_a00,
+    )
+    from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
+
+    self.deck = STARDeck()
+    self.carrier = hamilton_tip_carrier_L5_ntr_a00(name="ntr_carrier")
+    self.deck.assign_child_resource(self.carrier, track=30)
+    self.rack = hamilton_96_tiprack_300uL_NTR(name="rack", with_tips=False)
+    self.carrier[1] = self.rack
+    self.stack = ResourceStack(name="stack", direction="z")
+    for index in range(3):
+      self.stack.assign_child_resource(
+        resource=hamilton_96_tiprack_300uL_NTR(name=f"nested_{index}", with_tips=False)
+      )
+    self.carrier[2] = self.stack
+    self.driver = STARSimulationDriver(deck=self.deck, declared_configuration_json=RECORDING_STAR)
+    await self.driver.setup()
+    assert self.driver.pipettes is not None
+    self.pipettes = self.driver.pipettes
+    shaft = next(
+      child for child in self.pipettes.resources[0].children if isinstance(child, TipMountingShaft)
+    )
+    shaft.mount_tip(hamilton_tip_300uL(name="tip"))
+
+  async def asyncTearDown(self):
+    await self.driver.stop()
+
+  async def _touch_over_centre_of(
+    self, resource, search_start_position: Optional[float] = None
+  ) -> Optional[float]:
+    """Put channel 0 over `resource`'s centre and touch down, from the top of its range if None."""
+    centre = resource.get_location_wrt(self.deck, x="c", y="c", z="t")
+    await self.pipettes.move_to_x_position(x=centre.x)
+    await self.pipettes.move_to_y_position(channel=0, y=centre.y, make_space=True)
+    return await self.pipettes.probe_z_using_ztouch(
+      channel=0, search_start_position=search_start_position
+    )
+
+  async def test_an_empty_site_is_touched_on_its_surface(self):
+    site = self.carrier.sites[0]
+    touched = await self._touch_over_centre_of(resource=site)
+    assert touched is not None
+    self.assertAlmostEqual(touched, site.get_location_wrt(self.deck).z, delta=0.1)
+
+  async def test_an_empty_rack_is_touched_on_its_top(self):
+    touched = await self._touch_over_centre_of(resource=self.rack)
+    assert touched is not None
+    self.assertAlmostEqual(touched, self.rack.get_location_wrt(self.deck, z="t").z, delta=0.1)
+
+  async def test_a_stack_of_nested_racks_is_touched_on_the_top_rack(self):
+    top_rack = self.stack.get_top_item()
+    touched = await self._touch_over_centre_of(resource=self.stack)
+    assert touched is not None
+    self.assertAlmostEqual(touched, top_rack.get_location_wrt(self.deck, z="t").z, delta=0.1)
+
+  async def test_a_search_starting_inside_a_rack_meets_nothing_of_it(self):
+    top = self.rack.get_location_wrt(self.deck, z="t").z
+    touched = await self._touch_over_centre_of(resource=self.rack, search_start_position=top - 5.0)
+    self.assertIsNone(touched)
+
+
 class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
   """Containers are batched, every batch searched at once, and the heights read in one `C0 RL`.
 
