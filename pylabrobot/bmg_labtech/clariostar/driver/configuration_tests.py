@@ -277,3 +277,90 @@ class DeclaredConfigurationTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
   unittest.main()
+
+
+# An original CLARIOstar (main board revision 1) on firmware 1.20, compiled 2017-04-27: the
+# payloads of its INIT, stored parameters and firmware info replies at its first connection. The
+# serial number is zeroed at SERIAL_NUMBER_ADDRESSES, and the pumps' part numbers in block 0F's
+# text are zeroed too; neither is decoded.
+# INIT reply payload.
+CLARIOSTAR_1_20_INIT_PAYLOAD = bytes.fromhex(
+  "13250006300801000604b001020102090009010942500100013d460d000220000e00032700000f001f030550313a"
+  "303030303030303020430d0a50323a303030303030303020430011000300000012000200001f00090100ec102204"
+  "3d00212e000901044c0001001b32b12f017845585f53503a313d6f70656e2c323d46696c74657220312c333d4669"
+  "6c74657220320d0a45585f4c503a313d6f70656e2c323d46696c74657220312c333d46696c74657220320d0a4253"
+  "503a313d6f70656e2c323d46696c74657220312c333d46696c74657220322c343d46696c74657220330d0a454d5f"
+  "53503a313d6f70656e2c323d46696c74657220312c333d46696c74657220320d0a454d5f4c503a313d6f70656e2c"
+  "323d46696c74657220312c333d46696c74657220320d0a454d5f534c49543a313d6f70656e2c323d536c69742030"
+  "2e382c333d536c697420312e322c343d536c697420322e302c353d536c697420332e302c373d4650207061722c38"
+  "3d4650207065722c363d4c554d206c656e73650d0a45585f534c49543a313d6f70656e2c323d536c697420302e36"
+  "2c333d536c697420312e302c343d536c697420312e362c353d536c697420322e332c383d46502053746472642c37"
+  "3d46502055562c393d4142532c363d462d436865636b0d0a000131000700000000000000"
+)
+# Stored parameters reply payload.
+CLARIOSTAR_1_20_PARAMETERS_PAYLOAD = bytes.fromhex(
+  "070500263008000100000a0c0c010100000100540b00000f00c50000000000000003040000010000010200000000"
+  "00000000000032000000000000000000000000000000000000000074006f0000000000000065000000dc05000000"
+  "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000"
+  "000101000000000000000100000100000000000f02980600000000b004000004005b0c00000000a40058ff8e030d"
+  "0560ff6211fe0b621100001102990655ff950600000000b0140000000091009001463228460a0046061e00000000"
+  "00000000001e03bd0628002c01900146001e000010120000000000000000000000"
+)
+# Firmware info reply payload.
+CLARIOSTAR_1_20_FIRMWARE_INFO_PAYLOAD = bytes.fromhex(
+  "0a050026300804b041707220323720323031370031333a32343a333400737570706f7274206f6620646f75626c65"
+  "20504d5420636f6e66696775726174696f6e20287769746820657874656e64656420495220504d54293b206e6577"
+  "207363616e206d6f64652073706972616c207363616e6e696e673b20636f6e74726f6c206f662041435520647269"
+  "76656e2046414e323b20696d70726f76656420706175736520666561747572653a20706175736520696e2077656c"
+  "6c206d6f64652c20636f6e74696e7565207768656e20656e7669726f6e6d656e7420636f6e646974696f6e207265"
+  "61636865643b206e65772072656167656e742073617665207072696d696e67206f7074696f6e3b206e6577207368"
+  "616b65206d6f64657320726f756e6420616e64206f76616c3b20696d70726f76656d656e74732072656761726469"
+  "6e67207465737420657865637574696f6e2028666173746572207072657061726174696f6e2074696d652c20696e"
+  "6a6563742d6f6e6c792070726f746f636f6c732c2e2e293b0001"
+)
+RECORDING_CLARIOSTAR_1_20 = os.path.join(
+  os.path.dirname(__file__), "recordings", "clariostar_1_20_temperature_controller_pumps_2.json"
+)
+
+
+class OriginalCLARIOstarFirmware120Tests(unittest.TestCase):
+  """The replies of an original CLARIOstar on firmware 1.20 decode to its recording."""
+
+  def decoded(self) -> DeviceConfiguration:
+    configuration = DeviceConfiguration()
+    configuration.update_from_init_reply(CLARIOSTAR_1_20_INIT_PAYLOAD)
+    configuration.update_from_parameters(
+      master_module.CLARIOstarDriver._decode_parameters(CLARIOSTAR_1_20_PARAMETERS_PAYLOAD)
+    )
+    return configuration
+
+  def test_replies_decode_to_the_recording(self):
+    with open(RECORDING_CLARIOSTAR_1_20) as f:
+      recorded = json.load(f)["device"]
+    self.assertEqual(configuration_module.configuration_to_json(self.decoded()), recorded)
+
+  def test_recording_name(self):
+    self.assertEqual(
+      configuration_module.compute_recording_name(self.decoded()),
+      os.path.basename(RECORDING_CLARIOSTAR_1_20),
+    )
+
+  def test_init_and_parameters_agree_on_the_firmware(self):
+    parameters = master_module.CLARIOstarDriver._decode_parameters(
+      CLARIOSTAR_1_20_PARAMETERS_PAYLOAD
+    )
+    self.assertEqual(parameters["firmware_version"], 1200)
+    self.assertEqual(self.decoded().firmware_version, "1.20")
+
+  def test_firmware_build_date(self):
+    self.assertEqual(
+      master_module.CLARIOstarDriver._decode_firmware_build_date(
+        CLARIOSTAR_1_20_FIRMWARE_INFO_PAYLOAD
+      ),
+      "2017-04-27",
+    )
+
+  def test_two_xcalibur_pumps_from_a_longer_pumps_block(self):
+    blocks = dict(configuration_module._blocks(CLARIOSTAR_1_20_INIT_PAYLOAD))
+    self.assertEqual(len(blocks[0x0F]), 31)  # 3 on the recorded Plus, which has no pumps
+    self.assertEqual(self.decoded().pumps, ("XCalibur", "XCalibur", None))
