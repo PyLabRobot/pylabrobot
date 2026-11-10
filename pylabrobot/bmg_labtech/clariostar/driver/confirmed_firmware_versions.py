@@ -2,4 +2,4 @@
 
 from typing import FrozenSet
 
-CONFIRMED_FIRMWARE_VERSIONS: FrozenSet[str] = frozenset({"1.35"})
+CONFIRMED_FIRMWARE_VERSIONS: FrozenSet[str] = frozenset({"1.20", "1.35"})

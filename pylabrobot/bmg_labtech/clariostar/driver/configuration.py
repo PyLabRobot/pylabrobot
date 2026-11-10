@@ -11,8 +11,10 @@ logger = logging.getLogger(__name__)
 INIT_REPLY_TYPE = 0x13
 
 # The firmware whose replies are decoded, as (lowest, highest) firmware number x 1000: the 1.x line.
-# Older firmware is untested; 2.x (the line with native USB) lays its replies out unseen.
-DECODED_FIRMWARE = (1300, 1999)
+# 1.20 (an original CLARIOstar) lays out its INIT and stored parameters replies as 1.35 does, but
+# for a longer pumps block; older firmware is untested; 2.x (the line with native USB) lays its
+# replies out unseen.
+DECODED_FIRMWARE = (1200, 1999)
 
 _BARCODE_READER_TYPES = {0: "SE 923", 1: "CSE 600", 2: "SE 955", 3: "SE 965"}
 BARCODE_READER_POSITIONS = ("front", "right", "optional 1", "optional 2")

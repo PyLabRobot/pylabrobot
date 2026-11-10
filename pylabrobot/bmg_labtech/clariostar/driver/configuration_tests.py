@@ -70,9 +70,9 @@ class DecodeTests(unittest.TestCase):
     self.assertEqual(slides["EM_SLIT"][6], "LUM lense")
 
   def test_undecoded_firmware_fills_only_the_main_board(self):
-    # Not a reader's reply: the recorded one with its firmware field set to 1.29, and to 2.11, the
+    # Not a reader's reply: the recorded one with its firmware field set to 1.19, and to 2.11, the
     # line with native USB; no reader with either has answered.
-    for firmware, version in ((1290, "1.29"), (2110, "2.11")):
+    for firmware, version in ((1190, "1.19"), (2110, "2.11")):
       payload = bytearray(INIT_PAYLOAD)
       payload[9:11] = firmware.to_bytes(2, "big")
       configuration = DeviceConfiguration()
