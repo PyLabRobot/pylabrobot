@@ -1,5 +1,6 @@
 """Corning-Falcon Plates"""
 
+import warnings
 from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
@@ -14,10 +15,10 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# # # # # # # # # # Cor_Falcon_96_wellplate_275ul_Fb # # # # # # # # # #
+# # # # # # # # # # cor_falcon_96_wellplate_275uL_Fb # # # # # # # # # #
 
 
-def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_falcon_96_wellplate_275uL_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 353072
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -36,7 +37,7 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
     size_y=85.11,  # directly from reference manual
     size_z=14.30,  # without lid, directly from reference manual
     lid=lid,
-    model=Cor_Falcon_96_wellplate_275ul_Fb.__name__,
+    model=cor_falcon_96_wellplate_275uL_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -56,14 +57,15 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
       compute_height_from_volume=lambda liquid_volume: compute_height_from_volume_conical_frustum(
         liquid_volume, BOTTOM_RADIUS, TOP_RADIUS
       ),
+      name_prefix=name,
     ),
   )
 
 
-# # # # # # # # # # Cor_Falcon_96_wellplate_250ul_Rb # # # # # # # # # #
+# # # # # # # # # # cor_falcon_96_wellplate_250uL_Rb # # # # # # # # # #
 
 
-def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_falcon_96_wellplate_250uL_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 353077
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -94,7 +96,7 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
     size_y=85.11,
     size_z=14.30,
     lid=lid,
-    model=Cor_Falcon_96_wellplate_250ul_Rb.__name__,
+    model=cor_falcon_96_wellplate_250uL_Rb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -104,19 +106,16 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
       dz=1.80,  # calibrated manually by z-stepping down using a pipette.
       item_dx=8.99,  # measured
       item_dy=8.99,  # measured
+      name_prefix=name,
       **well_kwargs,
     ),
   )
 
 
-def Cor_Falcon_96_wellplate_250ul_Rb_Lid(name: str) -> Lid:
-  raise NotImplementedError("This lid is not currently defined.")
+# # # # # # # # # # cor_falcon_96_wellplate_340uL_Fb_black # # # # # # # # # #
 
 
-# # # # # # # # # # Cor_Falcon_96_wellplate_340ul_Fb_Black # # # # # # # # # #
-
-
-def Cor_Falcon_96_wellplate_340ul_Fb_Black(name: str, lid: Optional[Lid] = None) -> Plate:
+def cor_falcon_96_wellplate_340uL_Fb_black(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 353219
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -151,7 +150,7 @@ def Cor_Falcon_96_wellplate_340ul_Fb_Black(name: str, lid: Optional[Lid] = None)
     size_y=85.48,  # from spec
     size_z=14.40,  # from spec
     lid=lid,
-    model=Falcon_96_wellplate_Fl_Black.__name__,
+    model=cor_falcon_96_wellplate_340uL_Fb_black.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -161,20 +160,59 @@ def Cor_Falcon_96_wellplate_340ul_Fb_Black(name: str, lid: Optional[Lid] = None)
       dz=6.7,  # calculated from spec, manually calibrated
       item_dx=9,
       item_dy=9,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
 
 
-def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError(
-    "Falcon_96_wellplate_Fl definition is deprecated. Use "
-    "Cor_Falcon_96_wellplate_340ul_Fb_Black instead."
-  )
+# --------------------------------------------------------------------------- #
+# Deprecated function names (backward compatibility)
+# --------------------------------------------------------------------------- #
 
 
-def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError(
-    "Falcon_96_wellplate_Fl_Black definition is deprecated. Use "
-    "Cor_Falcon_96_wellplate_340ul_Fb_Black instead."
+def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_falcon_96_wellplate_250uL_Rb().
+
+  This alias will be removed in v1b1.
+  Use `cor_falcon_96_wellplate_250uL_Rb()` instead.
+  """
+  warnings.warn(
+    "Cor_Falcon_96_wellplate_250ul_Rb() is deprecated and will be removed in v1b1. "
+    "Use cor_falcon_96_wellplate_250uL_Rb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
   )
+  return cor_falcon_96_wellplate_250uL_Rb(name, lid)
+
+
+def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_falcon_96_wellplate_275uL_Fb().
+
+  This alias will be removed in v1b1.
+  Use `cor_falcon_96_wellplate_275uL_Fb()` instead.
+  """
+  warnings.warn(
+    "Cor_Falcon_96_wellplate_275ul_Fb() is deprecated and will be removed in v1b1. "
+    "Use cor_falcon_96_wellplate_275uL_Fb() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_falcon_96_wellplate_275uL_Fb(name, lid)
+
+
+def Cor_Falcon_96_wellplate_340ul_Fb_Black(
+  name: str, lid: Optional[Lid] = None
+) -> Plate:  # remove v1b1
+  """Deprecated alias for cor_falcon_96_wellplate_340uL_Fb_black().
+
+  This alias will be removed in v1b1.
+  Use `cor_falcon_96_wellplate_340uL_Fb_black()` instead.
+  """
+  warnings.warn(
+    "Cor_Falcon_96_wellplate_340ul_Fb_Black() is deprecated and will be removed in v1b1. "
+    "Use cor_falcon_96_wellplate_340uL_Fb_black() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return cor_falcon_96_wellplate_340uL_Fb_black(name, lid)

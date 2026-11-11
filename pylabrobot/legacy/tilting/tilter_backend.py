@@ -1,8 +1,6 @@
-"""Legacy. Use pylabrobot.capabilities.tilting instead."""
-
 from abc import ABCMeta, abstractmethod
 
-from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.legacy.machines.machine import MachineBackend
 
 
 class TiltModuleError(Exception):
@@ -15,6 +13,9 @@ class TilterBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def set_angle(self, angle: float):
     """Set the tilt module to rotate by a given angle.
+
+    We assume the rotation anchor is the right side of the module. This may change in the future
+    if we integrate other tilt modules.
 
     Args:
       angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.

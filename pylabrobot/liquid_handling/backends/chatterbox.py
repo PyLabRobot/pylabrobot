@@ -7,4 +7,4 @@ warnings.warn(
   stacklevel=2,
 )
 
-from pylabrobot.legacy.liquid_handling.backends.chatterbox import *  # noqa: F401,F403,E402
+from pylabrobot.legacy.liquid_handling.backends.chatterbox import *  # noqa: F403, E402

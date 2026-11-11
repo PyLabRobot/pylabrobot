@@ -2,14 +2,13 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
-from pylabrobot.legacy.machines.backend import MachineBackend
+from pylabrobot.legacy.storage.inheco.scila.inheco_sila_interface import InhecoSiLAInterface
 from pylabrobot.legacy.storage.inheco.scila.scila_backend import SCILABackend
 
 
 class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
-    self.patcher = patch("pylabrobot.inheco.scila.scila_backend.InhecoSiLAInterface")
+    self.patcher = patch("pylabrobot.legacy.storage.inheco.scila.scila_backend.InhecoSiLAInterface")
     self.MockInhecoSiLAInterface = self.patcher.start()
     self.mock_sila_interface = AsyncMock(spec=InhecoSiLAInterface)
     self.mock_sila_interface.bound_port = 80
@@ -24,7 +23,7 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     await self.backend.setup()
     self.mock_sila_interface.setup.assert_called_once()
     self.mock_sila_interface.send_command.assert_any_call(
-      "Reset",
+      command="Reset",
       deviceId="MyController",
       eventReceiverURI="http://127.0.0.1:80/",
       simulationMode=False,
@@ -121,6 +120,10 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
   async def test_close_invalid_id(self):
     with self.assertRaises(ValueError):
       await self.backend.close(5)
+
+  async def test_maintenance(self):
+    await self.backend.maintenance()
+    self.mock_sila_interface.send_command.assert_called_with("Maintenance")
 
   async def test_request_drawer_status(self):
     self.mock_sila_interface.send_command.return_value = ET.fromstring(
@@ -221,15 +224,15 @@ class TestSCILABackend(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(data["client_ip"])
 
   def test_deserialize(self):
-    data = {"type": "SCILABackend", "scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
-    MachineBackend.deserialize(data)
+    data = {"scila_ip": "169.254.1.117", "client_ip": "192.168.1.10"}
+    SCILABackend.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(
       client_ip="192.168.1.10", machine_ip="169.254.1.117"
     )
 
   def test_deserialize_no_client_ip(self):
-    data = {"type": "SCILABackend", "scila_ip": "169.254.1.117"}
-    MachineBackend.deserialize(data)
+    data = {"scila_ip": "169.254.1.117"}
+    SCILABackend.deserialize(data)
     self.MockInhecoSiLAInterface.assert_called_with(client_ip=None, machine_ip="169.254.1.117")
 
 

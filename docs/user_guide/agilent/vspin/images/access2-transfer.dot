@@ -1,0 +1,33 @@
+digraph access2_transfer {
+  graph [bgcolor="#f8fafc", pad=0.2, rankdir=TB, ranksep=0.5, nodesep=0.35,
+         splines=polyline];
+  node [shape=box, style="rounded,filled", fillcolor="#dcfce7", color="#16a34a",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=14, margin="0.12,0.09"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=12];
+
+  start [label="PARKED\nIDLE", group="left"];
+  approaching [label="APPROACHING\nSOURCE", group="middle"];
+  at_source [label="AT SOURCE", group="right"];
+  gripping [label="GRIPPING", group="right"];
+  holding [label="HOLDING", group="left"];
+  moving [label="MOVING TO\nDESTINATION", group="left"];
+  at_destination [label="AT DESTINATION", group="middle"];
+  releasing [label="RELEASING", group="right"];
+  returning [label="RETURNING\nTO PARK", group="right"];
+
+  {rank=same; start; approaching; at_source;}
+  {rank=same; holding; gripping;}
+  {rank=same; moving; at_destination; releasing;}
+
+
+  start -> approaching;
+  approaching -> at_source;
+  at_source -> gripping [label="plate detected", weight=10];
+  // Reverse the drawn arrows on alternate rows to keep the flow compact.
+  holding -> gripping [dir=back, label="grip verified"];
+  holding -> moving [weight=10];
+  moving -> at_destination;
+  at_destination -> releasing;
+  releasing -> returning [label="gripper open", weight=10];
+  returning -> start [label="park confirmed", constraint=false];
+}

@@ -2,25 +2,62 @@ import warnings
 
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 
-def MFX_TIP_module(name: str) -> ResourceHolder:
+def hamilton_mfx_tiprackholder_standard(name: str) -> EmbeddedTipRackHolder:
   """Hamilton cat. no.: 188160
-  Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack).
+  Hamilton name: 'MFX_TIP_module' or sometimes 'Tip Module BC'
+  Module to position a high-, standard- or low volume tip rack (but not a 384 tip rack).
+
+  Takes an `EmbeddedTipRack` - Hamilton calls these 'framed' tip racks - which sinks into the
+  module's opening and is centred over it, as in a tip carrier's site.
   """
 
-  # resource_size_x=122.4,
-  # resource_size_y=82.6,
+  top = 114.7 - 18.2  # above the carrier's own height
 
-  return ResourceHolder(
+  return EmbeddedTipRackHolder(
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=214.8 - 18.195 - 100,
-    # probe height - carrier_height - deck_height
-    child_location=Coordinate(6.2, 5.0, 214.8 - 18.195 - 100),
-    model="MFX_TIP_module",
+    size_z=top,
+    # Only the height: the holder centres a framed rack in X and Y and sinks it into its opening.
+    child_location=Coordinate(x=0.0, y=0.0, z=top),
+    model=hamilton_mfx_tiprackholder_standard.__name__,
   )
+
+
+def MFX_TIP_module(name: str) -> EmbeddedTipRackHolder:
+  """Deprecated: use `hamilton_mfx_tiprackholder_standard`."""
+  warnings.warn(
+    "MFX_TIP_module is deprecated and will be removed in the future. "
+    "Use 'hamilton_mfx_tiprackholder_standard' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+  )
+  return hamilton_mfx_tiprackholder_standard(name=name)
+
+
+def hamilton_mfx_resourceholder_ntr(name: str) -> ResourceHolder:
+  """Hamilton cat. no.: 191425
+  Hamilton name: '_NTR4' site of an MFX carrier.
+  Module to position a stack of up to 4x 96 nested tip racks (NTR).
+  """
+
+  return ResourceHolder(
+    name=name,
+    # 134 mm across, as every MFX module is, and modelled as the 135 mm its carrier slot is: the
+    # track's sliding blocks centre the module in it.
+    size_x=135.0,
+    size_y=94.0,  # Hamilton's NTR4Module 3D model
+    size_z=20.0,  # measured
+    # The rack stands centred in the module's pocket, its SBS footprint on the module's centre.
+    child_location=Coordinate(x=(135.0 - 127.76) / 2, y=(94.0 - 85.48) / 2, z=10.8),
+    model=hamilton_mfx_resourceholder_ntr.__name__,
+  )
+
+
+# -- Plate storage ---------------------------------------------------------------------------
 
 
 def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
@@ -36,9 +73,9 @@ def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=178.0 - 18.195 - 100,  # 59.81mm
+    size_z=178.0 - 18.2 - 100,  # 59.8 mm
     # probe height - carrier_height - deck_height
-    child_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
+    child_location=Coordinate(4.0, 3.5, 178.0 - 18.2 - 100),
     model=hamilton_mfx_plateholder_DWP_flat.__name__,
     pedestal_size_z=0,
   )
@@ -57,7 +94,7 @@ def hamilton_mfx_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:
     size_y=94.0,  # measured
     size_z=76.4,  # measured
     # probe height - carrier_height - deck_height
-    child_location=Coordinate(4.0, 4.0, 183.95 - 18.195 - 100),  # measured
+    child_location=Coordinate(4.0, 4.0, 183.95 - 18.2 - 100),  # measured
     pedestal_size_z=-4.74,
     model=hamilton_mfx_plateholder_DWP_metal_tapped.__name__,
   )
@@ -71,7 +108,9 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
   rather than pedestal, so pedestal_size_z=0,
   """
 
-  width = 134.0
+  # 134 mm measured, and modelled as the 135 mm its carrier slot is: the track's sliding blocks centre
+  # the module in it, so a plate centred on the module is centred on the slot.
+  width = 135.0
   length = 92.10
 
   return PlateHolder(
@@ -85,8 +124,9 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
   )
 
 
+# --------------------------------------------------------------------------------------------
 # Deprecated names for backwards compatibility
-# TODO: Remove >2026-02
+# TODO: Remove >2026-12
 
 
 def Hamilton_MFX_plateholder_DWP_metal_tapped(name: str) -> PlateHolder:

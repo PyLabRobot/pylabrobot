@@ -13,19 +13,20 @@ PreciseFlex
   :nosignatures:
   :recursive:
 
+    PreciseFlexDevice
     PreciseFlex400
     PreciseFlexDriver
-    PreciseFlexArmBackend
-    PreciseFlex3400Backend
-
-.. autoclass:: pylabrobot.brooks.precise_flex.PreciseFlexArmBackend.PickUpParams
-   :members:
-
-.. autoclass:: pylabrobot.brooks.precise_flex.PreciseFlexArmBackend.DropParams
-   :members:
-
-.. autoclass:: pylabrobot.brooks.precise_flex.PreciseFlexArmBackend.MoveToJointPositionParams
-   :members:
-
-.. autoclass:: pylabrobot.brooks.precise_flex.PreciseFlexArmBackend.MoveToLocationParams
-   :members:
+    PreciseFlexSimulationDriver
+    PreciseFlexArm
+    PreciseFlexGripper
+    PreciseFlexRail
+    PreciseFlexVision
+    PreciseFlexConfiguration
+    PreciseFlexCartesianPose
+    WorkEnvelope
+    MotionProfile
+    PreciseFlexAxis
+    Wrist
+    ElbowOrientation
+    PreciseFlexError
+    OutOfRangeOfMotionError

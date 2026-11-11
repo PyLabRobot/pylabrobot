@@ -2,12 +2,62 @@
 
 import asyncio
 import time
-from typing import List, Optional
+from typing import Any, List, Optional
 
+from pylabrobot.events import (
+  event_operation,
+  evented_operation,
+  is_event_bus_active,
+  resource_reference,
+)
 from pylabrobot.legacy.machines.machine import Machine
 from pylabrobot.legacy.thermocycling.backend import ThermocyclerBackend
 from pylabrobot.legacy.thermocycling.standard import BlockStatus, LidStatus, Protocol, Stage, Step
 from pylabrobot.resources import Coordinate, ResourceHolder
+
+
+def _thermocycler_event_context(
+  self: "Thermocycler",
+  **backend_kwargs: Any,
+) -> dict[str, Any]:
+  """Describe the thermocycler and its directly loaded resource, when present."""
+
+  context: dict[str, Any] = {"device": resource_reference(self)}
+  if self.resource is not None:
+    context["resources"] = [resource_reference(self.resource)]
+  return context
+
+
+def _set_temperature_event_context(
+  self: "Thermocycler",
+  temperature: List[float],
+  **backend_kwargs: Any,
+) -> dict[str, Any]:
+  context = _thermocycler_event_context(self)
+  context["target_temperatures"] = list(temperature)
+  return context
+
+
+def _run_protocol_event_context(
+  self: "Thermocycler",
+  protocol: Protocol,
+  block_max_volume: float,
+  **backend_kwargs: Any,
+) -> dict[str, Any]:
+  """Summarize a protocol without placing the protocol object in an event."""
+
+  context = _thermocycler_event_context(self)
+  context.update(
+    {
+      "block_max_volume": block_max_volume,
+      "stage_count": len(protocol.stages),
+      "step_definition_count": sum(len(stage.steps) for stage in protocol.stages),
+      "step_execution_count": sum(len(stage.steps) * stage.repeats for stage in protocol.stages),
+    }
+  )
+  if protocol.stages and protocol.stages[0].steps:
+    context["temperature_zone_count"] = len(protocol.stages[0].steps[0].temperature)
+  return context
 
 
 class Thermocycler(ResourceHolder, Machine):
@@ -49,12 +99,18 @@ class Thermocycler(ResourceHolder, Machine):
     Machine.__init__(self, backend=backend)
     self.backend: ThermocyclerBackend = backend
 
+  @evented_operation("thermocycler.open_lid", _thermocycler_event_context)
   async def open_lid(self, **backend_kwargs):
     return await self.backend.open_lid(**backend_kwargs)
 
+  @evented_operation("thermocycler.close_lid", _thermocycler_event_context)
   async def close_lid(self, **backend_kwargs):
     return await self.backend.close_lid(**backend_kwargs)
 
+  @evented_operation(
+    "thermocycler.set_block_temperature",
+    _set_temperature_event_context,
+  )
   async def set_block_temperature(self, temperature: List[float], **backend_kwargs):
     """Set the block temperature.
 
@@ -63,6 +119,10 @@ class Thermocycler(ResourceHolder, Machine):
     """
     return await self.backend.set_block_temperature(temperature, **backend_kwargs)
 
+  @evented_operation(
+    "thermocycler.set_lid_temperature",
+    _set_temperature_event_context,
+  )
   async def set_lid_temperature(self, temperature: List[float], **backend_kwargs):
     """Set the lid temperature.
 
@@ -71,10 +131,12 @@ class Thermocycler(ResourceHolder, Machine):
     """
     return await self.backend.set_lid_temperature(temperature, **backend_kwargs)
 
+  @evented_operation("thermocycler.deactivate_block", _thermocycler_event_context)
   async def deactivate_block(self, **backend_kwargs):
     """Turn off the block heater."""
     return await self.backend.deactivate_block(**backend_kwargs)
 
+  @evented_operation("thermocycler.deactivate_lid", _thermocycler_event_context)
   async def deactivate_lid(self, **backend_kwargs):
     """Turn off the lid heater."""
     return await self.backend.deactivate_lid(**backend_kwargs)
@@ -87,16 +149,22 @@ class Thermocycler(ResourceHolder, Machine):
       block_max_volume: Maximum block volume (µL) for safety.
     """
 
-    num_zones = len(protocol.stages[0].steps[0].temperature)
-    for stage in protocol.stages:
-      for i, step in enumerate(stage.steps):
-        if len(step.temperature) != num_zones:
-          raise ValueError(
-            f"All steps must have the same number of temperatures. "
-            f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
-          )
+    operation_data = (
+      _run_protocol_event_context(self, protocol, block_max_volume, **backend_kwargs)
+      if is_event_bus_active()
+      else {}
+    )
+    with event_operation("thermocycler.run_protocol", **operation_data):
+      num_zones = len(protocol.stages[0].steps[0].temperature)
+      for stage in protocol.stages:
+        for i, step in enumerate(stage.steps):
+          if len(step.temperature) != num_zones:
+            raise ValueError(
+              f"All steps must have the same number of temperatures. "
+              f"Expected {num_zones}, got {len(step.temperature)} in step {i}."
+            )
 
-    return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
+      return await self.backend.run_protocol(protocol, block_max_volume, **backend_kwargs)
 
   async def run_pcr_profile(
     self,

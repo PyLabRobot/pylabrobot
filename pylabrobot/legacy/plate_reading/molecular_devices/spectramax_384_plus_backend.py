@@ -1,38 +1,37 @@
-"""Legacy. Use pylabrobot.molecular_devices.spectramax.SpectraMax384PlusBackend instead."""
-
 from typing import Dict, List, Optional, Union
 
-from pylabrobot.molecular_devices.spectramax.backend import (
+from pylabrobot.resources.plate import Plate
+
+from .backend import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
-  MolecularDevicesDriver,
+  MolecularDevicesBackend,
+  MolecularDevicesSettings,
   PmtGain,
   ReadOrder,
   ReadType,
   ShakeSettings,
   SpectrumSettings,
 )
-from pylabrobot.molecular_devices.spectramax.spectramax_384_plus import (
-  SpectraMax384PlusAbsorbanceBackend,
-)
-from pylabrobot.resources.plate import Plate
-
-from .backend import MolecularDevicesBackend
 
 
 class MolecularDevicesSpectraMax384PlusBackend(MolecularDevicesBackend):
-  """Legacy. Use pylabrobot.molecular_devices.spectramax.SpectraMax384Plus instead."""
-
-  def _make_driver(self, port: str):
-    return MolecularDevicesDriver(
-      port=port, human_readable_device_name="Molecular Devices SpectraMax 384 Plus"
-    )
+  """Backend for Molecular Devices SpectraMax 384 Plus plate readers."""
 
   def __init__(self, port: str) -> None:
     super().__init__(port)
-    # Override the absorbance backend with the 384-specific one
-    self._absorbance = SpectraMax384PlusAbsorbanceBackend(self.driver)
+
+  async def _set_readtype(self, settings: MolecularDevicesSettings) -> None:
+    """Set the READTYPE command and the expected number of response fields."""
+    cmd = f"!READTYPE {'CUV' if settings.cuvette else 'PLA'}"
+    await self.send_command(cmd, num_res_fields=1)
+
+  async def _set_nvram(self, settings: MolecularDevicesSettings) -> None:
+    pass
+
+  async def _set_tag(self, settings: MolecularDevicesSettings) -> None:
+    pass
 
   async def read_fluorescence(  # type: ignore[override]
     self,

@@ -1,19 +1,9 @@
-from .backend import (
-  COMMAND_TERMINATORS,
-  ERROR_CODES,
+from .base import (
   Calibrate,
   CarriageSpeed,
   KineticSettings,
-  MolecularDevicesAbsorbanceBackend,
-  MolecularDevicesDriver,
-  MolecularDevicesError,
-  MolecularDevicesFirmwareError,
-  MolecularDevicesHardwareError,
-  MolecularDevicesMotionError,
-  MolecularDevicesNVRAMError,
+  MolecularDevicesPlateReader,
   MolecularDevicesSettings,
-  MolecularDevicesTemperatureBackend,
-  MolecularDevicesUnrecognizedCommandError,
   PmtGain,
   ReadMode,
   ReadOrder,
@@ -21,9 +11,15 @@ from .backend import (
   ShakeSettings,
   SpectrumSettings,
 )
-from .spectramax_384_plus import SpectraMax384Plus, SpectraMax384PlusAbsorbanceBackend
-from .spectramax_m5 import (
-  SpectraMaxM5,
-  SpectraMaxM5FluorescenceBackend,
-  SpectraMaxM5LuminescenceBackend,
+from .errors import (
+  ERROR_CODES,
+  SpectraMaxError,
+  SpectraMaxFirmwareError,
+  SpectraMaxHardwareError,
+  SpectraMaxMotionError,
+  SpectraMaxNVRAMError,
+  SpectraMaxUnrecognizedCommandError,
 )
+from .results import AbsorbanceResult, FluorescenceResult, LuminescenceResult
+from .spectramax_384_plus import SpectraMax384Plus
+from .spectramax_m5 import SpectraMaxM5

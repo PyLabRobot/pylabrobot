@@ -1,1 +1,2 @@
-from .masterflex_backend import MasterflexBackend, MasterflexDriver, MasterflexPump
+from .genogrinder import GenoGrinder, GenoGrinderError
+from .masterflex import Masterflex

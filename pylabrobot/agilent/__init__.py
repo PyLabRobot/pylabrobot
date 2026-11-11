@@ -1,15 +1,19 @@
+from .benchcel import BenchCel4R
 from .biotek import (
   EL406,
-  BioTekBackend,
-  BioTekLoadingTrayBackend,
+  AbsorbanceResult,
   Cytation1,
   Cytation5,
   CytationImagingConfig,
-  CytationMicroscopyBackend,
-  EL406Driver,
-  EL406PlateWasher96Backend,
-  EL406ShakingBackend,
+  FluorescenceResult,
+  LuminescenceResult,
   SynergyH1,
-  SynergyH1Backend,
+  SynergyHT,
 )
-from .vspin import Access2, Access2Driver, VSpin, VSpinCentrifugeBackend, VSpinDriver
+from .plateloc import (
+  PlateLoc,
+  PlateLocError,
+  PlateLocSerialProfile,
+  PlateLocStatus,
+)
+from .vspin import Access2, Access2Driver, VSpin

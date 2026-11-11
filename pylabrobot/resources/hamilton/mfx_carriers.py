@@ -13,12 +13,15 @@ def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) 
   Hamilton name: 'MFX_CAR_L5_base'
   Labware carrier base for up to 5 Multiflex Modules
   """
+  # Modules are 94 mm deep on a 96 mm pitch and centre what they hold; Hamilton's definitions place
+  # that content with the modules' front edges 4.5 mm into the carrier. A caliper reads 5 to 5.5,
+  # which cannot resolve half a millimetre against the carrier's chamfered edge.
   locations = [
-    Coordinate(0.0, 5.0, 18.195),
-    Coordinate(0.0, 101.0, 18.195),
-    Coordinate(0.0, 197.0, 18.195),
-    Coordinate(0.0, 293.0, 18.195),
-    Coordinate(0.0, 389.0, 18.195),
+    Coordinate(0.0, 4.5, 18.2),
+    Coordinate(0.0, 100.5, 18.2),
+    Coordinate(0.0, 196.5, 18.2),
+    Coordinate(0.0, 292.5, 18.2),
+    Coordinate(0.0, 388.5, 18.2),
   ]
   half_locations = [c + Coordinate(y=90 / 2) for c in locations[:-1]]
   sites: Dict[int, ResourceHolder] = {}
@@ -36,7 +39,7 @@ def hamilton_mfx_carrier_L5_base(name: str, modules: Dict[int, ResourceHolder]) 
     name=name,
     size_x=135.0,
     size_y=497.0,
-    size_z=18.195,
+    size_z=18.2,
     sites=sites,
     model="MFX_CAR_L5_base",
   )

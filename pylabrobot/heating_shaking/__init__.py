@@ -7,4 +7,4 @@ warnings.warn(
   stacklevel=2,
 )
 
-from pylabrobot.legacy.heating_shaking import *  # noqa: F401,F403,E402
+from pylabrobot.legacy.heating_shaking import *  # noqa: E402

@@ -24,7 +24,11 @@ import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, AsyncGenerator, Optional
 
 try:
-  from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+  from zeroconf import (  # type: ignore[import-not-found]
+    ServiceBrowser,
+    ServiceListener,
+    Zeroconf,
+  )
 
   HAS_ZEROCONF = True
 except ImportError:

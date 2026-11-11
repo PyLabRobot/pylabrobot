@@ -6,6 +6,7 @@ import enum
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Sequence, Union
 
+from pylabrobot.lib.liquid_handling.mix import Mix  # noqa: F401  kept here for its importers
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.rotation import Rotation
 
@@ -70,13 +71,6 @@ class SingleChannelDispense:
   liquid_height: Optional[float]
   blow_out_air_volume: Optional[float]
   mix: Optional[Mix]
-
-
-@dataclass(frozen=True)
-class Mix:
-  volume: float
-  repetitions: int
-  flow_rate: float
 
 
 @dataclass(frozen=True)

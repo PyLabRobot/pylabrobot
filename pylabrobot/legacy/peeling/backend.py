@@ -4,7 +4,7 @@ from pylabrobot.legacy.machines.backend import MachineBackend
 
 
 class PeelerBackend(MachineBackend, metaclass=ABCMeta):
-  """Legacy. Use pylabrobot.capabilities.peeling.PeelerBackend instead."""
+  """Backend for a peeler machine"""
 
   @abstractmethod
   async def peel(self):

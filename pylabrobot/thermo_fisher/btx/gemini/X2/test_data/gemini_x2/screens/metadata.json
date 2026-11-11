@@ -1,0 +1,167 @@
+{
+  "schema_version": 2,
+  "description": "Selected BTX Gemini X2 RSI screen fixtures from a physical end-to-end run with GO.",
+  "device": {
+    "model": "BTX Gemini X2",
+    "firmware": "BTX Gemini 4.0.4"
+  },
+  "capture": {
+    "kind": "physical_device_rsi_capture",
+    "captured_at_utc": "2026-05-26T07:42:48+00:00",
+    "go_pressed": true,
+    "plate_columns": 3,
+    "temporary_protocol_deleted": true,
+    "matched_log_path": "\\BTXDATA\\2026-05\\260526\\153650.TXT",
+    "notes": [
+      "Screens were captured from the physical RSI framebuffer at 800x480.",
+      "Only selected fixture PNGs and this portable manifest are kept in the repository.",
+      "Raw capture paths and host-specific serial port details are intentionally omitted.",
+      "The Set Plate Columns flow returns protocol_details after the first confirm and protocol_run_view after the second confirm."
+    ]
+  },
+  "temporary_protocol": {
+    "name": "!PLR_0526154053",
+    "protocol_type": "square",
+    "pulse_amplitude_volts": 250,
+    "gap_mm": 2.0,
+    "pulse_count": 1,
+    "pulse_interval_seconds": 0.0,
+    "duration_us": 1000,
+    "resistance_ohms": null,
+    "capacitance_uf": null
+  },
+  "run_log_summary": {
+    "protocol_name": "!PLR_0526154053",
+    "protocol_type": "Square Wave",
+    "pulse_amplitude_volts": 250,
+    "plate_columns": 3,
+    "pulse_1_voltage_volts": 262.45,
+    "protocol_result": "Complete",
+    "status_code": "0x00000000.00000000",
+    "status_message": "(No error.)"
+  },
+  "screens": [
+    {
+      "label": "00_main_menu",
+      "state": "main_menu",
+      "confidence": 1.0,
+      "image": "00_main_menu.png",
+      "rgb_sha1": "c4566e00637c64a464d80d0f9df77f51f9b53e65",
+      "matched": [
+        "main menu"
+      ]
+    },
+    {
+      "label": "01_user_protocols_top",
+      "state": "user_protocols",
+      "confidence": 1.0,
+      "image": "01_user_protocols_top.png",
+      "rgb_sha1": "98c19ee5064b42a3d781edc48eccbb3a3172a138",
+      "matched": [
+        "user protocols"
+      ]
+    },
+    {
+      "label": "02_protocol_summary",
+      "state": "unknown",
+      "confidence": 0.0,
+      "image": "02_protocol_summary.png",
+      "rgb_sha1": "5178b2eceefa0501787ec0267ba57390efbd7d11",
+      "matched": []
+    },
+    {
+      "label": "03_run_protocol_prerun",
+      "state": "protocol_run_view",
+      "confidence": 0.82,
+      "image": "03_run_protocol_prerun.png",
+      "rgb_sha1": "ff5ed097b3fb46c9a3718d9314eded590e45ae9e",
+      "matched": [
+        "run protocol",
+        "set meas",
+        "go"
+      ]
+    },
+    {
+      "label": "04_set_plate_columns_open",
+      "state": "protocol_details",
+      "confidence": 1.0,
+      "image": "04_set_plate_columns_open.png",
+      "rgb_sha1": "0ebad043b0e09499d09ec5e54cda28621ae01967",
+      "matched": [
+        "protocol details marker"
+      ]
+    },
+    {
+      "label": "05_set_plate_columns_after_first_confirm",
+      "state": "protocol_details",
+      "confidence": 1.0,
+      "image": "05_set_plate_columns_after_first_confirm.png",
+      "rgb_sha1": "e766c8f9472f95aa75ed0e27deb29e34e6ab5be5",
+      "matched": [
+        "protocol details marker"
+      ]
+    },
+    {
+      "label": "06_set_plate_columns_confirmed_run_view",
+      "state": "protocol_run_view",
+      "confidence": 0.82,
+      "image": "06_set_plate_columns_confirmed_run_view.png",
+      "rgb_sha1": "d048afe888bc0a2f1ca0e82d586757495d652f96",
+      "matched": [
+        "run protocol",
+        "set meas",
+        "go"
+      ]
+    },
+    {
+      "label": "07_go_prerun",
+      "state": "protocol_run_view",
+      "confidence": 0.82,
+      "image": "07_go_prerun.png",
+      "rgb_sha1": "65db3191e1be29e0e52296a831ca60f2fe7cc5ce",
+      "matched": [
+        "run protocol",
+        "set meas",
+        "go"
+      ]
+    },
+    {
+      "label": "08_go_delivering_pulse",
+      "state": "protocol_run_view",
+      "confidence": 0.82,
+      "image": "08_go_delivering_pulse.png",
+      "rgb_sha1": "a476cc0f193e37a6edd336f32af7138311948376",
+      "matched": [
+        "run protocol",
+        "set meas",
+        "delivering pulse"
+      ]
+    },
+    {
+      "label": "09_go_pulses_delivered",
+      "state": "protocol_finish",
+      "confidence": 1.0,
+      "image": "09_go_pulses_delivered.png",
+      "rgb_sha1": "8482a5f644f1fd307b60884efa1efb053d7ced2c",
+      "matched": [
+        "run protocol",
+        "pulses delivered",
+        "press to clear message"
+      ]
+    },
+    {
+      "label": "10_returned_home_after_go",
+      "state": "main_menu",
+      "confidence": 1.0,
+      "image": "10_returned_home_after_go.png",
+      "rgb_sha1": "dca38d5e9c5af6fe94796017a09669d72007ef23",
+      "matched": [
+        "main menu"
+      ]
+    }
+  ],
+  "extra_fixtures": {
+    "user_protocols_double_up_active": "user_protocols_double_up_active.png",
+    "user_protocols_double_up_inactive": "user_protocols_double_up_inactive.png"
+  }
+}

@@ -23,8 +23,6 @@ class _BaseCardDirective(Directive):
     option_spec = {
         "header": directives.unchanged_required,
         "card_description": directives.unchanged,
-        "image": directives.unchanged,
-        "image_hover": directives.unchanged,
         "link": directives.unchanged_required,
         "tags": directives.unchanged,
     }
@@ -37,8 +35,6 @@ class _BaseCardDirective(Directive):
         cards.append({
             "header": self.options.get("header", ""),
             "desc": self.options.get("card_description", ""),
-            "image": self.options.get("image", ""),
-            "image_hover": self.options.get("image_hover", ""),
             "link": self.options.get("link", ""),
             "tags": _split_tags(self.options.get("tags", "")),
         })
@@ -54,7 +50,6 @@ class PyLabRobotCard(_BaseCardDirective):
     Options:
       :header: Title (required)
       :card_description: Short text
-      :image: path/to/image.png
       :link: path/to/page.html (required)
       :tags: Tag1, Tag2
     """
@@ -99,7 +94,6 @@ def _page_ctx(app, pagename, templatename, context, doctree):
     context["plr_cards"] = per_page
     context["plr_cards_all_tags"] = all_tags
 
-import os
 from docutils import nodes
 
 
@@ -109,53 +103,11 @@ def _replace_placeholders(app, doctree, fromdocname):
     env = app.builder.env
     per_page = getattr(env, "plr_cards", {}).get(fromdocname, [])
 
-    # prefix like "", "../", "../../" depending on nesting of fromdocname
-    docdir = os.path.dirname(fromdocname).replace("\\", "/")
-    depth = 0 if docdir == "" else docdir.count("/") + 1
-    prefix = "../" * depth
-
-    def is_url(p):
-        return p.startswith(("http://", "https://"))
-
-    cards_render = []
-    for c in per_page:
-        img = (c.get("image") or "").replace("\\", "/")
-        img_hover = (c.get("image_hover") or "").replace("\\", "/")
-
-        image_url = ""
-        image_hover_url = ""
-
-        # Resolve main image
-        if img:
-            if is_url(img) or img.startswith("/"):
-                image_url = img  # absolute http(s) or site-root path
-            else:
-                if img.startswith("_static/"):
-                    image_url = prefix + img
-                else:
-                    image_url = prefix + img
-
-        # Resolve hover image
-        if img_hover:
-            if is_url(img_hover) or img_hover.startswith("/"):
-                image_hover_url = img_hover
-            else:
-                if img_hover.startswith("_static/"):
-                    image_hover_url = prefix + img_hover
-                else:
-                    image_hover_url = prefix + img_hover
-
-        cards_render.append({
-            **c,
-            "image_url": image_url,
-            "image_hover_url": image_hover_url,
-        })
-
     page_tags = sorted({t for c in per_page for t in c.get("tags", [])}, key=str.lower)
 
     for node in doctree.traverse(plr_card_grid_placeholder):
         html = app.builder.templates.render("plr_card_grid.html", {
-            "cards": cards_render,
+            "cards": per_page,
             "all_tags": page_tags,
         })
         raw = nodes.raw("", html, format="html")

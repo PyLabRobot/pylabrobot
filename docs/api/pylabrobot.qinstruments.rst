@@ -11,9 +11,6 @@ pylabrobot.qinstruments package
   :recursive:
 
     BioShake
-    BioShakeDriver
-    BioShakeShakerBackend
-    BioShakeTemperatureBackend
     BioShake3000
     BioShake3000Elm
     BioShake3000ElmDWP

@@ -3,5 +3,7 @@
 ```{toctree}
 :maxdepth: 1
 
-temperature_module/hello-world
+ot2/hello-world
+flex/hello-world
+flex/usb
 ```
