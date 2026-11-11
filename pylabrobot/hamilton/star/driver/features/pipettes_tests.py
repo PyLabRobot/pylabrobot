@@ -647,8 +647,8 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     reads.assert_awaited_once_with(module="P3", command="RD", fmt="rd#####")
 
   async def test_x_firmware(self):
-    await self.pipettes._unchecked_fw_probe_x_using_clld(134.0)
-    self.assertEqual(self.sent, ["C0XLxs01340"])
+    await self.pipettes._unchecked_fw_probe_x_using_clld(channel=4, end_position=134.0)
+    self.assertEqual(self.sent, ["C0XLpn05xs01340"])
 
   async def test_y_firmware(self):
     await self.pipettes._unchecked_fw_probe_y_using_clld(0, 2160, 10, 216, 4, 7)
@@ -657,7 +657,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
   async def test_x_probe_searches_backs_away_and_corrects_for_the_tip(self):
     self._stand_at_x(300.0, 250.04)
     x = await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0)
-    self.assertEqual(self.sent, ["C0XLxs02000"])
+    self.assertEqual(self.sent, ["C0XLpn01xs02000"])
     self.moves.assert_awaited_once_with(252.0)
     self.assertEqual(x, 249.4)
 
@@ -667,7 +667,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     high = device.instrument_size_slots * 22.5 + 125.0
     self._stand_at_x(300.0, 400.0)
     x = await self.pipettes.probe_x_using_clld(0, "right")
-    self.assertEqual(self.sent, [f"C0XLxs{round(high * 10):05}"])
+    self.assertEqual(self.sent, [f"C0XLpn01xs{round(high * 10):05}"])
     self.moves.assert_awaited_once_with(398.0)
     self.assertEqual(x, 400.6)
 
