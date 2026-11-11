@@ -1,0 +1,6 @@
+pylabrobot.opentrons.DoorStatus.required\_closed\_for\_protocol
+===============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: DoorStatus.required_closed_for_protocol

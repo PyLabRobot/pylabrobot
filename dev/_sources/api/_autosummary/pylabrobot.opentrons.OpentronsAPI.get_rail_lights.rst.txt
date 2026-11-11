@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.get\_rail\_lights
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.get_rail_lights

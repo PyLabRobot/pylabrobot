@@ -1,0 +1,6 @@
+pylabrobot.opentrons.DoorStatus.closed
+======================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: DoorStatus.closed
