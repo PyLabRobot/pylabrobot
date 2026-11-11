@@ -587,6 +587,26 @@ class TestEveryMotionPathIsChecked(unittest.IsolatedAsyncioTestCase):
               )
         self.assertEqual([call.args[0] for call in sent.call_args_list], ["wherej"])
 
+  async def test_a_pick_is_checked_with_the_wrist_turn_the_controller_takes(self):
+    # The first two: stations the arm reached a full wrist turn from the one taught.
+    for taught, reached in (
+      (joints(-81.17, 105.893, -268.962, 78.0, z=152.993), 91.038),
+      (joints(84.162, 236.177, 37.591, 78.0, z=150.0), -322.409),
+      (joints(-30.0, 150.0, 60.0, 78.0, z=150.0), -300.0),  # a heading of exactly 180
+    ):
+      with self.subTest(taught=taught[PreciseFlexAxis.WRIST]):
+        sent = AsyncMock(side_effect=lambda command: self.HOMED if command == "wherej" else "")
+        with patch.object(self.driver, "send_command", sent):
+          with patch.object(self.arm, "_wait_for_eom", AsyncMock()):
+            with patch.object(self.arm, "_check_path_reachable") as checked:
+              await self.arm._guarded_plate_j(
+                build_station=lambda current: {**current, **taught},
+                unchecked_fw_plate=self.arm._unchecked_fw_pick_plate,
+              )
+        self.assertEqual(checked.call_count, 1)
+        checked_wrist = checked.call_args.args[1][PreciseFlexAxis.WRIST]
+        self.assertAlmostEqual(checked_wrist, reached, delta=0.01)
+
   async def test_each_move_of_a_route_of_poses_is_checked_from_where_the_last_ends(self):
     ahead = self.arm._forward_kinematics(joints(0.0, 180.0, -180.0, 70.7)).gripper_pose
     sent = AsyncMock(side_effect=lambda command: self.HOMED if command == "wherej" else "")
