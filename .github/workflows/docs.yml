@@ -32,10 +32,8 @@ jobs:
 
       - name: Install Graphviz
         run: |
-          # The docs cannot build without it: retry once more on a fresh package index.
-          install="sudo apt-get install -y -o Acquire::Retries=3 graphviz libgvplugin-neato-layout8"
           sudo apt-get update
-          $install || (sudo apt-get update && $install)
+          sudo apt-get install -y graphviz libgvplugin-neato-layout8
 
       - name: Install dependencies
         run: pip install -e '.[dev]'
@@ -64,10 +62,8 @@ jobs:
 
       - name: Install Graphviz
         run: |
-          # The docs cannot build without it: retry once more on a fresh package index.
-          install="sudo apt-get install -y -o Acquire::Retries=3 graphviz libgvplugin-neato-layout8"
           sudo apt-get update
-          $install || (sudo apt-get update && $install)
+          sudo apt-get install -y graphviz libgvplugin-neato-layout8
 
       - name: Install dependencies
         run: pip install -e '.[dev]'
