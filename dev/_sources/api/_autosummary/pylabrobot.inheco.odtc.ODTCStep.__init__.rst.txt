@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCStep.\_\_init\_\_
+============================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. automethod:: ODTCStep.__init__

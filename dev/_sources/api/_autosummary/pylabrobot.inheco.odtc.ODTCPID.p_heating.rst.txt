@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCPID.p\_heating
+=========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCPID.p_heating

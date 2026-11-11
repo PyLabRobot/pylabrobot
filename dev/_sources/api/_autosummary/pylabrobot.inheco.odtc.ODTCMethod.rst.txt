@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCMethod
+=================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCMethod
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCMethod.creator
+      ~ODTCMethod.date_time
+      ~ODTCMethod.description
+      ~ODTCMethod.name
+      ~ODTCMethod.variant
+      ~ODTCMethod.plate_type
+      ~ODTCMethod.fluid_quantity
+      ~ODTCMethod.post_heating
+      ~ODTCMethod.start_temperature
+      ~ODTCMethod.start_lid_temperature
+      ~ODTCMethod.steps
+      ~ODTCMethod.pid_set
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCMethod.__init__
+   
+   

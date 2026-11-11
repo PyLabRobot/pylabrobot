@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCProtocol.stages
+==========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCProtocol.stages

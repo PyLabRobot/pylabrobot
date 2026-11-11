@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethod.pid\_set
+==========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethod.pid_set

@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCOvershoot
+====================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCOvershoot
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCOvershoot.approach_rate
+      ~ODTCOvershoot.duration
+      ~ODTCOvershoot.return_rate
+      ~ODTCOvershoot.temperature
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCOvershoot.__init__
+   
+   

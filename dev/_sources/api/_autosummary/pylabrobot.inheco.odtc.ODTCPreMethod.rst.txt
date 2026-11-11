@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCPreMethod
+====================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCPreMethod
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCPreMethod.creator
+      ~ODTCPreMethod.date_time
+      ~ODTCPreMethod.description
+      ~ODTCPreMethod.name
+      ~ODTCPreMethod.temperature
+      ~ODTCPreMethod.lid_temperature
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCPreMethod.__init__
+   
+   

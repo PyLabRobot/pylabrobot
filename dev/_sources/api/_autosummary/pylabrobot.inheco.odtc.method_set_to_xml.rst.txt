@@ -1,0 +1,6 @@
+﻿pylabrobot.inheco.odtc.method\_set\_to\_xml
+===========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autofunction:: method_set_to_xml

@@ -1,0 +1,48 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTC
+===========================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTC
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTC.door_open
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTC.__init__
+      ~ODTC.close_door
+      ~ODTC.open_door
+      ~ODTC.prepare
+      ~ODTC.request_block_temperature
+      ~ODTC.request_lid_temperature
+      ~ODTC.request_method_set
+      ~ODTC.request_progress
+      ~ODTC.request_protocol
+      ~ODTC.request_status
+      ~ODTC.request_temperatures
+      ~ODTC.run_protocol
+      ~ODTC.run_stored_protocol
+      ~ODTC.setup
+      ~ODTC.stop
+      ~ODTC.stop_protocol
+      ~ODTC.upload_protocol
+      ~ODTC.wait_for_completion
+   
+   

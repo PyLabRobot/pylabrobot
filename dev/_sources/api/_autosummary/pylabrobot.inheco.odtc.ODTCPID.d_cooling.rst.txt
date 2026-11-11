@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCPID.d\_cooling
+=========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCPID.d_cooling

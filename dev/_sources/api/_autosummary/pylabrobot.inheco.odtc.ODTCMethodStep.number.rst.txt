@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethodStep.number
+============================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethodStep.number

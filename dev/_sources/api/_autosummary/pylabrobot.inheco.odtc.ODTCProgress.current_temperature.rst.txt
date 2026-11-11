@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCProgress.current\_temperature
+========================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCProgress.current_temperature

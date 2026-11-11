@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethod.plate\_type
+=============================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethod.plate_type

@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCPID.number
+=====================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCPID.number

@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTC.wait\_for\_completion
+=================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. automethod:: ODTC.wait_for_completion

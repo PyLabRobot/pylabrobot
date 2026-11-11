@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCProtocol.name
+========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCProtocol.name
