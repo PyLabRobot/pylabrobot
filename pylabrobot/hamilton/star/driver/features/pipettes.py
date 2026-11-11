@@ -399,9 +399,9 @@ class Pipettes:
     LIQUID = 0
     FOAM = 1
 
-  # Y speed when the caller names none, in mm/s: high enough that Y never holds up an X move.
-  default_y_speed: float = 350.0
-  # Y acceleration level when the caller names none, 1 (gentlest) to 4.
+  # Y speed when the caller names none, in mm/s: just below the firmware's own (277.81).
+  default_y_speed: float = 275.0
+  # Y acceleration level when the caller names none, 1 (gentlest) to 4: the firmware's own.
   default_y_acceleration_level: int = 4
   # Z speed when the caller names none, in mm/s.
   default_z_speed: float = 125.0
@@ -1291,11 +1291,47 @@ class Pipettes:
     async with self._temporary_drive_profile({"zv": speed, "zr": acceleration}, channels):
       yield
 
+  async def _set_y_drive_profiles(
+    self, channels: List[int], speed: float, acceleration_level: int
+  ) -> None:
+    """Give channels one Y speed and acceleration level, writing only where a drive differs.
+
+    `C0 JY` moves each channel at what its drive holds, and a channel command (`Px YS`, `Px YL`)
+    leaves its own values there; neighbours at different speeds can run into each other.
+
+    Args:
+      channels: which channels, 0-indexed from the back.
+      speed: in mm/s.
+      acceleration_level: 1 (gentlest) to 4.
+    """
+    held = await asyncio.gather(
+      *(
+        asyncio.gather(self.request_y_speed(channel), self.request_y_acceleration_level(channel))
+        for channel in channels
+      )
+    )
+    writes = []
+    for channel, (held_speed, held_level) in zip(channels, held):
+      if self._drive_parameter_to_increments(
+        "yv", held_speed
+      ) != self._drive_parameter_to_increments("yv", speed):
+        writes.append(self._set_y_speed(channel, speed))
+      if held_level != acceleration_level:
+        writes.append(self._set_y_acceleration_level(channel, acceleration_level))
+    await asyncio.gather(*writes)
+
   async def _set_default_drive_parameters(self) -> None:
-    """Write the driver's Y and Z defaults into every channel's drive (`Px AA`)."""
+    """Give every channel the driver's Y and Z defaults (`Px AA`), whatever a session left.
+
+    The drives keep what was last sent until a power cycle, by this or any other program, so
+    what they hold is never taken as a default; Y is written only where it differs.
+    """
+    await self._set_y_drive_profiles(
+      list(range(self.num_channels)),
+      speed=self.default_y_speed,
+      acceleration_level=self.default_y_acceleration_level,
+    )
     for channel in range(self.num_channels):
-      await self._set_y_speed(channel, self.default_y_speed)
-      await self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
       await self._set_z_speed(channel, self.default_z_speed)
       await self._set_z_acceleration(channel, self.default_z_acceleration)
 
@@ -1426,12 +1462,27 @@ class Pipettes:
         )
     return channel_locations
 
-  async def _move_to_planned_y_positions(self, channel_locations: Dict[int, float]):
+  async def _move_to_planned_y_positions(
+    self,
+    channel_locations: Dict[int, float],
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+  ):
     """Send every channel to its planned Y (`C0 JY`) and record where they are.
+
+    The channels are first given one Y profile: the move runs each at what its drive holds. A
+    move given its own speed or level puts the defaults back afterwards, so nothing outlasts it.
 
     Args:
       channel_locations: every channel's target in mm, from `_plan_y_positions`.
+      speed: in mm/s, for this move only; the default Y speed when None.
+      acceleration_level: 1 (gentlest) to 4, for this move only; the default level when None.
     """
+    channels = list(channel_locations)
+    speed = self.default_y_speed if speed is None else speed
+    if acceleration_level is None:
+      acceleration_level = self.default_y_acceleration_level
+    await self._set_y_drive_profiles(channels, speed=speed, acceleration_level=acceleration_level)
     yp = " ".join([f"{round(y * 10):04}" for y in channel_locations.values()])
     try:
       resp = await self._driver.send_command(
@@ -1442,12 +1493,34 @@ class Pipettes:
       # here would ask the device where the channels are on every successful move.
       await self._record_where_they_stopped("y")
       raise
+    finally:
+      # A speed given for this move only leaves the defaults in the drives, as every other move.
+      writes = []
+      if self._drive_parameter_to_increments("yv", speed) != self._drive_parameter_to_increments(
+        "yv", self.default_y_speed
+      ):
+        writes += [self._set_y_speed(channel, self.default_y_speed) for channel in channels]
+      if acceleration_level != self.default_y_acceleration_level:
+        writes += [
+          self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
+          for channel in channels
+        ]
+      for failed in await asyncio.gather(*writes, return_exceptions=True):
+        if isinstance(failed, Exception):
+          logger.warning("could not put a channel's Y profile back to the default: %s", failed)
 
     for channel, y in channel_locations.items():
       self.update_location_by_reference_point(channel, y=y)
     return resp
 
-  async def move_to_y_positions(self, ys: Dict[int, float], make_space: bool = False):
+  async def move_to_y_positions(
+    self,
+    ys: Dict[int, float],
+    make_space: bool = False,
+    *,
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+  ):
     """Move channels along Y.
 
     The channels not named stay where they are.
@@ -1461,10 +1534,25 @@ class Pipettes:
         minimum Y spacing and the channels stay in order back to front. Off by default: nothing
         moves that the caller did not ask to move, and a request that will not fit raises instead.
         It can raise either way, since the requested positions may leave no room.
+      speed: every channel's Y speed for this move only, in mm/s; the default Y speed when None.
+      acceleration_level: every channel's level for this move only, 1 (gentlest) to 4; the default
+        level when None.
     """
-    return await self._move_to_planned_y_positions(await self._plan_y_positions(ys, make_space))
+    return await self._move_to_planned_y_positions(
+      await self._plan_y_positions(ys, make_space),
+      speed=speed,
+      acceleration_level=acceleration_level,
+    )
 
-  async def move_to_y_position(self, channel: int, y: float, make_space: bool = False):
+  async def move_to_y_position(
+    self,
+    channel: int,
+    y: float,
+    make_space: bool = False,
+    *,
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+  ):
     """Move one channel along Y.
 
     The other channels stay where they are, unless `make_space` says they may move to let this
@@ -1475,12 +1563,17 @@ class Pipettes:
       y: where to put it, in mm.
       make_space: whether the other channels may be moved to make room. Off by default. See
         `move_to_y_positions`.
+      speed: every channel's Y speed for this move only, in mm/s; the default Y speed when None.
+      acceleration_level: every channel's level for this move only, 1 (gentlest) to 4; the default
+        level when None.
 
     Raises:
       ValueError: If the channel cannot reach it, or the others cannot make room.
     """
     self._require_channel(channel)
-    return await self.move_to_y_positions({channel: y}, make_space=make_space)
+    return await self.move_to_y_positions(
+      {channel: y}, make_space=make_space, speed=speed, acceleration_level=acceleration_level
+    )
 
   async def make_max_space_for_channel(self, channel: int):
     """Spread the channels to leave one of them as much free Y as the arm allows.
@@ -2415,6 +2508,8 @@ class Pipettes:
     current_limit: int,
   ):
     """Move one channel along Y until its cLLD triggers, or to the end, as given. `Px YL`.
+
+    The drive keeps the speed and acceleration sent as its own.
 
     Args:
       channel: 0-indexed from the back.
