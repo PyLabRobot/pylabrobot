@@ -55,7 +55,7 @@ MOTORS = (0, 1, 2)
 class MantisDriver:
   """Talks to a Mantis: one command in flight, events logged as they come."""
 
-  def _build_io(self, *, device_id: Optional[str]) -> FTDI:
+  def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
     """Build the link to the Mantis ``device_id`` names, or to the first one found."""
     return FTDI(
       human_readable_device_name="Formulatrix Mantis",
@@ -63,9 +63,12 @@ class MantisDriver:
       vid=0x0403,
       pid=0x6010,
       interface_select=2,  # interface B carries the command link
+      ftdi_library=ftdi_library,
     )
 
-  def _build_rfid_io(self, *, device_id: Optional[str]) -> Optional[FTDI]:
+  def _build_rfid_io(
+    self, *, device_id: Optional[str], ftdi_library: Optional[str]
+  ) -> Optional[FTDI]:
     """Build the link to the RFID reader, interface A of the same FTDI bridge."""
     return FTDI(
       human_readable_device_name="Formulatrix Mantis RFID reader",
@@ -73,6 +76,7 @@ class MantisDriver:
       vid=0x0403,
       pid=0x6010,
       interface_select=RFID_FTDI_INTERFACE,
+      ftdi_library=ftdi_library,
     )
 
   def __init__(
@@ -84,6 +88,7 @@ class MantisDriver:
     name: str = "Mantis",
     declared_configuration_json: Optional[str] = None,
     oem_config_directory: Optional[str] = None,
+    ftdi_library: Optional[str] = None,
   ):
     """
     Args:
@@ -95,12 +100,16 @@ class MantisDriver:
       declared_configuration_json: a file ``save_configuration`` wrote. Setup refuses a device
         that disagrees with its ``device`` block on what is fitted (``FITTED_FIELDS``).
       oem_config_directory: the unit's vendor ``Data/Device/Configs`` folder, read at every setup.
+      ftdi_library: "libftdi" or "d2xx", for both links; None picks D2XX on Windows when FTDI's
+        D2XX library loads, else libftdi. Ignored for a link given as ``io`` or ``rfid_io``.
 
     The unit's own values (``UNIT_BLOCKS``) come from ``oem_config_directory`` and the declared
     file; where both have a block, they must agree. A block neither has comes from the
     generation's recording, with a warning: another unit's values, less accurate on this one.
     """
-    self.io: FTDI = io if io is not None else self._build_io(device_id=device_id)
+    self.io: FTDI = (
+      io if io is not None else self._build_io(device_id=device_id, ftdi_library=ftdi_library)
+    )
     self.name = name
     self.declared_configuration_json = declared_configuration_json
     self.oem_config_directory = oem_config_directory
@@ -115,7 +124,9 @@ class MantisDriver:
     self._event_waiters: List[Tuple[int, int, "asyncio.Future[bytes]"]] = []
     self._reader: Optional["asyncio.Task[None]"] = None
     self.rfid_io: Optional[FTDI] = (
-      rfid_io if rfid_io is not None or io is not None else self._build_rfid_io(device_id=device_id)
+      rfid_io
+      if rfid_io is not None or io is not None
+      else self._build_rfid_io(device_id=device_id, ftdi_library=ftdi_library)
     )
     self.plate_clamp: Optional[PlateClamp] = None
     self.rfid: Optional[Rfid] = None

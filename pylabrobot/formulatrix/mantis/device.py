@@ -40,6 +40,7 @@ class MantisDevice(Resource):
     size_z: float = SIZE_Z,
     declared_configuration_json: Optional[str] = None,
     oem_config_directory: Optional[str] = None,
+    ftdi_library: Optional[str] = None,
     simulation: bool = False,
   ):
     """
@@ -56,10 +57,13 @@ class MantisDevice(Resource):
         ``RECORDING_MANTIS_V4``.
       oem_config_directory: the unit's vendor ``Data/Device/Configs`` folder; where it and the
         declared file both hold a unit value, they must agree.
+      ftdi_library: "libftdi" or "d2xx"; None picks D2XX on Windows when FTDI's D2XX library
+        loads, else libftdi.
       simulation: build a simulated Mantis, with no link.
 
     Raises:
-      ValueError: if ``simulation`` is given with ``device_id``, ``io`` or ``rfid_io``.
+      ValueError: if ``simulation`` is given with ``device_id``, ``io``, ``rfid_io`` or
+      ``ftdi_library``.
     """
     super().__init__(
       name=name,
@@ -71,8 +75,10 @@ class MantisDevice(Resource):
     )
     self.driver: MantisDriver
     if simulation:
-      if device_id is not None or io is not None or rfid_io is not None:
-        raise ValueError("a simulated Mantis has no link: no device_id, io or rfid_io")
+      if any(link is not None for link in (device_id, io, rfid_io, ftdi_library)):
+        raise ValueError(
+          "a simulated Mantis has no link: no device_id, io, rfid_io or ftdi_library"
+        )
       self.driver = MantisSimulationDriver(
         declared_configuration_json=declared_configuration_json or RECORDING_MANTIS_V4,
         name=name,
@@ -86,6 +92,7 @@ class MantisDevice(Resource):
         name=name,
         declared_configuration_json=declared_configuration_json,
         oem_config_directory=oem_config_directory,
+        ftdi_library=ftdi_library,
       )
     self.mesh = {
       "path": os.path.join(os.path.dirname(__file__), "resource_model", MANIFEST["base"]),
@@ -146,6 +153,7 @@ def Mantis(
   size_z: float = SIZE_Z,
   declared_configuration_json: Optional[str] = None,
   oem_config_directory: Optional[str] = None,
+  ftdi_library: Optional[str] = None,
   simulation: bool = False,
 ) -> MantisDevice:
   """A Formulatrix Mantis, v3 or v4.
@@ -162,10 +170,13 @@ def Mantis(
       disagrees on what is fitted. Simulated, the configuration; None uses ``RECORDING_MANTIS_V4``.
     oem_config_directory: the unit's vendor ``Data/Device/Configs`` folder; where it and the
       declared file both hold a unit value, they must agree.
+    ftdi_library: "libftdi" or "d2xx"; None picks D2XX on Windows when FTDI's D2XX library loads,
+      else libftdi.
     simulation: build a simulated Mantis, with no link.
 
   Raises:
-    ValueError: if ``simulation`` is given with ``device_id``, ``io`` or ``rfid_io``.
+    ValueError: if ``simulation`` is given with ``device_id``, ``io``, ``rfid_io`` or
+      ``ftdi_library``.
   """
   return MantisDevice(
     name=name,
@@ -177,5 +188,6 @@ def Mantis(
     size_z=size_z,
     declared_configuration_json=declared_configuration_json,
     oem_config_directory=oem_config_directory,
+    ftdi_library=ftdi_library,
     simulation=simulation,
   )
