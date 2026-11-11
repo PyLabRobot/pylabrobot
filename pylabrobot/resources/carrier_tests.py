@@ -1,9 +1,14 @@
 import unittest
 
+from pylabrobot.resources.corning.plates import (
+  cor_96_wellplate_360uL_Fb,
+  cor_96_wellplate_360uL_Fb_lid,
+)
 from pylabrobot.resources.hamilton.mfx_carriers import hamilton_mfx_carrier_L5_base
 from pylabrobot.resources.hamilton.mfx_modules import (
   hamilton_mfx_tiprackholder_standard,
 )
+from pylabrobot.resources.hamilton.plate_carriers import hamilton_plate_carrier_L5_ac
 
 from .carrier import (
   Carrier,
@@ -393,6 +398,53 @@ class CarrierTests(unittest.TestCase):
       pcs._update_resource_stack_location,
       resource_stack._did_assign_resource_callbacks,
     )
+
+  def test_lid_on_plate_in_resource_stack(self):
+    """A lid can be put on a plate that sits in a ResourceStack on a PlateHolder.
+
+    The stack's assignment callback also fires for the stack's descendants, so it is called with
+    the lid, whose parent is the plate and not the stack.
+    """
+    carrier = hamilton_plate_carrier_L5_ac(name="carrier")
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    resource_stack = ResourceStack(name="resource_stack", direction="z", resources=[plate])
+    carrier[0] = resource_stack
+    stack_location = resource_stack.location
+
+    lid = cor_96_wellplate_360uL_Fb_lid(name="lid")
+    plate.assign_child_resource(lid)
+    self.assertTrue(plate.has_lid())
+    self.assertEqual(resource_stack.location, stack_location)
+
+    # taking the lid off and putting it back goes through the same callback
+    lid.unassign()
+    plate.assign_child_resource(lid)
+    self.assertTrue(plate.has_lid())
+    self.assertEqual(resource_stack.location, stack_location)
+
+  def test_lid_on_top_plate_in_resource_stack(self):
+    carrier = hamilton_plate_carrier_L5_ac(name="carrier")
+    bottom = cor_96_wellplate_360uL_Fb(name="bottom")
+    top = cor_96_wellplate_360uL_Fb(name="top")
+    resource_stack = ResourceStack(name="resource_stack", direction="z", resources=[bottom])
+    carrier[0] = resource_stack
+    resource_stack.assign_child_resource(top)
+    stack_location = resource_stack.location
+
+    top.assign_child_resource(cor_96_wellplate_360uL_Fb_lid(name="lid"))
+    self.assertTrue(top.has_lid())
+    self.assertEqual(resource_stack.location, stack_location)
+
+  def test_lid_on_plate_added_to_empty_resource_stack(self):
+    """The other assignment order: the stack is placed on the site before it holds a plate."""
+    carrier = hamilton_plate_carrier_L5_ac(name="carrier")
+    resource_stack = ResourceStack(name="resource_stack", direction="z")
+    carrier[0] = resource_stack
+    plate = cor_96_wellplate_360uL_Fb(name="plate")
+    resource_stack.assign_child_resource(plate)
+
+    plate.assign_child_resource(cor_96_wellplate_360uL_Fb_lid(name="lid"))
+    self.assertTrue(plate.has_lid())
 
 
 class MFXCarrierTests(unittest.TestCase):

@@ -246,11 +246,15 @@ class PlateHolder(ResourceHolder):
     the lowest resource on the stack wrt the ResourceStack is always 0,0,0, we need to update the
     location of the ResourceStack itself to make sure we take into account sinking of the plate.
 
+    The callback also fires when a resource is assigned further down the tree, for example a lid
+    put on a plate in the stack. Those assignments do not change what is lowest on the stack.
+
     Args:
-      resource: The Resource on the ResourceStack that was assigned.
+      resource: The Resource that was assigned to the ResourceStack or to one of its descendants.
     """
     resource_stack = resource.parent
-    assert isinstance(resource_stack, ResourceStack)
+    if not isinstance(resource_stack, ResourceStack):
+      return
     if resource_stack.children[0] == resource:
       resource_stack.location = self.get_default_child_location(resource)
 
