@@ -1,7 +1,10 @@
 """Tests for the VANTAstar driver: its commands against the bytes Voyager sent to the reader, and
 its command flows against the reader's captured replies, through a fake USB link."""
 
+import json
 import logging
+import os
+import tempfile
 import unittest
 from collections import deque
 from dataclasses import replace
@@ -16,7 +19,11 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   USB_SINGLE,
   usb_wrap_payload,
 )
-from pylabrobot.bmg_labtech.vantastar.driver.configuration_tests import HARDWARE_INFO
+from pylabrobot.bmg_labtech.vantastar.driver.configuration import read_configuration
+from pylabrobot.bmg_labtech.vantastar.driver.configuration_tests import (
+  HARDWARE_INFO,
+  RECORDING_VANTASTAR,
+)
 from pylabrobot.bmg_labtech.vantastar.driver.errors import CommandRefusedError, DeviceError
 from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
   LUMINESCENCE_NO_FILTER,
@@ -283,7 +290,7 @@ class FakeUSB(USB):
         self._receiving = None
         self._receive(payload)
 
-  async def read(self, timeout: Optional[float] = None, size: Optional[int] = None) -> bytes:  # type: ignore[override]
+  async def read(self, size: Optional[int] = None) -> bytes:  # type: ignore[override]
     """The next packet queued for the host."""
     return self._to_host.popleft()
 
@@ -840,6 +847,56 @@ class TestFlow(AnyioTestBase):
     assert run[0] == CommandId.RUN
     assert run[67] == 0x03  # WellPlateModeKinetic and CalcTimeOnly
     assert run[1:67] + run[68:] == fields[:66] + fields[67:]
+
+
+class TestDeclaredConfiguration(AnyioTestBase):
+  """Setup against a declared configuration, and saving the reader's configuration."""
+
+  @staticmethod
+  def make_reader(declared_configuration_json=None) -> VANTAstarDriver:
+    """A driver whose reader answers INIT with the tested reader's INIT reply, anything else with
+    an idle status."""
+    driver = VANTAstarDriver(
+      io=FakeUSB(lambda p: HARDWARE_INFO if p[0] == CommandId.INITIALIZE else STATUS_IDLE),
+      declared_configuration_json=declared_configuration_json,
+    )
+    driver.default_poll_interval = 0
+    return driver
+
+  async def test_setup_against_the_recording(self):
+    """The tested reader matches its recording."""
+    driver = self.make_reader(RECORDING_VANTASTAR)
+    async with driver:
+      assert driver.configuration.serial_number == "0421-000446"
+
+  async def test_setup_refuses_another_configuration(self):
+    """Setup refuses a reader that disagrees with the declaration on what is fitted, naming each
+    difference; firmware is not compared."""
+    declared = read_configuration(RECORDING_VANTASTAR)
+    declared["device"].update(stirrer=True, pumps=["XP3000", None], firmware_version=1110)
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "declared.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump(declared, f)
+      with pytest.raises(RuntimeError) as exc_info:
+        async with self.make_reader(path):
+          pass
+    message = str(exc_info.value)
+    assert "stirrer: declared True, reader False" in message
+    assert "pumps: declared ['XP3000', None], reader [None, None]" in message
+    assert "firmware_version" not in message
+
+  async def test_save_configuration(self):
+    """The saved configuration is the recording; saving before setup is refused."""
+    driver = self.make_reader()
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "saved.json")
+      with pytest.raises(RuntimeError):
+        driver.save_configuration(path)
+      async with driver:
+        driver.save_configuration(path)
+      with open(path, encoding="utf-8") as saved, open(RECORDING_VANTASTAR, encoding="utf-8") as f:
+        assert saved.read() == f.read()
 
 
 if __name__ == "__main__":

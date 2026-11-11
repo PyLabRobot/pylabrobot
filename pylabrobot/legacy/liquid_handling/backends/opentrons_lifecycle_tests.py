@@ -1095,12 +1095,12 @@ class TestOpentronsOperations(AnyioTestBase):
     }
     assert definition["ordering"][0][0] == "well-id"
     assert definition["wells"]["well-id"] == {
-      "depth": 0.0,
-      "x": 14.360000000000001,
+      "depth": 39.2,
+      "x": 14.36,
       "y": 74.26,
       "z": 25.49,
       "shape": "circular",
-      "diameter": 2.312,
+      "diameter": 3.27,
       "totalLiquidVolume": 20,
     }
     assert calls[1] == (

@@ -148,6 +148,21 @@ export function refreshTransforms(index, skipSelf) {
 }
 
 /**
+ * Where a resource sits and which way it is turned, relative to its parent: mm and degrees.
+ *
+ * @param {number} index
+ * @returns {{location: {x: number, y: number, z: number},
+ *   rotation: {x: number, y: number, z: number}}}
+ */
+export function getLocal(index) {
+  const o = index * 6;
+  return {
+    location: { x: world.local[o], y: world.local[o + 1], z: world.local[o + 2] },
+    rotation: { x: world.local[o + 3], y: world.local[o + 4], z: world.local[o + 5] },
+  };
+}
+
+/**
  * Where a resource sits, in mm, relative to its parent. Returns whether it actually moved, so a
  * caller can do nothing when told something it already knew.
  *

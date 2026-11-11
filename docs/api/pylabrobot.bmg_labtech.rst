@@ -15,6 +15,7 @@ VANTAstar
    VANTAstarDevice
    driver.master.VANTAstarDriver
    driver.master.VANTAstarStatus
+   driver.simulator.VANTAstarSimulationDriver
    driver.features.drawer.Drawer
    driver.features.absorbance.Absorbance
    driver.features.fluorescence.Fluorescence

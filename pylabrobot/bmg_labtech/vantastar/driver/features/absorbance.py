@@ -76,6 +76,32 @@ class Absorbance(Measurement):
       for i, wavelength in enumerate(wavelengths)
     ]
 
+  def _build_measure(
+    self,
+    wavelengths: Sequence[int],
+    plate: Optional[Plate],
+    wells: Optional[Sequence[Well]],
+    measurement_settings: Optional[MeasurementSettings],
+  ) -> Tuple[Plate, MeasurementSettings, List[Tuple[int, int]], bytes]:
+    """Check an endpoint read and build its RUN fields: the plate, the settings, the measured
+    wells (row, column) and the fields.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder.
+      ValueError: if an argument is out of range.
+    """
+    self._check_wavelengths(wavelengths)
+    plate = self._get_plate(plate)
+    settings = self._get_absorbance_settings(measurement_settings, plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self._driver.build_absorbance_run(
+      wavelengths,
+      geometry=get_plate_geometry(plate),
+      well_mask=self._get_well_mask(plate, wells),
+      **self._get_run_fields(settings),
+    )
+    return plate, settings, measured, parameters
+
   async def measure(
     self,
     wavelengths: Sequence[int],
@@ -84,6 +110,7 @@ class Absorbance(Measurement):
     wells: Optional[Sequence[Well]] = None,
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[List[AbsorbanceResult]] = None,
     timeout: float = 300.0,
   ) -> List[AbsorbanceResult]:
     """Measure the absorbance of the plate at each wavelength (endpoint).
@@ -101,6 +128,8 @@ class Absorbance(Measurement):
       wells: the wells to measure; None measures every well.
       measurement_settings: how to read; None reads with the defaults.
       shake_settings: shake the plate before the read; None does not shake.
+      simulated_data: ignored by a reader; a simulated one (``VANTAstar(simulation=True)``)
+        reads its values from it.
       timeout: seconds the run may take.
 
     Returns:
@@ -110,15 +139,8 @@ class Absorbance(Measurement):
       RuntimeError: if no plate is on the plate holder or the run ends without its data.
       ValueError: if an argument is out of range.
     """
-    self._check_wavelengths(wavelengths)
-    plate = self._get_plate(plate)
-    settings = self._get_absorbance_settings(measurement_settings, plate)
-    measured = _get_measured_wells(plate, wells)
-    parameters = self._driver.build_absorbance_run(
-      wavelengths,
-      geometry=get_plate_geometry(plate),
-      well_mask=self._get_well_mask(plate, wells),
-      **self._get_run_fields(settings),
+    _, settings, measured, parameters = self._build_measure(
+      wavelengths, plate, wells, measurement_settings
     )
     await self._prepare(settings, shake_settings)
     start = datetime.now()
@@ -126,36 +148,20 @@ class Absorbance(Measurement):
     end = datetime.now()
     return self._get_results(data, measured, wavelengths, start, end)
 
-  async def measure_spectrum(
+  def _build_spectrum(
     self,
     start_wavelength: int,
     end_wavelength: int,
-    step_size: int = 1,
-    *,
-    plate: Optional[Plate] = None,
-    wells: Optional[Sequence[Well]] = None,
-    measurement_settings: Optional[MeasurementSettings] = None,
-    shake_settings: Optional[ShakeSettings] = None,
-    timeout: float = 600.0,
-  ) -> AbsorbanceSpectrumResult:
-    """Measure the absorbance spectrum of the plate: every wavelength at once, well by well (the
-    reader's spectrometer).  The optical densities are computed as in ``measure``.
-
-    Args:
-      start_wavelength: the first wavelength in nm (220-1000).
-      end_wavelength: the last wavelength in nm, above ``start_wavelength`` (220-1000).
-      step_size: nm between wavelengths, a whole nm dividing the range.
-      plate: the plate to measure; None uses the plate on the plate holder.
-      wells: the wells to measure; None measures every well.
-      measurement_settings: how to read; None reads with the defaults.
-      shake_settings: shake the plate before the read; None does not shake.
-      timeout: seconds the run may take.
-
-    Returns:
-      Each measured well's spectrum, keyed by well identifier.
+    step_size: int,
+    plate: Optional[Plate],
+    wells: Optional[Sequence[Well]],
+    measurement_settings: Optional[MeasurementSettings],
+  ) -> Tuple[Plate, MeasurementSettings, List[Tuple[int, int]], List[int], bytes]:
+    """Check a spectrum and build its RUN fields: the plate, the settings, the measured wells
+    (row, column), the wavelengths and the fields.
 
     Raises:
-      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      RuntimeError: if no plate is on the plate holder.
       ValueError: if an argument is out of range.
     """
     self._check_wavelengths([start_wavelength, end_wavelength])
@@ -170,6 +176,46 @@ class Absorbance(Measurement):
       geometry=get_plate_geometry(plate),
       well_mask=self._get_well_mask(plate, wells),
       **self._get_run_fields(settings),
+    )
+    return plate, settings, measured, scanned, parameters
+
+  async def measure_spectrum(
+    self,
+    start_wavelength: int,
+    end_wavelength: int,
+    step_size: int = 1,
+    *,
+    plate: Optional[Plate] = None,
+    wells: Optional[Sequence[Well]] = None,
+    measurement_settings: Optional[MeasurementSettings] = None,
+    shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[AbsorbanceSpectrumResult] = None,
+    timeout: float = 600.0,
+  ) -> AbsorbanceSpectrumResult:
+    """Measure the absorbance spectrum of the plate: every wavelength at once, well by well (the
+    reader's spectrometer).  The optical densities are computed as in ``measure``.
+
+    Args:
+      start_wavelength: the first wavelength in nm (220-1000).
+      end_wavelength: the last wavelength in nm, above ``start_wavelength`` (220-1000).
+      step_size: nm between wavelengths, a whole nm dividing the range.
+      plate: the plate to measure; None uses the plate on the plate holder.
+      wells: the wells to measure; None measures every well.
+      measurement_settings: how to read; None reads with the defaults.
+      shake_settings: shake the plate before the read; None does not shake.
+      simulated_data: ignored by a reader; a simulated one (``VANTAstar(simulation=True)``)
+        reads its values from it.
+      timeout: seconds the run may take.
+
+    Returns:
+      Each measured well's spectrum, keyed by well identifier.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder or the run ends without its data.
+      ValueError: if an argument is out of range.
+    """
+    _, settings, measured, scanned, parameters = self._build_spectrum(
+      start_wavelength, end_wavelength, step_size, plate, wells, measurement_settings
     )
     await self._prepare(settings, shake_settings)
     start = datetime.now()

@@ -11,7 +11,6 @@ from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
   build_tip_rack_definition,
-  official_tip_rack_identity,
 )
 from pylabrobot.opentrons.ot2.pipette import (
   _PIPETTE_SPECS,
@@ -20,7 +19,6 @@ from pylabrobot.opentrons.ot2.pipette import (
 )
 from pylabrobot.opentrons.run import OpentronsRun, RobotOperationLock
 from pylabrobot.opentrons.types import (
-  LabwareIdentity,
   ModuleInfo,
   MountedPipette,
   RobotInfo,
@@ -221,14 +219,11 @@ class OT2(HasLifespan):
     if slot is None:
       raise ValueError("tip rack must be assigned directly to an OT-2 deck slot")
     registry = self._require_labware()
-    identity: Optional[LabwareIdentity]
     if registry.is_loaded(tip_rack):
       identity = registry.get(tip_rack).identity
     else:
-      identity = official_tip_rack_identity(tip_rack)
-      if identity is None:
-        definition = build_tip_rack_definition(tip_rack, tip)
-        identity = await registry.define(tip_rack, definition)
+      definition = build_tip_rack_definition(tip_rack, tip)
+      identity = await registry.define(tip_rack, definition)
     await registry.load(tip_rack, str(slot), identity)
 
   def _deck_to_robot_frame(self, location: Coordinate) -> Coordinate:

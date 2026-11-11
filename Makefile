@@ -49,8 +49,8 @@ format-js:
 # The browser tests draw in software on CI, against timeouts set for a runner of their own, so
 # they run after the rest, alone. One OpenMP thread per tesseract keeps OCR within its timeout.
 test:
-	OMP_THREAD_LIMIT=1 $(BIN)python -m pytest -n auto -v --ignore=pylabrobot/visualizer3D/browser_tests.py
-	$(BIN)python -m pytest -v pylabrobot/visualizer3D/browser_tests.py
+	OMP_THREAD_LIMIT=1 $(BIN)python -m pytest -n auto -v --ignore=pylabrobot/visualizer3D/browser_tests.py --ignore=pylabrobot/visualizer/browser_tests.py
+	$(BIN)python -m pytest -v pylabrobot/visualizer3D/browser_tests.py pylabrobot/visualizer/browser_tests.py
 
 typecheck:
 	$(BIN)python -m mypy pylabrobot

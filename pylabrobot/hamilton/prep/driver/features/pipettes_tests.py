@@ -3298,6 +3298,17 @@ def test_probe_liquid_heights_deals_the_containers_in_cycles_and_rises_to_safe_z
     seeks = [c.dest.node for c in sent if isinstance(c, PrepCmd.PrepZAxisSeekCapacitiveLld)]
     assert len(seeks) == 4 and len(set(seeks)) == 2
     assert isinstance(sent[-2], PrepCmd.PrepMoveZUpToSafe)
+    # The deprecated `resource_offsets` warns and moves the channels as `offsets` does.
+    offsets = [Coordinate(1.0, 0, 0)] * 4
+    for probe in (p.pipettes.probe_liquid_heights, p.pipettes.probe_liquid_volumes):
+      sent.clear()
+      await probe(wells, offsets=offsets)
+      given = [c for c in sent if isinstance(c, PrepCmd.PrepMoveToPosition)]
+      sent.clear()
+      with pytest.warns(DeprecationWarning):
+        await probe(wells, resource_offsets=offsets)
+      moves = [c for c in sent if isinstance(c, PrepCmd.PrepMoveToPosition)]
+      assert moves == given, probe.__name__
     await p.stop()
 
   _run(_t())
@@ -3587,7 +3598,7 @@ _GOLDEN_ASPIRATE_CALLS: Dict[str, Tuple[int, str, Optional[List[int]], Dict[str,
     300,
     "A1:B1",
     [0, 1],
-    {**_ASPIRATE_TWO, "resource_offsets": [Coordinate(0.5, 0.5, 1.0), Coordinate(0.5, 0, 0)]},
+    {**_ASPIRATE_TWO, "offsets": [Coordinate(0.5, 0.5, 1.0), Coordinate(0.5, 0, 0)]},
   ),
   "channels sharing a dish": (
     300,
@@ -3742,6 +3753,13 @@ def test_aspirate_sends_the_golden_frames():
   assert list(_GOLDEN_ASPIRATE_FRAMES) == list(_GOLDEN_ASPIRATE_CALLS)
   for name, frames in _GOLDEN_ASPIRATE_FRAMES.items():
     assert _digest(asyncio.run(_capture_aspirate(name))) == frames, name
+  # The deprecated `resource_offsets` warns and sends what `offsets` does.
+  name = "offsets of one X"
+  tip_volume, where, use_channels, kwargs = _GOLDEN_ASPIRATE_CALLS[name]
+  old = {"resource_offsets" if k == "offsets" else k: v for k, v in kwargs.items()}
+  with patch.dict(_GOLDEN_ASPIRATE_CALLS, {name: (tip_volume, where, use_channels, old)}):
+    with pytest.warns(DeprecationWarning):
+      assert _digest(asyncio.run(_capture_aspirate(name))) == _GOLDEN_ASPIRATE_FRAMES[name]
 
 
 def _keywords(method: Any) -> List[str]:
@@ -4422,7 +4440,7 @@ _GOLDEN_DISPENSE_CALLS: Dict[
     [0, 1],
     {
       "liquid_heights": [3.0, None],
-      "resource_offsets": [Coordinate(0.5, -0.5, 1.0), Coordinate.zero()],
+      "offsets": [Coordinate(0.5, -0.5, 1.0), Coordinate.zero()],
       "flow_rates": [50.0, None],
       "blow_out_air_volumes": [0.0, None],
     },
@@ -5087,6 +5105,13 @@ def test_dispense_sends_the_golden_frames():
   assert list(_GOLDEN_DISPENSE_FRAMES) == list(_GOLDEN_DISPENSE_CALLS)
   for name, frames in _GOLDEN_DISPENSE_FRAMES.items():
     assert asyncio.run(_capture_dispense(name)) == frames, name
+  # The deprecated `resource_offsets` warns and sends what `offsets` does.
+  name = "heights, offsets, flow rates, blow-out air"
+  tip_volume, where, vols, use_channels, kwargs = _GOLDEN_DISPENSE_CALLS[name]
+  old = {"resource_offsets" if k == "offsets" else k: v for k, v in kwargs.items()}
+  with patch.dict(_GOLDEN_DISPENSE_CALLS, {name: (tip_volume, where, vols, use_channels, old)}):
+    with pytest.warns(DeprecationWarning):
+      assert asyncio.run(_capture_dispense(name)) == _GOLDEN_DISPENSE_FRAMES[name]
 
 
 @pytest.mark.parametrize(
@@ -5471,7 +5496,7 @@ def test_shortfalls_warn_and_move_air_only_while_volumes_are_tracked(tracking):
           use_channels=[0, 1],
           piston_volumes=[150.0, 40.0],
           liquid_heights=[5.0, 5.0],
-          resource_offsets=[Coordinate(-5.0, 0, 0), Coordinate(5.0, 0, 0)],
+          offsets=[Coordinate(-5.0, 0, 0), Coordinate(5.0, 0, 0)],
         )
         well = plate.get_item("A1")
         await p.pipettes.dispense([well], use_channels=[0], piston_volumes=[200.0])

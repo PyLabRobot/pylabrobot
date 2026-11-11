@@ -18,7 +18,7 @@ jobs:
   check_docs:
     name: Check documentation
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
       - name: Install Graphviz
         run: |
           sudo apt-get update
-          sudo apt-get install -y graphviz
+          sudo apt-get install -y graphviz libgvplugin-neato-layout8
 
       - name: Install dependencies
         run: pip install -e '.[dev]'
@@ -46,7 +46,7 @@ jobs:
   deploy_docs:
     name: Build and deploy documentation
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
 
@@ -63,7 +63,7 @@ jobs:
       - name: Install Graphviz
         run: |
           sudo apt-get update
-          sudo apt-get install -y graphviz
+          sudo apt-get install -y graphviz libgvplugin-neato-layout8
 
       - name: Install dependencies
         run: pip install -e '.[dev]'

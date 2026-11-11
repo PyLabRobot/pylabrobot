@@ -8,6 +8,7 @@ from pylabrobot.resources.carrier import (
   create_homogeneous_resources,
 )
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.tip_rack_holder import EmbeddedTipRackHolder
 
 
@@ -294,9 +295,10 @@ def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
   Hamilton name: 'TIP_CAR_NTR_A00'.
   Carrier for 5 stacks of up to 4x 96 nested tip racks (NTR), landscape.
   6 track(T) wide.
+  Each site holds a z `ResourceStack` named `{name}-stack-{i}`; `carrier[i] = rack` nests onto it.
   """
   site_z = 29.0
-  return TipCarrier(
+  carrier = TipCarrier(
     name=name,
     size_x=135.0,
     size_y=497.0,
@@ -319,6 +321,9 @@ def hamilton_tip_carrier_L5_ntr_a00(name: str) -> TipCarrier:
     ),
     model=hamilton_tip_carrier_L5_ntr_a00.__name__,
   )
+  for index, site in carrier.sites.items():
+    site.assign_child_resource(resource=ResourceStack(name=f"{name}-stack-{index}", direction="z"))
+  return carrier
 
 
 def hamilton_prep_ftr_pedestal(name: str) -> TipCarrier:

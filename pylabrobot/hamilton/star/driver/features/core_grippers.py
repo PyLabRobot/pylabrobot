@@ -8,6 +8,9 @@ import warnings
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Tuple, Union, cast
 
+import anyio
+
+from pylabrobot.concurrency import non_cancelling_task_group
 from pylabrobot.hamilton.star.driver.errors import STARFirmwareError
 from pylabrobot.hamilton.star.driver.lock import _FirmwareLock
 from pylabrobot.lib.pick_and_place.assignment import assign_placed_resource
@@ -43,6 +46,9 @@ _DEPOSIT_BELOW_PICK_UP = 20.0
 # How far below its top a resource may be gripped, in mm: lower, its top presses into the pipetting
 # head the grippers hang from.
 _MAX_PICKUP_DISTANCE_FROM_TOP = 20.0
+# A mounted tool's overhang as the device reads it (`request_tip_overhang`), in mm: its tip-table
+# length 30.0 less 8.0 fitting depth. A 10 uL tip reads 21.9, one 0.1 mm step less.
+_CORE_GRIPPER_TOOL_OVERHANG = 22.0
 
 
 @dataclasses.dataclass
@@ -336,7 +342,8 @@ class CoreGrippers:
   async def _move_to_safe_z_after_failure(self) -> None:
     """`pipettes.move_to_safe_z`, logged not raised, so the command's error is the one seen."""
     try:
-      await self._pipettes.move_to_safe_z()
+      with anyio.CancelScope(shield=True):
+        await self._pipettes.move_to_safe_z()
     except Exception:
       logger.warning("could not raise the channels to safe Z after the failure")
 
@@ -421,7 +428,8 @@ class CoreGrippers:
       await self._move_to_safe_z_after_failure()
       raise
     finally:
-      await pipettes._record_after_command()
+      with anyio.CancelScope(shield=True):
+        await pipettes._record_after_command()
     # No safe Z on success: ZT leaves the tools' lowest point at `th`, the traverse height.
     self._back_channel, self._front_channel = back_channel, front_channel
     self._tools_taken_from = (
@@ -481,10 +489,13 @@ class CoreGrippers:
       await self._move_to_safe_z_after_failure()
       raise
     finally:
-      await pipettes._record_after_command()
-    await pipettes.move_to_safe_z()
+      with anyio.CancelScope(shield=True):
+        await pipettes._record_after_command()
     self._tools_taken_from = None
     self._back_channel = self._front_channel = None
+    self._tools_mounted = False
+    self._park_tools()
+    await pipettes.move_to_safe_z()
 
   # -- mounting ------------------------------------------------------------------------------------
 
@@ -556,13 +567,66 @@ class CoreGrippers:
   async def return_tools(self) -> None:
     """Put the tools back in their holder, if mounted.
 
-    A drop that fails leaves the channels holding them, and the model says so.
+    With nothing taken in the model, two neighbouring channels reading exactly the tools' overhang,
+    and no other within 0.1 mm of it, are taken to hold them. A drop that fails leaves the channels
+    holding them, and the model says so.
     """
     if not self._tools_mounted:
+      if self._tools_taken_from is not None:
+        return
+      pipettes = self._pipettes
+      sensed = [channel for channel, on in enumerate(await pipettes.sense_tip_presence()) if on]
+      overhangs = {
+        channel: await pipettes.request_tip_overhang(channel=channel) for channel in sensed
+      }
+      near = [
+        channel
+        for channel in sensed
+        if round(abs(overhangs[channel] - _CORE_GRIPPER_TOOL_OVERHANG), 1) <= 0.1
+      ]
+      if not near:
+        return
+      readings = [overhangs[channel] for channel in near]
+      if len(near) != 2 or near[1] != near[0] + 1 or set(readings) != {_CORE_GRIPPER_TOOL_OVERHANG}:
+        logger.warning(
+          "channels %s read %s mm below the stop disc: not the two neighbouring CoRe gripper tools "
+          "at %s mm, so nothing is returned",
+          near,
+          readings,
+          _CORE_GRIPPER_TOOL_OVERHANG,
+        )
+        return
+      logger.warning(
+        "channels %d and %d hold CoRe gripper tools the model did not know of (%s mm below the "
+        "stop disc): returning them to their holder",
+        *near,
+        readings,
+      )
+      # Where `pick_up_tools` takes them from; the model already has them in the holder.
+      holder = self._holder()
+      location = holder.get_location_wrt(self._deck, x="c")
+      top = max(
+        tool.get_location_wrt(self._deck, z="t").z
+        for tool in holder.children
+        if isinstance(tool, HeadTool)
+      )
+      self._back_channel, self._front_channel = near
+      self._tools_taken_from = (
+        location.x,
+        location.y + holder.back_channel_y_center,
+        location.y + holder.front_channel_y_center,
+        top,
+        top - 10.0,
+      )
+      try:
+        await self.drop_tools()
+      except BaseException:
+        # Not known whether they went back: the next call reads the channels again.
+        self._tools_taken_from = None
+        self._back_channel = self._front_channel = None
+        raise
       return
     await self.drop_tools()
-    self._tools_mounted = False
-    self._park_tools()
     await self._pipettes._record_where_they_stopped("z")
 
   @asynccontextmanager
@@ -576,7 +640,8 @@ class CoreGrippers:
     try:
       yield self
     finally:
-      await self.return_tools()
+      with anyio.CancelScope(shield=True):
+        await self.return_tools()
 
   # ----------------------------------------
   # Resources
@@ -836,7 +901,8 @@ class CoreGrippers:
           minimum_z_position_end=round(minimum_traverse_height_end * 10),
         )
     finally:
-      await pipettes._record_after_command()
+      with anyio.CancelScope(shield=True):
+        await pipettes._record_after_command()
     self._grip_height = grip_height
     self._holding_resource_width = resource_size_y
     self._held_resource = resource
@@ -945,7 +1011,8 @@ class CoreGrippers:
           x_acceleration_level=x_acceleration_level,
         )
     finally:
-      await pipettes._record_after_command()
+      with anyio.CancelScope(shield=True):
+        await pipettes._record_after_command()
     assign_placed_resource(held, destination, self._deck, location=location)
     self._clear_held_state()
 
@@ -1015,8 +1082,17 @@ class CoreGrippers:
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
     enable_recovery: bool = True,
+    *,
+    search_speed: float = 40.0,
+    approach_speed: float = 125.0,
+    acceleration: float = 200.0,
+    detection_limiter_pwm: int = 15,
+    push_force_pwm: int = 0,
   ) -> bool:
-    """Push the open jaws down onto `resource`'s centre: stalling on it is finding it (`C0 ZP`).
+    """Z-touch both tools down where the open jaws would land: meeting `resource` is finding it.
+
+    The back and front channel z-touch (`Px ZH`) together from the start traverse height to its
+    centre's height, at the grip line; then both go to the end traverse height.
 
     Args:
       location: where the resource's left-front-bottom is, in deck coordinates.
@@ -1028,13 +1104,19 @@ class CoreGrippers:
       minimum_traverse_height_end: where to leave the channels, in mm.
         `default_minimum_traverse_height` when None.
       enable_recovery: ask on the console whether to check again when it is not found.
+      search_speed: in mm/s.
+      approach_speed: down to the search start, in mm/s.
+      acceleration: in mm/s2.
+      detection_limiter_pwm: the force at which the search stops, 0 to 125.
+      push_force_pwm: the push-down force once stopped, 0 to 125; 0 switches the drive off.
 
     Returns:
       True if found.
 
     Raises:
-      RuntimeError: If the tools are not picked up.
-      ValueError: If the jaw width is out of range, the check is aborted, or ZP fails otherwise.
+      RuntimeError: If the tools are not picked up, or a channel's firmware predates 2022.
+      ValueError: If the jaw width or a search height is out of range, the check is aborted, or a
+        z-touch fails otherwise.
     """
     back, front = self._require_mounted()
     pipettes = self._pipettes
@@ -1053,52 +1135,118 @@ class CoreGrippers:
         f"{y_width_to_gripper_bump}"
       )
 
+    # Where the open jaws would come down: the channels stand at the jaws.
+    ys = {
+      back: round(center.y + y_width_to_gripper_bump / 2, 2),
+      front: round(center.y - y_width_to_gripper_bump / 2, 2),
+    }
+    # The searches run on the stop disc: each channel's window, checked before anything moves.
+    windows: Dict[int, Tuple[float, float]] = {}
+    overhangs: Dict[int, float] = {}
+    for channel in (back, front):
+      pipettes._require_ztouch_firmware(channel)
+      overhang = overhangs[channel] = await pipettes.request_tip_overhang(channel)
+      start = round(minimum_traverse_height_start + overhang, 2)
+      end = round(center.z + overhang, 2)
+      for z in (start, end):
+        pipettes._check_reachable("z", z)
+      if not end <= start:
+        raise ValueError(
+          f"the search starts at {minimum_traverse_height_start} mm, below where it ends, "
+          f"{center.z} mm"
+        )
+      windows[channel] = (start, end)
+
     resource_found = False
     try_counter = 0
-    try:
-      while not resource_found:
+    while not resource_found:
+      await pipettes.move_to_xy_positions(
+        x=center.x,
+        ys=ys,
+        make_space=True,
+        minimum_traverse_height_start=minimum_traverse_height_start,
+      )
+      # Both come down together, as the jaws do; each search is awaited before any error is raised.
+      results: List[Union[Optional[float], Exception]] = [None] * len(windows)
+
+      async def run_ztouch(idx: int, ch: int, s: float, e: float) -> None:
         try:
-          await self._unchecked_fw_pick_up_resource(
-            x_position=round(center.x * 10),
-            y_position=round(center.y * 10),
-            y_gripping_speed=50,
-            z_position=round(center.z * 10),
-            z_speed=600,
-            open_gripper_position=round(y_width_to_gripper_bump * 10),
-            plate_width=round(y_width_to_gripper_bump * 10),
-            grip_strength=20,
-            minimum_traverse_height_start=round(minimum_traverse_height_start * 10),
-            minimum_z_position_end=round(minimum_traverse_height_end * 10),
+          results[idx] = await pipettes._ztouch_search(
+            channel=ch,
+            end_position=e,
+            start_position=s,
+            search_speed=search_speed,
+            approach_speed=approach_speed,
+            acceleration=acceleration,
+            detection_limiter_pwm=detection_limiter_pwm,
+            push_force_pwm=push_force_pwm,
           )
-        except STARFirmwareError as exc:
-          # Trace 62 is the channels' Z drive stalling: the jaws came down on the resource.
-          for module_error in exc.errors.values():
-            if module_error.trace_information == 62:
-              resource_found = True
-            else:
-              raise ValueError(f"Unexpected error encountered: {exc}") from exc
-        else:
-          if enable_recovery:
-            print(
-              f"\nWARNING: Resource '{resource.name}' not found at center"
-              f" location {(center.x, center.y, center.z)} during check no {try_counter}."
-            )
-            user_prompt = input(
-              "Have you checked resource is present?"
-              "\n [ yes ] -> machine will check location again"
-              "\n [ abort ] -> machine will abort run\n Answer:"
-            )
-            if user_prompt == "yes":
-              try_counter += 1
-            elif user_prompt == "abort":
-              raise ValueError(
-                f"Resource '{resource.name}' not found at center"
-                f" location {(center.x, center.y, center.z)}"
-                " & error not resolved -> aborted resource movement."
-              )
-          else:
-            return False
-    finally:
-      await pipettes._record_after_command()
+        except Exception as error:
+          results[idx] = error
+
+      try:
+        async with non_cancelling_task_group() as group:
+          for index, (channel, (start, end)) in enumerate(windows.items()):
+            group.start_soon(run_ztouch, index, channel, start, end)
+      except BaseException:
+        with anyio.CancelScope(shield=True):
+          await pipettes._record_where_they_stopped("z", channels=[back, front])
+          await self._move_to_safe_z_after_failure()
+        raise
+      await pipettes._record_where_they_stopped("z", channels=[back, front])
+      failed = [result for result in results if isinstance(result, Exception)]
+      if failed:
+        await pipettes.move_to_safe_z()
+        if isinstance(failed[0], STARFirmwareError):
+          raise ValueError(f"Unexpected error encountered: {failed[0]}") from failed[0]
+        raise failed[0]
+      # Where each tool met something, at its reference point; None where its search ran out.
+      touched = [
+        round(cast(float, stop_disc) - overhangs[channel], 2)
+        if cast(float, stop_disc) - end > pipettes._ztouch_end_allowance
+        else None
+        for (channel, (_, end)), stop_disc in zip(windows.items(), results)
+      ]
+      resource_found = any(height is not None for height in touched)
+      if resource_found:
+        logger.info(
+          "'%s' found: %s",
+          resource.name,
+          ", ".join(
+            f"the {side} tool met it at {height:.2f} mm"
+            if height is not None
+            else f"the {side} tool met nothing"
+            for side, height in zip(("back", "front"), touched)
+          ),
+        )
+      else:
+        logger.info(
+          "'%s' not found: nothing met down to its centre at %.2f mm", resource.name, center.z
+        )
+      await pipettes.move_tool_bottom_to_z_positions(
+        zs={back: minimum_traverse_height_end, front: minimum_traverse_height_end}
+      )
+      if resource_found:
+        break
+      if enable_recovery:
+        print(
+          f"\nWARNING: Resource '{resource.name}' not found at center"
+          f" location {(center.x, center.y, center.z)} during check no {try_counter}."
+        )
+        user_prompt = input(
+          "Have you checked resource is present?"
+          "\n [ yes ] -> device will check location again"
+          "\n [ abort ] -> device will abort run\n Answer:"
+        )
+        if user_prompt == "yes":
+          try_counter += 1
+        elif user_prompt == "abort":
+          raise ValueError(
+            f"Resource '{resource.name}' not found at center"
+            f" location {(center.x, center.y, center.z)}"
+            " & error not resolved -> aborted resource movement."
+          )
+      else:
+        return False
 
     return True

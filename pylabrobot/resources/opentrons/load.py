@@ -60,7 +60,7 @@ def load_ot_tip_rack(
 
       assert well_data["shape"] == "circular", "We assume all tip racks are circular."
       diameter = well_data["diameter"]
-      well_size_x = well_size_y = round(diameter / math.sqrt(2), 3)
+      well_size_x = well_size_y = diameter
 
       # closure
       def make_tip(name: str) -> Tip:
@@ -78,6 +78,7 @@ def load_ot_tip_rack(
         name=f"{plr_resource_name}_{item}",
         size_x=well_size_x,
         size_y=well_size_y,
+        size_z=well_data["depth"],
         make_tip=make_tip,
       )
       tip_spot.location = Coordinate(
