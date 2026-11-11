@@ -419,6 +419,28 @@ class PreciseFlexArm:
       angles_str = f"{joint_position[PreciseFlexAxis.RAIL]} {angles_str}"
     await self._driver.send_command(f"locAngles {station_index} {angles_str}")
 
+  async def _unchecked_fw_set_station_cartesian(
+    self, station_index: int, joint_position: JointState
+  ) -> None:
+    """Write a station as the controller's Cartesian location, from the joint state to stand at.
+
+    ``pickplate`` and ``placeplate`` take a Cartesian station, and ``StationType`` empties one set
+    by ``locAngles``. The controller's z is the Z joint.
+
+    Raises:
+      NotImplementedError: On an arm with a rail, whose station has not been run on an arm.
+    """
+    if self._driver._has_rail:
+      raise NotImplementedError("a pick or a place is not supported on a rail-equipped arm yet")
+    pose = kinematics.fk(joint_position, self._driver._kinematics_params)
+    heading = (round(pose.rotation.z, 3) + 180) % 360 - 180
+    await self._driver.send_command(
+      f"locXyz {station_index} {round(pose.location.x, 3)} {round(pose.location.y, 3)} "
+      f"{round(joint_position[PreciseFlexAxis.BASE], 3)} {round(heading, 3)} 90 180"
+    )
+    config = 1 if pose.orientation == "right" else 2
+    await self._driver.send_command(f"locConfig {station_index} {config}")
+
   def _plan_cartesian_pose(
     self,
     pose: PreciseFlexCartesianPose,
@@ -2029,7 +2051,9 @@ class PreciseFlexArm:
     """Write the station and run the controller's pick or place at it, guarded.
 
     Only the straight joint move to the station is checked against the column and the base plate.
-    The controller's own approach, depart and any detour through its park pose are not seen by it.
+    The wrist is checked where the controller takes it: the heading wrapped to +-180, less the
+    shoulder and the elbow. The controller's own approach, depart and any detour through its park
+    pose are not seen by it.
 
     Args:
       build_station: maps the pose just read to the station's full joint state.
@@ -2040,12 +2064,21 @@ class PreciseFlexArm:
         base plate.
     """
 
+    def controller_station(current: JointState) -> List[JointState]:
+      station = dict(build_station(current))
+      # The heading as `_unchecked_fw_set_station_cartesian` sends it, so a wrap of +-180 cannot
+      # differ between the check and the wire.
+      pose = kinematics.fk(joints=station, p=self._driver._kinematics_params)
+      heading = round(pose.rotation.z, 3)
+      station[PreciseFlexAxis.WRIST] += (heading + 180) % 360 - 180 - heading
+      return [station]
+
     async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
-      await self._unchecked_fw_set_joint_angles(self.station_index, targets[0])
+      await self._unchecked_fw_set_station_cartesian(self.station_index, targets[0])
       await self._unchecked_fw_set_grip_detail()
       await unchecked_fw_plate()
 
-    await self._guarded_move(lambda current: [build_station(current)], unchecked_fw_move)
+    await self._guarded_move(build_targets=controller_station, unchecked_fw_move=unchecked_fw_move)
 
   @evented_operation(
     "precise_flex.pick_up_at_joint_position",

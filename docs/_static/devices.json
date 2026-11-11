@@ -720,11 +720,26 @@
       "heating",
       "active cooling"
     ],
-    "status": "mostly",
-    "api_version": "v0",
+    "status": "wip",
+    "api_version": "v1",
     "doc_slug": "inheco/odtc/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.inheco.com/odtc.html"
+    "oem": "https://www.inheco.com/odtc.html",
+    "api": "pylabrobot.inheco.ODTC",
+    "code_slug": "inheco/odtc",
+    "needs_hardware_testing": true,
+    "models": [
+      {
+        "name": "96-well",
+        "status": "wip",
+        "needs_hardware_testing": true
+      },
+      {
+        "name": "384-well",
+        "status": "wip",
+        "needs_hardware_testing": true
+      }
+    ]
   },
   {
     "id": "inheco-scila",
