@@ -46,3 +46,15 @@ on the instrument, discovery refuses one whose serial numbers are not the module
 sources have changed since. There is no switch to skip a check; the fix is to import again. A
 simulation with no files uses the package's generic instrument (`defaults/`), which a live session
 refuses.
+
+## The pods
+
+`left_x_arm` / `right_x_arm` (STAR's names) are `Pod`s, one ACE board each, on one shared X rail. A
+pod's axes, head or channels and gripper are driven by one board through one position record, so the
+pod keeps the shared mechanics (moves, homing, enabling, the reads, every `_unchecked_fw_*`) and its
+features send through it. `driver.arm(name)` also takes Biomek's names (`1`, `"Pod1"`, `"MC_1"`).
+
+**I5. Safety state.** The instrument rests with the interlock tripped; the driver arms it only to
+move and leaves it as it found it. `stop()` moves nothing (Biomek stops in place). `pause` /
+`resume` is Biomek's whole-system pause. A fault under power is cleared by enabling, with a warning;
+one that will not clear trips the interlock. The door only reports: it has no interlock of its own.

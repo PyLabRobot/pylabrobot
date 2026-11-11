@@ -13,7 +13,7 @@ from pylabrobot.beckman_coulter.biomek_i7.defaults import GENERIC_CONFIGURATION,
 from pylabrobot.beckman_coulter.biomek_i7.driver.board import AceBoard
 from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import DeviceConfiguration
 from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
-from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import ReplayAceUSB
+from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import ReplayAceUSB, simulated_boards
 
 _GENERIC: Optional[Dict[str, Any]] = None
 
@@ -87,6 +87,14 @@ def configuration_file(configuration: DeviceConfiguration) -> str:
   path = folder / "configuration.json"
   configuration.save(path)
   return str(path)
+
+
+def generic_simulated_boards(**kwargs: Any) -> List[AceBoard]:
+  """The generic instrument simulated (`simulator.simulated_boards`), with the generic
+  configuration's motor tables and the generic cold start; `kwargs` as `simulated_boards` takes
+  them (`homed`, `configured`)."""
+  kwargs.setdefault("path", GENERIC_RECORDING)
+  return simulated_boards(generic_configuration().motor_tables, **kwargs)
 
 
 def generic_driver(
