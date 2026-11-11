@@ -26,3 +26,14 @@ Each layer calls only the one below it.
 side; that places it, not the USB serial number or the enumeration order. An unknown type or side,
 two boards claiming one place, or no chassis is refused. `driver/simulator.py` simulates the boards
 at the wire, answering identity reads from a recording of a real instrument's.
+
+**I2. The configuration is declared.** What the boards cannot report (motor tables, each axis's home
+position and hysteresis, per pod the counts conversions, limits, geometry, calibration and settings)
+is a `DeviceConfiguration`, read only from `declared_configuration_json` and written by
+`save_configuration`. It describes what is fitted; it never decides what is present.
+
+**I3. Units: a Biomek-unit core behind one boundary.** The public API is in PyLabRobot's units (mm,
+uL, s, degrees, the deck's frame). Planning, recipes and the counts layer work in Biomek's (cm, its
+frame with Y towards the front, the per-mille speed field), which is what its logs and files are
+compared in. A public method converts its arguments once, in `units.py`, and calls its `_`-prefixed
+Biomek-unit twin; nothing is converted back and forth inside.

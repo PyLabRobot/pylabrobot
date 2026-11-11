@@ -15,7 +15,10 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.board import (
   ACE_VENDOR_ID,
   AceBoard,
 )
-from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import ModuleConfiguration
+from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
+  DeviceConfiguration,
+  ModuleConfiguration,
+)
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
 from pylabrobot.io.usb import USB
@@ -46,15 +49,44 @@ class BiomekI7Driver:
   def __init__(
     self,
     serial_numbers: Optional[Sequence[str]] = None,
+    declared_configuration_json: Optional[str] = None,
     boards: Optional[Sequence[AceBoard]] = None,
   ):
     """
     Args:
       serial_numbers: the ACE boards' USB serial numbers. Defaults to every ACE board attached.
+      declared_configuration_json: path of the instrument's declared configuration (motor tables,
+        and per pod its conversions, limits, geometry and calibration), made from the instrument's
+        Biomek files. Required: the driver never falls back to another, the package's generic one
+        included.
       boards: boards to use instead of opening USB devices: a simulated instrument
-        (`simulator.replay_boards`).
+        (`simulator.replay_boards`). With them, the checks that tie the configuration to a real
+        instrument (`discover`) are not made.
+
+    Raises:
+      ValueError: with no declared configuration, or one changed since it was imported
+        (`DeviceConfiguration.load`).
     """
+    if declared_configuration_json is None:
+      raise ValueError(
+        "no declared configuration: pass `declared_configuration_json`, the instrument's own, made "
+        "from its Biomek files"
+      )
     self._serial_numbers = list(serial_numbers) if serial_numbers is not None else None
+    self.declared_configuration_json = declared_configuration_json
+    self.declared = DeviceConfiguration.load(declared_configuration_json)
+    logger.info(
+      "declared configuration %s: chassis %s%s; %s",
+      declared_configuration_json,
+      self.declared.chassis_serial_number or "none",
+      " (generic)" if self.declared.generic else "",
+      "; ".join(
+        f"{name} {s.get('kind', '')} {s.get('path', '')} read {s.get('read_at', '?')} "
+        f"{s.get('fingerprint', '')[:19]}".replace("  ", " ")
+        for name, s in self.declared.sources.items()
+      ),
+    )
+    self.motor_tables = self.declared.motor_tables
     self._given_boards = list(boards) if boards is not None else None
     self.boards: List[AceBoard] = []
     self._connected = False
@@ -72,6 +104,7 @@ class BiomekI7Driver:
 
     Raises:
       RuntimeError: if no chassis is found, or a board cannot be placed (`discover`).
+      ValueError: for a declared configuration that is not this instrument's (`discover`).
     """
     logger.warning(
       "The Biomek i7 driver's discovery has run on one instrument; it is untested on other "
@@ -114,10 +147,16 @@ class BiomekI7Driver:
     Each board says what it is: Get Module ID answers a module type (`protocol.MODULE_TYPES`:
     chassis, Multichannel, Span-8) and a side (left, right). That, not its USB serial number or
     order, places it. Seen on one instrument; an unknown type or side, two boards claiming one
-    place, or no chassis is refused.
+    place, no chassis, or a pod type other than the declared one is refused
+    (`_check_declared_against`).
+
+    On the instrument (no `boards` given), the declared configuration must be this instrument's:
+    its chassis serial number and each declared pod's module serial number as the modules report
+    them, and not the generic one (`DeviceConfiguration.generic`). Otherwise it is refused.
 
     Raises:
       RuntimeError: for a board this driver cannot place, or no chassis.
+      ValueError: for a declared configuration that is not this instrument's.
     """
     if not self._connected:
       await self._open()
@@ -142,9 +181,20 @@ class BiomekI7Driver:
       types[place] = module.type
     if "chassis" not in places:
       raise RuntimeError("no chassis module among the ACE boards")
+    self._check_declared_against(types)
     self.chassis = Chassis(places["chassis"])
-    self.left_x_arm = Pod(places["left"], "left", types["left"]) if "left" in places else None
-    self.right_x_arm = Pod(places["right"], "right", types["right"]) if "right" in places else None
+    self.left_x_arm = (
+      Pod(places["left"], "left", types["left"], self.motor_tables, self.declared.pods.get("left"))
+      if "left" in places
+      else None
+    )
+    self.right_x_arm = (
+      Pod(
+        places["right"], "right", types["right"], self.motor_tables, self.declared.pods.get("right")
+      )
+      if "right" in places
+      else None
+    )
     modules: List[Tuple[str, ModuleConfiguration]] = [("chassis", await self.chassis.discover())]
     for pod in self.arms:
       modules.append((str(pod), await pod.discover()))
@@ -157,6 +207,17 @@ class BiomekI7Driver:
         logger.warning(
           "%s runs firmware this driver has not been run against: %s", name, "; ".join(untested)
         )
+    if self._given_boards is not None:
+      return  # simulated: no instrument to tie the configuration to
+    mismatches = self._serial_number_mismatches()
+    if mismatches:
+      raise ValueError(
+        "the declared configuration is not this instrument's: "
+        + "; ".join(mismatches)
+        + ". Its motor tables, conversions, geometry and calibration may not fit. Pass this "
+        "instrument's own `declared_configuration_json`, made from its Biomek files."
+      )
+    logger.info("the declared configuration is this instrument's: serial numbers match the modules")
 
   async def request_serial_numbers(self) -> Dict[str, Optional[str]]:
     """The serial numbers the modules report: `chassis`, and `left` / `right` for each pod found.
@@ -166,6 +227,54 @@ class BiomekI7Driver:
       RuntimeError: before discovery (`discover` or `setup`).
     """
     return self._serial_numbers_found()
+
+  def _serial_number_mismatches(self) -> List[str]:
+    """How the declared configuration's serial numbers differ from the modules' (read at discovery),
+    each as a sentence; empty when they are this instrument's."""
+    found = self._serial_numbers_found()
+    d = self.declared
+    problems = (
+      ["it is the generic configuration, which describes no instrument"] if d.generic else []
+    )
+    if d.chassis_serial_number != found["chassis"]:
+      problems.append(
+        f"chassis {d.chassis_serial_number or 'not recorded'}, found {found['chassis']}"
+      )
+    for side, pod in d.pods.items():
+      if side in found and pod.module_serial_number != found[side]:
+        problems.append(
+          f"{side} pod module {pod.module_serial_number or 'not recorded'}, found {found[side]}"
+        )
+    return problems
+
+  def _check_declared_against(self, types: Dict[str, str]) -> None:
+    """Refuse an instrument whose pods are not the ones declared: their motor tables and geometry
+    would be another arm's. A pod declared but not found, or found but not declared, is only
+    logged (a single-pod instrument, or one being configured).
+
+    Raises:
+      ValueError: if a pod is declared on a side where the boards report another arm type.
+    """
+    for side in ("left", "right"):
+      declared = self.declared.pods.get(side)
+      found = types.get(side)
+      if declared is not None and found is not None and declared.module_type != found:
+        raise ValueError(
+          f"the declared configuration has a {declared.module_type} pod on the {side}, but the "
+          f"boards report a {found}; pass this instrument's own `declared_configuration_json`"
+        )
+      if (declared is None) != (found is None):
+        logger.warning(
+          "%s pod: declared %s, found %s",
+          side,
+          declared.module_type if declared else "nothing",
+          found or "nothing",
+        )
+
+  def save_configuration(self, path: str) -> None:
+    """Write the declared configuration to `path`, as loaded, for `declared_configuration_json` to
+    read back. Nothing found at discovery is written into it."""
+    self.declared.save(path)
 
   def _serial_numbers_found(self) -> Dict[str, Optional[str]]:
     if self.chassis is None or self.chassis.configuration is None:
