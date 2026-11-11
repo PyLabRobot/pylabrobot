@@ -459,15 +459,40 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     self.assertTrue(sent[2].startswith("C0JY"))
     self.assertEqual(len(sent), 3)
 
-  async def test_a_y_move_given_a_speed_gives_it_to_every_channel(self):
+  async def test_a_y_move_given_a_speed_holds_it_for_that_move_only(self):
     pipettes = await simulated_channels()
     sent = await self.recorded_y_moves(pipettes)
     ys = await pipettes.request_y_positions()
     await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0, acceleration_level=1)
-    written = sent[:-1]
-    self.assertEqual(len(written), 2 * pipettes.num_channels)
-    self.assertEqual(written[:2], ["P1AAyv2160", "P1AAyr1"])
-    self.assertTrue(sent[-1].startswith("C0JY"))
+    move = next(index for index, command in enumerate(sent) if command.startswith("C0JY"))
+    channels = range(1, pipettes.num_channels + 1)
+    given = {f"P{n}AAyv2160" for n in channels} | {f"P{n}AAyr1" for n in channels}
+    default = {f"P{n}AAyv5939" for n in channels} | {f"P{n}AAyr4" for n in channels}
+    self.assertEqual(set(sent[:move]), given)
+    self.assertEqual(set(sent[move + 1 :]), default)
+    for channel in range(pipettes.num_channels):
+      self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
+      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 4)
+
+  async def test_a_failed_y_move_given_a_speed_still_puts_the_default_back(self):
+    pipettes = await simulated_channels()
+    sent = await self.recorded_y_moves(pipettes)
+    recording = pipettes._driver.send_command
+
+    async def failing(module: str, command: str, **kwargs: Any):
+      answer = await recording(module=module, command=command, **kwargs)
+      if command == "JY":
+        raise RuntimeError("the move")
+      return answer
+
+    pipettes._driver.send_command = failing  # type: ignore[assignment]
+    ys = await pipettes.request_y_positions()
+    with self.assertRaises(RuntimeError):
+      await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0)
+    move = next(index for index, command in enumerate(sent) if command.startswith("C0JY"))
+    self.assertEqual(
+      set(sent[move + 1 :]), {f"P{n}AAyv5939" for n in range(1, pipettes.num_channels + 1)}
+    )
 
   async def test_a_channel_move_writes_what_it_moved_with(self):
     pipettes = await simulated_channels()

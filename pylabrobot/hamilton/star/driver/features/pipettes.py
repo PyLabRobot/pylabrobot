@@ -1310,13 +1310,15 @@ class Pipettes:
         for channel in channels
       )
     )
+    writes = []
     for channel, (held_speed, held_level) in zip(channels, held):
       if self._drive_parameter_to_increments(
         "yv", held_speed
       ) != self._drive_parameter_to_increments("yv", speed):
-        await self._set_y_speed(channel, speed)
+        writes.append(self._set_y_speed(channel, speed))
       if held_level != acceleration_level:
-        await self._set_y_acceleration_level(channel, acceleration_level)
+        writes.append(self._set_y_acceleration_level(channel, acceleration_level))
+    await asyncio.gather(*writes)
 
   async def _set_default_drive_parameters(self) -> None:
     """Give every channel the driver's Y and Z defaults (`Px AA`), whatever a session left.
@@ -1468,20 +1470,19 @@ class Pipettes:
   ):
     """Send every channel to its planned Y (`C0 JY`) and record where they are.
 
-    The channels are first given one Y profile: the move runs each at what its drive holds.
+    The channels are first given one Y profile: the move runs each at what its drive holds. A
+    move given its own speed or level puts the defaults back afterwards, so nothing outlasts it.
 
     Args:
       channel_locations: every channel's target in mm, from `_plan_y_positions`.
-      speed: in mm/s; the default Y speed when None.
-      acceleration_level: 1 (gentlest) to 4; the default level when None.
+      speed: in mm/s, for this move only; the default Y speed when None.
+      acceleration_level: 1 (gentlest) to 4, for this move only; the default level when None.
     """
-    await self._set_y_drive_profiles(
-      list(channel_locations),
-      speed=self.default_y_speed if speed is None else speed,
-      acceleration_level=(
-        self.default_y_acceleration_level if acceleration_level is None else acceleration_level
-      ),
-    )
+    channels = list(channel_locations)
+    speed = self.default_y_speed if speed is None else speed
+    if acceleration_level is None:
+      acceleration_level = self.default_y_acceleration_level
+    await self._set_y_drive_profiles(channels, speed=speed, acceleration_level=acceleration_level)
     yp = " ".join([f"{round(y * 10):04}" for y in channel_locations.values()])
     try:
       resp = await self._driver.send_command(
@@ -1492,6 +1493,21 @@ class Pipettes:
       # here would ask the device where the channels are on every successful move.
       await self._record_where_they_stopped("y")
       raise
+    finally:
+      # A speed given for this move only leaves the defaults in the drives, as every other move.
+      writes = []
+      if self._drive_parameter_to_increments("yv", speed) != self._drive_parameter_to_increments(
+        "yv", self.default_y_speed
+      ):
+        writes += [self._set_y_speed(channel, self.default_y_speed) for channel in channels]
+      if acceleration_level != self.default_y_acceleration_level:
+        writes += [
+          self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
+          for channel in channels
+        ]
+      for failed in await asyncio.gather(*writes, return_exceptions=True):
+        if isinstance(failed, Exception):
+          logger.warning("could not put a channel's Y profile back to the default: %s", failed)
 
     for channel, y in channel_locations.items():
       self.update_location_by_reference_point(channel, y=y)
@@ -1518,9 +1534,9 @@ class Pipettes:
         minimum Y spacing and the channels stay in order back to front. Off by default: nothing
         moves that the caller did not ask to move, and a request that will not fit raises instead.
         It can raise either way, since the requested positions may leave no room.
-      speed: every channel's Y speed for the move, in mm/s; the default Y speed when None.
-      acceleration_level: every channel's level for the move, 1 (gentlest) to 4; the default level
-        when None.
+      speed: every channel's Y speed for this move only, in mm/s; the default Y speed when None.
+      acceleration_level: every channel's level for this move only, 1 (gentlest) to 4; the default
+        level when None.
     """
     return await self._move_to_planned_y_positions(
       await self._plan_y_positions(ys, make_space),
@@ -1547,9 +1563,9 @@ class Pipettes:
       y: where to put it, in mm.
       make_space: whether the other channels may be moved to make room. Off by default. See
         `move_to_y_positions`.
-      speed: every channel's Y speed for the move, in mm/s; the default Y speed when None.
-      acceleration_level: every channel's level for the move, 1 (gentlest) to 4; the default level
-        when None.
+      speed: every channel's Y speed for this move only, in mm/s; the default Y speed when None.
+      acceleration_level: every channel's level for this move only, 1 (gentlest) to 4; the default
+        level when None.
 
     Raises:
       ValueError: If the channel cannot reach it, or the others cannot make room.
