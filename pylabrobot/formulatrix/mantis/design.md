@@ -10,10 +10,11 @@ last section lists what is open and where the code does not follow a rule yet.
 device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
                              the driver, the parts.
 driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
-                             discovery and the saved configuration.
+                             discovery and the saved configuration; reads the motors; shows
+                             setup and stop on the LED bar.
 driver/simulator.py          MantisSimulationDriver, MantisSimulationPlateClamp,
-                             MantisSimulationRfid. Answer from the declared configuration; nothing
-                             reaches a wire.
+                             MantisSimulationPump, MantisSimulationRfid, MantisSimulationLedBar.
+                             Answer from the declared configuration; nothing reaches a wire.
 driver/framing.py            The frame: header, check word, splitting, payload strings, boards.
 driver/errors.py             MantisError and one error per kind; what the device's codes mean.
 driver/configuration.py      DeviceConfiguration: what the device answered about itself.
@@ -21,7 +22,8 @@ driver/oem_config.py         The unit's own values, read from its vendor
                              .config files, into a declared configuration.
 driver/confirmed_firmware_versions.py
                              The firmware sets confirmed on a device, per generation.
-driver/features/             One class per thing the device is fitted with: PlateClamp, Rfid.
+driver/features/             One class per thing the device is fitted with: PlateClamp, Pump,
+                             Rfid, LedBar.
 driver/recordings/           One real Mantis of each generation: its configuration and unit values.
 resource_model/              The parts the device is modelled as, their files and manifest.
 liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity band and chip type.
@@ -44,26 +46,37 @@ configuration (`_request_configuration`), checks it against a declared one, then
 is the exception: `discover` builds it when it answers its ping on interface A, after every
 opening of the link.
 Each feature is an `Optional` attribute of the driver, `None` until `_discover_features` builds
-it: `plate_clamp` is built only when board 12 answered discovery, so a v3 without it has none. A
-difference between v3 and v4 is expressed there, by which feature is built, never by a
-branch on the generation inside a command.
+it: `plate_clamp` is built only when board 12 answered discovery, so a v3 without it has none;
+`pump` only when board 10 answered. `led_bar` is gated by the generation: built only on a v4 whose
+board 12 answered, never on a v3, whose install sets no LED count. A difference between v3 and v4
+is expressed there, by which feature is built, never by a branch on the generation inside a
+command.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
-what the device answered: generation, firmware versions, motor limits. `save_configuration` writes
-it; `declared_configuration_json` reads one back and setup refuses if the device disagrees on a
-fitted field (`FITTED_FIELDS`). Each feature gets its own configuration when it is added, holding
-its own facts; the device configuration does not grow per feature. Motor limits are compared as a
-build fact: every v4 is taken to share them until a second device shows otherwise.
+what the device answered: generation, firmware versions, motor limits, and the pressure board's
+sensor calibration (`feedback_sensor_parameters`), read at setup and never written.
+`save_configuration` writes it; `declared_configuration_json` reads one back and setup refuses if
+the device disagrees on a fitted field (`FITTED_FIELDS`). The calibration is neither saved nor
+declared: the bottle and chip sensors' offsets are re-zeroed on the device between sessions, so
+they are read at every setup. A declared file that holds one, saved by an earlier version, loads;
+it is ignored. A simulated pump answers the generation's recording's.
+Each feature gets its own configuration when it is added, holding its own facts; the device
+configuration does not grow per feature, the calibration excepted, as discovery reads it with the
+firmware versions. Motor limits are compared as a build fact: every v4 is taken to share them until
+a second device shows otherwise.
 
 **M4a. A unit's own values come from its folder or its declared file, else its generation's
 recording.** What is set per unit and cannot be read off the device sits in the unit's vendor
 `Data/Device/Configs` folder (`oem_config_directory`). Each value is a block (`UNIT_BLOCKS`): where
 the folder and the declared file both hold it they must agree, or setup refuses listing the
-differences; one source suffices; with neither, the generation's recording supplies it with a
-warning, less accurate on this unit. `save_configuration` saves the unit's blocks, never a
-recording's, so after one setup with the folder the saved file alone carries them. A block is
-loaded only where its source applies: `plate_clamp.levels` for a clamp driven as a DC motor,
-`rfid.slot_to_antenna` where `RFID.config` exists.
+differences; one source suffices; with neither, the generation's recording supplies it, less
+accurate on this unit. A file saved before a block or a non-fitted device field existed still loads:
+each value it lacks comes from the folder, else the recording, in simulation too, with one warning
+naming each and where it came from. A later block or field is optional the same way.
+`save_configuration` saves the unit's blocks, never a recording's, so after one setup with the
+folder the saved file alone carries them. A block is loaded only where its source applies:
+`plate_clamp.levels` for a clamp driven as a DC motor, `rfid.slot_to_antenna` where `RFID.config`
+exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`.
 
 Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 
@@ -74,7 +87,7 @@ Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 | absolute-encoder correction (v4) | `System/Encoder Correction/*.csv` | the unit's |
 | plate holder origin | `Device/Adapters/SBS Adapter.ad.txt` | the unit's |
 | chip changer and sequence safe Z (`ChipChanger.MovementZ`, `*.seq.txt`) | `ChipChanger.config`, sequences | unit or generation, unsettled |
-| clamp levels, RFID antennas | `Device.config`, `RFID.config` | one unit seen; read as the unit's |
+| clamp levels, RFID antennas, LED count (`NumberOfLed`, v4) | `Device.config`, `RFID.config` | one unit seen; read as the unit's |
 | deck reference points and heights, arm geometry, drop verification | `StageTuning.config`, `RobotArm.config`, `DropVerification.config` | the same on both units |
 | chip catalogue and liquid classes | `System/`, `Device/Others/` | the software's; liquid classes ship as code (M4c) |
 
@@ -98,7 +111,8 @@ starts. A read that times out is resent with the same packet number, up to `atte
 that writes or moves is sent once (`attempts=1`), never resent. A failed read ends the reader: the
 command in flight and every event waiter fail with it, and every later command, including one
 already waiting for the lock, raises until setup runs again. `stop` fails the command in flight and
-every event waiter.
+every event waiter. After a failed read, `stop` (and `setup`, which runs it first) sends nothing:
+it closes the dead link with one warning.
 
 **M6. The wire speaks the device's units; reads return them.** (STAR P4.) Every read returns what
 the device sent, decoded but not converted, until the feature that owns it knows the conversion.
@@ -106,8 +120,8 @@ A feature then converts in one place, on its configuration, and speaks PyLabRobo
 suffix on names in default units.
 
 **M7. A range is checked before anything is sent.** (STAR P5.) A read accepts only the indices
-seen on a device (`MOTORS`, the boards); `_check_index` raises
-`ValueError` before a frame is built.
+seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CONTROLLERS`);
+`_check_index`, and the pump's `_get_controller_index`, raise `ValueError` before a frame is built.
 
 **M8. A command that changes the device has one raw call and one public method.** (STAR P7, P8,
 P9.) The raw call is `_unchecked_fw_*` and sends once; the public method checks its arguments, then
@@ -120,8 +134,8 @@ confirms what the device reports. `lock` checks the level against the declared l
 |---|---|---|
 | the device, doing work | `move_` | |
 | the device, a process left running | `start_`, `stop_` | |
-| the device's sensors | `measure_`, `sense_` | |
-| the device's memory, reading | `request_` | `request_motor_limits`, `request_name` |
+| the device's sensors | `measure_`, `sense_` | `pump.measure_pressure` |
+| the device's memory, reading | `request_` | `request_motor_limits`, `request_motor_status` |
 | the device's memory, writing | `set_` | |
 | the resource model, reading | `get_` | |
 | the resource model, writing | `update_` | |
@@ -129,11 +143,11 @@ confirms what the device reports. `lock` checks the level against the declared l
 Commands, boards and fields are named for what they do; no vendor class, method or opcode names.
 
 **M10. What is acquired is released on every path.** A feature that turns on or holds anything
-(pump, pressure controllers, clamp, a chip) turns it off or releases it in a `finally`, each step
-in its own `try`, and the first fault is the one raised. `stop` fails what waits on the link, then
-releases each built feature, then closes the link. A `lock` that does not report clamping
-done releases the clamp before raising, and `stop` releases a clamp that does not read released.
-Failure behaviour is designed before coverage.
+(pump, pressure controllers, clamp, a chip) turns it off or releases it in a `finally`, each step in
+its own `try`, and the first fault is the one raised. `stop` fails what waits on the link, releases
+each built feature, turns the LED bar off, then closes the link. A `lock` that does not report
+clamping done releases the clamp before raising, and `stop` releases a clamp that does not read
+released. Failure behaviour is designed before coverage.
 
 **M11. Firmware is confirmed, never gated.** A version set outside `CONFIRMED_FIRMWARE_VERSIONS`
 warns once at setup; nothing refuses. A set goes in once it has been seen on a device.
@@ -154,11 +168,14 @@ serials or dates; a constant is referenced by name, not repeated.
 
 **M15. The simulator answers from the declared configuration; nothing reaches a wire.** (CLARIOstar
 simulator.) `MantisSimulationDriver` builds no link and `_send_command` raises. Setup takes the
-configuration from the file's `device` block, and the reads answer from it; a board it leaves
-`None` does not answer, and the device name is not simulated. Each feature has a simulation
-subclass that overrides its `_unchecked_fw_*` calls and reads with state above the wire:
-`MantisSimulationPlateClamp` reads 0 until a command sets clamping done or unclamping done;
-`MantisSimulationRfid` reads every slot empty.
+configuration from the file's `device` block (a field it lacks filled as in M4a), and the reads
+answer from it; a board it leaves `None` does not answer, and the device name is not simulated. Each
+feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
+above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
+unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` reads off,
+every line at 0, with the recorded calibration; `MantisSimulationLedBar` takes every command and
+waits no hold. The motors read idle at 0, as after power-on; a motor read the configuration does not
+hold is not simulated.
 
 **M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
 add commands that the device runs together, each subsystem gets its own lock, taken in declaration
@@ -172,6 +189,20 @@ master's links. Interface B carries the command frames; interface A, the RFID re
 builds the parts and holds the driver; a feature reaches the parts through the device, and moves
 keep them in step. A driver with no resource tree still drives.
 
+**M19. The LED bar shows what the device does, never at the cost of it.** An action runs inside
+`_show_action`: the bar shows its colour, the enclosing action's when it ends, the idle animation
+when none is left, and `error_color` after one that failed. Each colour is an attribute of the bar
+(`setup_color`, ...), checked when it is set and read when it is shown; each bar has its own.
+`show_progress` lights a share of the LEDs from the left in `dispense_progress_color` and sends
+nothing when that many are already lit: each frame holds the link about 62 ms on a v4, so an action
+shows at most `number_of_leds` frames. Setup shows blue, then green for `SETUP_DONE_HOLD`, then
+idle; `stop` turns the bar off and shows no colour first: one sent there was replaced within
+milliseconds, too briefly to see. An LED bar fault only warns: it never fails or
+masks the action. `show_actions=False` shows no action, only the idle animation from setup on. A
+colour change costs about 0.1 s of link time (two commands), so an action that is quick on its own
+shows none: the plate clamp's lock and unlock, where a colour took a release from 0.21 s to 0.34 s
+on the recorded v4.
+
 ## Open, and where this is not consistent yet
 
 1. **`CommandRefusedError` is untested.** No reply seen has a non-zero status.
@@ -181,7 +212,8 @@ keep them in step. A driver with no resource tree still drives.
    (10 ms) and the reply timeout (5 s). A frame whose reserved word is not zero is logged, not
    refused.
 4. **The arm and Z column are not modelled yet.** They come with the arm feature, placed from a
-   pose read from the device; which motor drives which link is not measured.
+   pose read from the device; which motor drives which link is not measured. Until then the motor
+   reads sit on the driver and return the device's units.
 5. **Whether motor limits differ between devices of one generation** is unknown; one v4 has been
    read.
 6. **The plate clamp and the RFID reader have run on one v4 only,** on macOS and on Windows. No v3
@@ -206,3 +238,23 @@ keep them in step. A driver with no resource tree still drives.
     `RfidMultiplexerDelay` is unconfirmed.
 15. **The liquid classes' units are unconfirmed.** The delays may be ms or the valve sequence's time
     steps, the pressures psi and the vacuum inHg; the dispensing PR settles them.
+16. **Some motor read fields are named by their order only.** The three currents, and the
+    configuration's flag and three values, have no meaning confirmed on the wire; the
+    position read returns its first field, the demand position, and drops the five after it.
+17. **Each arm motor's first absolute encoder read after connecting is not valid,** on both
+    motors of the v4. It is read again, up to `ABSOLUTE_ENCODER_READS` (5, ours); the recorded v4
+    startup reads it twice. Why it is not valid is not known.
+18. **The vacuum sensor's offset reads about -38.8,** against about -13.6 on the bottle and chip
+    sensors. Nothing uses the calibration yet. The target pressure read (command 10) is left out:
+    no reply to it has been recorded.
+19. **A v3's pressure board is unproven.** Setup reads the calibration from any board 10 that
+    answers its version; one that does not answer that read leaves it empty, with a warning.
+20. **The LED bar has run on one v4 only.** The `fatal_error` and `unconnected` animations have
+    never been sent to a device, nor yellow shown; only writes of all 20 LEDs are recorded, so
+    `set_color` takes one colour per LED, no fewer.
+21. **The LED bar's replies are not checked.** A colour write and an animation start answer 1
+    when taken; a colour write while an animation plays answers 0 and is not shown, as in the
+    recorded v4, so every colour write stops the animation first.
+22. **The dispense progress has no caller yet.** `_show_fill` (`show_progress`), `_follow_fill` and
+    `_show_dispense_done` wait for the dispense; `_follow_fill` reads `_sequence_progress`, which
+    the sequencer sets.

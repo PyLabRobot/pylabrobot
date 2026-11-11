@@ -29,6 +29,7 @@ V4_DEVICE_CONFIG = (
     '    <add key="RfidMultiplexerDelay" value="0" />\r\n'
     '    <add key="PlateClampInisiatePWM" value="0.119,0.21,0.3" />\r\n'
     '    <add key="PlateClampTimer" value="2000,1000,500" />\r\n'
+    '    <add key="NumberOfLed" value="20" />\r\n'
   )
   + TAIL
 )
@@ -69,13 +70,15 @@ def write_files(*, directory: str, files: Dict[str, str]) -> str:
 
 
 class LoadUnitConfigurationTests(unittest.TestCase):
-  def test_a_v4_folder_gives_its_lock_levels_and_antennas(self):
+  def test_a_v4_folder_gives_its_lock_levels_antennas_and_led_count(self):
     with tempfile.TemporaryDirectory() as directory:
       files = {"Device.config": V4_DEVICE_CONFIG, "RFID.config": V4_RFID_CONFIG}
       blocks = _load_unit_configuration(
         oem_config_directory=write_files(directory=directory, files=files)
       )
-    self.assertEqual(blocks, {block: RECORDING[block] for block in ("plate_clamp", "rfid")})
+    self.assertEqual(
+      blocks, {block: RECORDING[block] for block in ("plate_clamp", "rfid", "led_bar")}
+    )
 
   def test_a_v3_folder_gives_neither(self):
     with tempfile.TemporaryDirectory() as directory:
@@ -116,7 +119,9 @@ class UnitBlockSourceTests(DriverTestCase):
         oem_config_directory=write_files(directory=directory, files=files)
       )
       saved = self.saved_blocks(driver=driver, directory=directory)
-    self.assertEqual(saved, {block: RECORDING[block] for block in ("plate_clamp", "rfid")})
+    self.assertEqual(
+      saved, {block: RECORDING[block] for block in ("plate_clamp", "rfid", "led_bar")}
+    )
 
   async def test_a_folder_and_declared_file_that_agree_set_up(self):
     with tempfile.TemporaryDirectory() as directory:
@@ -139,6 +144,37 @@ class UnitBlockSourceTests(DriverTestCase):
       )
       with self.assertRaisesRegex(MantisConfigurationError, "plate_clamp: declared"):
         await driver.setup()
+
+  async def test_a_folder_and_declared_file_that_disagree_on_the_led_count_refuse_setup(self):
+    with tempfile.TemporaryDirectory() as directory:
+      text = V4_DEVICE_CONFIG.replace('"NumberOfLed" value="20"', '"NumberOfLed" value="24"')
+      write_files(directory=directory, files={"Device.config": text})
+      driver = self.make_driver(
+        link=FakeLink(answers=make_answers()),
+        oem_config_directory=directory,
+        declared_configuration_json=RECORDING_MANTIS_V4,
+      )
+      with self.assertRaisesRegex(MantisConfigurationError, "led_bar: declared"):
+        await driver.setup()
+    self.assertIsNone(driver.led_bar)
+
+  async def test_an_older_declared_file_takes_what_it_lacks_from_the_folder(self):
+    older = {block: values for block, values in RECORDING.items() if block != "led_bar"}
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "older.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump(older, f)
+      text = V4_DEVICE_CONFIG.replace('"NumberOfLed" value="20"', '"NumberOfLed" value="24"')
+      folder = write_files(directory=directory, files={"Device.config": text})
+      with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING") as logs:
+        driver = await self.set_up_with(
+          oem_config_directory=folder, declared_configuration_json=path
+        )
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn(f"not in {path}: led_bar from {folder}", logs.output[0])
+    self.assertNotIn("less accurate", logs.output[0])
+    assert driver.led_bar is not None
+    self.assertEqual(driver.led_bar.number_of_leds, 24)
 
   async def test_neither_takes_the_recording_warns_and_saves_none_of_it(self):
     with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING") as logs:

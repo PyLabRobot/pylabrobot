@@ -8,6 +8,7 @@ import unittest
 from pylabrobot.formulatrix.mantis import Mantis
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import MantisTimeoutError
+from pylabrobot.formulatrix.mantis.driver.simulator import MantisSimulationLedBar
 
 
 class SimulationTests(unittest.IsolatedAsyncioTestCase):
@@ -48,6 +49,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
       await mantis.setup()
       self.addAsyncCleanup(mantis.stop)
     self.assertEqual(mantis.driver.configuration.generation, "v3")
+    self.assertIsNone(mantis.led_bar)
     with self.assertRaises(MantisTimeoutError):
       await mantis.driver.request_firmware_version(board=11)
 
@@ -61,6 +63,72 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(await self.mantis.driver.request_motor_limits(motor=2), (-160.0, 2300.0))
     with self.assertRaisesRegex(NotImplementedError, "name is not simulated"):
       await self.mantis.driver.request_name()
+
+  async def test_motors_read_idle_at_0(self):
+    driver = self.mantis.driver
+    for motor in (0, 1, 2):
+      with self.subTest(motor=motor):
+        self.assertEqual(await driver.request_motor_status(motor=motor), 0)
+        self.assertEqual(await driver.request_motor_position(motor=motor), 0.0)
+        self.assertEqual(await driver.request_encoder_position(motor=motor), 0.0)
+    with self.assertRaisesRegex(NotImplementedError, "absolute encoders are not simulated"):
+      await driver.request_absolute_encoder_position(motor=0)
+    with self.assertRaises(ValueError):
+      await driver.request_motor_status(motor=3)
+
+  async def test_pump_reads_off_with_the_recorded_calibration(self):
+    pump = self.mantis.pump
+    assert pump is not None
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recorded = json.load(f)["device"]["feedback_sensor_parameters"]
+    self.assertEqual(
+      self.mantis.driver.configuration.feedback_sensor_parameters,
+      {controller: tuple(value) for controller, value in recorded.items()},
+    )
+    self.assertEqual(
+      await pump.request_feedback_sensor_parameters(controller="vacuum"),
+      tuple(recorded["vacuum"]),
+    )
+    self.assertEqual(await pump.measure_pressure(controller="chip"), 0.0)
+    self.assertEqual(await pump.request_controller_status(controller="chip"), 0)
+    self.assertFalse(await pump.request_controller_enabled(controller="chip"))
+    self.assertFalse(await pump.request_pump_on())
+    with self.assertRaises(ValueError):
+      await pump.measure_pressure(controller="air")  # type: ignore[arg-type]
+
+  async def test_an_older_declared_file_takes_what_it_lacks_from_the_recording(self):
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recording = json.load(f)
+    del recording["device"]["feedback_sensor_parameters"]
+    del recording["led_bar"]
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "older.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump(recording, f)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING") as logs:
+        await mantis.setup()
+      self.addAsyncCleanup(mantis.stop)
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn(f"led_bar from {RECORDING_MANTIS_V4}", logs.output[0])
+    assert mantis.pump is not None and mantis.led_bar is not None
+    self.assertEqual(mantis.led_bar.number_of_leds, 20)
+    self.assertEqual(
+      await mantis.pump.request_feedback_sensor_parameters(controller="bottle"),
+      (0.010651180520653725, -13.580931663513184),
+    )
+
+  async def test_led_bar_takes_every_command(self):
+    bar = self.mantis.led_bar
+    assert isinstance(bar, MantisSimulationLedBar)
+    self.assertEqual(bar.number_of_leds, 20)
+    await bar.set_color(color="#FF0080")
+    await bar.set_color(color=["green"] * 10 + ["off"] * 10)
+    await bar.start_animation(effect="wave")
+    await bar.stop_animation()
+    await bar.turn_off()
+    with self.assertRaises(ValueError):
+      await bar.set_color(color="purple")
 
   async def test_simulated_mantis_sends_nothing(self):
     with self.assertRaisesRegex(NotImplementedError, "sends nothing"):

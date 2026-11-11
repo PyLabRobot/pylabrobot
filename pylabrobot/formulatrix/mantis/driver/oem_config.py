@@ -38,6 +38,7 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   ``PlateClampTimer``), only for a clamp driven as a DC motor (``PlateClampController``).
   ``rfid``: each input slot's antenna, from every ``RFIDAntennaId.ACC<n>`` of ``RFID.config``, only
   when it exists; with ``Device.config``'s ``RfidMultiplexerDelay`` as written.
+  ``led_bar``: the LED count, from ``Device.config``'s ``NumberOfLed``, only where it is set.
 
   Args:
     oem_config_directory: the unit's ``Data/Device/Configs`` folder.
@@ -83,6 +84,13 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
         str(level): [pwm, timeout_ms]
         for level, (pwm, timeout_ms) in enumerate(zip(pwms, timeouts_ms), start=1)
       }
+    }
+
+  if "NumberOfLed" in values:
+    blocks["led_bar"] = {
+      "number_of_leds": int(
+        number(path=device_config, key="NumberOfLed", text=values["NumberOfLed"])
+      )
     }
 
   rfid_config = os.path.join(oem_config_directory, "RFID.config")

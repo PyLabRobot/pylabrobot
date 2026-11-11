@@ -8,7 +8,9 @@ from pylabrobot.resources import Coordinate, Deck, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .driver.configuration import RECORDING_MANTIS_V4
+from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
+from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
 from .driver.simulator import MantisSimulationDriver
@@ -41,6 +43,7 @@ class MantisDevice(Resource):
     declared_configuration_json: Optional[str] = None,
     oem_config_directory: Optional[str] = None,
     ftdi_library: Optional[str] = None,
+    show_actions: bool = True,
     simulation: bool = False,
   ):
     """
@@ -59,6 +62,8 @@ class MantisDevice(Resource):
         declared file both hold a unit value, they must agree.
       ftdi_library: "libftdi" or "d2xx"; None picks D2XX on Windows when FTDI's D2XX library
         loads, else libftdi.
+      show_actions: whether the v4's LED bar shows each action's colour, and the idle animation
+        between actions.
       simulation: build a simulated Mantis, with no link.
 
     Raises:
@@ -83,6 +88,7 @@ class MantisDevice(Resource):
         declared_configuration_json=declared_configuration_json or RECORDING_MANTIS_V4,
         name=name,
         oem_config_directory=oem_config_directory,
+        show_actions=show_actions,
       )
     else:
       self.driver = MantisDriver(
@@ -93,6 +99,7 @@ class MantisDevice(Resource):
         declared_configuration_json=declared_configuration_json,
         oem_config_directory=oem_config_directory,
         ftdi_library=ftdi_library,
+        show_actions=show_actions,
       )
     self.mesh = {
       "path": os.path.join(os.path.dirname(__file__), "resource_model", MANIFEST["base"]),
@@ -129,9 +136,19 @@ class MantisDevice(Resource):
     return self.driver.plate_clamp
 
   @property
+  def pump(self) -> Optional[Pump]:
+    """The pump, once setup found the pressure board; None before or without it."""
+    return self.driver.pump
+
+  @property
   def rfid(self) -> Optional[Rfid]:
     """The RFID reader, once setup found it on interface A; None before or without it."""
     return self.driver.rfid
+
+  @property
+  def led_bar(self) -> Optional[LedBar]:
+    """The LED bar, once setup found board 12 on a v4; None before, without it, or on a v3."""
+    return self.driver.led_bar
 
   async def setup(self) -> None:
     """Connect, read the device's configuration and check it. Nothing moves."""
@@ -154,6 +171,7 @@ def Mantis(
   declared_configuration_json: Optional[str] = None,
   oem_config_directory: Optional[str] = None,
   ftdi_library: Optional[str] = None,
+  show_actions: bool = True,
   simulation: bool = False,
 ) -> MantisDevice:
   """A Formulatrix Mantis, v3 or v4.
@@ -172,6 +190,8 @@ def Mantis(
       declared file both hold a unit value, they must agree.
     ftdi_library: "libftdi" or "d2xx"; None picks D2XX on Windows when FTDI's D2XX library loads,
       else libftdi.
+    show_actions: whether the v4's LED bar shows each action's colour, and the idle animation
+      between actions.
     simulation: build a simulated Mantis, with no link.
 
   Raises:
@@ -189,5 +209,6 @@ def Mantis(
     declared_configuration_json=declared_configuration_json,
     oem_config_directory=oem_config_directory,
     ftdi_library=ftdi_library,
+    show_actions=show_actions,
     simulation=simulation,
   )

@@ -6,16 +6,20 @@ from typing import Dict, List, Optional, Tuple
 from pylabrobot.io.ftdi import FTDI
 
 from .configuration import (
+  RECORDING_MANTIS_V3,
+  RECORDING_MANTIS_V4,
   DeviceConfiguration,
   compute_generation,
   configuration_from_json,
   read_configuration,
 )
 from .errors import MantisConfigurationError, MantisTimeoutError
+from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
+from .features.pump import PressureController, Pump
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
-from .master import MOTORS, MantisDriver
+from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, MantisDriver
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,58 @@ class MantisSimulationPlateClamp(PlateClamp):
     return self._state
 
 
+class MantisSimulationPump(Pump):
+  """A pump with no device behind it, answering from the declared configuration.
+
+  Off, its controllers off and disabled, every line at 0, with the recorded sensor calibration.
+  """
+
+  async def measure_pressure(self, *, controller: PressureController) -> float:
+    """0: no line holds pressure."""
+    self._get_controller_index(controller=controller)
+    return 0.0
+
+  async def request_feedback_sensor_parameters(
+    self, *, controller: PressureController
+  ) -> Tuple[float, float]:
+    """The recorded calibration, as setup read it.
+
+    Raises:
+      MantisConfigurationError: if the generation's recording holds none for ``controller``.
+    """
+    self._get_controller_index(controller=controller)
+    parameters = self._driver.configuration.feedback_sensor_parameters.get(controller)
+    if parameters is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no feedback_sensor_parameters recorded for the {controller} "
+        "controller"
+      )
+    return parameters
+
+  async def request_controller_status(self, *, controller: PressureController) -> int:
+    """0: off."""
+    self._get_controller_index(controller=controller)
+    return 0
+
+  async def request_controller_enabled(self, *, controller: PressureController) -> bool:
+    """False: no controller regulates."""
+    self._get_controller_index(controller=controller)
+    return False
+
+  async def request_pump_on(self) -> bool:
+    """False: the pump is off."""
+    return False
+
+  async def _request_calibration(self) -> Dict[PressureController, Tuple[float, float]]:
+    """The generation's recording's calibration; none recorded is none."""
+    generation = self._driver.configuration.generation
+    path = RECORDING_MANTIS_V4 if generation == "v4" else RECORDING_MANTIS_V3
+    recorded = read_configuration(path=path)["device"].get("feedback_sensor_parameters", {})
+    return {
+      controller: (float(scale), float(offset)) for controller, (scale, offset) in recorded.items()
+    }
+
+
 class MantisSimulationRfid(Rfid):
   """An RFID reader with no device behind it: every slot reads empty."""
 
@@ -58,12 +114,30 @@ class MantisSimulationRfid(Rfid):
     return None
 
 
+class MantisSimulationLedBar(LedBar):
+  """An LED bar with no device behind it: every command is taken, and no hold is waited."""
+
+  async def _unchecked_fw_stop_animator(self) -> None:
+    """Send nothing."""
+
+  async def _unchecked_fw_start_animator(self, *, lowest_index: int, highest_index: int) -> None:
+    """Send nothing."""
+
+  async def _unchecked_fw_set_rgb_led(self, *, colors: List[int]) -> None:
+    """Send nothing."""
+
+  async def _sleep(self, *, seconds: float) -> None:
+    """Return at once: a simulated bar has nothing to show."""
+
+
 class MantisSimulationDriver(MantisDriver):
   """A Mantis driver with no device behind it.
 
   Nothing reaches a wire. The configuration comes from ``declared_configuration_json``, and the
   reads answer from it; a board it leaves ``None`` does not answer. The plate clamp's state changes
-  at once, and every RFID slot reads empty. The device name is not simulated.
+  at once, every RFID slot reads empty, and the LED bar takes every command and holds nothing. The
+  motors read idle at 0, as after power-on. The device name and the motor reads the configuration
+  does not hold are not simulated.
   """
 
   def __init__(
@@ -72,6 +146,7 @@ class MantisSimulationDriver(MantisDriver):
     name: str = "Mantis",
     *,
     oem_config_directory: Optional[str] = None,
+    show_actions: bool = True,
   ):
     """
     Args:
@@ -79,11 +154,13 @@ class MantisSimulationDriver(MantisDriver):
         configuration.
       name: the device name, heading its log messages.
       oem_config_directory: a unit's vendor ``Data/Device/Configs`` folder, as for a device.
+      show_actions: whether the LED bar shows each action, as for a device.
     """
     super().__init__(
       name=name,
       declared_configuration_json=declared_configuration_json,
       oem_config_directory=oem_config_directory,
+      show_actions=show_actions,
     )
 
   def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
@@ -133,13 +210,53 @@ class MantisSimulationDriver(MantisDriver):
     self._check_index(name="motor", value=motor, allowed=MOTORS)
     return self.configuration.motor_limits[motor]
 
+  async def request_motor_currents(self, *, motor: int) -> Tuple[float, float, float]:
+    """Raise: the currents are not part of the configuration."""
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    raise NotImplementedError(f"{self.name}: the motor currents are not simulated")
+
+  async def request_motor_configuration(
+    self, *, motor: int
+  ) -> Tuple[int, float, float, float, int, int]:
+    """Raise: a motor's configuration is not part of the device configuration."""
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    raise NotImplementedError(f"{self.name}: the motor configuration is not simulated")
+
+  async def request_motor_status(self, *, motor: int) -> int:
+    """0: idle, no fault, as after power-on."""
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    return 0
+
+  async def request_motor_position(self, *, motor: int) -> float:
+    """0, as after power-on."""
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    return 0.0
+
+  async def request_following_error_configuration(self, *, motor: int) -> Tuple[bool, float]:
+    """Raise: the following-error check is not part of the configuration."""
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    raise NotImplementedError(f"{self.name}: the following-error check is not simulated")
+
+  async def request_encoder_position(self, *, motor: int) -> float:
+    """0, as after power-on."""
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    return 0.0
+
+  async def request_absolute_encoder_position(self, *, motor: int) -> float:
+    """Raise: a raw reading means nothing without the unit's encoder correction."""
+    self._check_index(name="motor", value=motor, allowed=ABSOLUTE_ENCODER_MOTORS)
+    raise NotImplementedError(f"{self.name}: the absolute encoders are not simulated")
+
   async def _request_configuration(self) -> DeviceConfiguration:
-    """The declared configuration's ``device`` block; the generation from its boards, as a
-    device's is."""
-    configuration = configuration_from_json(
+    """The declared configuration's ``device`` block, a field it lacks filled as for the unit
+    blocks; the generation from its boards, as a device's is."""
+    declared = configuration_from_json(
       fields=read_configuration(path=self.declared_configuration_json or "")["device"]
     )
-    configuration.generation = compute_generation(firmware_versions=configuration.firmware_versions)
+    generation = compute_generation(firmware_versions=declared.firmware_versions)
+    values, _ = self._load_unit_values(generation=generation)
+    configuration = configuration_from_json(fields=values["device"])
+    configuration.generation = generation
     return configuration
 
   def _discover_features(self) -> None:
@@ -153,6 +270,14 @@ class MantisSimulationDriver(MantisDriver):
       self.plate_clamp, MantisSimulationPlateClamp
     ):
       self.plate_clamp = MantisSimulationPlateClamp(driver=self, levels=self.plate_clamp.levels)
+    if self.pump is not None and not isinstance(self.pump, MantisSimulationPump):
+      self.pump = MantisSimulationPump(driver=self)
+    if self.led_bar is not None and not isinstance(self.led_bar, MantisSimulationLedBar):
+      self.led_bar = MantisSimulationLedBar(
+        driver=self,
+        number_of_leds=self.led_bar.number_of_leds,
+        show_actions=self.led_bar.show_actions,
+      )
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")
       slot_to_antenna: Optional[Dict[int, int]] = None

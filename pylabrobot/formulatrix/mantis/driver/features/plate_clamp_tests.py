@@ -16,6 +16,8 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, Fa
 RELEASE = (12, 31, bytes.fromhex("000000000000e83f000000000000000088130000"))
 LOCK_AT_LEVEL_2 = (12, 30, bytes.fromhex("0000000000000000e17a14ae47e1ca3fe8030000"))
 STATE_READ = (12, 33, b"")
+# The LED bar's commands on board 12: a colour, the animation stopped, the animation started.
+LED_BAR_COMMANDS = ((12, 13), (12, 16), (12, 17))
 # The states the device read after each command, as recorded.
 STATES_AFTER_RELEASE_WHILE_RELEASED = ["0600", "0600"]
 STATES_AFTER_RELEASE_WHILE_LOCKED = ["0500", "0600"]
@@ -53,7 +55,9 @@ class PlateClampTests(DriverTestCase):
     self.sent_before = len(self.link.written)
 
   def sent(self) -> List[Tuple[int, int, bytes]]:
-    return [parse_frame(frame=frame)[1:] for frame in self.link.written[self.sent_before :]]
+    """The clamp's frames since setup; the LED bar's are pinned in its own tests."""
+    frames = [parse_frame(frame=frame)[1:] for frame in self.link.written[self.sent_before :]]
+    return [frame for frame in frames if frame[:2] not in LED_BAR_COMMANDS]
 
   async def test_unlock(self):
     answer_states_in_turn(link=self.link, turns=[(31, STATES_AFTER_RELEASE_WHILE_LOCKED)])
