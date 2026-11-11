@@ -2376,16 +2376,21 @@ class Pipettes:
 
   # -- x probing (capacitive only) --------------------------------------------------------------
 
-  async def _unchecked_fw_probe_x_using_clld(self, end_position: float, read_timeout: int = 240):
-    """Move the arm along X until the channel's cLLD triggers, or to the end, as given. `C0 XL`.
+  async def _unchecked_fw_probe_x_using_clld(
+    self, channel: int, end_position: float, read_timeout: int = 240
+  ):
+    """Move the arm along X until a channel's cLLD triggers, or to the end, as given. `C0 XL`.
 
     Args:
+      channel: the channel whose cLLD stops the search, 0-indexed from the back (`pn`). Left out,
+        the firmware watches the last channel a command named, or the first.
       end_position: where the search ends, in mm, sent in 0.1 mm (`xs`).
       read_timeout: how long to wait for the answer, in s.
     """
     await self._driver.send_command(
       module="C0",
       command="XL",
+      pn=f"{channel + 1:02}",  # the firmware counts channels from 1
       xs=f"{int(round(end_position * 10)):05}",
       read_timeout=read_timeout,
     )
@@ -2480,7 +2485,9 @@ class Pipettes:
 
     found = True
     try:
-      await self._unchecked_fw_probe_x_using_clld(search_end_position, read_timeout=read_timeout)
+      await self._unchecked_fw_probe_x_using_clld(
+        channel=channel, end_position=search_end_position, read_timeout=read_timeout
+      )
     except STARFirmwareError as error:
       if not self._found_nothing(error, "C0"):
         raise
