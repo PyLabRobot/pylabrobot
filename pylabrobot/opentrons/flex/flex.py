@@ -22,7 +22,6 @@ from pylabrobot.opentrons.labware import (
   build_movable_labware_definition,
   build_plate_definition,
   build_tip_rack_definition,
-  official_tip_rack_identity,
 )
 from pylabrobot.opentrons.operations import OperationLock, serialized
 from pylabrobot.opentrons.run import COMMAND_POLL_HEADROOM, OpentronsRun
@@ -564,22 +563,14 @@ class Flex:
     slot = self.deck.get_slot(resource)
     if slot is None:
       raise OpentronsError("Resource not on deck", f"'{name}' is not on a deck slot.")
-    identity = official_tip_rack_identity(resource) if isinstance(resource, TipRack) else None
     if registry.is_loaded(resource):
       binding = registry.get(resource)
-      await registry.load(resource, slot, identity or binding.identity)
+      await registry.load(resource, slot, binding.identity)
       _warn_grip_distance_discarded(
         name, grip_distance_from_top, "it is already loaded in this run"
       )
       return binding.labware_id
-    if identity is None:
-      identity = await self._define_custom_labware(resource, grip_distance_from_top, allow_stub)
-    else:
-      _warn_grip_distance_discarded(
-        name,
-        grip_distance_from_top,
-        f"it loads the robot's own definition for '{identity.load_name}', whose grip height is defined there",
-      )
+    identity = await self._define_custom_labware(resource, grip_distance_from_top, allow_stub)
     await registry.load(resource, slot, identity)
     binding = registry.get(resource)
     logger.info("Loaded labware '%s' at slot %s -> ID: %s", name, slot, binding.labware_id)

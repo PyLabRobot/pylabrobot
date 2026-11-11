@@ -7,6 +7,7 @@ from pylabrobot.opentrons.api import OpentronsAPI
 from pylabrobot.opentrons.labware import LabwareRegistry
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import (
+  DoorStatus,
   LabwareIdentity,
   ModuleInfo,
   MountedPipette,
@@ -102,6 +103,24 @@ class OT2LifecycleTests(unittest.IsolatedAsyncioTestCase):
     await self.robot.stop()
     self.io.stop.assert_awaited_once_with()
     self.protocol_run.stop.assert_not_awaited()
+
+  async def test_rail_lights_and_door_need_a_connection_but_no_run(self) -> None:
+    self.api.get_rail_lights.return_value = True
+    self.api.get_door_status.return_value = DoorStatus(
+      closed=True, required_closed_for_protocol=False
+    )
+    with self.assertRaisesRegex(RuntimeError, "not connected"):
+      await self.robot.set_rail_lights(True)
+
+    await self.robot.connect()
+    await self.robot.set_rail_lights(False)
+    self.assertTrue(await self.robot.get_rail_lights())
+    self.assertTrue((await self.robot.get_door_status()).closed)
+
+    self.api.set_rail_lights.assert_awaited_once_with(False)
+    self.api.create_run.assert_not_awaited()
+    with self.assertRaises(TypeError):
+      await self.robot.set_rail_lights(1)  # type: ignore[arg-type]
 
   async def test_queries_do_not_rebind_an_active_session(self) -> None:
     await self.robot.setup(skip_home=True)
@@ -321,13 +340,14 @@ class OT2LabwareTests(unittest.IsolatedAsyncioTestCase):
     self.rack = opentrons_96_filtertiprack_20ul("tips")
     self.robot.deck.assign_child_at_slot(self.rack, 1)
 
-  async def test_official_rack_uses_builtin_definition_for_calibration(self) -> None:
+  async def test_official_rack_uploads_generated_definition(self) -> None:
+    identity = LabwareIdentity("pylabrobot", "uploaded", 1)
+    self.registry.define.return_value = identity
+
     await self.robot._load_tip_rack(self.rack, self.rack.get_item("A1").get_tip())
 
-    self.registry.load.assert_awaited_once_with(
-      self.rack, "1", LabwareIdentity("opentrons", "opentrons_96_filtertiprack_20ul", 1)
-    )
-    self.registry.define.assert_not_awaited()
+    self.registry.define.assert_awaited_once()
+    self.registry.load.assert_awaited_once_with(self.rack, "1", identity)
 
   async def test_custom_rack_passes_its_geometry_to_the_registry(self) -> None:
     self.rack.model = None

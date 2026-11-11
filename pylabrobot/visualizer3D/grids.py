@@ -58,7 +58,7 @@ def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
     A dict in the resource's own frame: `axis`, which way the grid runs; `count`; `spacing` in mm;
     `origin`, the first position as [x, y, z] in mm; `extent`, how far a mark runs across the
     resource in mm; `label_every`, label the first and then every nth; `label`, what one
-    position is called.
+    position is called; `closing_mark`, whether the last position's far edge gets a mark too.
   """
   # A resource may state its grid, as it states its access bands: a loading tray's markings line
   # up with the deck it feeds, so nothing about itself could derive them.
@@ -125,4 +125,7 @@ def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
     "extent": round(max(seated) if seated else max(depth - first.y, 0.0), 4),
     "label_every": DEFAULT_LABEL_EVERY,
     "label": word,
+    # Each mark is a position's near edge, so the last position's far edge needs one of its own,
+    # unless the resource ends first.
+    "closing_mark": first.x + count * spacing <= resource.get_size_x(),
   }

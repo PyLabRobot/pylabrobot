@@ -10,7 +10,6 @@ from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
   build_tip_rack_definition,
-  official_tip_rack_identity,
 )
 from pylabrobot.opentrons.operations import OperationLock
 from pylabrobot.opentrons.ot2.pipette import (
@@ -20,7 +19,7 @@ from pylabrobot.opentrons.ot2.pipette import (
 )
 from pylabrobot.opentrons.run import OpentronsRun
 from pylabrobot.opentrons.types import (
-  LabwareIdentity,
+  DoorStatus,
   ModuleInfo,
   MountedPipette,
   RobotInfo,
@@ -188,6 +187,31 @@ class OT2:
           )
         await asyncio.sleep(self.command_poll_interval)
 
+  async def get_rail_lights(self) -> bool:
+    """Read whether the rail lights are on. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_rail_lights()
+
+  async def set_rail_lights(self, on: bool) -> None:
+    """Turn the rail lights on or off. Needs a connection, not a run.
+
+    Args:
+      on: True for on, False for off.
+
+    Raises:
+      TypeError: If ``on`` is not a bool.
+    """
+    if not isinstance(on, bool):
+      raise TypeError(f"on must be a bool, got {on!r}")
+    async with self._operation_lock:
+      self._require_connected()
+      await self._api.set_rail_lights(on)
+
+  async def get_door_status(self) -> DoorStatus:
+    """Read the front door's switch. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_door_status()
+
   async def setup(self, skip_home: bool = False) -> None:
     """Connect, discover and bind pipettes to a run, and optionally home.
 
@@ -283,14 +307,11 @@ class OT2:
     if slot is None:
       raise ValueError("tip rack must be assigned directly to an OT-2 deck slot")
     registry = self._require_labware()
-    identity: Optional[LabwareIdentity]
     if registry.is_loaded(tip_rack):
       identity = registry.get(tip_rack).identity
     else:
-      identity = official_tip_rack_identity(tip_rack)
-      if identity is None:
-        definition = build_tip_rack_definition(tip_rack, tip)
-        identity = await registry.define(tip_rack, definition)
+      definition = build_tip_rack_definition(tip_rack, tip)
+      identity = await registry.define(tip_rack, definition)
     await registry.load(tip_rack, str(slot), identity)
 
   def _deck_to_robot_frame(self, location: Coordinate) -> Coordinate:
