@@ -3,7 +3,7 @@ import math
 import re
 import unittest
 import unittest.mock
-from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.device import RECORDING_STAR
@@ -458,6 +458,29 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sent[:2], ["P8AAyv5939", "P8AAyr4"])
     self.assertTrue(sent[2].startswith("C0JY"))
     self.assertEqual(len(sent), 3)
+
+  async def test_a_y_move_never_sends_one_channel_two_commands_at_once(self):
+    pipettes = await simulated_channels()
+    await pipettes._set_y_speed(7, 10.0)
+    await pipettes._set_y_acceleration_level(7, 1)
+    answer = pipettes._driver.send_command
+    in_flight: Set[str] = set()
+    overlaps: List[str] = []
+
+    async def one_at_a_time(module: str, command: str, **kwargs: Any):
+      if module != "C0" and module in in_flight:
+        overlaps.append(f"{module}{command}")
+      in_flight.add(module)
+      try:
+        await asyncio.sleep(0)
+        return await answer(module=module, command=command, **kwargs)
+      finally:
+        in_flight.discard(module)
+
+    pipettes._driver.send_command = one_at_a_time  # type: ignore[assignment]
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0, acceleration_level=1)
+    self.assertEqual(overlaps, [])
 
   async def test_a_y_move_given_a_speed_holds_it_for_that_move_only(self):
     pipettes = await simulated_channels()
