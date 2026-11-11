@@ -613,11 +613,17 @@ operations are exposed on <code class="docutils literal notranslate"><span class
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.connect.html#pylabrobot.opentrons.OT2.connect" title="pylabrobot.opentrons.OT2.connect"><code class="xref py py-obj docutils literal notranslate"><span class="pre">connect</span></code></a>()</p></td>
 <td><p>Open the transport for queries, without creating a run or moving the robot.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_health.html#pylabrobot.opentrons.OT2.get_health" title="pylabrobot.opentrons.OT2.get_health"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_health</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_door_status.html#pylabrobot.opentrons.OT2.get_door_status" title="pylabrobot.opentrons.OT2.get_door_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_door_status</span></code></a>()</p></td>
+<td><p>Read the front door's switch.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_health.html#pylabrobot.opentrons.OT2.get_health" title="pylabrobot.opentrons.OT2.get_health"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_health</span></code></a>()</p></td>
 <td><p>Return a fresh health reading without changing device or run state.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_mounted_pipettes.html#pylabrobot.opentrons.OT2.get_mounted_pipettes" title="pylabrobot.opentrons.OT2.get_mounted_pipettes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_mounted_pipettes</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_mounted_pipettes.html#pylabrobot.opentrons.OT2.get_mounted_pipettes" title="pylabrobot.opentrons.OT2.get_mounted_pipettes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_mounted_pipettes</span></code></a>()</p></td>
 <td><p>Read physical pipette identities without loading or replacing pipette objects.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_rail_lights.html#pylabrobot.opentrons.OT2.get_rail_lights" title="pylabrobot.opentrons.OT2.get_rail_lights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_rail_lights</span></code></a>()</p></td>
+<td><p>Read whether the rail lights are on.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_runs.html#pylabrobot.opentrons.OT2.get_runs" title="pylabrobot.opentrons.OT2.get_runs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_runs</span></code></a>()</p></td>
 <td><p>Read server runs without selecting, stopping, or replacing the active run.</p></td>
@@ -628,10 +634,13 @@ operations are exposed on <code class="docutils literal notranslate"><span class
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.list_connected_modules.html#pylabrobot.opentrons.OT2.list_connected_modules" title="pylabrobot.opentrons.OT2.list_connected_modules"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_connected_modules</span></code></a>()</p></td>
 <td><p>Read connected module identities without loading modules into the run.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>([skip_home])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.set_rail_lights.html#pylabrobot.opentrons.OT2.set_rail_lights" title="pylabrobot.opentrons.OT2.set_rail_lights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_rail_lights</span></code></a>(on)</p></td>
+<td><p>Turn the rail lights on or off.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>([skip_home])</p></td>
 <td><p>Connect, discover and bind pipettes to a run, and optionally home.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.stop.html#pylabrobot.opentrons.OT2.stop" title="pylabrobot.opentrons.OT2.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.stop.html#pylabrobot.opentrons.OT2.stop" title="pylabrobot.opentrons.OT2.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
 <td><p>Stop the run and close the transport, retaining state if run shutdown fails.</p></td>
 </tr>
 </tbody>

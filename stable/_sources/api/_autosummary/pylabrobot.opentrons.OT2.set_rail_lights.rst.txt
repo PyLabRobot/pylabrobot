@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.set\_rail\_lights
+==========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.set_rail_lights

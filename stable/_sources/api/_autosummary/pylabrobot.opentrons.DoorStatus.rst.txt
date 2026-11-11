@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.DoorStatus
+===============================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: DoorStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DoorStatus.closed
+      ~DoorStatus.required_closed_for_protocol
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DoorStatus.__init__
+      ~DoorStatus.from_response
+   
+   

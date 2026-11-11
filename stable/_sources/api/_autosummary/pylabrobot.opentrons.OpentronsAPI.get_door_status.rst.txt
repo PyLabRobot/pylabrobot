@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OpentronsAPI.get\_door\_status
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OpentronsAPI.get_door_status
