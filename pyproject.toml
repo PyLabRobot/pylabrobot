@@ -34,11 +34,13 @@ rpc-dev = [
 ]
 cytation-microscopy = ["numpy>=1.26", "opencv-python", "PyGObject"]
 pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
+precise-flex-vision = ["numpy", "pillow"]
 xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,xarm,odyssey]"]
+all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,precise-flex-vision,xarm,odyssey]"]
 test = [
-  "pytest",
+  "pytest>=9.1",
+  "pytest-xdist",
 ]
 dev = [
   "PyLabRobot[all,test,celigo,rpc-dev]",

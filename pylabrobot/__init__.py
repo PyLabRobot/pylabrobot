@@ -61,8 +61,7 @@ def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
     else:
       now = datetime.datetime.now().strftime("%Y%m%d")
       log_path = log_dir / f"pylabrobot-{now}.log"
-    if not log_dir.exists():
-      log_dir.mkdir(parents=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
 
   logger = logging.getLogger("pylabrobot")
   logger.setLevel(level)
@@ -75,11 +74,11 @@ def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
       # delete the log file if it was created empty, but only regular files - a handler pointing at
       # a device node like /dev/null reports size 0 yet cannot (and must not) be unlinked.
       log_file_path = Path(handler.baseFilename)
-      if log_file_path.is_file() and log_file_path.stat().st_size == 0:
-        try:
+      try:
+        if log_file_path.is_file() and log_file_path.stat().st_size == 0:
           log_file_path.unlink()
-        except OSError:
-          pass
+      except OSError:
+        pass
 
   # Add a file handler, if log_dir is not None
   if log_path is not None:

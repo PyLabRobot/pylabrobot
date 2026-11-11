@@ -10,11 +10,12 @@ from pylabrobot.resources import Coordinate, PlateHolder, Resource
 from .driver.features.absorbance import Absorbance
 from .driver.features.drawer import Drawer
 from .driver.features.fluorescence import Fluorescence
+from .driver.features.luminescence import Luminescence
 from .driver.features.temperature_controller import TemperatureController
 from .driver.master import CLARIOstarDriver
 from .driver.simulator import CLARIOstarSimulationDriver
 
-# Preliminary: the operating manuals' nominal size, rounded to the cm, the same for the CLARIOstar
+# Preliminary: the nominal size, rounded to the cm, the same for the CLARIOstar
 # and the CLARIOstar Plus; not yet measured.
 SIZE_X = 450.0
 SIZE_Y = 510.0
@@ -188,6 +189,11 @@ class CLARIOstarDevice(Resource):
   def fluorescence(self) -> Optional[Fluorescence]:
     """Fluorescence measurement, or None if the reader has none; known after `setup`."""
     return self.driver.fluorescence
+
+  @property
+  def luminescence(self) -> Optional[Luminescence]:
+    """Luminescence measurement, or None if the reader has none; known after `setup`."""
+    return self.driver.luminescence
 
   async def setup(self) -> None:
     """Connect, initialize the reader (about 13 s), and check it is the model this device is.

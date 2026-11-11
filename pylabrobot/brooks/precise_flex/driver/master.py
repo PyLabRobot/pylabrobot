@@ -1,6 +1,8 @@
-"""PreciseFlex driver: the controller link, its lifecycle, and the configuration."""
+"""PreciseFlex driver: the controller link and lifecycle, the vision server's links, the
+configuration, and the resource model it builds from one."""
 
 import asyncio
+import dataclasses
 import json
 import logging
 import warnings
@@ -8,14 +10,18 @@ from typing import (
   Any,
   ClassVar,
   Dict,
+  List,
   Literal,
   Optional,
+  Sequence,
+  Tuple,
+  cast,
 )
 
 from pylabrobot.brooks.precise_flex import kinematics
 from pylabrobot.brooks.precise_flex.driver.configuration import (
   DEVICE_FEATURE_CONFIGURATIONS,
-  Axis,
+  PreciseFlexAxis,
   PreciseFlexConfiguration,
   read_configuration,
   to_jsonable,
@@ -23,6 +29,8 @@ from pylabrobot.brooks.precise_flex.driver.configuration import (
 from pylabrobot.brooks.precise_flex.kinematics import JointState
 from pylabrobot.events import emit_event, evented_operation
 from pylabrobot.io.socket import Socket
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 
 from ..confirmed_firmware_versions import (
   SUPPORTED_ROBOT_TYPES,
@@ -31,13 +39,83 @@ from ..confirmed_firmware_versions import (
   suggest_entry,
 )
 from ..data_ids import DataID, PowerState, _parse_scalar
+from ..resource_model.pf400_end_effector import GRIPPER_TOOL_CENTER_POINT_Z, gripper
+from ..resource_model.pf400_manipulator import (
+  LINK_1_ABOVE_FLANGE_PLANE,
+  Z_CARRIAGE_REFERENCE_POINT,
+  Z_COLUMN_LOCATION,
+  link_1,
+  link_2,
+  z_carriage,
+  z_carriage_location,
+  z_column,
+  z_column_height,
+)
 from ..tcs_modules import missing_required_modules
 from .errors import PreciseFlexError
 from .features.arm import PreciseFlexArm, PreciseFlexArmConfiguration
 from .features.gripper import PreciseFlexGripper, PreciseFlexGripperConfiguration
 from .features.rail import PreciseFlexRail, PreciseFlexRailConfiguration
+from .features.vision import PreciseFlexVision
 
 logger = logging.getLogger(__name__)
+
+# Brooks' PreciseVision server behind a camera-gripper arm: a text property
+# protocol on one port, and the JPEG results it pushes on another.
+VISION_SERVER_PROPERTY_PORT = 1450  # text command/query protocol
+# The binary stream carrying the pushed "Primary Image [n]" JPEG results.
+VISION_SERVER_IMAGE_PORT = 1500
+_NO_VISION_SERVER = "no vision server configured - pass vision_host at setup to use this method"
+
+_RESULT_HEADER_LENGTH = 16
+# A sanity cap: a result this large signals a desync, not a real frame.
+_MAX_IMAGE_BYTES = 16 * 1024 * 1024
+
+
+def _drain_named_result(buf: bytearray) -> Optional[Tuple[str, bytes]]:
+  """Pop the next complete ``(name, data)`` result from the front of ``buf``, consuming it.
+
+  The vision server pushes length-prefixed results on its image port, each a fixed 16-byte header,
+  then the result name, then the data::
+
+    01 | name_len (u8) | 00 00 00 | data_len (u32 LE) | 00 00 00 00 00 00 00 | <name> | <data>
+
+  For a "Primary Image [n]" result the data is the JPEG and ``data_len`` its exact byte count.
+  Non-image results, such as a tool's results, are interleaved and framed the same way. Parsing by
+  the announced length never inspects the payload, so a JPEG's internal markers cannot mis-frame
+  it. Assumes ``buf`` begins on a result boundary, which a freshly held stream does.
+
+  Args:
+    buf: the held read buffer; a complete result is removed from its front in place.
+
+  Returns:
+    The next ``(name, data)`` result, or ``None`` while the full result has not arrived yet.
+
+  Raises:
+    ValueError: if the header is not a result start (``buf[0] != 0x01``) or declares an implausibly
+      large ``data_len`` - both signal a desynchronised stream, which has no safe silent recovery.
+  """
+  if len(buf) < _RESULT_HEADER_LENGTH:
+    return None
+  if buf[0] != 0x01:
+    raise ValueError(
+      f"PreciseVision image stream desync: result starts with {buf[0]:#04x}, not 0x01"
+    )
+  name_len = buf[1]
+  data_len = int.from_bytes(buf[5:9], "little")
+  if data_len > _MAX_IMAGE_BYTES:
+    raise ValueError(
+      f"PreciseVision result declares an implausible data length of {data_len} bytes"
+    )
+  end = _RESULT_HEADER_LENGTH + name_len + data_len
+  if len(buf) < end:
+    return None
+  name = bytes(buf[_RESULT_HEADER_LENGTH : _RESULT_HEADER_LENGTH + name_len]).decode(
+    "ascii", "replace"
+  )
+  data = bytes(buf[_RESULT_HEADER_LENGTH + name_len : end])
+  del buf[:end]
+  return name, data
 
 
 class PreciseFlexDriver:
@@ -63,6 +141,8 @@ class PreciseFlexDriver:
     read_kinematics_from_device: bool = True,
     recover_out_of_range: bool = True,
     parking_position: Optional[JointState] = None,
+    vision_host: Optional[str] = None,
+    base_plate: Optional[Resource] = None,
     declared_configuration_json: Optional[str] = None,
   ) -> None:
     """
@@ -71,8 +151,9 @@ class PreciseFlexDriver:
         override; when ``read_kinematics_from_device`` is True (the default) the
         link lengths and tool length are read from the controller at setup and
         this value is only used if that read fails.
-      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip.
-        Depends on the mounted gripper. Always taken from here (not on the controller).
+      gripper_z_offset: vertical offset in mm from the wrist plate to the tool tip. A fallback, as
+        ``gripper_length`` is: with ``read_kinematics_from_device`` it is where the fitted
+        gripper's fingers grip, below the flange plane.
       read_kinematics_from_device: when True, read l1/l2 and the tool length from
         the controller at setup and use them for kinematics; the constructor's
         ``gripper_length`` then acts only as a fallback. Set False to force the
@@ -84,9 +165,8 @@ class PreciseFlexDriver:
         of range after that, ``OutOfRangeOfMotionError`` propagates (no loop). Set False to forbid
         this autonomous motion - an out-of-range axis then raises instead, carrying recovery
         instructions. Every recovery is logged.
-      closed_gripper_position: firmware-unit value (passed to ``GripClosePos`` /
-        ``GripOpenPos``) at which the jaws are at the narrow end of
-        :attr:`PreciseFlexGripper.jaw_width_range`.
+      closed_gripper_position: the gripper axis's position, in the controller's units, at which
+        the jaws are at the narrow end of :attr:`PreciseFlexGripper.jaw_width_range`.
         Depends on the mounted gripper. The conversion mm → firmware units is
         linear with slope 1: ``units = closed_gripper_position + (width_mm -
         jaw_width_range[0])``.
@@ -94,11 +174,20 @@ class PreciseFlexDriver:
         ``park()`` moves to. Leave None (the default) and setup fills the generic default RIGHT pose
         (planar fold, Z column at 3/4 of the discovered travel); reassign it any time to park
         elsewhere. While unset (no configuration), ``park()`` falls back to ``movetosafe``.
+      vision_host: address of the vision server, a separate computer from the controller (its
+        own box with its own IP). Set it to connect to the vision server, which powers both image
+        fetch and discovery on the vision server (what tool types, tools, processes, and projects
+        exist). None leaves the vision server unconnected, disabling those; the controller-side
+        execution path (running processes/tools, setting properties, lighting, barcodes, stereo
+        locate) is unaffected. Only consulted when setup discovers an IntelliGuide vision module.
+      base_plate: the base plate to build the arm on. Optional: without one the driver still
+        drives the arm, and models nothing.
       declared_configuration_json: path to a JSON file holding a declared configuration, as
         `save_configuration` writes one. The only way a configuration is read from a file.
         Discovery cross-checks it against what the device answers.
     """
     super().__init__()
+    self.base_plate = base_plate
     # What was declared this device is, read once here: the one place a configuration comes off a
     # file. Empty when nothing was declared.
     self.declared_configuration_json = declared_configuration_json
@@ -106,10 +195,26 @@ class PreciseFlexDriver:
       {} if declared_configuration_json is None else read_configuration(declared_configuration_json)
     )
     self.io = Socket(human_readable_device_name="Precise Flex Arm", host=host, port=port)
+    # Whether the controller link is open, so `disconnect` after a failed setup does nothing.
+    self._connected = False
     self.timeout = timeout
     # Serializes each request->reply exchange over the single shared controller socket; the
     # rationale (and why it is kept though uncontended today) is in _locked_exchange.
     self._io_lock = asyncio.Lock()
+    self._vision_host = vision_host
+    # The vision server's two connections, held here beside the controller's; None until
+    # setup opens them, which it does only for a reachable `vision_host`.
+    self._vision_server_io: Optional[Socket] = None
+    self._vision_image_io: Optional[Socket] = None
+    # The held image stream is read in chunks and a result can span reads, so a read that times out
+    # mid-result leaves a partial result here, keeping the next read frame-aligned.
+    self._vision_image_buf = bytearray()
+    self.vision_server_timeout = 5.0
+    # One exchange at a time on each vision server connection, as `_io_lock` on the controller's.
+    self._vision_server_lock = asyncio.Lock()
+    self._vision_image_lock = asyncio.Lock()
+    # The vision feature, built at setup when the controller's vision module is loaded.
+    self.vision: Optional[PreciseFlexVision] = None
     # Built only on an arm that has a rail; discovery decides at setup.
     self.rail: Optional[PreciseFlexRail] = PreciseFlexRail(self) if has_rail else None
     self.arm = PreciseFlexArm(self)
@@ -155,6 +260,18 @@ class PreciseFlexDriver:
       await self.io.write(command.encode("utf-8") + b"\n")
       return (await self.io.readline()).decode("utf-8").strip()
 
+  async def _locked_vision_server_exchange(self, command: str) -> str:
+    """As `_locked_exchange`, on the vision server's property connection. Its lines end CRLF.
+
+    Raises:
+      RuntimeError: If the vision server is not connected.
+    """
+    if self._vision_server_io is None:
+      raise RuntimeError(_NO_VISION_SERVER)
+    async with self._vision_server_lock:
+      await self._vision_server_io.write(command.encode("utf-8") + b"\r\n")
+      return (await self._vision_server_io.readline()).decode("utf-8", "replace").strip()
+
   def _ensure_successful(self, reply: str) -> str:
     """Return the data of a ``<code> <data>`` reply, raising unless the code is 0.
 
@@ -175,30 +292,43 @@ class PreciseFlexDriver:
       raise PreciseFlexError(replycode, data)
     return data
 
-  async def send_command(self, command: str) -> str:
+  async def send_command(
+    self, command: str, *, use_server: Literal["controller", "vision"] = "controller"
+  ) -> str:
     """Send a command and return the accepted ``<code> <data>`` payload.
 
     Writes the command and reads one reply line (as one locked exchange), then applies the standard
     acceptance gate (``_ensure_successful``): a non-zero reply code raises, otherwise the data
-    payload is returned. A reply in a different grammar goes through the same ``_locked_exchange``
-    and is parsed by the caller instead.
+    payload is returned. A reply in a different grammar (e.g. PreciseVision's bare ``VToolProperty``
+    value) goes through the same ``_locked_exchange`` and is parsed by the caller instead.
 
     The exchange is wrapped in the firmware-command events so a command keeps its enclosing
     operation context.
 
     Args:
       command: the command line, without its line ending.
+      use_server: ``"controller"`` (the default), or ``"vision"`` for the vision server's property
+        connection, which answers in the same grammar.
 
     Raises:
+      RuntimeError: If ``use_server`` is ``"vision"`` and the vision server is not connected.
       PreciseFlexError: on an empty reply or a non-zero reply code.
     """
+    device = self._controller_reference()
+    if use_server == "controller":
+      exchange = self._locked_exchange
+    elif use_server == "vision":
+      exchange = self._locked_vision_server_exchange
+      device = {**device, "host": self._vision_host, "port": VISION_SERVER_PROPERTY_PORT}
+    else:
+      raise ValueError(f"use_server has to be either `controller` or `vision`, is {use_server}")
     event_data = {
-      "device": self._controller_reference(),
+      "device": device,
       "command": command,
     }
     emit_event("precise_flex.firmware_command.started", **event_data)
     try:
-      result = self._ensure_successful(await self._locked_exchange(command))
+      result = self._ensure_successful(await exchange(command))
     except BaseException as error:
       emit_event(
         "precise_flex.firmware_command.failed",
@@ -210,33 +340,170 @@ class PreciseFlexDriver:
     emit_event("precise_flex.firmware_command.completed", **event_data, response=result)
     return result
 
+  # -- vision server: the second server's two connections, held here ------------------------------
+
+  @property
+  def vision_server_connected(self) -> bool:
+    """Whether setup opened the vision server's connections."""
+    return self._vision_server_io is not None
+
+  async def _open_vision_server(self, host: str) -> None:
+    """Open and hold both vision server connections (property + image stream)."""
+    server_io = Socket(
+      human_readable_device_name="vision server (property)",
+      host=host,
+      port=VISION_SERVER_PROPERTY_PORT,
+    )
+    image_io = Socket(
+      human_readable_device_name="vision server (image)",
+      host=host,
+      port=VISION_SERVER_IMAGE_PORT,
+    )
+    await server_io.setup()
+    await image_io.setup()
+    self._vision_server_io, self._vision_image_io = server_io, image_io
+    self._vision_image_buf.clear()  # a fresh stream; drop anything buffered from a previous session
+    logger.info(
+      "[PreciseVision %s] connected: property=%s image=%s",
+      host,
+      VISION_SERVER_PROPERTY_PORT,
+      VISION_SERVER_IMAGE_PORT,
+    )
+
+  async def _close_vision_server(self) -> None:
+    """Close both vision server connections, if they are open."""
+    if self._vision_image_io is not None:
+      await self._vision_image_io.stop()
+    if self._vision_server_io is not None:
+      await self._vision_server_io.stop()
+    self._vision_server_io = self._vision_image_io = None
+
+  async def request_vision_server_property(self, name: str) -> str:
+    """Read a named vision server parameter (``property get <name>``); raises on an error reply.
+
+    Args:
+      name: the vision server parameter name (e.g. ``system.engineversion``, ``acq1.exposure``).
+        May carry trailing positional args (e.g. ``system.cameraname 1``).
+
+    Returns:
+      The parameter value (possibly empty).
+    """
+    return await self.send_command(f"property get {name}", use_server="vision")
+
+  async def _set_vision_server_property(self, name: str, value: object) -> str:
+    """Write a named vision server parameter (``property set <name> <value>``).
+
+    Private: a write changes device state. The same namespace carries action triggers
+    (``system.runtool``, ``system.cameraacquire``).
+
+    Args:
+      name: the vision server parameter name (e.g. ``acq1.exposure``, ``system.runtool``).
+      value: the value to write; stringified onto the command line.
+
+    Returns:
+      The reply value (possibly empty).
+    """
+    return await self.send_command(f"property set {name} {value}", use_server="vision")
+
+  async def read_next_vision_server_result(
+    self, timeout: Optional[float] = None
+  ) -> Optional[Tuple[str, bytes]]:
+    """Read the next complete ``(name, data)`` result off the held image stream, or None at its end.
+
+    Returns a result already buffered if there is one, otherwise reads until a whole result has
+    arrived. Partial bytes from a timed-out read stay buffered, so the next call resumes
+    frame-aligned. One reader at a time, so concurrent callers take whole results in call order.
+
+    Args:
+      timeout: per-read timeout in seconds; ``vision_server_timeout`` when None.
+
+    Returns:
+      The next ``(name, data)`` result, or None if the stream closed before a full result.
+
+    Raises:
+      RuntimeError: If the vision server is not connected.
+      TimeoutError: if no bytes arrive within ``timeout``.
+      ValueError: if the stream has desynchronised (see ``_drain_named_result``).
+    """
+    if self._vision_image_io is None:
+      raise RuntimeError(_NO_VISION_SERVER)
+    buf = self._vision_image_buf
+    async with self._vision_image_lock:
+      while True:
+        result = _drain_named_result(buf)
+        if result is not None:
+          return result
+        chunk = await self._vision_image_io.read(
+          65_536, timeout=self.vision_server_timeout if timeout is None else timeout
+        )
+        if not chunk:
+          return None
+        buf += chunk
+
   # -- lifecycle -------------------------------------------------------------
 
   @evented_operation(
     "precise_flex.setup",
-    lambda self, skip_home=False: {
+    lambda self, skip_home=False, skip_vision_setup=False: {
       "device": self._controller_reference(),
       "skip_home": skip_home,
+      "skip_vision_setup": skip_vision_setup,
     },
   )
-  async def setup(self, skip_home: bool = False):
+  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
-    ``initialize`` reads the configuration, and setup raises if that fails. Axes outside their
-    limits are then dealt with.
+    ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
+    modelled, before homing so the jaws' opening is checked, axes outside their limits are dealt
+    with, and, when the controller has an IntelliGuide vision module, the vision feature is built
+    as ``self.vision``.
+
+    A setup that fails or is interrupted hands the arm back and closes its links, as ``disconnect``
+    does, each step on its own: the controller takes one connection and refuses the next while one
+    is open. The setup's own error is the one raised.
 
     Args:
       skip_home: If True, skip the homing step during setup.
+      skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
+        Mirrors STAR's ``skip_*`` setup flags.
     """
-    await self.connect()
-    await self.initialize()
-    if not skip_home:
-      await self.home()
-    await self.arm._handle_out_of_range_axes()
+    try:
+      await self.connect()
+      configuration = await self.initialize()
+      self._create_feature_resources(configuration)
+      if not skip_home:
+        await self.home()
+      await self.arm._handle_out_of_range_axes()
+      if not skip_vision_setup and configuration.has_vision_server:
+        await self._setup_vision(self._vision_host)
+    except BaseException:
+      try:
+        for release in (self.detach, self.power_off_robot, self._exit, self._close_vision_server):
+          try:
+            await release()
+          except Exception as error:
+            logger.warning(
+              "[PreciseFlex %s] after a failed setup, %s failed: %s",
+              self.io._host,
+              release.__name__,
+              error,
+            )
+      finally:
+        try:
+          await self.io.stop()
+        except Exception as error:
+          logger.warning(
+            "[PreciseFlex %s] could not close the link after a failed setup: %s",
+            self.io._host,
+            error,
+          )
+        self._connected = False
+      raise
 
   async def connect(self) -> None:
     """Open the link and agree the response protocol. Powers nothing, moves nothing."""
     await self.io.setup()
+    self._connected = True
     await self.set_response_mode("pc")
     logger.debug("[PreciseFlex %s] connected: port=%s", self.io._host, self.io._port)
 
@@ -244,8 +511,9 @@ class PreciseFlexDriver:
     """Raise if what was declared cannot stand for what the device answered.
 
     Only what decides whether the two are the same kind of arm, set up the same way: what is
-    fitted, its link and tool lengths, and its soft limits. Identity is left out: a declaration
-    taken off one arm describes another of the same build.
+    fitted, the gripper among it, its link and tool lengths, and its soft limits. The model is built
+    from the declared ones and kept. Identity is left out: a declaration taken off one arm describes
+    another of the same build.
 
     Args:
       discovered: what the device answered.
@@ -257,11 +525,17 @@ class PreciseFlexDriver:
     if declared is None:
       return
     arm, gripper = declared.arm, declared.gripper
+
+    def lengths(arm: PreciseFlexArmConfiguration) -> tuple:
+      return (arm.kinematics.l1, arm.kinematics.l2, arm.kinematics.gripper_length)
+
     must_match = (
       ("robot_type", declared.robot_type, discovered.robot_type),
       ("has_rail", declared.has_rail, discovered.has_rail),
       ("gripper.is_dual_gripper", gripper.is_dual_gripper, discovered.gripper.is_dual_gripper),
-      ("arm.kinematics", arm.kinematics, discovered.arm.kinematics),
+      # The gripper decides where the tool point stands below the flange plane.
+      ("has_vision_gripper", declared.has_vision_gripper, discovered.has_vision_gripper),
+      ("arm.kinematics (l1, l2, gripper_length)", lengths(arm), lengths(discovered.arm)),
       ("arm.soft_limits", arm.soft_limits, discovered.arm.soft_limits),
       ("gripper.soft_limit_range", gripper.soft_limit_range, discovered.gripper.soft_limit_range),
     )
@@ -285,6 +559,16 @@ class PreciseFlexDriver:
       The configuration, also kept as ``configuration``.
     """
     configuration = await self._request_configuration()
+    if configuration.arm.kinematics_source == "device":
+      # The tool point is where the fitted gripper's fingers grip, below the flange plane.
+      tool_point_z = GRIPPER_TOOL_CENTER_POINT_Z[
+        "v23" if configuration.has_vision_gripper else "s23"
+      ]
+      arm = configuration.arm
+      kinematics_params = dataclasses.replace(arm.kinematics, gripper_z_offset=tool_point_z)
+      configuration = dataclasses.replace(
+        configuration, arm=dataclasses.replace(arm, kinematics=kinematics_params)
+      )
     self._check_declared_against(configuration)
     self._configuration = configuration
     self._adopt_configuration(self._configuration)
@@ -297,8 +581,7 @@ class PreciseFlexDriver:
   async def initialize(self) -> "PreciseFlexConfiguration":
     """Raise high power, take control, end any freedrive, and read the configuration (`discover`).
 
-    Moves nothing. Homing is ``home()``, deliberately separate: it sweeps the arm through its
-    whole envelope, which is not something to do just to bring it up.
+    Moves nothing. Homing is ``home()``, deliberately separate: it moves the jaws.
 
     Returns:
       The configuration ``discover`` read.
@@ -308,15 +591,99 @@ class PreciseFlexDriver:
     await self.arm.stop_freedrive_mode()
     return await self.discover()
 
+  def _create_feature_resources(self, configuration: "PreciseFlexConfiguration") -> None:
+    """Build the arm on its base plate, from a configuration. No motion.
+
+    The column is stood on the base plate, the carriage hung on it, the links on that and the
+    gripper on link 2, each placed by where its joint has to land. They stand at Z 0 with every
+    joint at 0 until a joint state is read. Does nothing for a driver given no base plate. An arm
+    already built keeps its parts.
+
+    Args:
+      configuration: what the arm reported: the declared one, or the one read at setup.
+    """
+    base_plate = self.base_plate
+    if base_plate is None:
+      return
+    device = base_plate.parent
+    if device is None:
+      logger.warning("the base plate belongs to no device, so the arm is not modelled")
+      return
+    if self.arm.resource is not None:
+      return
+    c = configuration.arm
+    column = z_column(name=f"{device.name}_z_column", height=z_column_height(c.z_range[1]))
+    base_plate.assign_child_resource(column, location=Z_COLUMN_LOCATION)
+    carriage = z_carriage(name=f"{device.name}_z_carriage")
+    column.assign_child_resource(carriage, location=z_carriage_location(0.0))
+    first = link_1(name=f"{device.name}_link_1", length=c.kinematics.l1)
+    # The reference point is the shoulder axis at the flange plane, which link 1 stands above.
+    above = Coordinate(0.0, 0.0, LINK_1_ABOVE_FLANGE_PLANE)
+    carriage.assign_child_resource(
+      first, location=Z_CARRIAGE_REFERENCE_POINT - first.proximal_joint + above
+    )
+    second = link_2(name=f"{device.name}_link_2", length=c.kinematics.l2)
+    # Link 2's underside lies in the flange plane, that far below link 1's.
+    below = Coordinate(0.0, 0.0, -LINK_1_ABOVE_FLANGE_PLANE)
+    first.assign_child_resource(
+      second, location=cast(Coordinate, first.distal_joint) - second.proximal_joint + below
+    )
+    hand = gripper(
+      name=f"{device.name}_gripper",
+      tool_length=c.kinematics.gripper_length,
+      intelliguide="v23" if configuration.has_vision_gripper else "s23",
+      # The axis's soft limits, in mm, as the gripper takes them when it adopts a configuration.
+      jaw_range=(
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[0]),
+        self.gripper._firmware_units_to_mm(configuration.gripper.soft_limit_range[1]),
+      ),
+    )
+    second.assign_child_resource(
+      hand, location=cast(Coordinate, second.distal_joint) - hand.proximal_joint
+    )
+    self.arm.resource, self.arm.link_1, self.arm.link_2 = carriage, first, second
+    self.gripper.resource = hand
+
+  async def _setup_vision(self, vision_host: Optional[str]) -> None:
+    """Build the vision capability and connect its vision server; best-effort, never raises.
+
+    Called by ``setup`` when the controller is set up for a vision server (``has_vision_server``),
+    whatever gripper is fitted; this class owns the connection, as ``stop`` closes it. The
+    controller side of vision always works; a set, reachable ``vision_host`` additionally opens the
+    vision server for image fetch and discovery. A missing or unreachable host leaves
+    ``self.vision`` built with no vision server.
+
+    Args:
+      vision_host: address of the vision server, or ``None`` for controller-only vision.
+    """
+    if vision_host:
+      try:
+        await self._open_vision_server(vision_host)
+      # A missing or unreachable vision server just disables image fetch.
+      except Exception as exc:  # noqa: BLE001
+        logger.warning(
+          "[PreciseFlex %s] vision server at %s unreachable; direct image acquisition disabled: %s",
+          self.io._host,
+          vision_host,
+          exc,
+        )
+    self.vision = PreciseFlexVision(self)
+    await self.vision.setup()  # discovers, caches, and logs the capability summary (best-effort)
+
   async def disconnect(self) -> None:
     """Hand the arm back and close the links. Moves nothing.
 
-    Drops high power as well as releasing the arm, because ``initialize`` raised it.
+    Drops high power as well as releasing the arm, because ``initialize`` raised it. Does nothing
+    when the link is not open, as after a setup that failed and handed the arm back.
     """
+    if not self._connected:
+      return
     await self.detach()
     await self.power_off_robot()
     await self._exit()
+    await self._close_vision_server()
     await self.io.stop()
+    self._connected = False
     logger.info("[PreciseFlex %s] disconnected: port=%s", self.io._host, self.io._port)
 
   @evented_operation(
@@ -324,7 +691,7 @@ class PreciseFlexDriver:
     lambda self: {"device": self._controller_reference()},
   )
   async def stop(self):
-    """Hand the arm back and close the link (``disconnect``)."""
+    """Hand the arm back and close every connection (``disconnect``)."""
     await self.disconnect()
 
   # -- device-level commands -------------------------------------------------
@@ -435,12 +802,31 @@ class PreciseFlexDriver:
   async def home(self) -> None:
     """Home the robot associated with this thread.
 
+    Only the jaws move: the other joints read their position. The jaws open to their stop and back
+    off, so on a modelled arm their opening to the hard limit is first checked against the column
+    and the base plate. Closing never carries a finger outward.
+
     Note:
       Requires power to be enabled.
       Requires robot to be attached.
       Waits until the homing is complete.
     """
-    await self.send_command("home")
+    gripper = self.gripper.configuration
+
+    def build_targets(current: JointState) -> List[JointState]:
+      if gripper is None:
+        return []
+      return [{**current, PreciseFlexAxis.GRIPPER: gripper.hard_limit_range[1]}]
+
+    async def unchecked_fw_move(_targets: Sequence[JointState]) -> None:
+      await self.send_command("home")
+
+    await self.arm._guarded_move(
+      build_targets,
+      unchecked_fw_move,
+      check_soft_limits=False,
+      retry_out_of_range=False,
+    )
 
   async def home_all(self) -> None:
     """Home all robots.
@@ -457,19 +843,14 @@ class PreciseFlexDriver:
   )
   async def power_on_robot(self):
     """Power on the robot."""
-    error: Optional[PreciseFlexError] = None
-    for _ in range(3):
+    for attempt in range(1, 4):
       try:
         await self.set_power(True, self.timeout)
-      except PreciseFlexError as e:
-        logger.warning(f"Error powering on robot, retrying... Attempt {_ + 1}/3. Error: {e}")
-        error = e
-      else:
         return
-
-    if error:
-      raise error
-    raise RuntimeError("Failed to power on robot after 3 attempts for unknown reasons.")
+      except PreciseFlexError as e:
+        logger.warning(f"Error powering on robot, retrying... Attempt {attempt}/3. Error: {e}")
+        if attempt == 3:
+          raise
 
   @evented_operation(
     "precise_flex.power_off",
@@ -553,7 +934,7 @@ class PreciseFlexDriver:
   async def set_axis_parameter(
     self,
     data_id: int,
-    axis: Axis,
+    axis: PreciseFlexAxis,
     value,
     robot_number: int = 1,
   ) -> None:
@@ -786,15 +1167,20 @@ class PreciseFlexDriver:
     )
     power_state = await self.request_system_state()
 
-    arm_axes = (Axis.BASE, Axis.SHOULDER, Axis.ELBOW, Axis.WRIST)
+    arm_axes = (
+      PreciseFlexAxis.BASE,
+      PreciseFlexAxis.SHOULDER,
+      PreciseFlexAxis.ELBOW,
+      PreciseFlexAxis.WRIST,
+    )
     rail = None
-    if Axis.RAIL in soft_limits:
+    if PreciseFlexAxis.RAIL in soft_limits:
       rail = PreciseFlexRailConfiguration(
-        soft_limit_range=soft_limits[Axis.RAIL],
-        hard_limit_range=hard_limits.get(Axis.RAIL),
-        max_speed=max_joint_speed.get(Axis.RAIL),
-        max_acceleration=max_joint_acceleration.get(Axis.RAIL),
-        max_deceleration=max_joint_deceleration.get(Axis.RAIL),
+        soft_limit_range=soft_limits[PreciseFlexAxis.RAIL],
+        hard_limit_range=hard_limits.get(PreciseFlexAxis.RAIL),
+        max_speed=max_joint_speed.get(PreciseFlexAxis.RAIL),
+        max_acceleration=max_joint_acceleration.get(PreciseFlexAxis.RAIL),
+        max_deceleration=max_joint_deceleration.get(PreciseFlexAxis.RAIL),
       )
     return PreciseFlexConfiguration(
       manufacturer=manufacturer,
@@ -821,11 +1207,11 @@ class PreciseFlexDriver:
         kinematics_source=kinematics_source,
       ),
       gripper=PreciseFlexGripperConfiguration(
-        soft_limit_range=soft_limits[Axis.GRIPPER],
-        hard_limit_range=hard_limits[Axis.GRIPPER],
-        max_speed=max_joint_speed[Axis.GRIPPER],
-        max_acceleration=max_joint_acceleration[Axis.GRIPPER],
-        max_deceleration=max_joint_deceleration[Axis.GRIPPER],
+        soft_limit_range=soft_limits[PreciseFlexAxis.GRIPPER],
+        hard_limit_range=hard_limits[PreciseFlexAxis.GRIPPER],
+        max_speed=max_joint_speed[PreciseFlexAxis.GRIPPER],
+        max_acceleration=max_joint_acceleration[PreciseFlexAxis.GRIPPER],
+        max_deceleration=max_joint_deceleration[PreciseFlexAxis.GRIPPER],
         is_dual_gripper=bool(axis_mask & 0x80),
       ),
       rail=rail,
@@ -1108,7 +1494,7 @@ class PreciseFlexDriver:
       kwargs["station_index"] = kwargs.pop("location_index")
     return await self.arm._unchecked_fw_set_station_to_current_cartesian_location(*args, **kwargs)
 
-  async def move_gripper(self, width: float, force_sensing: bool = False) -> Any:
+  async def move_gripper(self, width: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position``."""
     warnings.warn(
       "`move_gripper` is deprecated, use `gripper.move_to_jaw_position`.",
@@ -1117,7 +1503,7 @@ class PreciseFlexDriver:
     )
     return await self.gripper.move_to_jaw_position(width, force_sensing=force_sensing)
 
-  async def move_gripper_joint_position(self, position: float, force_sensing: bool = False) -> Any:
+  async def move_gripper_joint_position(self, position: float, force_sensing: bool = True) -> Any:
     """Deprecated: use ``gripper.move_to_jaw_position_firmware_units``."""
     warnings.warn(
       "`move_gripper_joint_position` is deprecated, use "

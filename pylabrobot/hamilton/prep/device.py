@@ -241,9 +241,9 @@ def Prep(
     port: the port it answers on.
     declared_configuration_json: path to a declared configuration, passed to the driver this builds.
       Read only when this builds one: a driver given outright brings its own. A simulated device
-      defaults to the recording of a device with an 8-channel head and a heater shaker.
+      defaults to the recording of a device with an 8-channel head and no heater shaker.
     firmware_tree_json: path to a recorded firmware tree, for a simulated device to have. Defaults to
-      that device's (MLPrep Runtime V3.0.20).
+      that device's (MLPrep Runtime V1.2.2).
     driver: the driver to drive it through, instead of building one.
     name: what to call it.
     size_x: how wide it is, in mm.

@@ -26,9 +26,12 @@ class MechanicalGripper(LinkBody):
   at the far end of its span is `tool_center_point`, the point it grips at. Its body, its two
   fingers and a pad on each are material bolted to it.
 
+  On some grippers the drive moves two jaws, and a finger is bolted to each. The jaws are then
+  parts too: each carries its finger, and a finger is changed without the jaw.
+
   The gap between the fingers is state rather than shape, so `jaw_width` moves them. That is why
   the member is sized to its body alone: a box drawn around the fingers would change size every
-  time the jaws did. The fingers reach past it.
+  time they moved. The fingers reach past it.
   """
 
   def __init__(
@@ -43,6 +46,8 @@ class MechanicalGripper(LinkBody):
     jaw_range: Tuple[float, float],
     pads: Optional[Sequence[Resource]] = None,
     pad_location: Optional[Coordinate] = None,
+    jaws: Optional[Sequence[Resource]] = None,
+    jaw_location: Optional[Coordinate] = None,
     jaw_width: Optional[float] = None,
     category: str = "mechanical_gripper",
     model: Optional[str] = None,
@@ -55,13 +60,18 @@ class MechanicalGripper(LinkBody):
         on - rather than from this gripper's own origin.
       body: the material around the span, which is also what sizes this member.
       body_location: where it sits, from this gripper's own origin.
-      fingers: the two jaws, either side of the span.
+      fingers: the two fingers, either side of the span.
       finger_location: where a finger sits along and above the span. Its Y is not used: the
-        jaws straddle `tool_center_point`, and `jaw_width` sets how far apart.
+        fingers straddle `tool_center_point`, and `jaw_width` sets how far apart. Given `jaws`,
+        it is where the first finger sits on its jaw, Y included; the second sits mirrored.
       jaw_range: the gap between the fingers, closed and open, in mm.
       pads: what each finger meets the resource with, in the same order as `fingers`. A gripper
         whose fingers meet it themselves has none.
       pad_location: where a pad sits, from the finger it is fixed to. Given with `pads`.
+      jaws: what the drive moves and each finger is bolted to, in the same order as `fingers`. A
+        gripper whose fingers the drive moves directly has none.
+      jaw_location: where a jaw sits along and above the span. Its Y is not used: a jaw stands
+        wherever its finger has to. Given with `jaws`.
       jaw_width: the gap to begin with, in mm. Open, when not given.
     """
     super().__init__(
@@ -83,18 +93,34 @@ class MechanicalGripper(LinkBody):
     # Zipping a short list against a long one would drop material without saying so.
     if pads is not None and len(pads) != len(fingers):
       raise ValueError(f"a gripper has a pad on each finger, not {len(pads)} on {len(fingers)}")
+    if (jaws is None) != (jaw_location is None):
+      raise ValueError("jaws and jaw_location go together: give both, or neither")
+    if jaws is not None and len(jaws) != len(fingers):
+      raise ValueError(f"a gripper has a jaw for each finger, not {len(jaws)} for {len(fingers)}")
     self.jaw_range = jaw_range
     self._tool_center_point = tool_center_point
 
     self.body = body
     self.assign_child_resource(body, location=body_location)
+    self.jaws = list(jaws) if jaws is not None else []
+    for jaw in self.jaws:
+      self.assign_child_resource(jaw, location=cast(Coordinate, jaw_location))
     self.fingers = list(fingers)
-    for jaw in self.fingers:
-      self.assign_child_resource(jaw, location=finger_location)
+    for index, finger in enumerate(self.fingers):
+      if not self.jaws:
+        self.assign_child_resource(finger, location=finger_location)
+        continue
+      jaw = self.jaws[index]
+      # The two jaws are mirror images, so the second finger sits as far from its jaw's other side.
+      mirrored = jaw.get_size_y() - finger.get_size_y() - finger_location.y
+      across = finger_location.y if index == 0 else mirrored
+      jaw.assign_child_resource(
+        finger, location=Coordinate(finger_location.x, across, finger_location.z)
+      )
 
     self.pads = list(pads) if pads is not None else []
-    for jaw, face in zip(self.fingers, self.pads):
-      jaw.assign_child_resource(face, location=cast(Coordinate, pad_location))
+    for finger, face in zip(self.fingers, self.pads):
+      finger.assign_child_resource(face, location=cast(Coordinate, pad_location))
 
     # Through the setter, which is where a width is checked and the fingers are stood apart.
     self.jaw_width = jaw_range[1] if jaw_width is None else jaw_width
@@ -127,16 +153,23 @@ class MechanicalGripper(LinkBody):
     self._place_the_fingers()
 
   def _place_the_fingers(self) -> None:
-    """Stand the fingers either side of the grip centre, leaving `jaw_width` of gap between them."""
-    for finger, side in zip(self.fingers, (1.0, -1.0)):
-      here = cast(Coordinate, finger.location)
+    """Stand the fingers either side of the grip centre, leaving `jaw_width` of gap between them.
+
+    A finger bolted to a jaw is stood by moving its jaw.
+    """
+    for index, (finger, side) in enumerate(zip(self.fingers, (1.0, -1.0))):
       # A resource sits at its lowest-y corner: the facing surface on the +Y side, the back of the
       # finger on the -Y side. They close on what is at the grip centre, so they straddle the tool
       # centre point rather than the joint or the member's own middle.
       facing = self.proximal_joint.y + self._tool_center_point.y + side * self._jaw_width / 2.0
-      finger.location = Coordinate(
-        here.x, facing if side > 0 else facing - finger.get_size_y(), here.z
-      )
+      corner = facing if side > 0 else facing - finger.get_size_y()
+      on_its_carrier = cast(Coordinate, finger.location)
+      if self.jaws:
+        jaw = self.jaws[index]
+        here = cast(Coordinate, jaw.location)
+        jaw.location = Coordinate(here.x, corner - on_its_carrier.y, here.z)
+      else:
+        finger.location = Coordinate(on_its_carrier.x, corner, on_its_carrier.z)
 
   def serialize(self) -> dict:
     serialized = super().serialize()
@@ -152,22 +185,25 @@ class MechanicalGripper(LinkBody):
       "body": self.body.name,
       "fingers": [finger.name for finger in self.fingers],
       "pads": [pad.name for pad in self.pads],
+      "jaws": [jaw.name for jaw in self.jaws],
     }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False) -> "MechanicalGripper":
     """Rebuild a gripper, taking its own parts back out of its children.
 
-    Its body, fingers and pads are constructor arguments rather than children assigned after the
-    fact, so they are found by the names `serialize` recorded for them. Anything else goes back
-    where it was: on a finger, or on the gripper, which is what it was holding.
+    Its body, jaws, fingers and pads are constructor arguments rather than children assigned after
+    the fact, so they are found by the names `serialize` recorded for them. Anything else goes
+    back where it was: on a finger, on a jaw, or on the gripper, which is what it was holding.
 
     Raises:
-      ValueError: If a part it names is not among its children, or a finger does not carry
-        exactly one of the pads.
+      ValueError: If a part it names is not among its children, a jaw does not carry exactly one
+        of the fingers, or a finger does not carry exactly one of the pads.
     """
     children = {child["name"]: child for child in data["children"]}
-    parts = [data["body"], *data["fingers"]]
+    jaw_names = list(data.get("jaws") or [])
+    # A finger bolted to a jaw is that jaw's child, so the jaws stand in for them here.
+    parts = [data["body"], *(jaw_names or data["fingers"])]
     missing = [name for name in parts if name not in children]
     if missing:
       raise ValueError(f"gripper '{data['name']}' names parts it has no child for: {missing}")
@@ -180,12 +216,27 @@ class MechanicalGripper(LinkBody):
     # A finger's children are sorted here rather than by `Resource.deserialize`: the pad goes to
     # `__init__`, and whatever else it carries goes back on it once the gripper is built.
     pad_names = set(data["pads"])
+    finger_names = set(data["fingers"])
+    jaws: List[Resource] = []
+    saved_fingers: List[dict] = []
     fingers: List[Resource] = []
     pads: List[dict] = []
     carried: List[Tuple[Resource, dict]] = []
-    for name in data["fingers"]:
-      finger = Resource.deserialize({**children[name], "children": []}, allow_marshal=allow_marshal)
-      on_it = children[name]["children"]
+    for name in jaw_names:
+      jaw = Resource.deserialize({**children[name], "children": []}, allow_marshal=allow_marshal)
+      on_it = children[name].get("children", [])
+      bolted = [child for child in on_it if child["name"] in finger_names]
+      if len(bolted) != 1:
+        raise ValueError(f"jaw '{name}' carries {len(bolted)} of the gripper's fingers, not 1")
+      jaws.append(jaw)
+      saved_fingers.extend(bolted)
+      carried.extend((jaw, child) for child in on_it if child["name"] not in finger_names)
+    if not jaw_names:
+      saved_fingers = [children[name] for name in data["fingers"]]
+    for saved in saved_fingers:
+      name = saved["name"]
+      finger = Resource.deserialize({**saved, "children": []}, allow_marshal=allow_marshal)
+      on_it = saved.get("children", [])
       faces = [child for child in on_it if child["name"] in pad_names]
       if pad_names and len(faces) != 1:
         raise ValueError(f"finger '{name}' carries {len(faces)} of the gripper's pads, not 1")
@@ -204,10 +255,12 @@ class MechanicalGripper(LinkBody):
       body=body,
       body_location=where(children[data["body"]]),
       fingers=fingers,
-      finger_location=where(children[data["fingers"][0]]),
+      finger_location=where(saved_fingers[0]),
       jaw_range=(data["jaw_range"][0], data["jaw_range"][1]),
       pads=[Resource.deserialize(pad, allow_marshal=allow_marshal) for pad in pads] or None,
       pad_location=where(pads[0]) if pads else None,
+      jaws=jaws or None,
+      jaw_location=where(children[jaw_names[0]]) if jaw_names else None,
       category=data.get("category", "mechanical_gripper"),
       model=data.get("model"),
     )
@@ -226,8 +279,8 @@ class MechanicalGripper(LinkBody):
         Coordinate, deserialize(data["preferred_pickup_location"])
       )
     gripper.metadata = dict(data.get("metadata") or {})
-    for finger, child in carried:
-      finger.assign_child_resource(
+    for carrier, child in carried:
+      carrier.assign_child_resource(
         Resource.deserialize(child, allow_marshal=allow_marshal), location=where(child)
       )
     for name, child in children.items():

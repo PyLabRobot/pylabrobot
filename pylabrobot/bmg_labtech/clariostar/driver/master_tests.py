@@ -10,13 +10,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pylabrobot.bmg_labtech.clariostar.driver import master as master_module
 from pylabrobot.bmg_labtech.clariostar.driver.errors import (
   CommandRefusedError,
-  FrameError,
   parse_quit_codes,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.framing import (
+from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
   ftdi_extract_payload,
 )
-from pylabrobot.bmg_labtech.clariostar.driver.master import CLARIOstarDriver
+from pylabrobot.bmg_labtech.transport import ftdi_interface as ftdi_interface_module
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
 
@@ -51,7 +52,7 @@ INIT_REPLY = bytes.fromhex(
   "0001310007000000000000000071710d"
 )
 
-# Frames the vendor software exchanged with the same reader.
+# Ground-truth frames of the same reader.
 # Idle at power-on, motors off.
 STATUS_MOTORS_OFF = bytes.fromhex("0200180c010500040000000000000000000000c00000f00d")
 # Stored parameters; the project and serial number, reply bytes 161-164, are zeroed and the checksum
@@ -153,8 +154,8 @@ def parse_status(frame: bytes):
 
 def make_driver(io: FakeFTDI) -> CLARIOstarDriver:
   driver = CLARIOstarDriver(io=io)
-  driver._PACKET_READ_TIMEOUT = 0.01
-  driver._FRAME_STALL_TIMEOUT = 0.05
+  driver._ftdi._packet_read_timeout = 0.01
+  driver._ftdi._frame_stall_timeout = 0.05
   driver._RETRY_SETTLE = 0
   driver.default_poll_interval = 0
   driver.drawer.default_poll_interval = 0
@@ -206,7 +207,7 @@ class StatusTests(unittest.TestCase):
   def test_no_plate_is_reported_with_the_drawer_out(self):
     # As the reader answered with the plate on the plate holder and the drawer out.
     status = parse_status(
-      bytes.fromhex(load_session_replies()["step_9_status_drawer_out_plate_on_holder"])
+      bytes.fromhex(load_session_replies()["status_drawer_out_plate_on_holder"])
     )
     self.assertEqual((status.drawer_open, status.plate_detected), (True, False))
 
@@ -261,13 +262,14 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
     # 1.65 s, and the page stayed 421 bytes short.
     reads = [
       (at, bytes.fromhex(data))
-      for at, data in load_session_replies()["step_17_first_attempt_reads"]
+      for at, data in load_session_replies()["absorbance_spectrum_short_page_reads"]
     ]
     clock = [0.0]
     driver = make_driver(SessionReadsFTDI(reads, clock))
-    driver._PACKET_READ_TIMEOUT, driver._FRAME_STALL_TIMEOUT = 1.0, 2.0  # the driver's own
-    with patch.object(master_module.time, "time", side_effect=lambda: clock[0]):
-      frame = await driver._ftdi_read_frame()
+    driver._ftdi._packet_read_timeout = CLARIOstarDriver._PACKET_READ_TIMEOUT
+    driver._ftdi._frame_stall_timeout = CLARIOstarDriver._FRAME_STALL_TIMEOUT
+    with patch.object(ftdi_interface_module.time, "time", side_effect=lambda: clock[0]):
+      frame = await driver._ftdi._read_frame()
     self.assertEqual(frame, b"".join(data for _, data in reads))
     self.assertGreaterEqual(clock[0], reads[-1][0] + 2.0)  # 2 s of silence after the last bytes
 
@@ -305,10 +307,31 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
 class FirmwareTests(unittest.IsolatedAsyncioTestCase):
   async def test_discover_applies_the_stored_parameters(self):
     io = FakeFTDI()
-    io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     await driver.discover()
     self.assertEqual(driver.configuration.extended_temperature_range, False)
+
+  async def test_discover_reads_the_firmware_build_date(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
+    driver = make_driver(io)
+    driver.configuration.model = "CLARIOstarPlus"
+    driver.configuration.firmware_build = 1
+    await driver.discover()
+    self.assertEqual(io.written[-1], FIRMWARE_INFO_FRAME)
+    build_date = driver.configuration.firmware_build_date
+    self.assertRegex(build_date or "", r"^\d{4}-\d{2}-\d{2}$")
+    self.assertIn(f"Firmware: None (build 1, built {build_date})", driver.format_setup_summary())
+
+  async def test_a_reply_without_a_build_date_warns(self):
+    io = FakeFTDI()
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, PARAMETERS_REPLY]
+    driver = make_driver(io)
+    with self.assertLogs(master_module.logger, "WARNING") as logs:
+      await driver.discover()
+    self.assertTrue(any("firmware build date not read" in line for line in logs.output))
+    self.assertIsNone(driver.configuration.firmware_build_date)
 
   def test_unconfirmed_firmware_warns(self):
     driver = make_driver(FakeFTDI())
@@ -325,10 +348,15 @@ class WhenIdleTests(unittest.IsolatedAsyncioTestCase):
       STATUS_BUSY,
       STATUS_IDLE,
       PARAMETERS_REPLY,
+      STATUS_IDLE,
+      FIRMWARE_INFO_REPLY,
     ]
     driver = make_driver(io)
     await driver.discover()
-    self.assertEqual(io.written, [STATUS_QUERY_FRAME] * 3 + [PARAMETERS_FRAME])
+    self.assertEqual(
+      io.written,
+      [STATUS_QUERY_FRAME] * 3 + [PARAMETERS_FRAME, STATUS_QUERY_FRAME, FIRMWARE_INFO_FRAME],
+    )
 
   async def test_when_idle_false_sends_at_once(self):
     io = FakeFTDI()
@@ -394,6 +422,8 @@ class StatusRefusalAndWarningTests(unittest.IsolatedAsyncioTestCase):
       STATUS_WARNING,
       STATUS_IDLE,
       PARAMETERS_REPLY,
+      STATUS_IDLE,
+      FIRMWARE_INFO_REPLY,
     ]
     driver = make_driver(io)
     with self.assertLogs(master_module.logger, "WARNING") as logs:

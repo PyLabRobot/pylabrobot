@@ -264,6 +264,21 @@ class StateChannelTests(unittest.IsolatedAsyncioTestCase):
     finally:
       await ws.close()
 
+  async def test_a_resource_moved_back_to_where_the_scene_placed_it_publishes_that(self):
+    """A return to the scene's place is news to a client that was told of the move away."""
+    ws, _, _ = await self.connect()
+    try:
+      kept = self.plate.location
+      assert kept is not None
+      self.plate.location = Coordinate(400, 300, 0)
+      self.assertEqual((await self.next_state(ws))["locations"]["plate"]["x"], 400)
+      self.plate.location = kept
+      update = await self.next_state(ws)
+      self.assertIsNotNone(update)
+      self.assertEqual(update["locations"]["plate"]["x"], kept.x)
+    finally:
+      await ws.close()
+
   async def test_a_resource_moved_under_another_parent_is_moved_not_rebuilt(self):
     """The same names are the same instances: a change of parent is a move, a parent index and six
     floats, applied to the scene the client has. Its new location travels in the move and in no
@@ -371,6 +386,17 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
     except asyncio.TimeoutError:
       return told
 
+  async def until_told(self, ws, name: str, seconds: float = 30.0) -> None:
+    """Read until a client is told a state for `name`, however long the loop is held first."""
+
+    async def read() -> None:
+      while True:
+        message = json.loads(await ws.recv())
+        if message["event"] == "state" and name in message["data"]["of"]:
+          return
+
+    await asyncio.wait_for(read(), seconds)
+
   async def aspirate_held(self, ws) -> Tuple[Tip, List[Dict[str, Any]], "asyncio.Future[None]"]:
     """Mount a tip, start an aspirate into it and hold it at its command.
 
@@ -379,7 +405,8 @@ class SimulatedAspirateTests(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.pick_up_tips([self.rack.get_item("A1")])
     tip = self.pipettes.get_mounted_tip(0)
     assert tip is not None
-    await self.told(ws, tip.name)  # the pick-up's scene and snapshot
+    # The pick-up's rebuild can hold the loop past a quiet window: wait for the snapshot after it.
+    await self.until_told(ws, tip.name)
     aspirating = asyncio.ensure_future(self.pipettes.aspirate([self.well], [50.0]))
     await asyncio.wait_for(self.drawing.wait(), 10)
     return tip, await self.told(ws, tip.name), aspirating

@@ -80,17 +80,15 @@ _RECORDINGS = os.path.join(os.path.dirname(__file__), "recordings")
 
 # The recorded device as it saved itself (MLPrep Runtime V1.2.2): two channels, nothing else.
 RECORDING_PREP = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2.json")
-# The same, declared with an 8-channel head.
+# The same, declared with an 8-channel head: a simulated Prep unless told otherwise.
 RECORDING_PREP_HEAD8 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_head8.json")
-# A device with two channels, an 8-channel head, an enclosure and a heater shaker (V3.0.20): a
-# simulated Prep unless told otherwise.
+# A device with two channels, an 8-channel head, an enclosure and a heater shaker (V3.0.20).
 RECORDING_PREP_HEATER_SHAKER = os.path.join(_RECORDINGS, "prep_PRPBC1317_v3_0_20.json")
 
 # The firmware trees read off three devices.
 FIRMWARE_TREE_V1_2_2 = os.path.join(_RECORDINGS, "prep_PRPAA1087_v1_2_2_firmware_tree.json")
 FIRMWARE_TREE_V3_0_20 = os.path.join(_RECORDINGS, "prep_PRPBD1394_v3_0_20_firmware_tree.json")
-# V3.0.20 read off the device with a heater shaker, whose tree also holds its 8-channel head: what
-# a simulated Prep runs unless told otherwise.
+# V3.0.20 read off the device with a heater shaker, whose tree also holds its 8-channel head.
 FIRMWARE_TREE_V3_0_20_HEATER_SHAKER = os.path.join(
   _RECORDINGS, "prep_PRPBC1317_v3_0_20_firmware_tree.json"
 )
@@ -1360,9 +1358,9 @@ class PrepSimulationDriver(PrepDriver):
     Args:
       deck: the deck to reflect this device into.
       declared_configuration_json: path to a saved configuration, which this device then answers as.
-        Defaults to `RECORDING_PREP_HEATER_SHAKER`.
+        Defaults to `RECORDING_PREP_HEAD8`, which has no heater shaker.
       firmware_tree_json: path to a recorded firmware tree, whose objects and methods this device
-        then has. Defaults to `FIRMWARE_TREE_V3_0_20_HEATER_SHAKER`.
+        then has. Defaults to `FIRMWARE_TREE_V1_2_2`.
       initialized: whether the device reports itself already initialized. One that has just been
         switched on does not.
       default_minimum_traverse_height: what the device answers `GetDefaultTraverseHeight` with, and
@@ -1378,7 +1376,7 @@ class PrepSimulationDriver(PrepDriver):
     """
     super().__init__(
       deck=deck,
-      declared_configuration_json=declared_configuration_json or RECORDING_PREP_HEATER_SHAKER,
+      declared_configuration_json=declared_configuration_json or RECORDING_PREP_HEAD8,
       io=_SimulatedIO(self),
       liquid_class_lookup=liquid_class_lookup,
     )
@@ -1394,7 +1392,7 @@ class PrepSimulationDriver(PrepDriver):
       )
     self.simulated_configuration: DeviceConfiguration = configuration
     self.simulated_pipettes: Optional[PipettesConfiguration] = self.declared.get("pipettes")
-    self.firmware_tree_json = firmware_tree_json or FIRMWARE_TREE_V3_0_20_HEATER_SHAKER
+    self.firmware_tree_json = firmware_tree_json or FIRMWARE_TREE_V1_2_2
     self.tree = _RecordedTree(
       self.firmware_tree_json,
       head8_installed=bool(configuration.head8_installed),

@@ -11,12 +11,24 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Literal, Optional, Tuple, Union, cast
 
-from pylabrobot.io.capture import get_capture_or_validation_active
+from pylabrobot.bmg_labtech.protocol.errors import FrameError
+from pylabrobot.bmg_labtech.protocol.framing import (
+  USB_ACK,
+  USB_CONTINUATION,
+  USB_FIRST,
+  USB_HEADER_SIZE,
+  USB_PACKET_SIZE,
+  USB_SINGLE,
+  usb_packet_type,
+  usb_total_length,
+  usb_wrap_payload,
+)
+from pylabrobot.bmg_labtech.transport.ftdi_interface import BMGFTDIInterface
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.io.usb import USB
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO
 
 from .configuration import (
+  BARCODE_READER_POSITIONS,
   DECODED_FIRMWARE,
   FITTED_FIELDS,
   DeviceConfiguration,
@@ -26,7 +38,6 @@ from .configuration import (
 from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
 from .errors import (
   CommandRefusedError,
-  FrameError,
   describe_quit_codes,
   parse_quit_codes,
   parse_warning_codes,
@@ -34,28 +45,19 @@ from .errors import (
 from .features.absorbance import Absorbance
 from .features.drawer import Drawer
 from .features.fluorescence import Fluorescence
+from .features.luminescence import Luminescence
 from .features.temperature_controller import TemperatureController
-from .framing import (
-  FTDI_CR,
-  FTDI_STX,
-  USB_ACK,
-  USB_CONTINUATION,
-  USB_FIRST,
-  USB_HEADER_SIZE,
-  USB_HOST_ACK,
-  USB_PACKET_SIZE,
-  USB_SINGLE,
-  ftdi_extract_payload,
-  ftdi_validate_frame,
-  ftdi_wrap_payload,
-  usb_packet_type,
-  usb_total_length,
-  usb_wrap_payload,
+from .framing import FTDI_HEADER, USB_HOST_ACK
+from .parameter_table import (
+  PARAMETER_TABLE,
+  REPLY_OFFSET,
+  SERIAL_NUMBER_ADDRESSES,
+  SIGNED_PARAMETERS,
 )
-from .ftdi_queued_reads import LATENCY_TIMER, QueuedReads
-from .parameter_table import PARAMETER_TABLE, REPLY_OFFSET
 
 logger = logging.getLogger(__name__)
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,11 @@ def _configure_usb_device(dev: Any) -> None:
   dev.set_configuration()
 
 
+def _flag(channels: Optional[int]) -> Optional[bool]:
+  """Whether a reported channel count is non-zero; None if it was not read."""
+  return None if channels is None else bool(channels)
+
+
 class CLARIOstarDriver:
   """Owns the CLARIOstar connection, the command layer, and the reader's features.
 
@@ -91,11 +98,9 @@ class CLARIOstarDriver:
 
   # Seconds a command may keep the reader busy, when waited on (``read_timeout`` None).
   _default_read_timeout: float = 150.0
-  # Seconds between status polls while waiting: with a ~38 ms exchange, close to the vendor
-  # software's polling (302 ms median over 39,373 polls).
+  # Seconds between status polls while waiting, with a ~38 ms exchange.
   default_poll_interval: float = 0.25
 
-  _FTDI_READ_CHUNK = 25  # bytes per read; a shorter read marks the end of a burst
   _PACKET_READ_TIMEOUT = 1.0  # seconds to wait for the start of an FTDI reply
   # Seconds without new bytes before abandoning a started frame. The longest pause measured
   # inside a reply, over about 26,000 replies including measurement data, was 0.44 s.
@@ -112,8 +117,11 @@ class CLARIOstarDriver:
     RUN = 0x04
     REQUEST = 0x05
     TEMPERATURE_CONTROLLER = 0x06
+    PLATE_MAP_SCAN = 0x07
+    FOCUS_WELL = 0x09
     STOP = 0x0B
     SET_PARAMETER = 0x0E
+    FILTER_SCAN = 0x24
     STATUS = 0x80
 
   class Command:
@@ -126,17 +134,27 @@ class CLARIOstarDriver:
     DRAWER_OPEN = 0x01
     # REQUEST
     DATA = 0x02
+    PLATE_MAP_XY = 0x04
+    FOCUS_RESULT = 0x05
     PARAMETERS = 0x07
+    FIRMWARE_INFO = 0x09
+    PLATE_MAP_CONFIG = 0x0D
+    SPECTRAL_DATA = 0x11
+    FILTER_RESULT = 0x1B
     # SET_PARAMETER; seen only writing the two-byte test-run counter
     SET_PARAMETER_WORD = 0x0B
 
-  # Families whose payload is the family byte plus parameters, without a command byte.
+  # Families whose payload is the family byte plus parameters, without a command byte; FILTER_SCAN's
+  # first parameter is a mode bit field.
   _NO_COMMAND_FAMILIES = frozenset(
     {
       CommandFamily.RUN,
       CommandFamily.STOP,
       CommandFamily.STATUS,
       CommandFamily.TEMPERATURE_CONTROLLER,
+      CommandFamily.PLATE_MAP_SCAN,
+      CommandFamily.FOCUS_WELL,
+      CommandFamily.FILTER_SCAN,
     }
   )
 
@@ -226,212 +244,45 @@ class CLARIOstarDriver:
     # One lock over the link: a reply belongs to the last command written, so exchanges never
     # overlap.
     self._lock = asyncio.Lock()
+    # Whether a measurement is running; the reader runs only one at a time
+    # (`_enforce_one_measurement_at_a_time`).
+    self._measuring = False
     self._last_warning: Optional[Tuple[int, int, int, int, int]] = None
-    # FTDI only: bulk-in transfers kept pending from setup to stop; None reads through libftdi.
-    self._queued_reads: Optional[QueuedReads] = None
+    # Built on first use over the current io (`_ftdi`).
+    self._ftdi_interface: Optional[BMGFTDIInterface] = None
     self.drawer = Drawer(self)
-    # Built by `discover` only if the reader reports a temperature controller, absorbance, and
-    # a fluorescence channel.
+    # Built by `discover` only if the reader reports a temperature controller, absorbance, a
+    # fluorescence channel, and a luminescence channel.
     self.temperature_controller: Optional[TemperatureController] = None
     self.absorbance: Optional[Absorbance] = None
     self.fluorescence: Optional[Fluorescence] = None
+    self.luminescence: Optional[Luminescence] = None
 
   # -- FTDI interface --------------------------------------------------------
 
   @property
-  def _ftdi(self) -> FTDI:
-    """The io, as an FTDI."""
-    return cast(FTDI, self.io)
+  def _ftdi(self) -> BMGFTDIInterface:
+    """The FTDI interface over the current io; one built over an earlier io is stopped first.
 
-  def _start_queued_reads(self) -> None:
-    """Keep bulk-in transfers pending on the open FTDI chip; if they cannot start, read with
-    libftdi (`_ftdi_read_frame`).
-
-    Not while capture or validation is active: their replay needs every read to pass `FTDI.read`.
-    The queued reads belong to the event loop that ran setup.
+    Raises:
+      RuntimeError: if the reader is connected over USB.
     """
-    if get_capture_or_validation_active():
-      logger.info("capture or validation active: reading with libftdi")
-      return
-    try:
-      reads = QueuedReads.from_device(self._ftdi.dev)
-      reads.start()
-    except Exception as e:  # no open pylibftdi device, no libusb handle, nothing submitted
-      logger.warning("bulk-in transfers not kept pending (%s); reading with libftdi", e)
-      return
-    self._queued_reads = reads
-
-  def _stop_queued_reads(self) -> None:
-    """Cancel and free the pending bulk-in transfers, if any; libftdi reads from then on."""
-    reads, self._queued_reads = self._queued_reads, None
-    if reads is not None:
-      reads.stop()
-
-  async def _ftdi_setup(self) -> None:
-    """Open the FTDI port at 125000 baud, 8N1, latency 2 ms, and keep bulk-in transfers pending."""
-    self._stop_queued_reads()  # a second setup reopens the device under them
-    await self._ftdi.setup()
-    await self._ftdi.set_baudrate(125000)
-    await self._ftdi.set_line_property(8, 0, 0)  # 8N1
-    await self._ftdi.set_latency_timer(LATENCY_TIMER)
-    self._start_queued_reads()
-
-  async def _ftdi_write(self, frame: bytes) -> None:
-    """Write a whole frame; raise OSError on a short write."""
-    written = await self._ftdi.write(frame)
-    if written != len(frame):
-      raise OSError(f"Short write: sent {written} of {len(frame)} bytes")
-
-  async def _ftdi_read_frame(self) -> bytes:
-    """Read one FTDI reply frame.
-
-    CR (0x0D) also occurs inside payloads, so once the header is in, the size field decides
-    when the frame is complete. Bytes before an STX are dropped to resync. Before the header,
-    ``_PACKET_READ_TIMEOUT`` bounds the wait; after it, only a silence of
-    ``_FRAME_STALL_TIMEOUT`` or the ``_FRAME_HARD_CAP`` ends the read, as long replies
-    stream in bursts.
-
-    Returns:
-      The frame, possibly short of its size field on a stall; the caller validates it.
-    """
-    data = b""
-    expected_size: Optional[int] = None
-    end_byte_found = False
-    start = time.time()
-    last_data_time = start
-
-    while True:
-      chunk = await self._ftdi.read(self._FTDI_READ_CHUNK)
-      if chunk:
-        data += chunk
-        last_data_time = time.time()
-
-        if expected_size is None and data[0] != FTDI_STX:
-          index = data.find(FTDI_STX)
-          data = data[index:] if index != -1 else b""
-
-        end_byte_found = bool(data) and data[-1] == FTDI_CR
-
-        if expected_size is None and len(data) >= 3:
-          expected_size = int.from_bytes(data[1:3], "big")
-          start = time.time()
-
-        if len(chunk) < self._FTDI_READ_CHUNK and end_byte_found:
-          if expected_size is None or len(data) >= expected_size:
-            break
-        if expected_size is not None and len(data) >= expected_size:
-          break
-
-        # The size is known, so ask for exactly the rest of the frame.
-        if expected_size is not None:
-          remainder = await self._ftdi.read(expected_size - len(data))
-          if remainder:
-            data += remainder
-            last_data_time = time.time()
-            end_byte_found = data[-1] == FTDI_CR
-            if len(data) >= expected_size:
-              break
-      else:
-        if end_byte_found and (expected_size is None or len(data) >= expected_size):
-          break
-        now = time.time()
-        if expected_size is None:
-          timed_out = now - start > self._PACKET_READ_TIMEOUT
-        else:
-          timed_out = (
-            now - last_data_time > self._FRAME_STALL_TIMEOUT or now - start > self._FRAME_HARD_CAP
-          )
-        if timed_out:
-          if expected_size is not None and 0 < len(data) < expected_size:
-            data += await self._ftdi.read(expected_size - len(data))
-          break
-        await asyncio.sleep(0.0001)
-
-    if expected_size is not None and len(data) >= expected_size:
-      return data[:expected_size]
-    return data
-
-  def _get_queued_reads(self) -> Optional[QueuedReads]:
-    """The queued reads while they run; None once they stopped by themselves (e.g. the device
-    was removed), and libftdi reads from then on."""
-    reads = self._queued_reads
-    if reads is not None and not reads.running:
-      logger.warning("bulk-in transfers stopped (%s); reading with libftdi", reads.error)
-      self._stop_queued_reads()
-      return None
-    return reads
-
-  def _discard_unread(self, reads: QueuedReads) -> None:
-    """Drop the bytes the queued reads hold unread, logging them at the I/O level."""
-    data, _ = reads.take()
-    if data:
-      logger.log(LOG_LEVEL_IO, "[%s] discarded %s", self._ftdi.device_id, data)
-
-  async def _ftdi_read_queued_frame(self, reads: QueuedReads) -> bytes:
-    """Read one FTDI reply frame from the queued reads, with `_ftdi_read_frame`'s rules.
-
-    Bytes before an STX are dropped and the size field ends the frame. It waits until the pending
-    reads receive bytes: ``_PACKET_READ_TIMEOUT`` bounds the wait for the header; after it, a
-    silence of ``_FRAME_STALL_TIMEOUT`` or the ``_FRAME_HARD_CAP``. Packets flagging a line error
-    (an overrun loses bytes) are warned about. The IO log gets one line per reply: every byte
-    taken, dropped ones included.
-
-    Returns:
-      The frame, possibly short of its size field on a stall; the caller validates it.
-    """
-    data = bytearray()
-    received = bytearray()
-    expected_size: Optional[int] = None
-    line_errors = 0
-    start = time.time()
-    last_data_time = start
-    try:
-      while True:
-        chunk, errors = reads.take()
-        line_errors += errors
-        now = time.time()
-        if chunk:
-          received += chunk
-          data += chunk
-          last_data_time = now
-          if expected_size is None:
-            index = data.find(FTDI_STX)
-            del data[: index if index != -1 else len(data)]
-            if len(data) >= 3:
-              expected_size = int.from_bytes(data[1:3], "big")
-              start = now
-          if expected_size is not None and len(data) >= expected_size:
-            break
-        elif not reads.running:
-          break
-        if expected_size is None:
-          deadline = start + self._PACKET_READ_TIMEOUT
-        else:
-          deadline = min(last_data_time + self._FRAME_STALL_TIMEOUT, start + self._FRAME_HARD_CAP)
-        if now > deadline:
-          break
-        await reads.wait(deadline - now)
-    finally:  # a cancelled read's bytes too
-      if received:
-        logger.log(LOG_LEVEL_IO, "[%s] read %s", self._ftdi.device_id, bytes(received))
-    if line_errors:
-      logger.warning("%d packets of this reply flagged a line error (bytes lost)", line_errors)
-    if expected_size is not None and len(data) >= expected_size:
-      return bytes(data[:expected_size])
-    return bytes(data)
-
-  async def _ftdi_exchange(self, payload: bytes) -> bytes:
-    """Send one payload over FTDI and return the validated reply payload."""
-    reads = self._get_queued_reads()
-    if reads is None:
-      await self._ftdi_write(ftdi_wrap_payload(payload))
-      frame = await self._ftdi_read_frame()
-    else:
-      self._discard_unread(reads)  # bytes read before the command is sent are not its reply
-      await self._ftdi_write(ftdi_wrap_payload(payload))
-      frame = await self._ftdi_read_queued_frame(reads)
-    ftdi_validate_frame(frame)
-    return ftdi_extract_payload(frame)
+    if self.use_io != "ftdi":
+      raise RuntimeError("the CLARIOstar is connected over USB, not FTDI")
+    interface = self._ftdi_interface
+    if interface is None or interface.io is not self.io:
+      if interface is not None:
+        interface.stop()
+      interface = BMGFTDIInterface(
+        cast(FTDI, self.io),
+        header=FTDI_HEADER,
+        baudrate=125000,
+        packet_read_timeout=self._PACKET_READ_TIMEOUT,
+        frame_stall_timeout=self._FRAME_STALL_TIMEOUT,
+        frame_hard_cap=self._FRAME_HARD_CAP,
+      )
+      self._ftdi_interface = interface
+    return interface
 
   # -- USB interface ---------------------------------------------------------
 
@@ -461,17 +312,17 @@ class CLARIOstarDriver:
     A message longer than one packet waits for the reader's acknowledgement before its
     continuation packets; a long reply is acknowledged by the host before its continuations.
     """
-    packets = usb_wrap_payload(payload)
+    packets = usb_wrap_payload(payload, header=FTDI_HEADER)
     await self._usb.write(packets[0])
     if len(packets) > 1:
       ack = await self._usb_read_packet()
-      if usb_packet_type(ack) != USB_ACK:
+      if usb_packet_type(ack, header=FTDI_HEADER) != USB_ACK:
         raise FrameError(f"Expected a USB acknowledgement, got {ack.hex()}")
       for packet in packets[1:]:
         await self._usb.write(packet)
 
     first = await self._usb_read_packet()
-    packet_type = usb_packet_type(first)
+    packet_type = usb_packet_type(first, header=FTDI_HEADER)
     if packet_type == USB_SINGLE:
       return bytes(first[USB_HEADER_SIZE:])
     if packet_type != USB_FIRST:
@@ -482,7 +333,7 @@ class CLARIOstarDriver:
     await self._usb.write(USB_HOST_ACK)
     while len(reply) < total:
       packet = await self._usb_read_packet()
-      if usb_packet_type(packet) != USB_CONTINUATION:
+      if usb_packet_type(packet, header=FTDI_HEADER) != USB_CONTINUATION:
         raise FrameError(f"Expected a USB continuation packet, got {packet.hex()}")
       reply += packet[USB_HEADER_SIZE:]
     return bytes(reply[:total])
@@ -492,44 +343,16 @@ class CLARIOstarDriver:
   async def _purge_rx(self) -> None:
     """Discard unread reply bytes."""
     if self.use_io == "ftdi":
-      await self._ftdi.usb_purge_rx_buffer()
-      if self._queued_reads is not None:
-        self._discard_unread(self._queued_reads)
+      await self._ftdi.purge_rx()
     else:
       await self._usb.drain()
 
   async def _drain_rx(self) -> None:
-    """Discard reply bytes until none has come for ``_FRAME_STALL_TIMEOUT``, at most
-    ``_FRAME_HARD_CAP``: the rest of a reply the reader is still sending.
-
-    The reader sends a reply it has started to its end, a data page too (61,508 B over about
-    7 s); after a cancelled read its rest would reach the next command's read. The queued reads'
-    bytes are logged on one I/O line, libftdi's by `FTDI.read`.
-    """
-    if self.use_io != "ftdi":
+    """Discard the rest of a reply the reader is still sending (`BMGFTDIInterface.drain_rx`)."""
+    if self.use_io == "ftdi":
+      await self._ftdi.drain_rx()
+    else:
       await self._usb.drain()
-      return
-    reads = self._get_queued_reads()
-    drained = bytearray()
-    start = last_data_time = time.monotonic()
-    while True:
-      if reads is not None:
-        data, _ = reads.take()
-      else:
-        data = await self._ftdi.read(self._FTDI_READ_CHUNK)
-      now = time.monotonic()
-      if data:
-        drained += data
-        last_data_time = now
-      deadline = min(last_data_time + self._FRAME_STALL_TIMEOUT, start + self._FRAME_HARD_CAP)
-      if now >= deadline:
-        break
-      if reads is not None:
-        await reads.wait(deadline - now)
-      elif not data:
-        await asyncio.sleep(LATENCY_TIMER / 1000)  # the chip sends at least once per period
-    if reads is not None and drained:
-      logger.log(LOG_LEVEL_IO, "[%s] discarded %s", self._ftdi.device_id, bytes(drained))
 
   async def exchange(self, payload: bytes) -> bytes:
     """Send one logical payload and return the reply payload.
@@ -539,7 +362,7 @@ class CLARIOstarDriver:
     """
     async with self._lock:
       if self.use_io == "ftdi":
-        return await self._ftdi_exchange(payload)
+        return await self._ftdi.exchange(payload)
       return await self._usb_exchange(payload)
 
   async def _exchange_with_retries(self, payload: bytes, retries: int) -> bytes:
@@ -722,77 +545,143 @@ class CLARIOstarDriver:
       timeout=self.default_read_timeout, poll_interval=self.default_poll_interval
     )
 
-  async def request_parameters(self) -> Dict[str, int]:
-    """Request the reader's stored parameters, by the reader's own names (see ``PARAMETER_TABLE``).
-
-    The reader answers all of them in one reply. Its project and serial number are left out.
+  async def _request_parameters_reply(self) -> bytes:
+    """Request the reader's stored parameters (REQUEST `07`) and return the whole reply.
 
     Raises:
-      ValueError: if the reply is not a whole parameters reply, or comes from firmware outside
-        ``DECODED_FIRMWARE``.
+      ValueError: if the reply is not a whole stored parameters reply.
     """
     payload = await self.send_command(
       self.CommandFamily.REQUEST, self.Command.PARAMETERS, parameters=b"\x00\x00\x00\x00\x00"
     )
     if not payload or payload[0] != self.Command.PARAMETERS or len(payload) < 260:
-      raise ValueError(f"not a whole parameters reply: {len(payload)} bytes")
+      raise ValueError(f"not a whole stored parameters reply: {len(payload)} bytes")
+    return payload
+
+  @staticmethod
+  def _decode_parameters(payload: bytes) -> Dict[str, int]:
+    """A stored parameters reply's values, by key (see ``PARAMETER_TABLE``).
+
+    Raises:
+      ValueError: if the reply comes from firmware outside ``DECODED_FIRMWARE``.
+    """
     parameters = {
       name: int.from_bytes(
-        payload[address + REPLY_OFFSET : address + REPLY_OFFSET + size], "little"
+        payload[address + REPLY_OFFSET : address + REPLY_OFFSET + size],
+        "little",
+        signed=name in SIGNED_PARAMETERS,
       )
       for name, address, size in PARAMETER_TABLE
     }
-    if not DECODED_FIRMWARE[0] <= parameters["Firmware version"] <= DECODED_FIRMWARE[1]:
-      raise ValueError(f"parameters of firmware {parameters['Firmware version']} are not decoded")
+    if not DECODED_FIRMWARE[0] <= parameters["firmware_version"] <= DECODED_FIRMWARE[1]:
+      raise ValueError(
+        f"stored parameters of firmware {parameters['firmware_version']} are not decoded"
+      )
     return parameters
+
+  @staticmethod
+  def _decode_serial_number(payload: bytes) -> str:
+    """A stored parameters reply's serial number, "NNN-NNNN" (``SERIAL_NUMBER_ADDRESSES``)."""
+    first, second = (
+      int.from_bytes(payload[address + REPLY_OFFSET : address + REPLY_OFFSET + 2], "little")
+      for address in SERIAL_NUMBER_ADDRESSES
+    )
+    return f"{first:03d}-{second:04d}"
+
+  def _get_link_serial_number(self) -> Optional[str]:
+    """The serial number the reader was opened by: the FTDI chip's or the USB device's; None if
+    it was opened by address."""
+    fields = self.io.serialize()
+    if fields.get("usb_address") or fields.get("device_address"):
+      return None
+    return fields.get("device_id") or fields.get("serial_number")
+
+  async def request_parameters(self) -> Dict[str, int]:
+    """Request the reader's stored parameters, by key (see ``PARAMETER_TABLE``).
+
+    The reader answers all of them in one reply. Its serial number is left out: `discover` reads
+    it.
+
+    Raises:
+      ValueError: if the reply is not a whole stored parameters reply, or comes from firmware
+        outside ``DECODED_FIRMWARE``.
+    """
+    return self._decode_parameters(await self._request_parameters_reply())
 
   async def request_fluorescence_channels(self) -> int:
     """Request the number of fluorescence measurement channels."""
-    return (await self.request_parameters())["No. of fluorescence measurement channels"]
+    return (await self.request_parameters())["fluorescence_measurement_channel_count"]
 
   async def request_luminescence_channels(self) -> int:
     """Request the number of luminescence measurement channels."""
-    return (await self.request_parameters())["No. of luminescence measurement channels"]
+    return (await self.request_parameters())["luminescence_measurement_channel_count"]
 
   async def request_time_resolved_fluorescence_channels(self) -> int:
     """Request the number of time-resolved fluorescence measurement channels."""
     parameters = await self.request_parameters()
-    return parameters["No. of time-resolved fluorescence meas. channels"]
+    return parameters["time_resolved_fluorescence_measurement_channel_count"]
 
   async def request_absorbance_available(self) -> bool:
     """Request whether absorbance measurements are available."""
-    return (await self.request_parameters())["Absorbance measurement option"] != 0
+    return (await self.request_parameters())["absorbance_measurement_option"] != 0
 
   async def request_alpha_screen_available(self) -> bool:
     """Request whether AlphaScreen measurements are available."""
-    return (await self.request_parameters())["AlphaScreen measurement option"] != 0
+    return (await self.request_parameters())["alpha_screen_measurement_option"] != 0
 
   async def request_fluorescence_polarization_available(self) -> bool:
     """Request whether fluorescence polarization measurements are available."""
     parameters = await self.request_parameters()
-    return parameters["Fluorescence polarization measurement option"] != 0
+    return parameters["fluorescence_polarization_measurement_option"] != 0
 
   async def request_bottom_measurement_available(self) -> bool:
     """Request whether measurements from below the plate are available."""
-    return (await self.request_parameters())["Bottom measurement option"] != 0
+    return (await self.request_parameters())["bottom_measurement_option"] != 0
 
   async def request_extended_temperature_range(self) -> bool:
     """Request whether the extended temperature range (10 to 65 C) is built in."""
-    return (await self.request_parameters())["Extended incubator"] != 0
+    return (await self.request_parameters())["extended_incubator"] != 0
 
   async def request_high_speed_shaking_allowed(self) -> bool:
     """Request whether shaking at 800-1100 rpm is allowed."""
-    return (await self.request_parameters())["High speed shaking allowed"] != 0
+    return (await self.request_parameters())["high_speed_shaking_allowed"] != 0
 
   async def request_well_1536_plates_supported(self) -> bool:
     """Request whether the reader is set up for 1536-well plates, an upgrade fitted to it."""
-    return (await self.request_parameters())["1536 well measurements enabled"] != 0
+    return (await self.request_parameters())["well_1536_measurements_enabled"] != 0
+
+  @staticmethod
+  def _decode_firmware_build_date(payload: bytes) -> str:
+    """A firmware info reply's compile date ("Nov 20 2020" at bytes 8-19), as "YYYY-MM-DD".
+
+    Raises:
+      ValueError: if the payload is not a firmware info reply, or its date is not one.
+    """
+    if not payload or payload[0] != 0x0A or len(payload) < 20:
+      raise ValueError(f"not a firmware info reply: {payload[:1].hex()}, {len(payload)} bytes")
+    text = payload[8:20].split(b"\x00")[0].decode("ascii", errors="replace")
+    try:
+      month, day, year = text.split()
+      return f"{int(year):04d}-{_MONTHS.index(month) + 1:02d}-{int(day):02d}"
+    except ValueError:
+      raise ValueError(f"not a firmware build date: {text!r}") from None
+
+  async def request_firmware_build_date(self) -> str:
+    """Request the day the reader's firmware was compiled (REQUEST `09`), as "YYYY-MM-DD".
+
+    Raises:
+      ValueError: if the reply is not a firmware info reply with a date.
+    """
+    payload = await self.send_command(
+      self.CommandFamily.REQUEST, self.Command.FIRMWARE_INFO, parameters=b"\x00" * 5
+    )
+    return self._decode_firmware_build_date(payload)
 
   async def _set_parameter(self, name: str, value: int) -> None:
     """Write one of the reader's stored parameters (see ``PARAMETER_TABLE``).
 
     Args:
-      name: the parameter, by the reader's own name.
+      name: the parameter's key in ``PARAMETER_TABLE``.
       value: the new value, unsigned, within the parameter's size.
 
     Raises:
@@ -818,6 +707,8 @@ class CLARIOstarDriver:
       self.absorbance = Absorbance(self)
     if self.configuration.fluorescence_channels and self.fluorescence is None:
       self.fluorescence = Fluorescence(self)
+    if self.configuration.luminescence_channels and self.luminescence is None:
+      self.luminescence = Luminescence(self)
 
   def _check_firmware_compatibility(self) -> None:
     """Log a warning if the firmware version has not been checked on hardware."""
@@ -830,21 +721,35 @@ class CLARIOstarDriver:
       )
 
   async def discover(self) -> None:
-    """Read the stored parameters into ``configuration``.
+    """Read the stored parameters into ``configuration``, the serial number with them, and the
+    firmware build date.
 
-    Fields stay unchanged when the reply is not decoded. The firmware version is reported twice
+    Fields stay unchanged when a reply is not decoded. The firmware version is reported twice
     (INIT reply, stored parameters); logs a warning if they disagree, or for a version not checked
-    on hardware.
+    on hardware, and if the serial number is not the one the reader was opened by.
     """
     versions = {"INIT reply": self.configuration.firmware_version}
-    # The stored parameters first, as the vendor software reads them right after INIT.
+    # The stored parameters first, right after INIT.
     try:
-      parameters = await self.request_parameters()
+      payload = await self._request_parameters_reply()
+      parameters = self._decode_parameters(payload)
     except ValueError as e:
       logger.warning("stored parameters not decoded (%s)", e)
     else:
-      versions["stored parameters"] = f"{parameters['Firmware version'] / 1000:.2f}"
+      versions["stored parameters"] = f"{parameters['firmware_version'] / 1000:.2f}"
       self.configuration.update_from_parameters(parameters)
+      self.configuration.serial_number = self._decode_serial_number(payload)
+      opened_by = self._get_link_serial_number()
+      if opened_by is not None and opened_by != self.configuration.serial_number:
+        logger.warning(
+          "the reader's serial number %s is not the one it was opened by, %s",
+          self.configuration.serial_number,
+          opened_by,
+        )
+    try:
+      self.configuration.firmware_build_date = await self.request_firmware_build_date()
+    except ValueError as e:
+      logger.warning("firmware build date not read (%s)", e)
     reported = {source: version for source, version in versions.items() if version is not None}
     if len(set(reported.values())) > 1:
       logger.warning(
@@ -913,8 +818,8 @@ class CLARIOstarDriver:
     return link + (f" ({', '.join(named)})" if named else "")
 
   def format_setup_summary(self) -> str:
-    """One block describing the reader that was found: how it is reached, its model and firmware,
-    and what is fitted.
+    """One block describing the reader that was found: how it is reached and every field of its
+    configuration; a field that was not read shows None.
 
     Returns:
       A multi-line summary, or a note that setup has not run.
@@ -922,39 +827,96 @@ class CLARIOstarDriver:
     c = self.configuration
     if c.model is None:
       return f"[{self.name}] not discovered yet"
-    temperature = "none"
-    if c.temperature_controller:
-      temperature = "10-65 C" if c.extended_temperature_range else "25-45 C"
-    measurements = [
-      label
-      for label, available in (
-        ("absorbance", c.absorbance_available),
-        ("fluorescence", c.fluorescence_channels),
-        ("luminescence", c.luminescence_channels),
-        ("time-resolved fluorescence", c.time_resolved_fluorescence_channels),
-        ("fluorescence polarization", c.fluorescence_polarization_available),
-        ("AlphaScreen", c.alpha_screen_available),
-      )
-      if available
-    ]
-    fitted = [
-      label
-      for label, present in (
-        ("pumps", c.pumps and any(c.pumps)),
-        ("stacker", c.stacker_connected),
-        ("barcode readers", c.barcode_readers),
-        ("atmospheric control unit", c.atmospheric_control_unit_connected),
-      )
-      if present
-    ]
+    standard = c.extended_red_photomultiplier_tube
+    if standard is not None:
+      standard = not c.extended_red_photomultiplier_tube or bool(c.dual_photomultiplier_tubes)
+    pumps = c.pumps or (None, None, None)
+    barcode_readers = c.barcode_readers
+    groups: Tuple[Tuple[str, Tuple[Tuple[str, Any], ...]], ...] = (
+      (
+        "Measurement modes",
+        (
+          ("absorbance", c.absorbance_available),
+          ("fluorescence", _flag(c.fluorescence_channels)),
+          ("luminescence", _flag(c.luminescence_channels)),
+          ("time-resolved fluorescence", _flag(c.time_resolved_fluorescence_channels)),
+          ("fluorescence polarization, visible", c.fluorescence_polarization_available),
+          (
+            "fluorescence polarization, ultraviolet",
+            c.fluorescence_polarization_ultraviolet_available,
+          ),
+          ("AlphaScreen", c.alpha_screen_available),
+        ),
+      ),
+      (
+        "Detectors",
+        (
+          ("standard photomultiplier", standard),
+          ("extended-red photomultiplier", c.extended_red_photomultiplier_tube),
+          ("dual photomultipliers", c.dual_photomultiplier_tubes),
+          ("crossover", c.photomultiplier_tube_crossover),
+        ),
+      ),
+      (
+        "Optics",
+        (
+          ("monochromators", c.linear_variable_filters),
+          ("spectrometer", c.spectrometer),
+          ("bottom optic", c.bottom_measurement_available),
+        ),
+      ),
+    )
+    details = [f"build {c.firmware_build}"] if c.firmware_build is not None else []
+    details += [f"built {c.firmware_build_date}"] if c.firmware_build_date else []
+    firmware_details = f" ({', '.join(details)})" if details else ""
     lines = [
       f"[{self.name}] Connected on {self._describe_link()}",
       f"  Model: {c.model}",
-      f"  Firmware: {c.firmware_version or 'unknown'}",
-      f"  Measurements: {', '.join(measurements) or 'none reported'}",
-      f"  Temperature control: {temperature}",
-      f"  Fitted: {', '.join(fitted) or 'nothing else'}",
+      f"  Serial number: {c.serial_number}",
+      f"  Firmware: {c.firmware_version}{firmware_details}",
+      f"  Mainboard revision: {c.mainboard_revision}",
     ]
+
+    def add_group(title: str, rows: Tuple[Tuple[str, Any], ...]) -> None:
+      lines.append(f"  {title}:")
+      lines.extend(f"    - {label}: {value}" for label, value in rows)
+
+    for title, rows in groups:
+      add_group(title, rows)
+    if self.fluorescence is not None:
+      slots = self.fluorescence.configuration
+      defaults = Fluorescence._compute_filter_slots(c.monochromator_slides) is None
+      lines.append(
+        f"  Filter slots: excitation {slots.excitation_filter_slots}, dichroic "
+        f"{slots.dichroic_filter_slots}, emission {slots.emission_filter_slots}"
+        + (" (defaults: the slides are not reported)" if defaults else "")
+      )
+    add_group(
+      "Temperature control",
+      (
+        ("temperature controller", c.temperature_controller),
+        ("channels", c.temperature_controller_channels),
+        ("extended range (10-65 C)", c.extended_temperature_range),
+      ),
+    )
+    lines.append(f"  High-speed shaking: {c.high_speed_shaking_allowed}")
+    lines.append(f"  1536-well plates: {c.well_1536_plates_supported}")
+    add_group(
+      "Pumps",
+      tuple(
+        (f"pump {index}", None if c.pumps is None else kind or False)
+        for index, kind in enumerate(pumps, 1)
+      ),
+    )
+    add_group(
+      "Barcode readers",
+      tuple(
+        (position, None if barcode_readers is None else barcode_readers.get(position, False))
+        for position in BARCODE_READER_POSITIONS
+      ),
+    )
+    lines.append(f"  Stacker: {c.stacker_connected}")
+    lines.append(f"  Atmospheric control unit: {c.atmospheric_control_unit_connected}")
     return "\n".join(lines)
 
   async def setup(self) -> None:
@@ -966,7 +928,7 @@ class CLARIOstarDriver:
     """
     logger.debug("setting up the CLARIOstar on %s ...", self._describe_link())
     if self.use_io == "ftdi":
-      await self._ftdi_setup()
+      await self._ftdi.setup()
     else:
       logger.warning(
         "the CLARIOstar USB interface has not been tested on hardware with this driver; please "
@@ -1057,7 +1019,10 @@ class CLARIOstarDriver:
     Raises:
       RuntimeError: if a plate is still in the reader, unless `accept_plate_left_in_device`; the
         drawer is opened and the connection stays open.
+      ValueError: if the plate on the plate holder is too tall to close the drawer with; the
+        drawer stays open and the connection stays open.
     """
     await self._shut_down(accept_plate_left_in_device)
-    self._stop_queued_reads()  # before the device handle under them is closed
+    if self._ftdi_interface is not None:
+      self._ftdi_interface.stop()  # before the device handle under them is closed
     await self.io.stop()

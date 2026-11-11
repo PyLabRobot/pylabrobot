@@ -15,6 +15,7 @@ from pylabrobot.bmg_labtech.clariostar.driver.features.temperature_controller im
   TemperatureController,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
+  FIRMWARE_INFO_REPLY,
   PARAMETERS_REPLY,
   REFUSED_TEMPERATURE,
   STATUS_IDLE,
@@ -45,7 +46,7 @@ def make_temperature_controller(io: FakeFTDI, extended: bool = False) -> Tempera
 class GatingTests(unittest.IsolatedAsyncioTestCase):
   async def discover_with(self, temperature_controller_fitted: bool):
     io = FakeFTDI()
-    io.replies = [STATUS_IDLE, PARAMETERS_REPLY]
+    io.replies = [STATUS_IDLE, PARAMETERS_REPLY, STATUS_IDLE, FIRMWARE_INFO_REPLY]
     driver = make_driver(io)
     driver.configuration = decoded()
     driver.configuration.temperature_controller = temperature_controller_fitted

@@ -534,10 +534,12 @@ class XArm:
     # The reply arrives when the move ends, not when the arm stops. Two reads in a row at the
     # target say it has: the extremes of a swing never are. Each read records where the arm is.
     self.update_location_by_reference_point(x)
+    target = c.x_mm_to_increments(x)
     at_target = 0
     for _ in range(settle_reads):
-      reached = await self.request_position()
-      at_target = at_target + 1 if abs(reached - x) <= c.x_mm_per_increment else 0
+      # In increments: in mm, one increment off can come out a hair over x_mm_per_increment.
+      reached = c.x_mm_to_increments(await self.request_position())
+      at_target = at_target + 1 if abs(reached - target) <= 1 else 0
       if at_target == 2:
         return resp
     logger.warning(

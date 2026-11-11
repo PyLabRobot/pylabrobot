@@ -30,6 +30,8 @@ runs:
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.version }}
+        cache: pip
+        cache-dependency-path: pyproject.toml
     - name: Install Dependencies
       run: |
         if [ "${{ inputs.extra }}" = "<none>" ]; then

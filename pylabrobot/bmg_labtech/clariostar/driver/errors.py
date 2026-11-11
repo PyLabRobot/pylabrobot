@@ -2,15 +2,6 @@
 
 from typing import Dict, Optional, Tuple
 
-
-class FrameError(Exception):
-  """A reply frame is malformed, truncated, or missing."""
-
-
-class ChecksumError(FrameError):
-  """An FTDI reply frame's checksum does not match its bytes."""
-
-
 # Reply byte 1 bits that put quit codes in bytes 6-10 of a type 0x01 reply.
 REFUSED_BIT = 1 << 4
 WARNING_BIT = 1 << 7
@@ -34,8 +25,8 @@ def parse_warning_codes(reply: bytes) -> Optional[Tuple[int, int, int, int, int]
   return _quit_codes(reply, WARNING_BIT)
 
 
-# What the first quit code means, for the codes seen in replies from a reader. 1-3 mean the reader
-# received a malformed frame.
+# What the first quit code means, for the codes seen in replies from a reader, and 242 and 243 not
+# seen yet. 1-3 mean the reader received a malformed frame.
 QUIT_CODE_DESCRIPTIONS: Dict[int, str] = {
   1: "the reader received a frame with a wrong checksum",
   2: "the reader received a frame with a wrong end byte",
@@ -48,6 +39,8 @@ QUIT_CODE_DESCRIPTIONS: Dict[int, str] = {
   202: "the reader is busy",
   213: "no measurement results are available",
   214: "no test run is active",
+  242: "the wellplate sensor failed or could not be read",
+  243: "no wellplate is inserted, or the focal height is too low for the one detected",
   250: "the motor controller reported a collision",
 }
 

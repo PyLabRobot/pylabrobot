@@ -1,134 +1,165 @@
-"""The reader's stored parameters: name, address and size in bytes, read with REQUEST 0x07.
+"""The reader's stored parameters: key, address and size in bytes, read with REQUEST 0x07.
 
-The names are the reader's own. The project and serial number are stored too and left out here.
+Each key describes the stored value; the table is grouped by what the values are for. The serial
+number is not in the table: it is the project number and the reader's number, at
+`SERIAL_NUMBER_ADDRESSES`.
 """
 
 from typing import Tuple
 
-# A parameter at address n is reply byte n + 7; values are unsigned, little endian.
+# A parameter at address n is reply byte n + 7; values are little endian.
 REPLY_OFFSET = 7
 
+# The serial number "NNN-NNNN": the project number (u16 at 154), then the reader's number (156).
+SERIAL_NUMBER_ADDRESSES = (154, 156)
+
 PARAMETER_TABLE: Tuple[Tuple[str, int, int], ...] = (
-  ("EEPROM parameter list already initialized", 0, 1),
-  ("Max. number of allowed temp. errors before warning", 3, 1),
-  ("Exhibition demo mode", 22, 2),
-  ("Extended incubator", 134, 1),
-  ("Use microplate sensor", 33, 1),
-  ("Skip monochromator calibration", 10, 1),
-  ("No additional K factor determination after gain adj.", 44, 1),
-  ("Use ultra fast XY motor profile", 38, 1),
-  ("High speed shaking allowed", 139, 1),
-  ("No calibration of XY transport system after shaking", 15, 1),
-  ("Reader is integration unit", 145, 1),
-  ("No. of fluorescence measurement channels", 132, 1),
-  ("Excitation source for fluorescence testruns", 58, 1),
-  ("No. of time-resolved fluorescence meas. channels", 142, 1),
-  ("Fluorescence polarization measurement option", 143, 1),
-  ("No. of luminescence measurement channels", 128, 1),
-  ("Mode for internal online blank correction (FI)", 61, 1),
-  ("Mode for internal online blank correction (LUM)", 2, 1),
-  ("Absorbance measurement option", 133, 1),
-  ("0/100% absorbance data measurement mode", 31, 1),
-  ("Intensity value for flash lamp HV power supply (ABS)", 12, 2),
-  ("AlphaScreen measurement option", 135, 1),
-  ("Excitation source for AlphaScreen testruns", 59, 1),
-  ("Flash lamp stress warning limit", 80, 2),
-  ("Alternative flash rate", 136, 2),
-  ("Alternative flash rate methods", 138, 1),
-  ("Bottom measurement option", 141, 1),
-  ("PMT configuration", 129, 1),
-  ("Raw data correction factor IR excitation", 66, 2),
-  ("Raw data correction factor IR emission", 68, 2),
-  ("1536 well measurements enabled", 140, 1),
-  ("Excitation optic slide not built in", 144, 1),
-  ("Fluorescence AutoGain gain value level 1 (PMT1)", 160, 2),
-  ("Fluorescence AutoGain gain value level 2 (PMT1)", 198, 2),
-  ("Fluorescence AutoGain gain value level 3 (PMT1)", 202, 2),
-  ("Fluorescence AutoGain gain value level 4 (PMT1)", 204, 2),
-  ("Fluorescence AutoGain gain value level 5 (PMT1)", 250, 2),
-  ("Luminescence AutoGain gain value level 1 (PMT1)", 246, 2),
-  ("Luminescence AutoGain gain value level 2 (PMT1)", 248, 2),
-  ("Fluorescence AutoGain gain value level 1 (PMT2)", 90, 2),
-  ("Fluorescence AutoGain gain value level 2 (PMT2)", 92, 2),
-  ("Fluorescence AutoGain gain value level 3 (PMT2)", 94, 2),
-  ("Fluorescence AutoGain gain value level 4 (PMT2)", 96, 2),
-  ("Fluorescence AutoGain gain value level 5 (PMT2)", 98, 2),
-  ("Luminescence AutoGain gain value level 1 (PMT2)", 100, 2),
-  ("Luminescence AutoGain gain value level 2 (PMT2)", 102, 2),
-  ("AutoGain calibration procedure enabled", 82, 1),
-  ("Fan 1 speed", 39, 2),
-  ("Fan 2 speed", 76, 2),
-  ("Fan 2 busy speed", 210, 1),
-  ("Fan 2 idle speed", 211, 1),
-  ("Fan 2 cover open speed", 212, 1),
-  ("Fan 2 power-on speed", 213, 1),
-  ("Fan 2 power-on time", 214, 2),
-  ("Fan 2 after test run speed", 216, 1),
-  ("Fan 2 after test run time", 218, 2),
-  ("Fan 2 speed when target temp. > threshold temp. 1", 232, 1),
-  ("Threshold temperature 1 for fan speed regulation", 234, 2),
-  ("Fan 2 speed when target temp. > threshold temp. 2", 233, 1),
-  ("Threshold temperature 2 for fan speed regulation", 236, 2),
-  ("Fan 2 speed after software termination", 238, 1),
-  ("Fan 2 after software termination time", 240, 2),
-  ("Syringe volume pump 1", 35, 1),
-  ("Syringe volume pump 2", 36, 1),
-  ("Pull back volume after injection (air volume)", 34, 1),
-  ("Prime speed pump 1", 4, 1),
-  ("Prime speed pump 2", 5, 1),
-  ("Invert dispensing mode for pump 1", 6, 1),
-  ("Invert dispensing mode for pump 2", 7, 1),
-  ("Stroke volume for pump 1 priming", 8, 1),
-  ("Stroke volume for pump 2 priming", 9, 1),
-  ("Distance between injection needles and microplate", 16, 1),
-  ("Distance between aperture spoon and microplate", 30, 1),
-  ("Lense protection mode", 60, 1),
-  ("Focal length top optical system [1/10 mm]", 170, 2),
-  ("Focal length bottom optical system [1/10 mm]", 206, 2),
-  ("Thickness of the microplate carrier [0.01mm]", 208, 2),
-  ("Top focus z height correction for filters type 1", 70, 1),
-  ("Top focus z height correction for filters type 2", 71, 1),
-  ("Top focus z height correction for filters type 3", 72, 1),
-  ("Top focus z height correction for filters type 4", 73, 1),
-  ("Temperature control 1 offset", 166, 2),
-  ("Temperature control 2 offset", 168, 2),
-  ("Temperature sensor 1 offset", 243, 3),
-  ("Temperature sensor 2 offset", 244, 3),
-  ("X offset 1 (standard top measurement position)", 150, 2),
-  ("Y offset 1 (standard top measurement position)", 152, 2),
-  ("X offset 2 (standard bottom measurement position)", 188, 2),
-  ("Y offset 2 (standard bottom measurement position)", 190, 2),
-  ("X offset 3 (spectrometer measurement position)", 192, 2),
-  ("Y offset 3 (spectrometer measurement position)", 194, 2),
-  ("X offset 6 (pump 1+2 injection position)", 228, 2),
-  ("Y offset 6 (pump 1+2 injection position)", 230, 2),
-  ("Z offset for optic focus system top", 164, 2),
-  ("Z offset for optic focus system bottom", 176, 2),
-  ("Offset for Z motor plate detection / needle transp.", 200, 2),
-  ("Z offset for aperture fine adjustment", 217, 1),
-  ("Offset for top/bottom switching slide", 162, 2),
-  ("Offset for PMT slide", 196, 2),
-  ("X transport lock position", 172, 2),
-  ("Y transport lock position", 174, 2),
-  ("Offset Scan: measurement values threshold", 45, 1),
-  ("Front plate barcode Y position", 48, 2),
-  ("Front plate barcode scanning resolution", 54, 2),
-  ("Right plate barcode X position", 50, 2),
-  ("Right plate barcode scanning resolution", 56, 2),
-  ("X position for plate carrier under stack 1", 178, 2),
-  ("Y position for plate carrier under stack 1", 180, 2),
-  ("X position for plate carrier under stack 2", 182, 2),
-  ("Y position for plate carrier under stack 2", 184, 2),
-  ("XY movement order", 86, 1),
-  ("Measure stop times of single actions on wells", 40, 1),
-  ("Data logging mode", 42, 1),
-  ("Data logging mode 2", 43, 1),
-  ("Store reference channel values as channel B values", 85, 1),
-  ("Flash off (dark measurement)", 84, 1),
-  ("Top/bottom switch position", 64, 1),
-  ("Disable door sensor monitoring", 29, 1),
-  ("Number of calibration errors that have occurred", 14, 1),
-  ("Gain value for focus adjustment procedure", 74, 2),
-  ("Firmware version", 158, 2),
-  ("Number of test runs performed", 18, 4),
+  # The reader's own counters and markers.
+  ("eeprom_parameter_list_initialized", 0, 1),
+  ("calibration_error_count", 14, 1),
+  ("test_run_count", 18, 4),
+  ("firmware_version", 158, 2),
+  # Fitted options.
+  ("luminescence_measurement_channel_count", 128, 1),
+  ("photomultiplier_tube_configuration", 129, 1),
+  ("fluorescence_measurement_channel_count", 132, 1),
+  ("absorbance_measurement_option", 133, 1),
+  ("extended_incubator", 134, 1),
+  ("alpha_screen_measurement_option", 135, 1),
+  ("high_speed_shaking_allowed", 139, 1),
+  ("well_1536_measurements_enabled", 140, 1),
+  ("bottom_measurement_option", 141, 1),
+  ("time_resolved_fluorescence_measurement_channel_count", 142, 1),
+  ("fluorescence_polarization_measurement_option", 143, 1),
+  ("no_excitation_optic_slide", 144, 1),
+  ("integration_unit", 145, 1),
+  # Measurement.
+  ("luminescence_online_blank_correction_mode", 2, 1),
+  ("skip_monochromator_calibration", 10, 1),
+  ("absorbance_flash_lamp_high_voltage_intensity", 12, 2),  # 0 brightest to 4095 dimmest
+  ("absorbance_0_100_percent_measurement_mode", 31, 1),
+  ("measure_well_action_stop_times", 40, 1),
+  ("no_k_factor_determination_after_gain_adjustment", 44, 1),
+  ("offset_scan_measurement_threshold", 45, 1),  # percent
+  ("fluorescence_test_run_excitation_source", 58, 1),
+  ("alpha_screen_test_run_excitation_source", 59, 1),
+  ("lens_protection_mode", 60, 1),
+  ("fluorescence_intensity_online_blank_correction_mode", 61, 1),
+  ("top_bottom_switch_position", 64, 1),
+  ("focus_adjustment_gain", 74, 2),
+  ("flash_lamp_stress_warning_limit", 80, 2),  # 0.1 Hz
+  ("auto_gain_calibration_enabled", 82, 1),
+  ("flash_off_dark_measurement", 84, 1),
+  ("store_reference_channel_as_channel_b", 85, 1),
+  ("alternative_flash_rate", 136, 2),  # Hz
+  ("alternative_flash_rate_methods", 138, 1),  # bits
+  # Auto-gain levels, by photomultiplier tube.
+  ("fluorescence_auto_gain_level_1_photomultiplier_tube_1", 160, 2),
+  ("fluorescence_auto_gain_level_2_photomultiplier_tube_1", 198, 2),
+  ("fluorescence_auto_gain_level_3_photomultiplier_tube_1", 202, 2),
+  ("fluorescence_auto_gain_level_4_photomultiplier_tube_1", 204, 2),
+  ("fluorescence_auto_gain_level_5_photomultiplier_tube_1", 250, 2),
+  ("luminescence_auto_gain_level_1_photomultiplier_tube_1", 246, 2),
+  ("luminescence_auto_gain_level_2_photomultiplier_tube_1", 248, 2),
+  ("fluorescence_auto_gain_level_1_photomultiplier_tube_2", 90, 2),
+  ("fluorescence_auto_gain_level_2_photomultiplier_tube_2", 92, 2),
+  ("fluorescence_auto_gain_level_3_photomultiplier_tube_2", 94, 2),
+  ("fluorescence_auto_gain_level_4_photomultiplier_tube_2", 96, 2),
+  ("fluorescence_auto_gain_level_5_photomultiplier_tube_2", 98, 2),
+  ("luminescence_auto_gain_level_1_photomultiplier_tube_2", 100, 2),
+  ("luminescence_auto_gain_level_2_photomultiplier_tube_2", 102, 2),
+  # Optics: focus, slides and correction factors.
+  ("aperture_spoon_to_plate_distance", 30, 1),  # 0.1 mm
+  ("do_not_use_smoothed_focus_curve", 41, 1),
+  ("infrared_excitation_raw_data_correction_factor", 66, 2),  # x 0.01
+  ("infrared_emission_raw_data_correction_factor", 68, 2),  # x 0.01
+  ("top_focus_z_correction_filter_type_1", 70, 1),  # 0.01 mm
+  ("top_focus_z_correction_filter_type_2", 71, 1),  # 0.01 mm
+  ("top_focus_z_correction_filter_type_3", 72, 1),  # 0.01 mm
+  ("top_focus_z_correction_filter_type_4", 73, 1),  # 0.01 mm
+  ("top_bottom_slide_offset", 162, 2),  # steps
+  ("top_focus_z_offset", 164, 2),  # steps
+  ("top_optic_focal_length", 170, 2),  # 0.1 mm
+  ("bottom_focus_z_offset", 176, 2),  # steps
+  ("photomultiplier_tube_slide_offset", 196, 2),  # steps
+  ("bottom_optic_focal_length", 206, 2),  # 0.1 mm
+  ("aperture_fine_adjustment_z_offset", 217, 1),  # 0.1 mm
+  # Plate transport: positions and offsets.
+  ("no_xy_transport_calibration_after_shaking", 15, 1),
+  ("use_plate_sensor", 33, 1),
+  ("use_ultra_fast_xy_motor_profile", 38, 1),
+  ("xy_movement_order", 86, 1),
+  ("top_measurement_position_x_offset", 150, 2),  # steps
+  ("top_measurement_position_y_offset", 152, 2),  # steps
+  ("x_transport_lock_position", 172, 2),
+  ("y_transport_lock_position", 174, 2),
+  ("stack_1_carrier_x_position", 178, 2),
+  ("stack_1_carrier_y_position", 180, 2),
+  ("stack_2_carrier_x_position", 182, 2),
+  ("stack_2_carrier_y_position", 184, 2),
+  ("bottom_measurement_position_x_offset", 188, 2),  # steps
+  ("bottom_measurement_position_y_offset", 190, 2),  # steps
+  ("spectrometer_position_x_offset", 192, 2),  # steps
+  ("spectrometer_position_y_offset", 194, 2),  # steps
+  ("z_plate_detection_needle_transport_offset", 200, 2),  # steps
+  ("plate_carrier_thickness", 208, 2),  # 0.01 mm
+  ("injection_position_x_offset", 228, 2),
+  ("injection_position_y_offset", 230, 2),
+  # Pumps and injection.
+  ("pump_1_prime_speed", 4, 1),
+  ("pump_2_prime_speed", 5, 1),
+  ("pump_1_invert_dispensing_mode", 6, 1),
+  ("pump_2_invert_dispensing_mode", 7, 1),
+  ("pump_1_prime_stroke_volume", 8, 1),  # percent of the syringe volume
+  ("pump_2_prime_stroke_volume", 9, 1),  # percent of the syringe volume
+  ("injection_needle_to_plate_distance", 16, 1),  # 0.1 mm
+  ("do_not_use_prime_sensors", 17, 1),
+  ("injection_pull_back_air_volume", 34, 1),  # ul
+  ("pump_1_syringe_volume", 35, 1),
+  ("pump_2_syringe_volume", 36, 1),
+  ("inverted_smart_dispensing_mode", 79, 1),
+  # Barcode readers.
+  ("front_barcode_y_position", 48, 2),  # steps
+  ("right_barcode_x_position", 50, 2),  # steps
+  ("front_barcode_scanning_resolution", 54, 2),  # steps per mm
+  ("right_barcode_scanning_resolution", 56, 2),  # steps per mm
+  # Fans and temperature.
+  ("maximum_temperature_errors_before_warning", 3, 1),
+  ("power_on_incubation", 24, 2),  # 0 off, 1 temperature monitoring only, else the target in 0.1 C
+  ("fan_1_speed", 39, 1),  # percent, 0 controlled by the reader
+  ("fan_2_speed", 76, 2),  # percent, above 100 controlled by the reader
+  ("temperature_control_1_offset", 166, 2),  # 0.1 C
+  ("temperature_control_2_offset", 168, 2),  # 0.1 C
+  ("fan_2_busy_speed", 210, 1),  # percent
+  ("fan_2_idle_speed", 211, 1),  # percent
+  ("fan_2_cover_open_speed", 212, 1),  # percent
+  ("fan_2_power_on_speed", 213, 1),  # percent
+  ("fan_2_power_on_time", 214, 2),  # s
+  ("fan_2_after_test_run_speed", 216, 1),  # percent
+  ("fan_2_after_test_run_time", 218, 2),  # s
+  ("fan_2_speed_above_threshold_temperature_1", 232, 1),  # percent
+  ("fan_2_speed_above_threshold_temperature_2", 233, 1),  # percent
+  ("fan_threshold_temperature_1", 234, 2),  # 0.1 C
+  ("fan_threshold_temperature_2", 236, 2),  # 0.1 C
+  ("fan_2_after_software_termination_speed", 238, 1),  # percent
+  ("fan_2_after_software_termination_time", 240, 2),  # s
+  ("temperature_sensor_1_offset", 243, 1),  # 0.1 C
+  ("temperature_sensor_2_offset", 244, 1),  # 0.1 C
+  # Device.
+  ("exhibition_demo_mode", 22, 2),  # bits
+  ("disable_door_sensor_monitoring", 29, 1),
+  ("data_logging_mode", 42, 1),  # bits
+  ("data_logging_mode_2", 43, 1),  # bits
+)
+
+# The parameters that can be negative; the rest are unsigned.
+SIGNED_PARAMETERS = (
+  "top_bottom_slide_offset",
+  "temperature_control_1_offset",
+  "temperature_control_2_offset",
+  "x_transport_lock_position",
+  "y_transport_lock_position",
+  "spectrometer_position_x_offset",
+  "temperature_sensor_1_offset",
+  "temperature_sensor_2_offset",
 )

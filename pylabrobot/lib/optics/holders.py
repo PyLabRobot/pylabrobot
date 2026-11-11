@@ -9,7 +9,7 @@ from .filters import DichroicFilter, OpticalFilter, _FilterBase
 F = TypeVar("F", bound=_FilterBase)
 
 
-class _FilterSlideBase(Generic[F]):
+class FilterSlide(Generic[F]):
   """The filters a device holds on one side, by slot.
 
   Attributes:
@@ -74,21 +74,21 @@ class _FilterSlideBase(Generic[F]):
     return f"{type(self).__name__}({self.maximum_slots} slots, {{{', '.join(held)}}})"
 
 
-class ExcitationFilterSlide(_FilterSlideBase[OpticalFilter]):
+class ExcitationFilterSlide(FilterSlide[OpticalFilter]):
   """The excitation filters a device holds, by slot."""
 
   _CATEGORY = "excitation"
   _FILTER_CLASS = OpticalFilter
 
 
-class EmissionFilterSlide(_FilterSlideBase[OpticalFilter]):
+class EmissionFilterSlide(FilterSlide[OpticalFilter]):
   """The emission filters a device holds, by slot."""
 
   _CATEGORY = "emission"
   _FILTER_CLASS = OpticalFilter
 
 
-class DichroicFilterSlide(_FilterSlideBase[DichroicFilter]):
+class DichroicFilterSlide(FilterSlide[DichroicFilter]):
   """The dichroic filters a device holds, by slot."""
 
   _CATEGORY = "dichroic"

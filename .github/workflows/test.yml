@@ -8,6 +8,12 @@ on:
   pull_request_review:
   workflow_dispatch:
 
+# A newer push to the same pull request makes a running test run obsolete; every other run, e.g.
+# each push to main, gets a group of its own, so none waits on or cancels another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test-all:
     if: github.event_name != 'pull_request_review'
