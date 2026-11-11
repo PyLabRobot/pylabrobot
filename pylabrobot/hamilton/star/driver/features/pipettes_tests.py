@@ -382,7 +382,7 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
       speed=46.3, acceleration_level=1, channels=[7]
     ):
       self.assertEqual(self.sent, ["P8AAyv1000", "P8AAyr1"])
-    self.assertEqual(self.sent[2:], ["P8AAyv7559", "P8AAyr4"])
+    self.assertEqual(self.sent[2:], ["P8AAyv5939", "P8AAyr4"])
 
   async def test_profile_touches_only_the_named_channels(self):
     async with self.pipettes._temporary_y_drive_profile(acceleration_level=1, channels=[6, 7]):
@@ -391,17 +391,17 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
 
 
 class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
-  """Setup writes the driver's defaults into every channel, whatever an earlier session left."""
+  """Setup gives every channel the driver's defaults, whatever an earlier session left."""
 
   async def test_every_channel_holds_the_defaults_after_setup(self):
     pipettes = await simulated_channels()
     for channel in range(pipettes.num_channels):
-      self.assertEqual(await pipettes.request_y_speed(channel), 350.0)
+      self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
       self.assertEqual(await pipettes.request_y_acceleration_level(channel), 4)
       self.assertEqual(await pipettes.request_z_speed(channel), 125.0)
       self.assertEqual(await pipettes.request_z_acceleration(channel), 804.6)
 
-  async def test_setup_writes_four_per_channel(self):
+  async def test_setup_writes_z_per_channel_and_y_only_where_it_differs(self):
     driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
     sent: List[str] = []
     answer = driver.send_command
@@ -414,8 +414,17 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     driver.send_command = recorded  # type: ignore[assignment]
     await driver.setup()
     written = [command for command in sent if command[0] == "P"]
-    self.assertEqual(len(written), 32)
-    self.assertEqual(written[:4], ["P1AAyv7559", "P1AAyr4", "P1AAzv11652", "P1AAzr075"])
+    # the simulated drives start at the firmware's 6000 steps/s and level 4: only the speed differs
+    self.assertEqual(len(written), 24)
+    self.assertEqual(written[:2], ["P1AAyv5939", "P2AAyv5939"])
+
+  async def test_setup_does_not_take_what_every_channel_holds_as_the_default(self):
+    pipettes = await simulated_channels()
+    for channel in range(pipettes.num_channels):
+      await pipettes._set_y_speed(channel, 350.0)
+    await pipettes._driver.setup()
+    for channel in range(pipettes.num_channels):
+      self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
 
   async def test_a_repeated_setup_puts_back_what_a_session_changed(self):
     pipettes = await simulated_channels()
@@ -424,6 +433,41 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     await pipettes._driver.setup()
     self.assertEqual(await pipettes.request_z_speed(2), 125.0)
     self.assertEqual(await pipettes.request_y_acceleration_level(2), 4)
+
+  async def recorded_y_moves(self, pipettes: Pipettes) -> List[str]:
+    """Record every `AA` and `JY` the channels are sent, answered as before."""
+    sent: List[str] = []
+    answer = pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command in ("AA", "JY"):
+        fields = {key: value for key, value in kwargs.items() if key != "subsystem"}
+        sent.append(assemble_command(module=module, command=command, id_=None, **fields))
+      return await answer(module=module, command=command, **kwargs)
+
+    pipettes._driver.send_command = recorded  # type: ignore[assignment]
+    return sent
+
+  async def test_a_y_move_first_gives_a_channel_left_at_another_speed_the_default(self):
+    pipettes = await simulated_channels()
+    await pipettes._set_y_speed(7, 10.0)
+    await pipettes._set_y_acceleration_level(7, 1)
+    sent = await self.recorded_y_moves(pipettes)
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_positions({7: ys[7] - 5.0})
+    self.assertEqual(sent[:2], ["P8AAyv5939", "P8AAyr4"])
+    self.assertTrue(sent[2].startswith("C0JY"))
+    self.assertEqual(len(sent), 3)
+
+  async def test_a_y_move_given_a_speed_gives_it_to_every_channel(self):
+    pipettes = await simulated_channels()
+    sent = await self.recorded_y_moves(pipettes)
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0, acceleration_level=1)
+    written = sent[:-1]
+    self.assertEqual(len(written), 2 * pipettes.num_channels)
+    self.assertEqual(written[:2], ["P1AAyv2160", "P1AAyr1"])
+    self.assertTrue(sent[-1].startswith("C0JY"))
 
   async def test_a_channel_move_writes_what_it_moved_with(self):
     pipettes = await simulated_channels()
@@ -3098,7 +3142,9 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
     await pipettes.request_y_positions()
     self.sleep.assert_awaited_once()
     self.assertAlmostEqual(
-      self.sleep.await_args_list[0].args[0], 30.0 / Pipettes.default_y_speed, places=3
+      self.sleep.await_args_list[0].args[0],
+      30.0 / pipettes.default_y_speed,
+      places=3,
     )
 
   async def test_nothing_is_waited_when_the_device_keeps_no_time(self):

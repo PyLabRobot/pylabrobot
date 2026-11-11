@@ -286,7 +286,14 @@ class SimulatedPipettes(_Simulated, Pipettes):
     if self.device.simulate_motion_time:
       self.device.owe_motion_time(
         self._get_travel_time(
-          0.0 if y is None else y - self._modelled_y(channel), self.default_y_speed, None
+          0.0 if y is None else y - self._modelled_y(channel),
+          # the speed the channel's simulated drive holds, as `C0 JY` moves each at its own
+          self.configuration.y_drive_increments_to_mm(
+            self.device.channel_drive_parameters.get(channel, SIMULATED_CHANNEL_DRIVE_PARAMETERS)[
+              "yv"
+            ]
+          ),
+          None,
         ),
         self._get_travel_time(
           0.0 if z is None else z - self._modelled_z(channel),
