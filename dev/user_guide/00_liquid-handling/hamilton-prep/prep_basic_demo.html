@@ -811,7 +811,7 @@
 <p><code class="docutils literal notranslate"><span class="pre">SIMULATION</span> <span class="pre">=</span> <span class="pre">True</span></code> runs everything against <code class="docutils literal notranslate"><span class="pre">PrepSimulationDriver</span></code>, which answers from a recorded Prep (PRPAA1087, MLPrep Runtime V1.2.2), so the notebook runs without a device. Set it to <code class="docutils literal notranslate"><span class="pre">False</span></code> and <code class="docutils literal notranslate"><span class="pre">HOST</span></code> to your Prep’s address to run the same cells on a device.</p>
 <p><code class="docutils literal notranslate"><span class="pre">prep</span></code> is a <a class="reference internal" href="../../../api/_autosummary/pylabrobot.hamilton.prep.PrepDevice.html#pylabrobot.hamilton.prep.PrepDevice" title="pylabrobot.hamilton.prep.device.PrepDevice"><code class="xref py py-class docutils literal notranslate"><span class="pre">PrepDevice</span></code></a>: the device is a resource and its deck is its child. <code class="docutils literal notranslate"><span class="pre">prep.driver</span></code> speaks to the device; <code class="docutils literal notranslate"><span class="pre">prep.pipettes</span></code>, <code class="docutils literal notranslate"><span class="pre">prep.x_arm</span></code>, <code class="docutils literal notranslate"><span class="pre">prep.head8</span></code> and <code class="docutils literal notranslate"><span class="pre">prep.core_grippers</span></code> are its features, built at setup.</p>
 <section id="imports-and-config">
-<h2>1. Imports and config<a class="headerlink" href="#imports-and-config" title="Link to this heading">#</a></h2>
+<span id="1-imports-and-config"></span><h2>1. Imports and config<a class="headerlink" href="#imports-and-config" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
@@ -839,7 +839,7 @@
 </div>
 </section>
 <section id="deck-and-device">
-<h2>2. Deck and device<a class="headerlink" href="#deck-and-device" title="Link to this heading">#</a></h2>
+<span id="2-deck-and-device"></span><h2>2. Deck and device<a class="headerlink" href="#deck-and-device" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">PrepDeck</span></code> has eight labware spots (column-major, <code class="docutils literal notranslate"><span class="pre">deck[0]</span></code>..<code class="docutils literal notranslate"><span class="pre">deck[7]</span></code>), the waste block, the liquid waste container, the teaching needle and the waste positions; <code class="docutils literal notranslate"><span class="pre">with_core_grippers=True</span></code> adds the CoRe gripper mount.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -869,7 +869,7 @@
 </div>
 </section>
 <section id="what-the-device-reports">
-<h2>3. What the device reports<a class="headerlink" href="#what-the-device-reports" title="Link to this heading">#</a></h2>
+<span id="3-what-the-device-reports"></span><h2>3. What the device reports<a class="headerlink" href="#what-the-device-reports" title="Link to this heading">#</a></h2>
 <p>Setup reads the device: serial and firmware, what is fitted, the deck and channel bounds, and where the teaching needle and waste positions are - which it places on the deck. The configuration can be saved, and declared later: a real device is then checked against it at setup, and a simulated one answers as it says.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -901,7 +901,7 @@ saved prep_configuration.json in the temporary directory
 </div>
 </section>
 <section id="moving">
-<h2>4. Moving<a class="headerlink" href="#moving" title="Link to this heading">#</a></h2>
+<span id="4-moving"></span><h2>4. Moving<a class="headerlink" href="#moving" title="Link to this heading">#</a></h2>
 <p>The X arm moves the gantry both channels ride. <code class="docutils literal notranslate"><span class="pre">move_to_y_positions</span></code> and <code class="docutils literal notranslate"><span class="pre">move_tool_bottom_to_z_positions</span></code> move one axis for all channels in one command (<code class="docutils literal notranslate"><span class="pre">ChannelXYZCoordinator.MoveYAbsolute</span></code> / <code class="docutils literal notranslate"><span class="pre">MoveZAbsolute</span></code>), each at a <code class="docutils literal notranslate"><span class="pre">speed</span></code> in mm/s; the Z moves also take an <code class="docutils literal notranslate"><span class="pre">acceleration</span></code> in mm/s2. Channels are numbered from the back and stay at least their minimum spacing apart: <code class="docutils literal notranslate"><span class="pre">make_space=True</span></code> lets a channel that is in the way move aside.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -942,7 +942,7 @@ channel 1: x 150.00, y 150.00, z 167.50
 </div>
 </section>
 <section id="teaching-needle">
-<h2>5. Teaching needle<a class="headerlink" href="#teaching-needle" title="Link to this heading">#</a></h2>
+<span id="5-teaching-needle"></span><h2>5. Teaching needle<a class="headerlink" href="#teaching-needle" title="Link to this heading">#</a></h2>
 <p>Pick up the teaching needle, move it over well A1 at a safe height, and put it back. On a device, check the needle’s pickup height first: on PRPAA1087 its top was measured 1.6 mm below the deck model’s.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -964,7 +964,7 @@ channel 1: x 150.00, y 150.00, z 167.50
 </div>
 </section>
 <section id="tip-pickup-aspirate-dispense-dual-channel">
-<h2>6. Tip pickup, aspirate, dispense (dual channel)<a class="headerlink" href="#tip-pickup-aspirate-dispense-dual-channel" title="Link to this heading">#</a></h2>
+<span id="6-tip-pickup-aspirate-dispense-dual-channel"></span><h2>6. Tip pickup, aspirate, dispense (dual channel)<a class="headerlink" href="#tip-pickup-aspirate-dispense-dual-channel" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">tip_spots</span> <span class="o">=</span> <span class="n">tip_rack</span><span class="p">[</span><span class="s2">"A1:B1"</span><span class="p">]</span>
@@ -1002,7 +1002,7 @@ after drop: mounted [None, None], source [65.0, 75.0], destination [35.0, 25.0]
 </div>
 </section>
 <section id="the-8-channel-head">
-<h2>7. The 8-channel head<a class="headerlink" href="#the-8-channel-head" title="Link to this heading">#</a></h2>
+<span id="7-the-8-channel-head"></span><h2>7. The 8-channel head<a class="headerlink" href="#the-8-channel-head" title="Link to this heading">#</a></h2>
 <p>Skipped on a device without one. To simulate a Prep with the head, build it with <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code> pointing at <code class="docutils literal notranslate"><span class="pre">pylabrobot/hamilton/prep/driver/recordings/prep_PRPAA1087_v1_2_2_head8.json</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1032,7 +1032,7 @@ after drop: mounted [None, None], source [65.0, 75.0], destination [35.0, 25.0]
 </div>
 </section>
 <section id="probing-with-capacitive-lld">
-<h2>8. Probing with capacitive LLD<a class="headerlink" href="#probing-with-capacitive-lld" title="Link to this heading">#</a></h2>
+<span id="8-probing-with-capacitive-lld"></span><h2>8. Probing with capacitive LLD<a class="headerlink" href="#probing-with-capacitive-lld" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">probe_z_using_clld</span></code> lowers a channel where it stands until its cLLD triggers, and returns the height (None when nothing triggers); on PRPAA1087 it found a finger and the teaching needle’s top. <code class="docutils literal notranslate"><span class="pre">clld_probe_y_position_using_channel</span></code> searches along Y from where the channel stands, kept clear of its neighbours; its detection is not yet reliable on a device. The simulator has nothing to detect.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1056,7 +1056,7 @@ Y probe: channel 1 detected nothing between y=352.50 and y=60.00 mm
 </div>
 </section>
 <section id="plate-movement-with-core-grippers-deck-4-to-deck-2">
-<h2>9. Plate movement with CoRe grippers (deck[4] to deck[2])<a class="headerlink" href="#plate-movement-with-core-grippers-deck-4-to-deck-2" title="Link to this heading">#</a></h2>
+<span id="9-plate-movement-with-core-grippers-deck4-to-deck2"></span><h2>9. Plate movement with CoRe grippers (deck[4] to deck[2])<a class="headerlink" href="#plate-movement-with-core-grippers-deck-4-to-deck-2" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">place_resource</span></code> reassigns the plate in the resource tree. On a device, check the gripper mount position first: the deck’s default is not yet measured.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1076,7 +1076,7 @@ Y probe: channel 1 detected nothing between y=352.50 and y=60.00 mm
 </div>
 </section>
 <section id="deck-light-a-declared-configuration-and-putting-it-down">
-<h2>10. Deck light, a declared configuration, and putting it down<a class="headerlink" href="#deck-light-a-declared-configuration-and-putting-it-down" title="Link to this heading">#</a></h2>
+<span id="10-deck-light-a-declared-configuration-and-putting-it-down"></span><h2>10. Deck light, a declared configuration, and putting it down<a class="headerlink" href="#deck-light-a-declared-configuration-and-putting-it-down" title="Link to this heading">#</a></h2>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">before</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prep</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_deck_light</span><span class="p">()</span>

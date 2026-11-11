@@ -603,10 +603,10 @@
                 <article class="bd-article">
                   
   <section class="tex2jax_ignore mathjax_ignore" id="writing-pylabrobot-device-drivers-hello-world-guides">
-<h1>Writing PyLabRobot Device Drivers &amp; Hello-World Guides<a class="headerlink" href="#writing-pylabrobot-device-drivers-hello-world-guides" title="Link to this heading">#</a></h1>
+<span id="writing-pylabrobot-device-drivers--hello-world-guides"></span><h1>Writing PyLabRobot Device Drivers &amp; Hello-World Guides<a class="headerlink" href="#writing-pylabrobot-device-drivers-hello-world-guides" title="Link to this heading">#</a></h1>
 <p>How to add a device driver and its hello-world notebook, for humans and agents. This guide covers device-specific requirements; follow the <a class="reference internal" href="contributing.html"><span class="std std-doc">general contribution guide</span></a> for shared code style, testing, and contribution conventions. Post on the <a class="reference external" href="https://discuss.pylabrobot.org">PyLabRobot forum</a> before starting to avoid duplicated effort and get support.</p>
 <section id="understand-the-device">
-<h2>1. Understand the device<a class="headerlink" href="#understand-the-device" title="Link to this heading">#</a></h2>
+<span id="1-understand-the-device"></span><h2>1. Understand the device<a class="headerlink" href="#understand-the-device" title="Link to this heading">#</a></h2>
 <p>Recover the protocol before writing code.</p>
 <ul class="simple">
 <li><p><strong>Extract, don’t guess.</strong> Work from an authoritative source — firmware/protocol docs, manufacturer log files, or a reference binary. Capture the <em>complete</em> set of command frames, error codes, status values, and exact message text, filled with real values, not placeholders.</p></li>
@@ -615,7 +615,7 @@
 </ul>
 </section>
 <section id="structure-the-driver">
-<h2>2. Structure the driver<a class="headerlink" href="#structure-the-driver" title="Link to this heading">#</a></h2>
+<span id="2-structure-the-driver"></span><h2>2. Structure the driver<a class="headerlink" href="#structure-the-driver" title="Link to this heading">#</a></h2>
 <p>Keep it small and idiomatic to PyLabRobot.</p>
 <ul class="simple">
 <li><p><strong>One file, one plain class.</strong> The old Driver/Backend split and capability machinery are deprecated — don’t use them. Instead write a single plain class whose public methods are the device’s operations, talking to hardware through a <code class="docutils literal notranslate"><span class="pre">pylabrobot.io</span></code> transport. Path <code class="docutils literal notranslate"><span class="pre">pylabrobot/&lt;vendor&gt;/&lt;device&gt;.py</span></code>, re-exported from <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code>. Promote to a <code class="docutils literal notranslate"><span class="pre">&lt;device&gt;/</span></code> package only when it genuinely helps — a distinct subsystem, the protocol/framing layer, or a large command table — not by reflex.</p></li>
@@ -651,7 +651,7 @@ per-channel minimum spacing and executes the plan with its own moves; <code clas
 </section>
 </section>
 <section id="hello-world-notebook">
-<h2>3. Hello-world notebook<a class="headerlink" href="#hello-world-notebook" title="Link to this heading">#</a></h2>
+<span id="3-hello-world-notebook"></span><h2>3. Hello-world notebook<a class="headerlink" href="#hello-world-notebook" title="Link to this heading">#</a></h2>
 <p>Every device ships a runnable notebook that takes a user from cabling to first command. Path <code class="docutils literal notranslate"><span class="pre">docs/user_guide/&lt;vendor&gt;/&lt;device&gt;/hello-world.ipynb</span></code>; wire it in via the <code class="docutils literal notranslate"><span class="pre">&lt;vendor&gt;/index.md</span></code> <code class="docutils literal notranslate"><span class="pre">{toctree}</span></code> and add <code class="docutils literal notranslate"><span class="pre">&lt;vendor&gt;/index</span></code> to the Manufacturers <code class="docutils literal notranslate"><span class="pre">{toctree}</span></code> in <code class="docutils literal notranslate"><span class="pre">docs/user_guide/index.md</span></code> (alphabetical).</p>
 <p>Sections (markdown cell then code cell): (1) title + property table + untested-warning; (2) how it talks — brief, since users care about the machine, not the wire; (3) physical setup; (4) <code class="docutils literal notranslate"><span class="pre">setup()</span></code>; (5) one section per operation.</p>
 <p>Cell rules:</p>
@@ -661,7 +661,7 @@ per-channel minimum spacing and executes the plan with its own moves; <code clas
 </ul>
 </section>
 <section id="register-the-device-and-its-guide">
-<h2>4. Register the device and its guide<a class="headerlink" href="#register-the-device-and-its-guide" title="Link to this heading">#</a></h2>
+<span id="4-register-the-device-and-its-guide"></span><h2>4. Register the device and its guide<a class="headerlink" href="#register-the-device-and-its-guide" title="Link to this heading">#</a></h2>
 <p>Add or update the device’s object in <code class="docutils literal notranslate"><span class="pre">docs/_static/devices.json</span></code> in the same change. Follow the <a class="reference internal" href="device-registry.html"><span class="std std-doc">device registry guide</span></a> for the schema. A driver and hello-world change is not complete until its registry entry has:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">api</span></code>, <code class="docutils literal notranslate"><span class="pre">api_version</span></code>, and <code class="docutils literal notranslate"><span class="pre">code_slug</span></code> pointing to the driver;</p></li>
@@ -671,7 +671,7 @@ per-channel minimum spacing and executes the plan with its own moves; <code clas
 <p>When the device is already registered, edit its existing object instead of adding a duplicate. In particular, add <code class="docutils literal notranslate"><span class="pre">doc_slug</span></code> when a guide is added to a device that previously had no documentation page.</p>
 </section>
 <section id="verify-the-integration">
-<h2>5. Verify the integration<a class="headerlink" href="#verify-the-integration" title="Link to this heading">#</a></h2>
+<span id="5-verify-the-integration"></span><h2>5. Verify the integration<a class="headerlink" href="#verify-the-integration" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p>Test framing, parsing, command sequencing, status handling, and error handling through a mocked or captured transport without connecting to hardware.</p></li>
 <li><p>Validate the hello-world notebook structure and imports without executing its hardware cells.</p></li>

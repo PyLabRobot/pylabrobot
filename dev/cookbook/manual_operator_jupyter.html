@@ -595,7 +595,7 @@
 </ul>
 </section>
 <section id="define-a-notebook-local-provider">
-<h2>1. Define a notebook-local provider<a class="headerlink" href="#define-a-notebook-local-provider" title="Link to this heading">#</a></h2>
+<span id="1-define-a-notebook-local-provider"></span><h2>1. Define a notebook-local provider<a class="headerlink" href="#define-a-notebook-local-provider" title="Link to this heading">#</a></h2>
 <p>An <code class="docutils literal notranslate"><span class="pre">OperatorActionProvider</span></code> turns a transport-independent <code class="docutils literal notranslate"><span class="pre">OperatorActionRequest</span></code> into an acknowledgement interaction. This minimal provider prints the request and treats Enter as a successful acknowledgement.</p>
 <p>It intentionally pauses this notebook’s event loop while waiting. That is appropriate when the protocol should wait for the manual handoff before proceeding. Applications that need a richer UI or concurrent orchestration can supply their own provider instead.</p>
 <div class="cell docutils container">
@@ -629,7 +629,7 @@
 </div>
 </section>
 <section id="model-the-incubator-plate-reader-and-sample-plate">
-<h2>2. Model the incubator, plate reader, and sample plate<a class="headerlink" href="#model-the-incubator-plate-reader-and-sample-plate" title="Link to this heading">#</a></h2>
+<span id="2-model-the-incubator-plate-reader-and-sample-plate"></span><h2>2. Model the incubator, plate reader, and sample plate<a class="headerlink" href="#model-the-incubator-plate-reader-and-sample-plate" title="Link to this heading">#</a></h2>
 <p>The sample plate begins in a modeled incubator storage site. The incubator and reader use chatterbox backends, which print their actions and return deterministic dummy data.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -682,7 +682,7 @@
 </div>
 </section>
 <section id="optional-observe-semantic-eventbus-events">
-<h2>3. Optional: observe semantic EventBus events<a class="headerlink" href="#optional-observe-semantic-eventbus-events" title="Link to this heading">#</a></h2>
+<span id="3-optional-observe-semantic-eventbus-events"></span><h2>3. Optional: observe semantic EventBus events<a class="headerlink" href="#optional-observe-semantic-eventbus-events" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">ManualOperator</span></code> does not require EventBus. It works with no subscriber installed. This optional section demonstrates that the incubator fetch and manual resource transfer emit semantic lifecycle events when a subscriber is active. Set <code class="docutils literal notranslate"><span class="pre">ENABLE_EVENT_BUS_DEMO</span> <span class="pre">=</span> <span class="pre">False</span></code> to run the exact same manual workflow without EventBus.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -711,7 +711,7 @@
 </div>
 </section>
 <section id="fetch-manually-transfer-and-read-the-plate">
-<h2>4. Fetch, manually transfer, and read the plate<a class="headerlink" href="#fetch-manually-transfer-and-read-the-plate" title="Link to this heading">#</a></h2>
+<span id="4-fetch-manually-transfer-and-read-the-plate"></span><h2>4. Fetch, manually transfer, and read the plate<a class="headerlink" href="#fetch-manually-transfer-and-read-the-plate" title="Link to this heading">#</a></h2>
 <p>The model remains unchanged while the request is pending: the sample plate stays on the incubator tray until the operator reports completion. <code class="docutils literal notranslate"><span class="pre">move_resource()</span></code> then validates the model and assigns the plate to the reader. On real hardware, ensure the reader is open before moving the plate and close it before reading. The <code class="docutils literal notranslate"><span class="pre">ENABLE_EVENT_BUS_DEMO</span></code> setting changes only observation; it does not change the manual action or resource-model behavior.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
