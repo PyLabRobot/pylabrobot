@@ -1,7 +1,7 @@
 """Values exchanged with the Opentrons robot-server API."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Literal, Optional
 
 from pylabrobot.opentrons.errors import OpentronsProtocolError
@@ -61,20 +61,29 @@ class MountedPipette:
 
 @dataclass(frozen=True)
 class ModuleInfo:
-  """The identity of a connected module."""
+  """The identity of a connected module, and its live state as the robot reports it.
+
+  ``data`` is the module's own state, which differs by module type: a Temperature Module's
+  ``currentTemperature`` and ``targetTemperature``, a Magnetic Module's ``engaged`` and ``height``,
+  and every module's ``status``. It does not take part in comparisons, as it changes while the
+  identity stays.
+  """
 
   id: str
   module_type: Optional[str] = None
   model: Optional[str] = None
   serial_number: Optional[str] = None
+  data: Dict[str, Any] = field(default_factory=dict, compare=False)
 
   @classmethod
   def from_response(cls, data: Dict[str, Any]) -> "ModuleInfo":
+    state = data.get("data")
     return cls(
       id=_string(data, "id"),
       module_type=_optional_string(data, "moduleType"),
       model=_optional_string(data, "moduleModel"),
       serial_number=_optional_string(data, "serialNumber"),
+      data=dict(state) if isinstance(state, dict) else {},
     )
 
 
