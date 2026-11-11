@@ -24,7 +24,7 @@ Advantages over proprietary software:
 - **Modern**: PyLabRobot is built on modern Python 3.10+ features and async/await syntax.
 - **Fast support**: PyLabRobot has [an active community forum](https://discuss.pylabrobot.org) for support and discussion, and most pull requests are merged within a day.
 
-The docs show how to use each kind of machine: [liquid handling robots](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/_liquid-handling.html), [plate readers](https://docs.pylabrobot.org/stable/user_guide/02_analytical/plate-reading/plate-reading.html), [centrifuges](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/centrifuge/_centrifuge.html), [pumps](https://docs.pylabrobot.org/stable/user_guide/00_liquid-handling/pumps/_pumps.html), [scales](https://docs.pylabrobot.org/stable/user_guide/02_analytical/scales/scales.html), [heater shakers](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/heating_shaking/heating_shaking.html), [fans](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/fans/fans.html) and [thermocyclers](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/thermocycling/thermocycling.html).
+The [Supported Machines](https://docs.pylabrobot.org/dev/user_guide/machines.html) page lists every machine PyLabRobot supports and its current support level.
 
 ## Resources
 
