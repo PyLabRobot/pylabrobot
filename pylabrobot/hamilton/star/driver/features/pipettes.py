@@ -399,9 +399,9 @@ class Pipettes:
     LIQUID = 0
     FOAM = 1
 
-  # Y speed when the caller names none, in mm/s: high enough that Y never holds up an X move.
-  default_y_speed: float = 350.0
-  # Y acceleration level when the caller names none, 1 (gentlest) to 4.
+  # Y speed when the caller names none, in mm/s: just below the firmware's own (277.81).
+  default_y_speed: float = 275.0
+  # Y acceleration level when the caller names none, 1 (gentlest) to 4: the firmware's own.
   default_y_acceleration_level: int = 4
   # Z speed when the caller names none, in mm/s.
   default_z_speed: float = 125.0
@@ -1226,6 +1226,42 @@ class Pipettes:
     async with self._temporary_drive_profile({"yv": speed, "yr": acceleration_level}, channels):
       yield
 
+  async def _set_y_drive_profiles(
+    self, channels: List[int], speed: float, acceleration_level: int
+  ) -> None:
+    """Give channels one Y speed and acceleration level, writing only where a drive differs.
+
+    `C0 JY` moves each channel at what its drive holds, and a channel command (`Px YS`, `Px YL`)
+    leaves its own values there; neighbours at different speeds can run into each other.
+
+    Args:
+      channels: which channels, 0-indexed from the back.
+      speed: in mm/s.
+      acceleration_level: 1 (gentlest) to 4.
+    """
+    # A channel module answers one command at a time: every round sends each at most one.
+    held_speeds = await asyncio.gather(
+      *(self.request_y_speed(channel=channel) for channel in channels)
+    )
+    held_levels = await asyncio.gather(
+      *(self.request_y_acceleration_level(channel=channel) for channel in channels)
+    )
+    target = self._drive_parameter_to_increments(parameter="yv", value=speed)
+    await asyncio.gather(
+      *(
+        self._set_y_speed(channel=channel, speed=speed)
+        for channel, held in zip(channels, held_speeds)
+        if self._drive_parameter_to_increments(parameter="yv", value=held) != target
+      )
+    )
+    await asyncio.gather(
+      *(
+        self._set_y_acceleration_level(channel=channel, level=acceleration_level)
+        for channel, held in zip(channels, held_levels)
+        if held != acceleration_level
+      )
+    )
+
   # ---- z -----------------------------------------------------------------------------------------
 
   async def request_z_speed(self, channel: int) -> float:
@@ -1292,10 +1328,17 @@ class Pipettes:
       yield
 
   async def _set_default_drive_parameters(self) -> None:
-    """Write the driver's Y and Z defaults into every channel's drive (`Px AA`)."""
+    """Give every channel the driver's Y and Z defaults (`Px AA`), whatever a session left.
+
+    The drives keep what was last sent until a power cycle, by this or any other program, so
+    what they hold is never taken as a default; Y is written only where it differs.
+    """
+    await self._set_y_drive_profiles(
+      channels=list(range(self.num_channels)),
+      speed=self.default_y_speed,
+      acceleration_level=self.default_y_acceleration_level,
+    )
     for channel in range(self.num_channels):
-      await self._set_y_speed(channel, self.default_y_speed)
-      await self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
       await self._set_z_speed(channel, self.default_z_speed)
       await self._set_z_acceleration(channel, self.default_z_acceleration)
 
@@ -1426,12 +1469,29 @@ class Pipettes:
         )
     return channel_locations
 
-  async def _move_to_planned_y_positions(self, channel_locations: Dict[int, float]):
+  async def _move_to_planned_y_positions(
+    self,
+    channel_locations: Dict[int, float],
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+  ):
     """Send every channel to its planned Y (`C0 JY`) and record where they are.
+
+    The channels are first given one Y profile: the move runs each at what its drive holds. A
+    move given its own speed or level puts the defaults back afterwards, so nothing outlasts it.
 
     Args:
       channel_locations: every channel's target in mm, from `_plan_y_positions`.
+      speed: in mm/s, for this move only; the default Y speed when None.
+      acceleration_level: 1 (gentlest) to 4, for this move only; the default level when None.
     """
+    channels = list(channel_locations)
+    speed = self.default_y_speed if speed is None else speed
+    if acceleration_level is None:
+      acceleration_level = self.default_y_acceleration_level
+    await self._set_y_drive_profiles(
+      channels=channels, speed=speed, acceleration_level=acceleration_level
+    )
     yp = " ".join([f"{round(y * 10):04}" for y in channel_locations.values()])
     try:
       resp = await self._driver.send_command(
@@ -1442,12 +1502,41 @@ class Pipettes:
       # here would ask the device where the channels are on every successful move.
       await self._record_where_they_stopped("y")
       raise
+    finally:
+      # A speed given for this move only leaves the defaults in the drives, as every other move;
+      # one round per value, so no channel module is sent two commands at once.
+      rounds = []
+      default_speed = self._drive_parameter_to_increments(
+        parameter="yv", value=self.default_y_speed
+      )
+      if self._drive_parameter_to_increments(parameter="yv", value=speed) != default_speed:
+        rounds.append(
+          [self._set_y_speed(channel=channel, speed=self.default_y_speed) for channel in channels]
+        )
+      if acceleration_level != self.default_y_acceleration_level:
+        rounds.append(
+          [
+            self._set_y_acceleration_level(channel=channel, level=self.default_y_acceleration_level)
+            for channel in channels
+          ]
+        )
+      for writes in rounds:
+        for failed in await asyncio.gather(*writes, return_exceptions=True):
+          if isinstance(failed, Exception):
+            logger.warning("could not put a channel's Y profile back to the default: %s", failed)
 
     for channel, y in channel_locations.items():
       self.update_location_by_reference_point(channel, y=y)
     return resp
 
-  async def move_to_y_positions(self, ys: Dict[int, float], make_space: bool = False):
+  async def move_to_y_positions(
+    self,
+    ys: Dict[int, float],
+    make_space: bool = False,
+    *,
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+  ):
     """Move channels along Y.
 
     The channels not named stay where they are.
@@ -1461,10 +1550,25 @@ class Pipettes:
         minimum Y spacing and the channels stay in order back to front. Off by default: nothing
         moves that the caller did not ask to move, and a request that will not fit raises instead.
         It can raise either way, since the requested positions may leave no room.
+      speed: every channel's Y speed for this move only, in mm/s; the default Y speed when None.
+      acceleration_level: every channel's level for this move only, 1 (gentlest) to 4; the default
+        level when None.
     """
-    return await self._move_to_planned_y_positions(await self._plan_y_positions(ys, make_space))
+    return await self._move_to_planned_y_positions(
+      await self._plan_y_positions(ys, make_space),
+      speed=speed,
+      acceleration_level=acceleration_level,
+    )
 
-  async def move_to_y_position(self, channel: int, y: float, make_space: bool = False):
+  async def move_to_y_position(
+    self,
+    channel: int,
+    y: float,
+    make_space: bool = False,
+    *,
+    speed: Optional[float] = None,
+    acceleration_level: Optional[int] = None,
+  ):
     """Move one channel along Y.
 
     The other channels stay where they are, unless `make_space` says they may move to let this
@@ -1475,12 +1579,17 @@ class Pipettes:
       y: where to put it, in mm.
       make_space: whether the other channels may be moved to make room. Off by default. See
         `move_to_y_positions`.
+      speed: every channel's Y speed for this move only, in mm/s; the default Y speed when None.
+      acceleration_level: every channel's level for this move only, 1 (gentlest) to 4; the default
+        level when None.
 
     Raises:
       ValueError: If the channel cannot reach it, or the others cannot make room.
     """
     self._require_channel(channel)
-    return await self.move_to_y_positions({channel: y}, make_space=make_space)
+    return await self.move_to_y_positions(
+      {channel: y}, make_space=make_space, speed=speed, acceleration_level=acceleration_level
+    )
 
   async def make_max_space_for_channel(self, channel: int):
     """Spread the channels to leave one of them as much free Y as the arm allows.
@@ -2287,16 +2396,20 @@ class Pipettes:
 
   # -- x probing (capacitive only) --------------------------------------------------------------
 
-  async def _unchecked_fw_probe_x_using_clld(self, end_position: float, read_timeout: int = 240):
-    """Move the arm along X until the channel's cLLD triggers, or to the end, as given. `C0 XL`.
+  async def _unchecked_fw_probe_x_using_clld(
+    self, channel: int, end_position: float, read_timeout: int = 240
+  ):
+    """Move the arm along X until a channel's cLLD triggers, or to the end, as given. `C0 XL`.
 
     Args:
+      channel: the channel whose cLLD stops the search, 0-indexed from the back (`pn`).
       end_position: where the search ends, in mm, sent in 0.1 mm (`xs`).
       read_timeout: how long to wait for the answer, in s.
     """
     await self._driver.send_command(
       module="C0",
       command="XL",
+      pn=f"{channel + 1:02}",  # the firmware counts channels from 1
       xs=f"{int(round(end_position * 10)):05}",
       read_timeout=read_timeout,
     )
@@ -2349,7 +2462,8 @@ class Pipettes:
       direction: "left" (decreasing x) or "right" (increasing x).
       search_end_position: where the search ends, in mm. The end of the reach in `direction` when
         None.
-      post_detection_distance: how far to back away from the surface afterwards, in mm.
+      post_detection_distance: how far to back away from the surface afterwards, in mm; 0 sends
+        no move.
       tip_bottom_diameter: the tip's bottom diameter, in mm; half of it is added to the reading.
       stop_disc_diameter: the stop disc's, in mm, for a channel probing without a tip.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
@@ -2391,23 +2505,52 @@ class Pipettes:
 
     found = True
     try:
-      await self._unchecked_fw_probe_x_using_clld(search_end_position, read_timeout=read_timeout)
+      await self._unchecked_fw_probe_x_using_clld(
+        channel=channel, end_position=search_end_position, read_timeout=read_timeout
+      )
     except STARFirmwareError as error:
       if not self._found_nothing(error, "C0"):
         raise
       found = False
     detected = round(await self.request_x_position(), 1)
 
-    # Back away, so a carrier moved later does not drag against the tip.
-    if direction == "left":
-      await self.move_to_x_position(detected + post_detection_distance)
-      surface = detected - diameter / 2
-    else:
-      await self.move_to_x_position(detected - post_detection_distance)
-      surface = detected + diameter / 2
+    # Back away, so a carrier moved later does not drag against the tip; 0 sends no move.
+    if round(post_detection_distance, 1) > 0:
+      away = post_detection_distance if direction == "left" else -post_detection_distance
+      await self.move_to_x_position(detected + away)
+    surface = detected - diameter / 2 if direction == "left" else detected + diameter / 2
     return round(surface, 1) if found else None
 
   # -- y probing (capacitive only) --------------------------------------------------------------
+
+  async def _unchecked_fw_move_y_relative(
+    self,
+    channel: int,
+    distance_increments: int,
+    speed_increments: int,
+    acceleration_level: int,
+    current_limit: int,
+  ) -> None:
+    """Move one channel's Y drive by a distance, as given, moving no other channel. `Px YS`.
+
+    The drive keeps the speed and acceleration sent as its own.
+
+    Args:
+      channel: 0-indexed from the back.
+      distance_increments: signed; positive moves backward (`ys`, `yt`).
+      speed_increments: in increments/s (`yv`).
+      acceleration_level: 1 to 4, each `level * 5000` increments/s2 (`yr`).
+      current_limit: 0 to 7 (`yw`).
+    """
+    await self._driver.send_command(
+      module=self.channel_id(channel),
+      command="YS",
+      ys=f"{abs(distance_increments):05}",
+      yt="0" if distance_increments >= 0 else "1",
+      yv=f"{speed_increments:04}",
+      yr=f"{acceleration_level}",
+      yw=f"{current_limit}",
+    )
 
   async def _unchecked_fw_probe_y_using_clld(
     self,
@@ -2419,6 +2562,8 @@ class Pipettes:
     current_limit: int,
   ):
     """Move one channel along Y until its cLLD triggers, or to the end, as given. `Px YL`.
+
+    The drive keeps the speed and acceleration sent as its own.
 
     Args:
       channel: 0-indexed from the back.
@@ -2458,6 +2603,12 @@ class Pipettes:
   ) -> Optional[float]:
     """Probe a conductive surface along Y with a channel's cLLD, never past its neighbours.
 
+    The neighbours' positions are read once, at the start.
+
+    N.B.: two adjacent channels probing along Y at the same time, toward each other, may both
+    enter the gap between them. This rare case is the only known crash risk: its caller must make
+    sure a conductive object stands between the two.
+
     Args:
       channel: which channel, 0-indexed from the back.
       direction: "forward" (decreasing y) or "backward" (increasing y).
@@ -2467,8 +2618,8 @@ class Pipettes:
       acceleration_level: 1 to 4, each `level * 5000` increments/s2.
       detection_edge: cLLD edge steepness, 0 to 1023.
       current_limit: the Y drive's current limit, 0 to 7.
-      post_detection_distance: how far to back away from the surface afterwards, in mm; less if
-        the neighbour is closer.
+      post_detection_distance: how far to move off the surface after detecting it, in mm, along
+        the path just searched; 0 sends no move.
       tip_bottom_diameter: the tip's bottom diameter, in mm; half of it is added to the reading.
         1.2 is the teaching needle's.
       stop_disc_diameter: the stop disc's, in mm, for a channel probing without a tip.
@@ -2536,33 +2687,56 @@ class Pipettes:
       if not lowest <= checked <= highest:
         raise ValueError(f"{name} must be between {lowest} and {highest}, is {checked}")
 
-    found = True
     try:
-      await self._unchecked_fw_probe_y_using_clld(
-        channel,
-        end_position=end_increments,
-        detection_edge=detection_edge,
-        search_speed=speed_increments,
-        acceleration_level=acceleration_level,
-        current_limit=current_limit,
-      )
-    except STARFirmwareError as error:
-      if not self._found_nothing(error, self.channel_id(channel)):
-        raise
-      found = False
-    detected = await self.request_y_position(channel)
+      found, read = True, False
+      try:
+        try:
+          await self._unchecked_fw_probe_y_using_clld(
+            channel=channel,
+            end_position=end_increments,
+            detection_edge=detection_edge,
+            search_speed=speed_increments,
+            acceleration_level=acceleration_level,
+            current_limit=current_limit,
+          )
+        except STARFirmwareError as error:
+          if not self._found_nothing(error, self.channel_id(channel)):
+            raise
+          found = False
+        detected = await self.request_y_position(channel=channel)
+        read = True
+      finally:
+        # A search that failed, or whose read failed, left the channel where nothing records it.
+        if not read:
+          await self._record_where_they_stopped(axis="y", channels=[channel])
 
-    # Back away from the surface, no further than the neighbour behind the move allows.
-    if direction == "backward":
-      await self.move_to_y_position(
-        channel, detected - min(post_detection_distance, detected - low)
-      )
-      surface = detected + diameter / 2
-    else:
-      await self.move_to_y_position(
-        channel, detected + min(post_detection_distance, high - detected)
-      )
-      surface = detected - diameter / 2
+      # The post-detection move, along the path just searched, moving this channel alone.
+      distance = c.y_drive_mm_to_increments(mm=min(post_detection_distance, abs(detected - here)))
+      if distance > 0:
+        try:
+          await self._unchecked_fw_move_y_relative(
+            channel=channel,
+            distance_increments=-distance if direction == "backward" else distance,
+            speed_increments=speed_increments,
+            acceleration_level=acceleration_level,
+            current_limit=current_limit,
+          )
+        finally:
+          # Whether the move arrived or stopped part way, this read is how either is recorded.
+          await self._record_where_they_stopped(axis="y", channels=[channel])
+    finally:
+      # The search and the post-detection move leave their speed in the drive: put the defaults
+      # back, so the probe leaves nothing behind.
+      try:
+        if speed_increments != c.y_drive_mm_to_increments(mm=self.default_y_speed):
+          await self._set_y_speed(channel=channel, speed=self.default_y_speed)
+        if acceleration_level != self.default_y_acceleration_level:
+          await self._set_y_acceleration_level(
+            channel=channel, level=self.default_y_acceleration_level
+          )
+      except Exception:
+        logger.warning("could not put channel %s's Y profile back to the default", channel)
+    surface = detected + diameter / 2 if direction == "backward" else detected - diameter / 2
     return round(surface, 1) if found else None
 
   # -- z probing (capacitive, pressure, force) --------------------------------------------------
