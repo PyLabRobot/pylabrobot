@@ -592,7 +592,7 @@
 </ul>
 </section>
 <section id="store-the-webhook-url">
-<h2>1. Store the webhook URL<a class="headerlink" href="#store-the-webhook-url" title="Link to this heading">#</a></h2>
+<span id="1-store-the-webhook-url"></span><h2>1. Store the webhook URL<a class="headerlink" href="#store-the-webhook-url" title="Link to this heading">#</a></h2>
 <p>Save the URL to <code class="docutils literal notranslate"><span class="pre">~/.plr_slack_webhook</span></code> — outside the repo, mode 600 so only your user can read it:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">umask</span><span class="w"> </span><span class="m">077</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"https://hooks.slack.com/services/..."</span><span class="w"> </span>&gt;<span class="w"> </span>~/.plr_slack_webhook
 </pre></div>
@@ -600,7 +600,7 @@
 <p>The helper below reads from this file. Pass <code class="docutils literal notranslate"><span class="pre">webhook_url=</span></code> to override (e.g. for testing).</p>
 </section>
 <section id="a-tiny-stdlib-notifier">
-<h2>2. A tiny stdlib notifier<a class="headerlink" href="#a-tiny-stdlib-notifier" title="Link to this heading">#</a></h2>
+<span id="2-a-tiny-stdlib-notifier"></span><h2>2. A tiny stdlib notifier<a class="headerlink" href="#a-tiny-stdlib-notifier" title="Link to this heading">#</a></h2>
 <p>Slack’s incoming-webhook endpoint accepts a JSON POST. The standard library is enough — no <code class="docutils literal notranslate"><span class="pre">httpx</span></code>, <code class="docutils literal notranslate"><span class="pre">requests</span></code>, or <code class="docutils literal notranslate"><span class="pre">slack_sdk</span></code> needed.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -644,7 +644,7 @@
 </div>
 </section>
 <section id="wrap-a-plr-run">
-<h2>3. Wrap a PLR run<a class="headerlink" href="#wrap-a-plr-run" title="Link to this heading">#</a></h2>
+<span id="3-wrap-a-plr-run"></span><h2>3. Wrap a PLR run<a class="headerlink" href="#wrap-a-plr-run" title="Link to this heading">#</a></h2>
 <p>Send a message at start, on success, and on failure. The <code class="docutils literal notranslate"><span class="pre">finally</span></code> block guarantees <code class="docutils literal notranslate"><span class="pre">lh.stop()</span></code> runs even if the protocol crashes.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -680,7 +680,7 @@
 </div>
 </section>
 <section id="forward-semantic-eventbus-events">
-<h2>4. Forward semantic EventBus events<a class="headerlink" href="#forward-semantic-eventbus-events" title="Link to this heading">#</a></h2>
+<span id="4-forward-semantic-eventbus-events"></span><h2>4. Forward semantic EventBus events<a class="headerlink" href="#forward-semantic-eventbus-events" title="Link to this heading">#</a></h2>
 <p>PLR’s <a class="reference internal" href="../user_guide/machine-agnostic-features/event-bus.html"><span class="std std-doc">EventBus</span></a> can automatically report instrument operations. This subscriber forwards completed and failed semantic operations while ignoring lower-level transport and firmware diagnostics.</p>
 <p>EventBus subscribers run synchronously with PLR, so the callback only submits work to a background thread. A slow Slack request therefore does not delay the instrument operation.</p>
 <div class="cell docutils container">
@@ -740,7 +740,7 @@
 </div>
 </section>
 <section id="richer-messages-with-block-kit">
-<h2>5. Richer messages with Block Kit<a class="headerlink" href="#richer-messages-with-block-kit" title="Link to this heading">#</a></h2>
+<span id="5-richer-messages-with-block-kit"></span><h2>5. Richer messages with Block Kit<a class="headerlink" href="#richer-messages-with-block-kit" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">text</span></code> is just one of the payload fields. Slack also accepts <a class="reference external" href="https://api.slack.com/block-kit">Block Kit</a> for headers, sections, fields, and dividers:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">

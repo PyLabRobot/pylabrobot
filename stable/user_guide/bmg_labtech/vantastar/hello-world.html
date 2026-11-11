@@ -971,7 +971,7 @@
 </div>
 </section>
 <section id="estimating-a-read-s-duration">
-<h3>Estimating a read’s duration<a class="headerlink" href="#estimating-a-read-s-duration" title="Link to this heading">#</a></h3>
+<span id="estimating-a-reads-duration"></span><h3>Estimating a read’s duration<a class="headerlink" href="#estimating-a-read-s-duration" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">reader.estimate_duration</span></code> returns the run time in seconds the reader expects for a read, without reading: pass the read as a lambda, as to <code class="docutils literal notranslate"><span class="pre">run_cycles</span></code>. The read ends at its command, which goes to the reader with its time-only flag; nothing moves. Shaking before the read and <code class="docutils literal notranslate"><span class="pre">pause_before_reading</span></code> are not part of the estimate, and any call other than a read is refused. On the tested reader every read finished a few seconds before its estimate, so a <code class="docutils literal notranslate"><span class="pre">cycle_time</span></code> of at least the estimate leaves room.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">

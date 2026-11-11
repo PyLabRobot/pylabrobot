@@ -793,7 +793,7 @@
                 <article class="bd-article">
                   
   <section class="tex2jax_ignore mathjax_ignore" id="byonoy-luminescence-96-lab-guide">
-<h1>Byonoy Luminescence 96 — lab guide<a class="headerlink" href="#byonoy-luminescence-96-lab-guide" title="Link to this heading">#</a></h1>
+<span id="byonoy-luminescence-96--lab-guide"></span><h1>Byonoy Luminescence 96 — lab guide<a class="headerlink" href="#byonoy-luminescence-96-lab-guide" title="Link to this heading">#</a></h1>
 <p>Run a luminescence assay on the Byonoy L96 from PyLabRobot. Assumes the device is plugged in via USB and you’ve installed <code class="docutils literal notranslate"><span class="pre">pylabrobot</span></code> (with <code class="docutils literal notranslate"><span class="pre">hid</span></code> and <code class="docutils literal notranslate"><span class="pre">hidapi</span></code>).</p>
 <p>The L96 is a 96-well luminescence-only plate reader. It reads emitted light per well, no excitation source. Communicates over USB HID (vid <code class="docutils literal notranslate"><span class="pre">0x16D0</span></code>, pid <code class="docutils literal notranslate"><span class="pre">0x119B</span></code>).</p>
 <div class="plr-device-card" id="device-byonoy-luminescence-96">
@@ -823,7 +823,7 @@
   <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.byonoy.ByonoyLuminescence96</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
   <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/byonoy"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://byonoy.com/luminescence-96-automate/" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
 </div><section id="connect">
-<h2>1. Connect<a class="headerlink" href="#connect" title="Link to this heading">#</a></h2>
+<span id="1-connect"></span><h2>1. Connect<a class="headerlink" href="#connect" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">base</span></code> is a resource (a plate goes here); <code class="docutils literal notranslate"><span class="pre">reader</span></code> is both a resource and a device (the detector unit). After <code class="docutils literal notranslate"><span class="pre">setup()</span></code> the HID handle is open.</p>
 <blockquote>
 <div><p><strong>One process at a time.</strong> macOS / Windows / Linux all give exclusive HID access. If a previous Python session crashed without <code class="docutils literal notranslate"><span class="pre">stop()</span></code>, the next <code class="docutils literal notranslate"><span class="pre">setup()</span></code> will fail with “device already open”. Replug the USB cable to force-release.</p>
@@ -849,7 +849,7 @@
 </div>
 </section>
 <section id="load-a-plate">
-<h2>2. Load a plate<a class="headerlink" href="#load-a-plate" title="Link to this heading">#</a></h2>
+<span id="2-load-a-plate"></span><h2>2. Load a plate<a class="headerlink" href="#load-a-plate" title="Link to this heading">#</a></h2>
 <p>The reader-on-base interlock prevents you from assigning a plate while the detector is still on the holder — it forces a sane physical sequence.</p>
 <p>After running this cell, physically place the plate in the reader and place the detector back on top.</p>
 <div class="cell docutils container">
@@ -865,7 +865,7 @@
 </div>
 </section>
 <section id="read-the-basics">
-<h2>3. Read — the basics<a class="headerlink" href="#read-the-basics" title="Link to this heading">#</a></h2>
+<span id="3-read--the-basics"></span><h2>3. Read — the basics<a class="headerlink" href="#read-the-basics" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">focal_height</span></code> is required by the abstract <code class="docutils literal notranslate"><span class="pre">Luminescence</span></code> capability but <strong>ignored by the L96</strong> — the device has a fixed optical configuration (the detector unit clamps onto the base; geometry is determined by plate + base + detector heights, not user-tunable). Pass <code class="docutils literal notranslate"><span class="pre">0</span></code> by convention.</p>
 <section id="result-shape">
 <h3>Result shape<a class="headerlink" href="#result-shape" title="Link to this heading">#</a></h3>
@@ -893,7 +893,7 @@
 </section>
 </section>
 <section id="picking-an-integration-mode">
-<h2>4. Picking an integration mode<a class="headerlink" href="#picking-an-integration-mode" title="Link to this heading">#</a></h2>
+<span id="4-picking-an-integration-mode"></span><h2>4. Picking an integration mode<a class="headerlink" href="#picking-an-integration-mode" title="Link to this heading">#</a></h2>
 <p>Four modes, mapping to the byonoy_device_library presets:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -949,7 +949,7 @@
 </div>
 </section>
 <section id="reading-specific-wells">
-<h2>5. Reading specific wells<a class="headerlink" href="#reading-specific-wells" title="Link to this heading">#</a></h2>
+<span id="5-reading-specific-wells"></span><h2>5. Reading specific wells<a class="headerlink" href="#reading-specific-wells" title="Link to this heading">#</a></h2>
 <p>Pass a <code class="docutils literal notranslate"><span class="pre">wells=</span></code> list to <code class="docutils literal notranslate"><span class="pre">read()</span></code> — only those wells get real values back; everything else comes back as <code class="docutils literal notranslate"><span class="pre">None</span></code>. The result shape is still 8×12 (per the <code class="docutils literal notranslate"><span class="pre">LuminescenceResult</span></code> contract); unmeasured cells are <code class="docutils literal notranslate"><span class="pre">None</span></code> so you can distinguish “didn’t read” from a legitimate <code class="docutils literal notranslate"><span class="pre">0.0</span></code> reading (baseline subtraction can yield ~0 or negative values).</p>
 <blockquote>
 <div><p><strong>No speed-up.</strong> The firmware always integrates the whole 96-sensor array. Reading one column with <code class="docutils literal notranslate"><span class="pre">SENSITIVE</span></code> takes the same wall-clock as reading the full plate (~28 s in our hardware test). The <code class="docutils literal notranslate"><span class="pre">wells</span></code> filter keeps your downstream tidy — it doesn’t save time. If you want fast, use <code class="docutils literal notranslate"><span class="pre">RAPID</span></code> mode.</p>
@@ -971,7 +971,7 @@
 </div>
 </section>
 <section id="timed-read-delay-before-reading">
-<h2>6. Timed read (delay before reading)<a class="headerlink" href="#timed-read-delay-before-reading" title="Link to this heading">#</a></h2>
+<span id="6-timed-read-delay-before-reading"></span><h2>6. Timed read (delay before reading)<a class="headerlink" href="#timed-read-delay-before-reading" title="Link to this heading">#</a></h2>
 <p>For a substrate-injection assay where you want a fixed delay between adding reagent and reading. <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">asyncio.sleep</span></code> doesn’t block the event loop, and the reader stays connected.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -986,7 +986,7 @@
 </div>
 </section>
 <section id="kinetic-read-time-series">
-<h2>7. Kinetic read (time series)<a class="headerlink" href="#kinetic-read-time-series" title="Link to this heading">#</a></h2>
+<span id="7-kinetic-read-time-series"></span><h2>7. Kinetic read (time series)<a class="headerlink" href="#kinetic-read-time-series" title="Link to this heading">#</a></h2>
 <p>Read the same plate every N seconds, collect a stack of matrices. With <code class="docutils literal notranslate"><span class="pre">SENSITIVE</span></code> (2 s) the wall-clock per read is around 3 s including overhead, so <code class="docutils literal notranslate"><span class="pre">interval_s</span></code> must be ≥ 3. With <code class="docutils literal notranslate"><span class="pre">ULTRA_SENSITIVE</span></code> (20 s) it’s around 28 s — plan accordingly.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1020,7 +1020,7 @@
 </div>
 </section>
 <section id="stopping-a-long-read">
-<h2>8. Stopping a long read<a class="headerlink" href="#stopping-a-long-read" title="Link to this heading">#</a></h2>
+<span id="8-stopping-a-long-read"></span><h2>8. Stopping a long read<a class="headerlink" href="#stopping-a-long-read" title="Link to this heading">#</a></h2>
 <p>If you need to bail out of an <code class="docutils literal notranslate"><span class="pre">ULTRA_SENSITIVE</span></code> read mid-flight (or any read takes longer than expected), <code class="docutils literal notranslate"><span class="pre">cancel()</span></code> raises a flag the read loop checks; bail-out is within ~2 s. After cancel the device stays initialised and immediately accepts new reads.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1043,7 +1043,7 @@
 </div>
 </section>
 <section id="device-health-identity">
-<h2>9. Device health &amp; identity<a class="headerlink" href="#device-health-identity" title="Link to this heading">#</a></h2>
+<span id="9-device-health--identity"></span><h2>9. Device health &amp; identity<a class="headerlink" href="#device-health-identity" title="Link to this heading">#</a></h2>
 <p>Useful at the start of a session, in error messages, or for run logging.</p>
 <blockquote>
 <div><p><strong><code class="docutils literal notranslate"><span class="pre">slot_state</span></code></strong>: <code class="docutils literal notranslate"><span class="pre">OCCUPIED</span></code> when a plate is loaded, <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> when nothing is in the reader (the firmware can’t tell empty from missing). Don’t treat <code class="docutils literal notranslate"><span class="pre">UNKNOWN</span></code> as an error.</p>
@@ -1069,7 +1069,7 @@
 </div>
 </section>
 <section id="visual-feedback-led-bar">
-<h2>10. Visual feedback (LED bar)<a class="headerlink" href="#visual-feedback-led-bar" title="Link to this heading">#</a></h2>
+<span id="10-visual-feedback-led-bar"></span><h2>10. Visual feedback (LED bar)<a class="headerlink" href="#visual-feedback-led-bar" title="Link to this heading">#</a></h2>
 <p>The L96 has a 20-pixel addressable RGB front bar. Useful in a workcell to flag run state — solid colors for status, firmware-driven animations (<code class="docutils literal notranslate"><span class="pre">BREATHING</span></code>, <code class="docutils literal notranslate"><span class="pre">CYLON</span></code>, etc.) for “busy” indicators, or per-pixel control for progress bars and custom animations.</p>
 <p>See the dedicated <a class="reference internal" href="led_bar.html"><span class="std std-doc">LED bar notebook</span></a> for the full surface and recipes (KITT scanner, gradients, etc.). Quick taste below.</p>
 <div class="cell docutils container">
@@ -1083,7 +1083,7 @@
 </div>
 </section>
 <section id="end-point-luciferase-recipe">
-<h2>11. End-point luciferase recipe<a class="headerlink" href="#end-point-luciferase-recipe" title="Link to this heading">#</a></h2>
+<span id="11-end-point-luciferase-recipe"></span><h2>11. End-point luciferase recipe<a class="headerlink" href="#end-point-luciferase-recipe" title="Link to this heading">#</a></h2>
 <p>End-to-end workflow for a typical end-point luciferase assay.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1130,7 +1130,7 @@
 </div>
 </section>
 <section id="troubleshooting">
-<h2>12. Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h2>
+<span id="12-troubleshooting"></span><h2>12. Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Symptom</p></th>
@@ -1176,7 +1176,7 @@
 </div>
 </section>
 <section id="reference">
-<h2>13. Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h2>
+<span id="13-reference"></span><h2>13. Reference<a class="headerlink" href="#reference" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><strong>Hardware protocol</strong>: HID 64-byte frames, vid <code class="docutils literal notranslate"><span class="pre">0x16D0</span></code>, pid <code class="docutils literal notranslate"><span class="pre">0x119B</span></code>. Report IDs decoded from Byonoy’s <code class="docutils literal notranslate"><span class="pre">byonoyusbhid.h</span></code>. <code class="docutils literal notranslate"><span class="pre">routing_info=\x80\x40</span></code> requests a reply; <code class="docutils literal notranslate"><span class="pre">\x00\x00</span></code> is fire-and-forget.</p></li>
 </ul>
