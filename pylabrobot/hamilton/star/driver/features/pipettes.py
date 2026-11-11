@@ -2376,16 +2376,21 @@ class Pipettes:
 
   # -- x probing (capacitive only) --------------------------------------------------------------
 
-  async def _unchecked_fw_probe_x_using_clld(self, end_position: float, read_timeout: int = 240):
-    """Move the arm along X until the channel's cLLD triggers, or to the end, as given. `C0 XL`.
+  async def _unchecked_fw_probe_x_using_clld(
+    self, channel: int, end_position: float, read_timeout: int = 240
+  ):
+    """Move the arm along X until a channel's cLLD triggers, or to the end, as given. `C0 XL`.
 
     Args:
+      channel: the channel whose cLLD stops the search, 0-indexed from the back (`pn`). Left out,
+        the firmware watches the last channel a command named, or the first.
       end_position: where the search ends, in mm, sent in 0.1 mm (`xs`).
       read_timeout: how long to wait for the answer, in s.
     """
     await self._driver.send_command(
       module="C0",
       command="XL",
+      pn=f"{channel + 1:02}",  # the firmware counts channels from 1
       xs=f"{int(round(end_position * 10)):05}",
       read_timeout=read_timeout,
     )
@@ -2438,7 +2443,8 @@ class Pipettes:
       direction: "left" (decreasing x) or "right" (increasing x).
       search_end_position: where the search ends, in mm. The end of the reach in `direction` when
         None.
-      post_detection_distance: how far to back away from the surface afterwards, in mm.
+      post_detection_distance: how far to back away from the surface afterwards, in mm; 0 sends
+        no move.
       tip_bottom_diameter: the tip's bottom diameter, in mm; half of it is added to the reading.
       stop_disc_diameter: the stop disc's, in mm, for a channel probing without a tip.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
@@ -2480,20 +2486,20 @@ class Pipettes:
 
     found = True
     try:
-      await self._unchecked_fw_probe_x_using_clld(search_end_position, read_timeout=read_timeout)
+      await self._unchecked_fw_probe_x_using_clld(
+        channel=channel, end_position=search_end_position, read_timeout=read_timeout
+      )
     except STARFirmwareError as error:
       if not self._found_nothing(error, "C0"):
         raise
       found = False
     detected = round(await self.request_x_position(), 1)
 
-    # Back away, so a carrier moved later does not drag against the tip.
-    if direction == "left":
-      await self.move_to_x_position(detected + post_detection_distance)
-      surface = detected - diameter / 2
-    else:
-      await self.move_to_x_position(detected - post_detection_distance)
-      surface = detected + diameter / 2
+    # Back away, so a carrier moved later does not drag against the tip; 0 sends no move.
+    if round(post_detection_distance, 1) > 0:
+      away = post_detection_distance if direction == "left" else -post_detection_distance
+      await self.move_to_x_position(detected + away)
+    surface = detected - diameter / 2 if direction == "left" else detected + diameter / 2
     return round(surface, 1) if found else None
 
   # -- y probing (capacitive only) --------------------------------------------------------------
