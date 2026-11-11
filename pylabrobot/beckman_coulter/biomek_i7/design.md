@@ -37,3 +37,12 @@ uL, s, degrees, the deck's frame). Planning, recipes and the counts layer work i
 frame with Y towards the front, the per-mille speed field), which is what its logs and files are
 compared in. A public method converts its arguments once, in `units.py`, and calls its `_`-prefixed
 Biomek-unit twin; nothing is converted back and forth inside.
+
+**I4. One way to make a configuration, checked against the instrument.**
+`DeviceConfiguration.from_biomek` (`biomek_files/`) makes it from the instrument's Biomek instrument
+file (`.bif`) and the Master Controller's instrument record, read-only; the two must describe one
+instrument. Each source's values are fingerprinted: a file changed after import is refused at load;
+on the instrument, discovery refuses one whose serial numbers are not the modules', and one whose
+sources have changed since. There is no switch to skip a check; the fix is to import again. A
+simulation with no files uses the package's generic instrument (`defaults/`), which a live session
+refuses.

@@ -8,16 +8,18 @@ Two kinds:
   - per pod, the counts conversions, travel limits, geometry and settings that Biomek keeps on
     the host side.
 
-  One JSON file per instrument, made from the instrument's two Biomek sources and given to the
-  driver by path; no instrument's own ships with the driver (the generic one in `defaults/`,
-  anonymized, is for simulation):
+  One JSON file per instrument, made only by `DeviceConfiguration.from_biomek` from the
+  instrument's two Biomek sources (`biomek_files/`), and given to the driver by path; no
+  instrument's own ships with the driver (the generic one in `defaults/`, anonymized, is for
+  simulation):
   - Biomek's instrument file (`.bif`): the pods, the deck's calibrated positions and its layout;
   - the Master Controller's instrument record: the motor tables (with each instrument's measured
     hysteresis) and the modules' serial numbers.
 
   `sources` records, per source, where it was read, when, and a fingerprint of exactly the values
   taken from it. Loading refuses a file whose values no longer match its fingerprints (changed
-  after it was imported).
+  after it was imported), and a live session refuses one whose sources have changed since
+  (`check_sources`).
 """
 
 import copy
@@ -335,6 +337,35 @@ def fingerprint(value: Any) -> str:
   return "sha256:" + hashlib.sha256(text.encode("ascii")).hexdigest()
 
 
+def differences(old: Any, new: Any, path: str = "") -> List[str]:
+  """Where two JSON values differ, one line per leaf (`pods/left/limits/X: [..] -> [..]`)."""
+  if isinstance(old, dict) and isinstance(new, dict):
+    lines = []
+    for key in sorted(set(old) | set(new), key=str):
+      sub = f"{path}/{key}" if path else str(key)
+      if key not in old:
+        lines.append(f"{sub}: added")
+      elif key not in new:
+        lines.append(f"{sub}: removed")
+      else:
+        lines += differences(old[key], new[key], sub)
+    return lines
+  if isinstance(old, list) and isinstance(new, list) and len(old) == len(new):
+    return [
+      line for i, (a, b) in enumerate(zip(old, new)) for line in differences(a, b, f"{path}[{i}]")
+    ]
+  return [] if old == new else [f"{path}: {old!r} -> {new!r}"]
+
+
+@dataclass(frozen=True)
+class SourcesCheck:
+  """How a configuration's sources compare with it now (`DeviceConfiguration.check_sources`):
+  `changed` lists each value that differs, `unavailable` each source that could not be found."""
+
+  changed: List[str]
+  unavailable: List[str]
+
+
 @dataclass
 class DeviceConfiguration:
   """Everything declared about one instrument: its motor tables and its pods.
@@ -371,6 +402,45 @@ class DeviceConfiguration:
       raise ValueError(f"no pod declared on the {side}; declared: {sorted(self.pods)}")
     return self.pods[side]
 
+  @classmethod
+  def from_biomek(
+    cls,
+    bif: Union[str, Path],
+    master_controller_db: Optional[Union[str, Path]] = None,
+    master_controller_record: Optional[Union[str, Path]] = None,
+    chassis_serial_number: Optional[str] = None,
+  ) -> "DeviceConfiguration":
+    """An instrument's declared configuration, from its Biomek files: the only way one is made.
+
+    Args:
+      bif: Biomek's instrument file (on the instrument's computer,
+        `C:\\Users\\Public\\Documents\\Biomek5\\Biomek_i7.bif`).
+      master_controller_db: the Master Controller's database (`C:\\ProgramData\\Beckman
+        Coulter\\Biomek Master Controller\\Log.db3`), read-only.
+      master_controller_record: instead of the database, a text file holding its instrument
+        record (`biomek_files.master_controller.write_record`).
+      chassis_serial_number: which instrument's record, when the database holds more than one.
+
+    Raises:
+      ValueError: for files that do not describe one consistent instrument (see
+        `biomek_files.importer`).
+    """
+    from pylabrobot.beckman_coulter.biomek_i7.biomek_files.importer import import_configuration
+
+    return import_configuration(
+      bif,
+      master_controller_db=master_controller_db,
+      master_controller_record=master_controller_record,
+      chassis_serial_number=chassis_serial_number,
+    )
+
+  def check_sources(self) -> SourcesCheck:
+    """Read this configuration's sources again (read-only) and say what has changed since it was
+    imported, and which sources cannot be found here."""
+    from pylabrobot.beckman_coulter.biomek_i7.biomek_files.importer import check_sources
+
+    return check_sources(self)
+
   def fingerprints(self) -> Dict[str, str]:
     """The fingerprint of the values taken from each source, as they are now."""
     parts = source_parts(self.to_dict())
@@ -378,7 +448,7 @@ class DeviceConfiguration:
 
   def unrecorded_changes(self) -> List[str]:
     """The sources whose values no longer match the fingerprints recorded at import: changed after
-    the file was made, by hand or otherwise."""
+    the file was made, by hand or by anything but `from_biomek`."""
     now = self.fingerprints()
     return [name for name in SOURCES if self.sources.get(name, {}).get("fingerprint") != now[name]]
 
@@ -407,11 +477,11 @@ class DeviceConfiguration:
 
   @classmethod
   def load(cls, path: Union[str, Path]) -> "DeviceConfiguration":
-    """An instrument's declared configuration, from the file `save` wrote.
+    """An instrument's declared configuration, from the file `from_biomek` made and `save` wrote.
 
     Raises:
       ValueError: if its values no longer match the fingerprints recorded at import: it was
-        changed afterwards. Import it again.
+        changed afterwards. Make it again with `from_biomek`.
     """
     with open(path, encoding="utf-8") as fh:
       config = cls.from_dict(json.load(fh))
@@ -419,7 +489,8 @@ class DeviceConfiguration:
     if changed:
       raise ValueError(
         f"{path}: the values from {' and '.join(changed)} are not the ones imported (changed "
-        "after import); import it again from the instrument's Biomek files"
+        "after import, or not made by `DeviceConfiguration.from_biomek`); import it again from "
+        "the instrument's Biomek files"
       )
     return config
 

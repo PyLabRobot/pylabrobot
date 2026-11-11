@@ -56,9 +56,9 @@ class BiomekI7Driver:
     Args:
       serial_numbers: the ACE boards' USB serial numbers. Defaults to every ACE board attached.
       declared_configuration_json: path of the instrument's declared configuration (motor tables,
-        and per pod its conversions, limits, geometry and calibration), made from the instrument's
-        Biomek files. Required: the driver never falls back to another, the package's generic one
-        included.
+        and per pod its conversions, limits, geometry and calibration), as
+        `DeviceConfiguration.from_biomek` makes it from the instrument's Biomek files. Required:
+        the driver never falls back to another, the package's generic one included.
       boards: boards to use instead of opening USB devices: a simulated instrument
         (`simulator.replay_boards`). With them, the checks that tie the configuration to a real
         instrument (`discover`) are not made.
@@ -70,7 +70,7 @@ class BiomekI7Driver:
     if declared_configuration_json is None:
       raise ValueError(
         "no declared configuration: pass `declared_configuration_json`, the instrument's own, made "
-        "from its Biomek files"
+        "by `DeviceConfiguration.from_biomek` from its Biomek files"
       )
     self._serial_numbers = list(serial_numbers) if serial_numbers is not None else None
     self.declared_configuration_json = declared_configuration_json
@@ -150,13 +150,17 @@ class BiomekI7Driver:
     place, no chassis, or a pod type other than the declared one is refused
     (`_check_declared_against`).
 
-    On the instrument (no `boards` given), the declared configuration must be this instrument's:
-    its chassis serial number and each declared pod's module serial number as the modules report
-    them, and not the generic one (`DeviceConfiguration.generic`). Otherwise it is refused.
+    On the instrument (no `boards` given), two checks follow, each refusing:
+    - the declared configuration must be this instrument's: its chassis serial number and each
+      declared pod's module serial number as the modules report them, and not the generic one
+      (`DeviceConfiguration.generic`);
+    - it must still match the Biomek files it was imported from, where they can be found
+      (`DeviceConfiguration.check_sources`): a re-framed deck or re-measured motors there make it
+      stale. Where they cannot be found (another computer), a warning says so.
 
     Raises:
       RuntimeError: for a board this driver cannot place, or no chassis.
-      ValueError: for a declared configuration that is not this instrument's.
+      ValueError: for a declared configuration that is not this instrument's, or is stale.
     """
     if not self._connected:
       await self._open()
@@ -215,9 +219,32 @@ class BiomekI7Driver:
         "the declared configuration is not this instrument's: "
         + "; ".join(mismatches)
         + ". Its motor tables, conversions, geometry and calibration may not fit. Pass this "
-        "instrument's own `declared_configuration_json`, made from its Biomek files."
+        "instrument's own `declared_configuration_json`, made by "
+        "`DeviceConfiguration.from_biomek` from its Biomek files."
       )
-    logger.info("the declared configuration is this instrument's: serial numbers match the modules")
+    sources = self.declared.check_sources()
+    if sources.changed:
+      shown = sources.changed[:20]
+      more = len(sources.changed) - len(shown)
+      raise ValueError(
+        "the declared configuration no longer matches the Biomek files it was imported from ("
+        + "; ".join(shown)
+        + (f"; and {more} more" if more else "")
+        + "): the instrument was re-calibrated or re-configured since. Import it again: "
+        "`DeviceConfiguration.from_biomek(...).save(path)`."
+      )
+    if sources.unavailable:
+      logger.warning(
+        "the declared configuration's sources cannot be read here (%s): whether the instrument "
+        "was re-calibrated since %s cannot be checked",
+        "; ".join(sources.unavailable),
+        self.declared.sources.get("instrument_file", {}).get("read_at", "it was imported"),
+      )
+    logger.info(
+      "the declared configuration is this instrument's: serial numbers match the modules; "
+      "sources %s",
+      "unchanged since import" if not sources.unavailable else "partly not checked (above)",
+    )
 
   async def request_serial_numbers(self) -> Dict[str, Optional[str]]:
     """The serial numbers the modules report: `chassis`, and `left` / `right` for each pod found.
@@ -271,10 +298,16 @@ class BiomekI7Driver:
           found or "nothing",
         )
 
-  def save_configuration(self, path: str) -> None:
+  def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
     """Write the declared configuration to `path`, as loaded, for `declared_configuration_json` to
-    read back. Nothing found at discovery is written into it."""
-    self.declared.save(path)
+    read back. A configuration is made only from the instrument's Biomek files
+    (`DeviceConfiguration.from_biomek`), so nothing found at discovery is written into it.
+
+    Args:
+      path: where to write it.
+      indent: how far to indent the JSON, or None to write it on one line.
+    """
+    self.declared.save(path, indent=indent)
 
   def _serial_numbers_found(self) -> Dict[str, Optional[str]]:
     if self.chassis is None or self.chassis.configuration is None:
