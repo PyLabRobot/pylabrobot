@@ -2443,7 +2443,8 @@ class Pipettes:
       direction: "left" (decreasing x) or "right" (increasing x).
       search_end_position: where the search ends, in mm. The end of the reach in `direction` when
         None.
-      post_detection_distance: how far to back away from the surface afterwards, in mm.
+      post_detection_distance: how far to back away from the surface afterwards, in mm; 0 sends
+        no move.
       tip_bottom_diameter: the tip's bottom diameter, in mm; half of it is added to the reading.
       stop_disc_diameter: the stop disc's, in mm, for a channel probing without a tip.
       allow_without_tip: whether to probe without a tip, on the stop disc. False requires one.
@@ -2494,13 +2495,11 @@ class Pipettes:
       found = False
     detected = round(await self.request_x_position(), 1)
 
-    # Back away, so a carrier moved later does not drag against the tip.
-    if direction == "left":
-      await self.move_to_x_position(detected + post_detection_distance)
-      surface = detected - diameter / 2
-    else:
-      await self.move_to_x_position(detected - post_detection_distance)
-      surface = detected + diameter / 2
+    # Back away, so a carrier moved later does not drag against the tip; 0 sends no move.
+    if round(post_detection_distance, 1) > 0:
+      away = post_detection_distance if direction == "left" else -post_detection_distance
+      await self.move_to_x_position(detected + away)
+    surface = detected - diameter / 2 if direction == "left" else detected + diameter / 2
     return round(surface, 1) if found else None
 
   # -- y probing (capacitive only) --------------------------------------------------------------

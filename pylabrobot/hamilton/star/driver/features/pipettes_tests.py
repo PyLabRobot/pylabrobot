@@ -661,6 +661,15 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self.moves.assert_awaited_once_with(252.0)
     self.assertEqual(x, 249.4)
 
+  async def test_x_probe_with_no_post_detection_distance_sends_only_the_search(self):
+    self._stand_at_x(300.0, 250.04)
+    x = await self.pipettes.probe_x_using_clld(
+      0, "left", search_end_position=200.0, post_detection_distance=0
+    )
+    self.assertEqual(self.sent, ["C0XLpn01xs02000"])
+    self.moves.assert_not_awaited()
+    self.assertEqual(x, 249.4)
+
   async def test_x_probe_searches_to_the_end_of_its_reach_by_default(self):
     device = self.pipettes._driver.configuration
     assert device is not None
