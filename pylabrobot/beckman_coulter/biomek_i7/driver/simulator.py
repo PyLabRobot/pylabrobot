@@ -1,8 +1,8 @@
 """Simulated instruments: boards that answer from what a real Biomek i7's boards answered.
 
-`ReplayAceUSB` only replays a recording. `SimulatedAceUSB` also models each axis's state and the
-interlock, so configuring, arming and enabling can run against it; nothing it does reaches a USB
-device.
+`ReplayAceUSB` only replays a recording. `SimulatedAceUSB` also models each axis (homed or not,
+its position, its pending move), so configuring, arming and homing can run against it; nothing it
+does reaches a USB device.
 
 A replayed board holds a recording of request -> replies, keyed on everything in a request
 but its sequence number, and answers a request it has a recording for with those replies under
@@ -13,22 +13,35 @@ ignored it would, and is kept in `unanswered`.
 import asyncio
 import gzip
 import json
+import math
 import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import (
+  Any,
+  Dict,
+  Iterable,
+  List,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
+)
 
 from pylabrobot.beckman_coulter.biomek_i7.driver.board import AceBoard
 from pylabrobot.beckman_coulter.biomek_i7.driver.framing import frame, split
 from pylabrobot.beckman_coulter.biomek_i7.driver.motors import Axis, MotorTables
-from pylabrobot.beckman_coulter.biomek_i7.driver.protocol import AxisState, Device
+from pylabrobot.beckman_coulter.biomek_i7.driver.protocol import (
+  LLS_LIQUID_SENSED,
+  AxisState,
+  Device,
+)
 from pylabrobot.io.usb import USB
 
 # Names the recording the simulator answers from (identity and sensor reads, recorded at an
 # instrument's cold start) when no path is given. A generic one ships in `defaults/`
-# (`biomek_i7_generic_coldstart.json`), which `BiomekI7(simulation=True)` uses when neither is
-# given.
+# (`biomek_i7_generic_coldstart.json`).
 RECORDING_ENV = "BIOMEK_I7_SIMULATOR_RECORDING"
 
 
@@ -111,20 +124,45 @@ def replay_boards(
   ]
 
 
+# Axes a Home of one axis also homes. Biomek homes only Y1 of the Span-8's eight Y channels, and
+# after its Home All every one of them reads as homed (H1, 2026-10-24).
+LINKED_HOMES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+  "span8": {
+    "Y1": tuple(f"Y{i}" for i in range(1, 9)),
+    "D1": tuple(f"D{i}" for i in range(1, 9)),  # the pumps (`HD`, 2026-10-09)
+  },
+}
+
+
 class SimulatedAceUSB(ReplayAceUSB):
   """One board's USB link, answered from a model of its axes rather than only a recording.
 
-  Each axis has a state (`AxisState`), is homed or not, and has a position, by the boards' rules:
-  an axis starts not configured; Configure leaves it disabled and not homed; Set State is refused
-  "not configured" before that. Identity and sensor reads are answered from the recording.
+  Each axis has a state (`AxisState`), is homed or not, and has a position and a pending move, by
+  the boards' rules: an axis starts not configured; Configure leaves it
+  disabled and not homed; Set State and Set Move Parameters are refused "not configured" before
+  that; Home is refused "not enabled" unless the axis is enabled. Set Move Parameters is refused
+  "not homed" for an axis not homed, as a board refuses it after power-up; Move, Move All and Home
+  answer ACCEPTED then DONE and update the model. A homed axis ends at 0 in the model; a real
+  board ends where its Configure parameters say (Biomek read the Multichannel's Z at -1000 and its
+  plunger at 43175 straight after homing). Identity and sensor reads are answered from the
+  recording.
 
   The boards of one instrument share an `Interlock`. While it is tripped, as at rest, a CiA 402
   axis that was enabled reads FAULT (its drive lost motor power: H1, 2026-10-27; one configured at
-  rest reads DISABLED, as on H2 the same day), its enable fails, and the arm's drive supply
-  input reads 0.12 V; armed, 35.4 V.
+  rest reads DISABLED, as on H2 the same day), its enable fails, moves and homes
+  are refused "interlock tripped", and the arm's drive supply input reads 0.12 V; armed, 35.4 V.
   Enabling a CiA 402 axis in fault resets it, unless it was given a fault that
   does not clear (`_AxisModel.stuck_fault`). The error codes of a failed enable are not known; the
   model answers "interlock tripped" without power and 0x3D for a stuck fault.
+
+  A move with a force limit stops where the axis meets something (`_AxisModel.obstacle`, set by a
+  test). A move with a sensor stops where the sensor fires (`_AxisModel.sensed_at`), and the
+  Move All carries that axis's report (LLS_LIQUID_SENSED and the position) under its sequence.
+  A pump keeps the valve it was last moved through.
+
+  Moves complete at once unless `time_scale` is set: then a Move or Move All is accepted at once
+  and done after the slowest axis's move would take (`_AxisModel.duration`), times `time_scale`
+  (1: about as long as on the instrument), so a simulated run can be watched and stopped.
   """
 
   def __init__(
@@ -133,16 +171,21 @@ class SimulatedAceUSB(ReplayAceUSB):
     axes: Sequence[Axis] = (),
     homed: Iterable[str] = (),
     name: str = "simulated ACE board",
+    linked_homes: Optional[Dict[str, Tuple[str, ...]]] = None,
     configured: bool = False,
     interlock: Optional["Interlock"] = None,
     supply_input: Optional[int] = None,
     door_input: Optional[int] = None,
+    time_scale: float = 0.0,
   ):
     super().__init__(recording, name=name)
+    self.time_scale = time_scale
+    self._move_seconds = 0.0  # how long the move just answered takes (`answer`)
     self.door_input = door_input
     homed = set(homed)
     if homed and not configured:
       raise ValueError("an axis cannot be homed on a board that is not configured")
+    self.linked_homes = linked_homes or {}
     self.interlock = interlock or Interlock()
     self.supply_input = supply_input
     self.axes: Dict[Tuple[int, int], _AxisModel] = {}
@@ -151,6 +194,7 @@ class SimulatedAceUSB(ReplayAceUSB):
       # axes read FAULT while the interlock is tripped (`_apply_power`).
       state = AxisState.ENABLED if configured else AxisState.NOT_CONFIGURED
       self.axes[(a.device, a.index)] = _AxisModel(a.name, a.name in homed, state, a.drive)
+    self.axes_list = list(axes)
 
   def _apply_power(self) -> None:
     """An enabled CiA 402 drive faults when its motor power goes. One configured with the power
@@ -188,6 +232,7 @@ class SimulatedAceUSB(ReplayAceUSB):
     device, index, opcode, params = message[0], message[1], message[4], message[5:]
     header = message[:5]
     done = header + b"\x02\x00"
+    accepted = header + b"\x01\x00"
     tripped = header + b"\x00\x0f"
     self._apply_power()
     if device == Device.ANALOG_INPUT and opcode == 0x10 and index == self.supply_input:
@@ -196,6 +241,8 @@ class SimulatedAceUSB(ReplayAceUSB):
     axis = self.axes.get((device, index))
     if axis is not None:
       configured = axis.state != AxisState.NOT_CONFIGURED
+      if opcode in (0x50, 0x51) and not self.interlock.armed:
+        return [tripped]
       if opcode == 0x11:
         return [done + bytes([axis.state])]
       if opcode == 0x24:
@@ -203,7 +250,7 @@ class SimulatedAceUSB(ReplayAceUSB):
       if opcode == 0x21:
         return [done + (b"\x00" if axis.homed else b"\x01")]
       if opcode == 0x10:
-        axis.state, axis.homed = AxisState.DISABLED, False
+        axis.state, axis.homed, axis.pending = AxisState.DISABLED, False, None
         return [done]
       if opcode == 0x12:
         if not configured:
@@ -216,8 +263,51 @@ class SimulatedAceUSB(ReplayAceUSB):
             return [header + b"\x00\x3d"]
         axis.state = AxisState(params[0])
         return [done]
+      if opcode == 0x40:
+        if not configured:
+          return [header + b"\x00\x30"]
+        if not axis.homed:
+          return [header + b"\x00\x32"]
+        axis.pending = struct.unpack_from("<i", params, 16)[0]
+        if device == Device.PUMP:
+          axis.valve = params[20]
+          axis.force = axis.sensor = 0
+          axis.velocity, axis.acceleration = (
+            struct.unpack_from("<II", params, 4)[0],
+            struct.unpack_from("<I", params, 12)[0],
+          )
+        else:
+          axis.velocity, axis.acceleration = struct.unpack_from("<II", params, 0)
+          axis.force = struct.unpack_from("<I", params, 12)[0]
+          axis.sensor = params[20]
+        return [done]
+      if opcode == 0x50:
+        self._move_seconds = axis.duration()
+        axis.finish_move()
+        return [accepted, done]
+      if opcode == 0x51:
+        if axis.state != AxisState.ENABLED:
+          return [header + b"\x00\x31"]
+        for model in self.axes.values():
+          if model is axis or model.name in self.linked_homes.get(axis.name, ()):
+            model.homed, model.position, model.pending = True, 0, None
+        return [accepted, done]
     if device == Device.MOTION_SERVICE and opcode == 0x0F:
+      for model in self.axes.values():
+        model.pending = None
       return [done]
+    if device == Device.MOTION_SERVICE and opcode == 0x50:
+      if not self.interlock.armed:
+        return [tripped]
+      reports = []
+      self._move_seconds = max((m.duration() for m in self.axes.values()), default=0.0)
+      for (axis_device, axis_index), model in self.axes.items():
+        if model.finish_move() == "sensed":
+          reports.append(
+            bytes([axis_device, axis_index, 0, message[3], 0x50, 0x02, 0x00, LLS_LIQUID_SENSED])
+            + struct.pack("<i", model.position)
+          )
+      return [accepted, *reports, done]
     if device == Device.MODULE and opcode == 0x0F:
       return [done]
     if device == Device.INTERLOCK and opcode == 0x10:
@@ -242,13 +332,23 @@ class SimulatedAceUSB(ReplayAceUSB):
 
   async def write(self, data: bytes, timeout: Optional[float] = None):
     for message in split(data):
+      self._move_seconds = 0.0
       replies = self.answer(message)
       if replies is None:
         await super().write(frame(message), timeout)
         continue
       self.requests.append(message)
-      for reply in replies:
-        self._queue(reply)
+      delay = self._move_seconds * self.time_scale
+      if delay > 0 and len(replies) > 1:
+        # Accepted now; the rest (reports, done) once the move would have finished.
+        self._queue(replies[0])
+        asyncio.get_running_loop().call_later(delay, self._queue_all, replies[1:])
+        continue
+      self._queue_all(replies)
+
+  def _queue_all(self, replies: List[bytes]) -> None:
+    for reply in replies:
+      self._queue(reply)
 
   def _queue(self, message: bytes) -> None:
     framed = frame(message)
@@ -275,6 +375,48 @@ class _AxisModel:
   drive: str = "cia402"
   stuck_fault: bool = False
   position: int = 0
+  pending: Optional[int] = None
+  # The pending move's force limit (x1000) and sensor; a pump's valve (0-3, None until moved).
+  force: int = 0
+  sensor: int = 0
+  valve: Optional[int] = None
+  # Where a force-limited move meets something, and where a sensor fires; None: nowhere.
+  obstacle: Optional[int] = None
+  sensed_at: Optional[int] = None
+  # The pending move's top speed (counts/s) and acceleration (counts/s2), as last set.
+  velocity: int = 0
+  acceleration: int = 0
+
+  def duration(self) -> float:
+    """Seconds the pending move takes: up to speed, at speed, down again (jerk left out); 0
+    with none, or without speeds."""
+    if self.pending is None or self.velocity <= 0 or self.acceleration <= 0:
+      return 0.0
+    distance = abs(self.pending - self.position)
+    v, a = float(self.velocity), float(self.acceleration)
+    if distance >= v * v / a:
+      return distance / v + v / a
+    return 2.0 * math.sqrt(distance / a)
+
+  def finish_move(self) -> Optional[str]:
+    """Run the pending move to its end: its target, or where force or a sensor stops it. Returns
+    "stalled" or "sensed" for those, else None."""
+    if self.pending is None:
+      return None
+    low, high = sorted((self.position, self.pending))
+    target, self.pending = self.pending, None
+    obstacle, sensed_at = self.obstacle, self.sensed_at
+    # An obstacle stops a force-limited move into it, not one leaving it.
+    if (
+      self.force and obstacle is not None and obstacle != self.position and low <= obstacle <= high
+    ):
+      self.position = obstacle
+      return "stalled"
+    if self.sensor and sensed_at is not None and low <= sensed_at <= high:
+      self.position = sensed_at
+      return "sensed"
+    self.position = target
+    return None
 
 
 # The analog input carrying the interlocked drive supply, per module (the Master Controller's cold
@@ -290,6 +432,7 @@ def simulated_boards(
   path: Optional[Union[str, Path]] = None,
   default_timeout: float = 1.0,
   configured: Optional[Union[bool, Dict[str, bool]]] = None,
+  time_scale: float = 0.0,
 ) -> List[AceBoard]:
   """A simulated instrument as `BiomekI7Driver(boards=...)` takes it: the recorded chassis, a left
   Multichannel and a right Span-8 pod.
@@ -302,6 +445,7 @@ def simulated_boards(
     configured: whether each arm's board has its motor tables, as one value or per arm type.
       Defaults to configured wherever an axis is homed, and not configured (just powered up)
       otherwise.
+    time_scale: how long moves take, as `SimulatedAceUSB` takes it (0: at once).
   """
   tables = motor_tables
   data = load_recording(path)
@@ -325,10 +469,12 @@ def simulated_boards(
       axes,
       homed_axes,
       name=f"simulated {module}",
+      linked_homes=LINKED_HOMES.get(module),
       configured=is_configured,
       interlock=interlock,
       supply_input=SUPPLY_INPUTS.get(module),
       door_input=DOOR_INPUTS.get(module),
+      time_scale=time_scale,
     )
     boards.append(AceBoard(io=usb, name=f"simulated {module}", default_timeout=default_timeout))
   return boards

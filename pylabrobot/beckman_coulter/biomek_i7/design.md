@@ -58,3 +58,16 @@ features send through it. `driver.arm(name)` also takes Biomek's names (`1`, `"P
 move and leaves it as it found it. `stop()` moves nothing (Biomek stops in place). `pause` /
 `resume` is Biomek's whole-system pause. A fault under power is cleared by enabling, with a warning;
 one that will not clear trips the interlock. The door only reports: it has no interlock of its own.
+
+**I6. Positions are kept as the MC keeps them.** Each axis has `(position, adjusted)`; moves are
+planned from where the driver last put the axis, not from a read. An axis whose position is unknown
+(after homing, a force-limited move or a failure) is read before its next move. That, and sending
+each move's requests in the MC's order, keeps the traffic request for request the MC's. Home All is
+the MC's recipe (`driver/recipes/homing.py`), its targets from the motor record.
+
+**I7. Pod against pod is the driver's job.** Nothing below the driver stops the pods colliding.
+Before a pod moves, its swept X range (bridge, pipettor and gripper as posed, with what it holds)
+must clear the other pod's range and any move it has in flight, or the move is refused before
+anything is sent (`driver/x_rail.py`, Biomek's own rule). The driver does not move the other pod out
+of the way; a caller makes room (`Pod.move_aside`, `Pod.park`). The guard uses the configuration
+only, so it holds without a deck.

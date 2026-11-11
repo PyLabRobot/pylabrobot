@@ -174,10 +174,13 @@ class Obstacle:
 # The settings the driver takes from a pod's entry in the instrument file, never assumed: a pod
 # whose entry lacks one is refused (`PodConfiguration`). Every pod's; a gripper's; each pod type's.
 POD_SETTINGS: Tuple[str, ...] = ()
-GRIPPER_SETTINGS: Tuple[str, ...] = ()
+GRIPPER_SETTINGS: Tuple[str, ...] = ("GripperSqueezeForce",)
 TYPE_SETTINGS: Dict[str, Tuple[str, ...]] = {
   "span8": ("ProbeSize",),
-  "multichannel": (),
+  "multichannel": (
+    "HeadBodyXSpan",
+    "HeadBodyYSpan",
+  ),
 }
 
 

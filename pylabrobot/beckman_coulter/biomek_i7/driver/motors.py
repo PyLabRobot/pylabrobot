@@ -3,8 +3,8 @@
 A board does not keep its motor tables across a power cycle and cannot be asked for them, so the
 host loads them at a cold start. Two more values per axis never reach a board: the Master
 Controller keeps them in its own motor record and applies them itself. `home_position` is its
-`phome`: where its Home All leaves X, the Multichannel's Y and the gripper axes (the Z channels,
-the plunger and the Span-8 Y channels end elsewhere).
+`phome`: where its Home All leaves X, the Multichannel's Y and the gripper axes (see
+`driver/recipes/homing.py`; the Z channels, the plunger and the Span-8 Y channels end elsewhere).
 `hysteresis` is what it adds to an axis's targets; only the Span-8 Z channels have any, and it
 differs channel by channel, measured per instrument. They are data, the Master Controller's own
 record of the instrument (the `modules` section of its declared configuration,
@@ -22,7 +22,7 @@ Three layouts of Configure parameters were seen, each starting with the axis's l
 
 import struct
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pylabrobot.beckman_coulter.biomek_i7.driver.protocol import Device
 
@@ -110,6 +110,22 @@ class Axis:
       raise ValueError(
         f"{self.name} position {position} is outside ({limits.min_position}, {limits.max_position})"
       )
+
+
+@dataclass(frozen=True)
+class AxisMove:
+  """One axis's next move, in counts. Speeds left as None are the axis's maximum; `force` is the
+  force limit x1000 (grip and tip loading), 0 for none; `sensor` and `trigger` stop the move
+  where that sensor fires (0, 0 for none)."""
+
+  axis: str
+  position: int
+  velocity: Optional[int] = None
+  acceleration: Optional[int] = None
+  jerk: Optional[int] = None
+  force: int = 0
+  sensor: int = 0
+  trigger: int = 0
 
 
 class MotorTables:

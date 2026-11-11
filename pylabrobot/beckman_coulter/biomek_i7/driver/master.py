@@ -16,8 +16,21 @@ Controller's logs show it doing.
 
 import asyncio
 import logging
-from typing import Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
+from typing import (
+  Awaitable,
+  Callable,
+  Dict,
+  Iterable,
+  List,
+  Mapping,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  Union,
+)
 
+from pylabrobot.beckman_coulter.biomek_i7.driver import motion
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.board import (
   ACE_PRODUCT_ID,
@@ -31,7 +44,8 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import INTERLOCK_TRIPPED_CODE, ace_error
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
+from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
 from pylabrobot.io.usb import USB
 
 logger = logging.getLogger(__name__)
@@ -91,7 +105,7 @@ class BiomekI7Driver:
         `DeviceConfiguration.from_biomek` makes it from the instrument's Biomek files. Required:
         the driver never falls back to another, the package's generic one included.
       boards: boards to use instead of opening USB devices: a simulated instrument
-        (`simulator.replay_boards`). With them, the checks that tie the configuration to a real
+        (`simulator.simulated_boards`). With them, the checks that tie the configuration to a real
         instrument (`discover`) are not made.
 
     Raises:
@@ -118,12 +132,15 @@ class BiomekI7Driver:
       ),
     )
     self.motor_tables = self.declared.motor_tables
+    # Called when a head's tips change; the device saves its heads' tips on it (`state_json`).
+    self.on_tips_changed: Callable[[], None] = lambda: None
     self._given_boards = list(boards) if boards is not None else None
     self.boards: List[AceBoard] = []
     self._connected = False
     self._armed = False  # this driver armed the interlock, and has not tripped it since
     self._tripping = False  # this driver is tripping it: the chassis's trip event is our own
-    self._paused = False  # paused (`pause`), waiting for `resume`
+    # While paused (`pause`): each pod's positions when the pause began, by side.
+    self._paused: Optional[Dict[str, Dict[str, int]]] = None
     # Set while the interlock is tripped as far as this driver knows: from the start, when the
     # chassis reports a trip, or when this driver trips it; cleared when it arms it.
     self.interlock_tripped = asyncio.Event()
@@ -131,7 +148,9 @@ class BiomekI7Driver:
     self._unwatch: List[Callable[[], None]] = []
     self._background: Set["asyncio.Task[None]"] = set()
     self.chassis: Optional[Chassis] = None
-    # The pods, named as STAR names its X-arms: each fills an X-arm's slot (design.md, Feature map).
+    # The shared X rail (design.md I7), built at discovery from the declared pod geometry.
+    self.rail: Optional[XRail] = None
+    # The pods, named as STAR names its X-arms: each fills an X-arm's slot (design.md, The pods).
     self.left_x_arm: Optional[Pod] = None
     self.right_x_arm: Optional[Pod] = None
 
@@ -143,29 +162,31 @@ class BiomekI7Driver:
     *,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
+    force_initialize: bool = False,
   ) -> None:
     """Connect to the instrument, find out what it is, and bring it up.
 
-    `discover` is the read-only part; then the motor tables are loaded where a board has lost them,
-    the interlock is armed and every axis enabled. Nothing moves: the drives hold where they stand.
-    With every skip below set, setup only reads. Repeatable: the boards stay open and discovery
-    reads them again. A setup that fails part way releases the boards.
+    This moves the arms: every pod is homed. `discover` is the read-only part; with every skip
+    below set, setup only reads. Repeatable: the boards stay open, discovery reads them again, and
+    initializing an instrument that is up re-homes nothing (unless `force_initialize`). A setup that
+    fails part way releases the boards.
 
     Args:
       skip_device_initialization: do not load motor tables, even into a board that has lost them.
-        A pod with an axis not configured is then left as it is.
-      skip_left_x_arm: leave the left pod as it is: not configured or enabled.
+        A pod with an axis not configured is then left as it is, and cannot move.
+      skip_left_x_arm: leave the left pod as it is: not configured, enabled or moved.
       skip_right_x_arm: leave the right pod as it is.
+      force_initialize: home again axes that are already homed, as Biomek's Home All does.
 
     Raises:
-      RuntimeError: if no chassis is found, a board cannot be placed (`discover`), or the
-        interlock or a drive supply does not come up.
-      ValueError: for a declared configuration that is not this instrument's (`discover`).
-      AceError: if an axis cannot be enabled; the interlock is then tripped and ERROR shown.
+      RuntimeError: if no chassis is found, two modules claim the same place, an axis reports a
+        fault, or a pod would move on the X rail beside a skipped pod whose X is not homed.
     """
     logger.warning(
-      "The Biomek i7 driver's discovery, configuration and interlock have run on one instrument; "
-      "they are untested on other instruments. Please report what works and what does not."
+      "The Biomek i7 driver's discovery, configuration, interlock, Home All and moves have run on "
+      "one instrument; its commands were compared with Biomek's logs where Biomek ran the same "
+      "operation; it is untested on other instruments. Please report what works and what does "
+      "not."
     )
     if not self._connected:
       await self._open()
@@ -175,6 +196,7 @@ class BiomekI7Driver:
         skip_device_initialization=skip_device_initialization,
         skip_left_x_arm=skip_left_x_arm,
         skip_right_x_arm=skip_right_x_arm,
+        force_initialize=force_initialize,
       )
     except BaseException:
       await self.stop()
@@ -209,8 +231,7 @@ class BiomekI7Driver:
     Each board says what it is: Get Module ID answers a module type (`protocol.MODULE_TYPES`:
     chassis, Multichannel, Span-8) and a side (left, right). That, not its USB serial number or
     order, places it. Seen on one instrument; an unknown type or side, two boards claiming one
-    place, no chassis, or a pod type other than the declared one is refused
-    (`_check_declared_against`).
+    place, no chassis, or a pod type other than the declared one is refused (`_check_declared_against`).
 
     On the instrument (no `boards` given), two checks follow, each refusing:
     - the declared configuration must be this instrument's: its chassis serial number and each
@@ -261,7 +282,11 @@ class BiomekI7Driver:
       if "right" in places
       else None
     )
+    self.rail = XRail({pod.side: pod.declared for pod in self.arms})
     self._watch_faults()
+    for pod in self.arms:
+      pod.rail = self.rail
+      self.rail.readers[pod.side] = pod.request_rail_pose
     modules: List[Tuple[str, ModuleConfiguration]] = [("chassis", await self.chassis.discover())]
     for pod in self.arms:
       modules.append((str(pod), await pod.discover()))
@@ -384,16 +409,20 @@ class BiomekI7Driver:
     """Return the instrument to rest and release every board. Moves nothing.
 
     If this driver armed the interlock, as the Master Controller does when its host goes away: each
-    pod's module is stopped (Stop Module Execution), then the interlock is tripped and READY shown.
-    Otherwise nothing is written. What the boards do on their own when the host goes away is not
-    known.
+    pod's module is stopped (Stop Module Execution) and its positions forgotten, then the
+    interlock is tripped and READY shown. Otherwise nothing is written. What the boards do on their
+    own when the host goes away is not known.
     """
+    # As the Master Controller does when its host goes away: stop each pod's
+    # module, forget its positions, then trip the interlock. Only while this driver has the
+    # interlock armed: otherwise the drives have no power, and a read-only session writes nothing.
     if self._armed:
       for pod in self.arms:
         try:
           await asyncio.wait_for(pod._unchecked_fw_stop_module_execution(), REST_TIMEOUT)
         except BaseException:
           logger.exception("could not stop %s", pod)
+        pod._forget_positions()
     await self._return_to_rest()
     for unwatch in self._unwatch:
       unwatch()
@@ -454,8 +483,9 @@ class BiomekI7Driver:
     """Every axis's state, by pod side then axis name. Moves nothing."""
     return {pod.side: await pod.request_axis_states() for pod in self.arms}
 
-  # -- configuration and interlock ------------------------------------------------
-  # These write to the boards. Run them only on a clear deck, with someone at the emergency stop.
+  # -- configuration, interlock and homing ---------------------------------------
+  # These write to the boards and move the arms. Run them only on a clear deck, with someone at
+  # the emergency stop.
 
   def _require_chassis(self) -> Chassis:
     if self.chassis is None:
@@ -474,23 +504,27 @@ class BiomekI7Driver:
     *,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
+    force_initialize: bool = False,
   ) -> None:
-    """Bring the instrument up: what `setup` does after discovery.
+    """Bring the instrument up: what `setup` does after discovery, and what Home All is later.
 
     Reads every axis's state first. A pod with an axis not configured (the board was powered up, or
     a drive lost its parameters) has its motor tables loaded; one fully configured does not, since
-    loading them again would un-home it. Then the interlock is armed and every axis enabled
-    (`arm_interlock`). The arguments are those of `setup`.
+    loading them again would un-home it. Then the pods are homed together (`home`). The arguments
+    are those of `setup`.
 
     An axis in fault is not refused: enabling it is its fault reset, as when Biomek re-arms and
     enables after a fault, and calling this is the person's go-ahead that Biomek waits for. A CiA
     402 drive in fault with its motor supply off is the instrument at rest and is only noted; any
     other fault is warned about, since under power it usually means a following error or a
-    collision. A fault that does not clear fails the enable, and the instrument is returned to rest.
+    collision. A fault that does not clear fails the enable, and `home` returns the instrument to
+    rest before anything moves.
 
     Raises:
-      RuntimeError: if the interlock or a drive supply does not come up when armed.
-      AceError: if an axis cannot be enabled; the interlock is then tripped and ERROR shown.
+      RuntimeError: if a pod would move on the X rail beside a skipped pod whose X is not homed
+        (nothing has been written), or the drive supply does not come up when armed.
+      AceError: if an axis cannot be enabled, or a move or home fails; the interlock is then
+        tripped and ERROR shown.
     """
     skipped = self.skipped_sides(skip_left_x_arm=skip_left_x_arm, skip_right_x_arm=skip_right_x_arm)
     pods = [pod for pod in self.arms if pod.side not in skipped]
@@ -528,14 +562,12 @@ class BiomekI7Driver:
       )
       pods = [pod for pod in pods if pod not in unconfigured]
       unconfigured = []
+    if pods:
+      await self._check_shared_x_rail(pods)
     if unconfigured:
       await self.configure(unconfigured)
     if pods:
-      try:
-        await self.arm_interlock(pods)
-      except BaseException:
-        await self._return_to_rest(error=True)
-        raise
+      await self.home(pods, force=force_initialize)
 
     # A pod that answered every request is not a pod that came up, so each is asked again.
     states = await self.request_axis_states()
@@ -547,6 +579,27 @@ class BiomekI7Driver:
     ]
     if down:
       logger.warning("initialize finished with these axes not enabled: %s", ", ".join(down))
+
+  async def _check_shared_x_rail(self, moving: Sequence[Pod]) -> None:
+    """Refuse to move pods on the X rail beside a pod left out whose X is not homed: where that pod
+    stands is not known. Reads only.
+
+    Raises:
+      RuntimeError: if a pod left out has its X not homed.
+    """
+    for pod in self.arms:
+      if pod in moving:
+        continue
+      others = ", ".join(str(m) for m in moving)
+      if await pod.request_homed_state("X") != "homed":
+        raise RuntimeError(
+          f"the {pod} is left as it is and its X is not homed, so where it stands on the shared X "
+          f"rail is not known; the {others} cannot move beside it. Bring up both pods. Nothing was "
+          "moved"
+        )
+      logger.warning(
+        "the %s is left as it is; the %s's X moves are not checked against it", pod, others
+      )
 
   async def configure(self, pods: Optional[Sequence[Pod]] = None) -> None:
     """Load the motor tables into pods' boards (every pod by default), as after a power-up. Moves
@@ -591,6 +644,63 @@ class BiomekI7Driver:
         raise RuntimeError(f"{pod}: the drive supply reads {supply:.1f} V with the interlock armed")
     await _together(pod.enable_axes() for pod in targets)
 
+  async def home(self, pods: Optional[Sequence[Pod]] = None, force: bool = False) -> None:
+    """Home pods (every pod by default) at once, the Master Controller's Home All without its
+    Span-8 priming.
+
+    Arms the interlock, then homes the pods together, as Biomek does: each runs its `HM` recipe.
+    Needs the motor tables loaded (`initialize` sees to it).
+
+    If anything fails once the interlock is armed, ERROR is shown and the interlock tripped, which
+    cuts the drives' power, before the error is raised; nothing is retried. Biomek instead leaves
+    the drives powered while its dialog waits for the person; here no one may be waiting, so the
+    instrument goes back to rest.
+
+    Args:
+      pods: the pods to home.
+      force: home again axes already homed, as Biomek does. Without it they are only moved to
+        where a Home leaves them.
+    """
+    targets = self.arms if pods is None else list(pods)
+
+    try:
+      await self.arm_interlock(targets)
+      await _together(pod.home(force=force) for pod in targets)
+    except BaseException:
+      await self._return_to_rest(error=True)
+      raise
+
+  async def move_axes(
+    self, targets: Mapping[str, Mapping[str, int]], speed: int = 1000
+  ) -> Dict[str, MoveResult]:
+    """Move axes of both pods at once: each pod's `AM` (`Pod.move_axes`), started together, as
+    Biomek runs the two pods' steps. The shared X rail keeps them apart: a move into the other
+    pod's range is refused, and one crossing only the other's path waits for it.
+
+    Args:
+      targets: per pod side (`left`, `right`), its axes' targets in counts.
+      speed: 1..1000, Biomek's speed field, for both.
+
+    Returns:
+      Each pod's result, by side.
+
+    Raises:
+      ValueError: for a side with no pod. Otherwise as `Pod.move_axes`; if one pod's move fails,
+        the other's is cancelled and waited for first. Nothing returns the instrument to rest:
+        whether to is the caller's (design.md I5).
+    """
+    pods: Dict[str, Pod] = {pod.side: pod for pod in self.arms}
+    missing = sorted(set(targets) - set(pods))
+    if missing:
+      raise ValueError(f"no pod on the {', '.join(missing)}; have {sorted(pods)}")
+    results: Dict[str, MoveResult] = {}
+
+    async def move(side: str) -> None:
+      results[side] = await pods[side].move_axes(targets[side], speed)
+
+    await _together(move(side) for side in targets)
+    return results
+
   async def _return_to_rest(self, error: bool = False) -> None:
     """Trip the interlock, if this driver armed it, and show READY (ERROR with `error`). Never
     raises: it runs on the way out of a failure."""
@@ -615,25 +725,26 @@ class BiomekI7Driver:
       self._tripping = False
 
   # -- pause for access --------------------------------------------------------------
-  # Biomek's whole-system pause, as its logs show it: a deliberate interlock trip with PAUSED shown;
-  # resuming re-arms and enables every axis. There is no mute: the light curtain may be broken only
-  # because the drives have no power.
+  # Biomek's whole-system pause, as its logs show it: a deliberate interlock trip with PAUSED shown
+  # and the pods' positions saved; resuming re-arms, enables every axis and moves the pods back.
+  # There is no mute: the light curtain may be broken only because the drives have no power.
 
   @property
   def paused(self) -> bool:
     """Whether the instrument is paused (`pause`), waiting for `resume`."""
-    return self._paused
+    return self._paused is not None
 
   async def pause(self) -> None:
     """Pause for access: cut the pods' drive power and show PAUSED, so the light curtain may be
     broken without an error. Call it between operations, as Biomek's Pause step runs between
-    steps.
+    steps: a move still running is stopped where it is. Moving the pods out of the way first is
+    the caller's. Each pod's positions are read and kept for `resume`.
 
     Raises:
       RuntimeError: if the interlock is not armed by this driver (nothing to pause), or the
         instrument is already paused.
     """
-    if self._paused:
+    if self._paused is not None:
       raise RuntimeError("the instrument is already paused")
     if not self._armed:
       raise RuntimeError("the interlock is not armed: nothing to pause")
@@ -646,17 +757,34 @@ class BiomekI7Driver:
     finally:
       self._tripping = False
     await chassis._unchecked_fw_set_status_display("paused")
-    self._paused = True
+    # Biomek reads the positions after the trip; the drives answer without power. Kept as the
+    # adjusted positions moves take (a Span-8 Z channel's hysteresis), as the driver keeps them.
+    saved: Dict[str, Dict[str, int]] = {}
+    for pod in self.arms:
+      read = await pod.request_positions()
+      saved[pod.side] = {
+        name: motion.update_cpos(pod.cpositions[name], counts, pod.axis(name).hysteresis)[1]
+        for name, counts in read.items()
+      }
+      pod._forget_positions()
+    self._paused = saved
     logger.info("paused: the interlock is tripped; the light curtain may be broken")
 
-  async def resume(self) -> None:
-    """Resume after `pause`: re-arm the interlock and enable every axis. Nothing is homed.
+  async def resume(self, speed: int = 200) -> None:
+    """Resume after `pause`: re-arm the interlock, enable every axis, then move each pod back to
+    where it was when paused (an axis pushed by hand is returned; the plunger and syringe pumps
+    are not, as Biomek does not, nor is a gripper holding labware opened or closed). Nothing is
+    homed.
+
+    Args:
+      speed: 1..1000, Biomek's speed field, for the moves back.
 
     Raises:
       RuntimeError: if not paused, or if the interlock does not arm (the light curtain still
         broken): the instrument stays paused, so clear it and call `resume` again.
     """
-    if not self._paused:
+    saved = self._paused
+    if saved is None:
       raise RuntimeError("the instrument is not paused")
     try:
       await self.arm_interlock()
@@ -664,8 +792,18 @@ class BiomekI7Driver:
       self._armed = False
       self.interlock_tripped.set()
       raise
-    self._paused = False
+    self._paused = None
     logger.info("resumed: the interlock is armed")
+    for pod in self.arms:
+      keep = {"D"} | ({"GG"} if pod._held_labware is not None else set())
+      back = {
+        name: counts
+        for name, counts in saved.get(pod.side, {}).items()
+        if name not in keep and not pod.axis(name).is_pump
+      }
+      if any(pod.cpositions[name][1] != counts for name, counts in back.items()):
+        logger.info("%s moving back to where it was paused", pod.component)
+        await pod.move_axes(back, speed)
 
   # -- faults the boards report unasked ------------------------------------------
   # As the Master Controller handles them, as its logs show it.
@@ -707,14 +845,18 @@ class BiomekI7Driver:
     error = ace_error(reply.error_code, reply.device_error, f"{pod} {axis}")
     logger.error("The %s %s motor failed: %s.", pod.side, axis, error)
     self.interlock_tripped.set()
+    for each in self.arms:
+      each._forget_positions()
     self._in_background(self._trip(error=True))
 
   def _interlock_tripped(self, reason: str) -> None:
-    """What the Master Controller does when the interlock trips under a running instrument: waits
-    end, and ERROR is shown. A trip this driver made itself (at rest, or after a failure) only marks
-    it tripped."""
+    """What the Master Controller does when the interlock trips under a running instrument: every
+    position is forgotten (read again after re-arming), waits end, and ERROR is shown. A trip this
+    driver made itself (at rest, or after a failure) only marks it tripped."""
     ours = self._tripping or not self._armed
     self.interlock_tripped.set()
+    for pod in self.arms:
+      pod._forget_positions()
     if ours:
       return
     logger.error("the interlock tripped: %s", reason)

@@ -100,12 +100,15 @@ def generic_simulated_boards(**kwargs: Any) -> List[AceBoard]:
 def generic_driver(
   boards: Optional[Sequence[AceBoard]] = None,
   configuration: Optional[DeviceConfiguration] = None,
+  **kwargs: Any,
 ) -> BiomekI7Driver:
   """A driver over `boards` (by default the generic instrument replayed), declared by
-  `configuration` (by default the generic configuration's file)."""
+  `configuration` (by default the generic configuration's file); `kwargs` as `BiomekI7Driver`
+  takes them."""
   return BiomekI7Driver(
     declared_configuration_json=(
       str(GENERIC_CONFIGURATION) if configuration is None else configuration_file(configuration)
     ),
     boards=generic_boards() if boards is None else boards,
+    **kwargs,
   )
