@@ -1304,21 +1304,26 @@ class Pipettes:
       speed: in mm/s.
       acceleration_level: 1 (gentlest) to 4.
     """
-    held = await asyncio.gather(
+    # A channel module answers one command at a time: every round sends each at most one.
+    held_speeds = await asyncio.gather(*(self.request_y_speed(channel) for channel in channels))
+    held_levels = await asyncio.gather(
+      *(self.request_y_acceleration_level(channel) for channel in channels)
+    )
+    target = self._drive_parameter_to_increments("yv", speed)
+    await asyncio.gather(
       *(
-        asyncio.gather(self.request_y_speed(channel), self.request_y_acceleration_level(channel))
-        for channel in channels
+        self._set_y_speed(channel, speed)
+        for channel, held in zip(channels, held_speeds)
+        if self._drive_parameter_to_increments("yv", held) != target
       )
     )
-    writes = []
-    for channel, (held_speed, held_level) in zip(channels, held):
-      if self._drive_parameter_to_increments(
-        "yv", held_speed
-      ) != self._drive_parameter_to_increments("yv", speed):
-        writes.append(self._set_y_speed(channel, speed))
-      if held_level != acceleration_level:
-        writes.append(self._set_y_acceleration_level(channel, acceleration_level))
-    await asyncio.gather(*writes)
+    await asyncio.gather(
+      *(
+        self._set_y_acceleration_level(channel, acceleration_level)
+        for channel, held in zip(channels, held_levels)
+        if held != acceleration_level
+      )
+    )
 
   async def _set_default_drive_parameters(self) -> None:
     """Give every channel the driver's Y and Z defaults (`Px AA`), whatever a session left.
@@ -1494,20 +1499,24 @@ class Pipettes:
       await self._record_where_they_stopped("y")
       raise
     finally:
-      # A speed given for this move only leaves the defaults in the drives, as every other move.
-      writes = []
+      # A speed given for this move only leaves the defaults in the drives, as every other move;
+      # one round per value, so no channel module is sent two commands at once.
+      rounds = []
       if self._drive_parameter_to_increments("yv", speed) != self._drive_parameter_to_increments(
         "yv", self.default_y_speed
       ):
-        writes += [self._set_y_speed(channel, self.default_y_speed) for channel in channels]
+        rounds.append([self._set_y_speed(channel, self.default_y_speed) for channel in channels])
       if acceleration_level != self.default_y_acceleration_level:
-        writes += [
-          self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
-          for channel in channels
-        ]
-      for failed in await asyncio.gather(*writes, return_exceptions=True):
-        if isinstance(failed, Exception):
-          logger.warning("could not put a channel's Y profile back to the default: %s", failed)
+        rounds.append(
+          [
+            self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
+            for channel in channels
+          ]
+        )
+      for writes in rounds:
+        for failed in await asyncio.gather(*writes, return_exceptions=True):
+          if isinstance(failed, Exception):
+            logger.warning("could not put a channel's Y profile back to the default: %s", failed)
 
     for channel, y in channel_locations.items():
       self.update_location_by_reference_point(channel, y=y)
