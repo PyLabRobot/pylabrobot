@@ -2523,6 +2523,8 @@ class Pipettes:
   ) -> None:
     """Move one channel's Y drive by a distance, as given, moving no other channel. `Px YS`.
 
+    The drive keeps the speed and acceleration sent as its own.
+
     Args:
       channel: 0-indexed from the back.
       distance_increments: signed; positive moves backward (`ys`, `yt`).
@@ -2675,42 +2677,53 @@ class Pipettes:
       if not lowest <= checked <= highest:
         raise ValueError(f"{name} must be between {lowest} and {highest}, is {checked}")
 
-    found, read = True, False
     try:
+      found, read = True, False
       try:
-        await self._unchecked_fw_probe_y_using_clld(
-          channel,
-          end_position=end_increments,
-          detection_edge=detection_edge,
-          search_speed=speed_increments,
-          acceleration_level=acceleration_level,
-          current_limit=current_limit,
-        )
-      except STARFirmwareError as error:
-        if not self._found_nothing(error, self.channel_id(channel)):
-          raise
-        found = False
-      detected = await self.request_y_position(channel)
-      read = True
-    finally:
-      # A search that failed, or whose read failed, left the channel where nothing records it.
-      if not read:
-        await self._record_where_they_stopped("y", [channel])
-
-    # The post-detection move, along the path just searched, moving this channel alone.
-    distance = c.y_drive_mm_to_increments(min(post_detection_distance, abs(detected - here)))
-    if distance > 0:
-      try:
-        await self._unchecked_fw_move_y_relative(
-          channel=channel,
-          distance_increments=-distance if direction == "backward" else distance,
-          speed_increments=speed_increments,
-          acceleration_level=acceleration_level,
-          current_limit=current_limit,
-        )
+        try:
+          await self._unchecked_fw_probe_y_using_clld(
+            channel,
+            end_position=end_increments,
+            detection_edge=detection_edge,
+            search_speed=speed_increments,
+            acceleration_level=acceleration_level,
+            current_limit=current_limit,
+          )
+        except STARFirmwareError as error:
+          if not self._found_nothing(error, self.channel_id(channel)):
+            raise
+          found = False
+        detected = await self.request_y_position(channel)
+        read = True
       finally:
-        # Whether the move arrived or stopped part way, this read is how either is recorded.
-        await self._record_where_they_stopped("y", [channel])
+        # A search that failed, or whose read failed, left the channel where nothing records it.
+        if not read:
+          await self._record_where_they_stopped("y", [channel])
+
+      # The post-detection move, along the path just searched, moving this channel alone.
+      distance = c.y_drive_mm_to_increments(min(post_detection_distance, abs(detected - here)))
+      if distance > 0:
+        try:
+          await self._unchecked_fw_move_y_relative(
+            channel=channel,
+            distance_increments=-distance if direction == "backward" else distance,
+            speed_increments=speed_increments,
+            acceleration_level=acceleration_level,
+            current_limit=current_limit,
+          )
+        finally:
+          # Whether the move arrived or stopped part way, this read is how either is recorded.
+          await self._record_where_they_stopped("y", [channel])
+    finally:
+      # The search and the post-detection move leave their speed in the drive: put the defaults
+      # back, so the probe leaves nothing behind.
+      try:
+        if speed_increments != c.y_drive_mm_to_increments(self.default_y_speed):
+          await self._set_y_speed(channel, self.default_y_speed)
+        if acceleration_level != self.default_y_acceleration_level:
+          await self._set_y_acceleration_level(channel, self.default_y_acceleration_level)
+      except Exception:
+        logger.warning("could not put channel %s's Y profile back to the default", channel)
     surface = detected + diameter / 2 if direction == "backward" else detected - diameter / 2
     return round(surface, 1) if found else None
 

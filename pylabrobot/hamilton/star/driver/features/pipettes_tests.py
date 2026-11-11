@@ -731,7 +731,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     end = self.pipettes.configuration.y_drive_mm_to_increments(front)
     self.assertEqual(
       self.sent,
-      [f"P2YLya{end:05}gt0010gl0000yv0216yr4yw7", "P2YSys00043yt0yv0216yr4yw7"],
+      [f"P2YLya{end:05}gt0010gl0000yv0216yr4yw7", "P2YSys00043yt0yv0216yr4yw7", "P2AAyv5939"],
     )
     self.moves.assert_not_awaited()
     self.assertEqual(y, 249.4)
@@ -745,7 +745,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     end = self.pipettes.configuration.y_drive_mm_to_increments(back)
     self.assertEqual(
       self.sent,
-      [f"P3YLya{end:05}gt0010gl0000yv0216yr4yw7", "P3YSys00011yt1yv0216yr4yw7"],
+      [f"P3YLya{end:05}gt0010gl0000yv0216yr4yw7", "P3YSys00011yt1yv0216yr4yw7", "P3AAyv5939"],
     )
     self.moves.assert_not_awaited()
     self.assertEqual(y, 201.1)
@@ -755,11 +755,11 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     after[1] = 250.0
     self._stand_at_y(self.ys, self.ys, after)
     y = await self.pipettes.probe_y_using_clld(1, "forward", post_detection_distance=0)
-    self.assertEqual([command[2:4] for command in self.sent], ["YL"])
+    self.assertEqual([command[2:4] for command in self.sent], ["YL", "AA"])
     self.moves.assert_not_awaited()
     self.assertEqual(y, 249.4)
 
-  async def test_y_probe_that_fails_still_reads_where_the_channel_stopped(self):
+  async def test_y_probe_that_fails_still_reads_where_it_stopped_and_puts_the_default_back(self):
     after = list(self.ys)
     after[1] = 250.0
     sending = self.pipettes._driver.send_command
@@ -769,9 +769,12 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       self._answer_the_search_with(command, f"P2{command}id0001er99")
       reads = unittest.mock.AsyncMock(side_effect=[self.ys, self.ys, after, after])
       self.pipettes.request_y_positions = reads  # type: ignore[method-assign]
+      self.sent.clear()
       with self.assertRaises(STARFirmwareError):
         await self.pipettes.probe_y_using_clld(1, "forward")
       self.assertEqual(reads.await_count, read_count)
+      # and the default speed is back in the drive
+      self.assertEqual(self.sent[-1], "P2AAyv5939")
 
   async def test_y_probe_refuses_a_start_or_end_past_the_neighbour(self):
     for kwargs in ({"search_start_position": 399.0}, {"search_end_position": 150.0}):
@@ -802,7 +805,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
       after[1] = 200.0 + self.pipettes._min_spacing_between(1, 2)
       self._stand_at_y(self.ys, self.ys, after, after)
       self.assertIsNone(await self.pipettes.probe_y_using_clld(1, "forward"))
-      self.assertEqual(self.sent[-1], "P2YSys00043yt0yv0216yr4yw7")
+      self.assertEqual(self.sent[-2:], ["P2YSys00043yt0yv0216yr4yw7", "P2AAyv5939"])
       self.moves.assert_not_awaited()
 
   async def test_any_other_error_is_raised_and_nothing_backs_away(self):
