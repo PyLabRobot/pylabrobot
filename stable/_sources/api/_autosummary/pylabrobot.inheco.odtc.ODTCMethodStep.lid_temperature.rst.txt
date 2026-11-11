@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethodStep.lid\_temperature
+======================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethodStep.lid_temperature

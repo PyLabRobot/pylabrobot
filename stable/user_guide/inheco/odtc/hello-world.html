@@ -794,29 +794,297 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="inheco-odtc">
 <h1>Inheco ODTC<a class="headerlink" href="#inheco-odtc" title="Link to this heading">#</a></h1>
-<p>The Inheco ODTC (On Deck Thermal Cycler) is a thermocycler designed for automated PCR workflows. It features:</p>
-<ul class="simple">
-<li><p>Precise temperature control (4 – 99 °C, up to 4.4 °C/s ramp rate)</p></li>
-<li><p>Heated lid to prevent condensation</p></li>
-<li><p>Motorized door for automated plate handling</p></li>
-<li><p>96-well plate format</p></li>
-</ul>
-<p>The ODTC communicates over Ethernet using the SiLA 2 protocol. You will need the IP address of the device and network connectivity between your computer and the ODTC.</p>
-<p>See the <a class="reference external" href="https://www.inheco.com/odtc.html">Inheco ODTC product page</a> for hardware details.</p>
 <div class="plr-device-card" id="device-inheco-odtc">
   <div class="plr-device-card__head">
     <div>
       <div class="plr-device-card__vendor">Inheco</div>
       <div class="plr-device-card__name">ODTC</div>
     </div>
-    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--mostly">Mostly</span><span class="plr-device-api-version">v0</span></div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--wip">WIP</span><span class="plr-device-api-version">v1</span></div>
   </div>
   <div class="plr-device-card__kind">thermocycler</div>
   <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 223">thermocycling</span><span class="plr-device-badge" style="--plr-badge-hue: 318">heating</span><span class="plr-device-badge" style="--plr-badge-hue: 25">active cooling</span></div>
-  
-  <div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
-  <div class="plr-device-card__links"><a class="plr-device-link" href="https://www.inheco.com/odtc.html" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
-</div></section>
+  <div class="plr-device-card__models-scroll" role="region" tabindex="0" aria-label="Inheco ODTC models"><table class="plr-device-card__models"><caption>Models</caption><thead><tr><th scope="col">Model</th><th scope="col">Support</th></tr></thead><tbody><tr><th scope="row">96-well</th><td><span class="plr-device-status plr-device-status--wip">WIP</span></td></tr><tr><th scope="row">384-well</th><td><span class="plr-device-status plr-device-status--wip">WIP</span></td></tr></tbody></table></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.inheco.ODTC</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/inheco/odtc"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://www.inheco.com/odtc.html" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
+</div><div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Property</p></th>
+<th class="head"><p>Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Connection</p></td>
+<td><p>Ethernet, SiLA 1 SOAP; device port 8080</p></td>
+</tr>
+<tr class="row-odd"><td><p>Models</p></td>
+<td><p>96-well and 384-well</p></td>
+</tr>
+<tr class="row-even"><td><p>Block temperature</p></td>
+<td><p>4–99 °C</p></td>
+</tr>
+<tr class="row-odd"><td><p>Lid temperature</p></td>
+<td><p>30–110 °C (96); 30–115 °C (384)</p></td>
+</tr>
+<tr class="row-even"><td><p>Units</p></td>
+<td><p>°C, seconds, microliters</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Hardware verification required for this implementation on both variants.</strong> Offline tests cover
+protocol compilation and simulated communication; they do not establish thermal accuracy or safe
+robotic placement. <code class="docutils literal notranslate"><span class="pre">setup()</span></code> logs a warning until a verified hardware run is reported.</p>
+<section id="connection-and-physical-setup">
+<h2>Connection and physical setup<a class="headerlink" href="#connection-and-physical-setup" title="Link to this heading">#</a></h2>
+<p>Connect the ODTC controller to Ethernet and power, following the manufacturer’s operating manual.
+Configure an address reachable from this computer. The instrument sends completion and temperature
+callbacks to the computer: allow the selected <code class="docutils literal notranslate"><span class="pre">client_ip</span></code> and <code class="docutils literal notranslate"><span class="pre">callback_port</span></code> through its firewall.
+The default callback port is chosen automatically. Supply a fixed port if firewall rules require it.</p>
+<p>The driver opens no connection during construction. <code class="docutils literal notranslate"><span class="pre">plate_holder</span></code> represents the plate location;
+its zero child offset is <strong>not a measured loading position</strong>. Calibrate its placement before robotic
+transfers. Load compatible labware manually for an initial hardware check.</p>
+<p>The controls below move and heat real hardware. Run them only when the instrument and labware are ready.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.inheco</span><span class="w"> </span><span class="kn">import</span> <span class="n">ODTC</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.inheco.odtc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ODTCProtocol</span><span class="p">,</span> <span class="n">ODTCStage</span><span class="p">,</span> <span class="n">ODTCStep</span><span class="p">,</span> <span class="n">compile_protocol</span><span class="p">,</span> <span class="n">method_set_to_xml</span><span class="p">,</span> <span class="n">ODTCMethodSet</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">odtc</span> <span class="o">=</span> <span class="n">ODTC</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"odtc"</span><span class="p">,</span>
+    <span class="n">odtc_ip</span><span class="o">=</span><span class="s2">"192.168.1.50"</span><span class="p">,</span>  <span class="c1"># use the configured instrument address</span>
+    <span class="n">variant</span><span class="o">=</span><span class="mi">96</span><span class="p">,</span>
+    <span class="c1"># client_ip="192.168.1.10",  # computer interface reachable from the ODTC</span>
+    <span class="c1"># callback_port=8081,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="set-up">
+<h2>Set up<a class="headerlink" href="#set-up" title="Link to this heading">#</a></h2>
+<p>Set up the HTTP connection and callback listener, register the listener, and initialize the device.
+Setup refuses to reset a busy or faulted instrument. Calling it again on an established session leaves
+the session intact. <code class="docutils literal notranslate"><span class="pre">simulation_mode=True</span></code> selects the instrument firmware’s simulation mode; it is
+not an offline simulator.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="open-the-drawer">
+<h2>Open the drawer<a class="headerlink" href="#open-the-drawer" title="Link to this heading">#</a></h2>
+<p>Open and wait for command completion. Repeating an already confirmed open or close does not issue
+another movement. The firmware provides no door-position query: <code class="docutils literal notranslate"><span class="pre">door_open</span></code> is the last
+command-confirmed state, or <code class="docutils literal notranslate"><span class="pre">None</span></code> after connection, a failed movement, or a fault.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">open_door</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="load-the-plate-then-close">
+<h2>Load the plate, then close<a class="headerlink" href="#load-the-plate-then-close" title="Link to this heading">#</a></h2>
+<p>Place the plate on the ODTC mount before running this cell.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">close_door</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="read-temperatures">
+<h2>Read temperatures<a class="headerlink" href="#read-temperatures" title="Link to this heading">#</a></h2>
+<p>Read all eight sensors in degrees C. This operation is also available while a method is running.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">temperatures</span> <span class="o">=</span> <span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">request_temperatures</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">temperatures</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="define-a-temperature-profile">
+<h2>Define a temperature profile<a class="headerlink" href="#define-a-temperature-profile" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ODTCStep</span></code> holds a target temperature and duration. <code class="docutils literal notranslate"><span class="pre">ODTCStage</span></code> repeats an ordered sequence of steps
+or nested stages. Temperatures, durations, and ramp rates are checked before upload. Native methods
+are limited to 100 steps; deeply nested loops sharing an endpoint may need expansion.</p>
+<p>Lid temperature and maximum sample volume are supplied per run. An explicit step lid temperature
+or ramp rate overrides the run’s lid default or the variant’s transition rate.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">protocol</span> <span class="o">=</span> <span class="n">ODTCProtocol</span><span class="p">(</span><span class="n">stages</span><span class="o">=</span><span class="p">[</span>
+    <span class="n">ODTCStage</span><span class="p">([</span><span class="n">ODTCStep</span><span class="p">(</span><span class="mi">95</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">300</span><span class="p">)]),</span>
+    <span class="n">ODTCStage</span><span class="p">([</span>
+        <span class="n">ODTCStep</span><span class="p">(</span><span class="mi">95</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+        <span class="n">ODTCStep</span><span class="p">(</span><span class="mi">55</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+        <span class="n">ODTCStep</span><span class="p">(</span><span class="mi">72</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">60</span><span class="p">),</span>
+    <span class="p">],</span> <span class="n">repeats</span><span class="o">=</span><span class="mi">30</span><span class="p">),</span>
+    <span class="n">ODTCStage</span><span class="p">([</span><span class="n">ODTCStep</span><span class="p">(</span><span class="mi">72</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">600</span><span class="p">),</span> <span class="n">ODTCStep</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mi">30</span><span class="p">)]),</span>
+<span class="p">])</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="inspect-the-native-method-without-hardware">
+<h2>Inspect the native method without hardware<a class="headerlink" href="#inspect-the-native-method-without-hardware" title="Link to this heading">#</a></h2>
+<p>Compilation is pure Python. The volume selects the device’s compensation range: below 30 µL,
+30–below 75 µL, or 75–100 µL. The volume must be positive and no greater than 100 µL.</p>
+<p>Automatic empirical overshoot is <strong>disabled by default</strong>: the coefficients have not been validated
+against a manufacturer reference or this implementation’s hardware runs. <code class="docutils literal notranslate"><span class="pre">apply_overshoot=True</span></code>
+opts in with a warning. A loop entry with different incoming temperatures requires explicit
+<code class="docutils literal notranslate"><span class="pre">ODTCOvershoot</span></code> settings because a single calculated excursion would be ambiguous. Its <code class="docutils literal notranslate"><span class="pre">temperature</span></code>
+is an excursion magnitude, not an absolute target. Explicit overshoot and PID settings are retained
+in native XML round trips. Validate thermal compensation on the actual model and labware.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">method</span> <span class="o">=</span> <span class="n">compile_protocol</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">variant</span><span class="o">=</span><span class="mi">96</span><span class="p">,</span> <span class="n">volume</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">lid_temperature</span><span class="o">=</span><span class="mi">105</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">method_set_to_xml</span><span class="p">(</span><span class="n">ODTCMethodSet</span><span class="p">(</span><span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="n">method</span><span class="p">])))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="run-prepare-execute-and-wait">
+<h2>Run: prepare, execute, and wait<a class="headerlink" href="#run-prepare-execute-and-wait" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">run_protocol</span></code> uploads the method, runs a matching block/lid premethod when necessary, and waits for
+completion. Preparation can take several minutes. It waits for firmware completion rather than
+merely observing the target on a temperature sensor. Compatible conditions retained from a completed
+premethod or post-heated method can be reused within the session.</p>
+<p>The firmware executes timed temperature steps because its command interface has no direct
+block-setpoint primitive. PLR performs compilation and sequencing.</p>
+<p><code class="docutils literal notranslate"><span class="pre">post_heating=True</span></code> keeps regulation at the final step after completion. Pass <code class="docutils literal notranslate"><span class="pre">False</span></code> to disable it.
+<code class="docutils literal notranslate"><span class="pre">timeout</span></code> limits each execution wait; a timeout <strong>does not stop the instrument</strong>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">run_protocol</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">volume</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">lid_temperature</span><span class="o">=</span><span class="mi">105</span><span class="p">,</span> <span class="n">post_heating</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="read-measured-progress">
+<h2>Read measured progress<a class="headerlink" href="#read-measured-progress" title="Link to this heading">#</a></h2>
+<p>The latest callback provides elapsed time and target, block, and lid temperatures. <code class="docutils literal notranslate"><span class="pre">None</span></code> means no
+sample has arrived for this execution. Step numbers, cycle counts, and estimated remaining time are
+not reported as measured device state.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">progress</span> <span class="o">=</span> <span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">request_progress</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">progress</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="stop-temperature-control">
+<h2>Stop temperature control<a class="headerlink" href="#stop-temperature-control" title="Link to this heading">#</a></h2>
+<p>This stops an active method or regulation remaining after a method or premethod. It remains available
+while <code class="docutils literal notranslate"><span class="pre">run_protocol()</span></code> is awaiting completion. An interrupted run raises <code class="docutils literal notranslate"><span class="pre">ODTCProtocolStopped</span></code>.
+To run concurrently with other work, create an asyncio task for <code class="docutils literal notranslate"><span class="pre">run_protocol</span></code>; canceling that task
+only cancels the wait. Call <code class="docutils literal notranslate"><span class="pre">stop_protocol()</span></code> to stop the hardware. A later <code class="docutils literal notranslate"><span class="pre">wait_for_completion()</span></code>
+still observes completion errors.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">stop_protocol</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="prepare-independently">
+<h2>Prepare independently<a class="headerlink" href="#prepare-independently" title="Link to this heading">#</a></h2>
+<p>Use explicit preparation when the block and lid should be ready before loading a plate. The same
+preparation is included in <code class="docutils literal notranslate"><span class="pre">run_protocol</span></code>. Temperatures are per-operation arguments.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">prepare</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mi">95</span><span class="p">,</span> <span class="n">lid_temperature</span><span class="o">=</span><span class="mi">105</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="store-a-named-method">
+<h2>Store a named method<a class="headerlink" href="#store-a-named-method" title="Link to this heading">#</a></h2>
+<p>Compile with a persistent name, then upload. Existing names require <code class="docutils literal notranslate"><span class="pre">overwrite=True</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">plr_currentProtocol</span></code> and <code class="docutils literal notranslate"><span class="pre">plr_currentPreMethod</span></code> slots are reserved for the driver’s working methods;
+unnamed runs replace only these slots. Uploads never clear the instrument’s method library.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">stored_method</span> <span class="o">=</span> <span class="n">compile_protocol</span><span class="p">(</span>
+    <span class="n">protocol</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"StandardPCR"</span><span class="p">,</span> <span class="n">variant</span><span class="o">=</span><span class="mi">96</span><span class="p">,</span> <span class="n">volume</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">lid_temperature</span><span class="o">=</span><span class="mi">105</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">upload_protocol</span><span class="p">(</span><span class="n">stored_method</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="retrieve-methods">
+<h2>Retrieve methods<a class="headerlink" href="#retrieve-methods" title="Link to this heading">#</a></h2>
+<p>Downloaded <code class="docutils literal notranslate"><span class="pre">ODTCMethod</span></code> objects retain native step numbers, loop targets/counts, independent overshoot
+rates, PID sets, and metadata. They can be inspected or edited using <code class="docutils literal notranslate"><span class="pre">dataclasses.replace</span></code>, then
+uploaded explicitly. <code class="docutils literal notranslate"><span class="pre">request_method_set()</span></code> includes premethods too.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">stored</span> <span class="o">=</span> <span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">request_protocol</span><span class="p">(</span><span class="s2">"StandardPCR"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">stored</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="run-a-stored-method">
+<h2>Run a stored method<a class="headerlink" href="#run-a-stored-method" title="Link to this heading">#</a></h2>
+<p>Use its stored volume, lid, and ramp settings. PLR prepares matching initial thermal conditions
+before executing it.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">run_stored_protocol</span><span class="p">(</span><span class="s2">"StandardPCR"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="disconnect">
+<h2>Disconnect<a class="headerlink" href="#disconnect" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">stop()</span></code> stops temperature control and closes the HTTP connection and callback server. Transport
+cleanup also runs if the stop command fails; the exception still reports that the device did not
+confirm stopping.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">odtc</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="variant-verification-and-protocol-references">
+<h2>Variant verification and protocol references<a class="headerlink" href="#variant-verification-and-protocol-references" title="Link to this heading">#</a></h2>
+<p>Choose <code class="docutils literal notranslate"><span class="pre">variant=384</span></code> for a 384-well unit. Its current compiler limits are 5 °C/s heating and 115 °C lid,
+compared with 4.4 °C/s and 110 °C for the 96-well unit. Both use a 2.2 °C/s cooling limit. The variant
+codes, plate types, volume compensation, and limits need confirmation on each hardware variant;
+passing mock tests is not hardware validation.</p>
+<p>The wire format, method storage, premethod sequence, callback sample units, and return codes are
+covered by the <a class="reference external" href="https://github.com/user-attachments/files/26010799/TD_SILA_FWCommandSet.25210.pdf">INHECO Firmware Command Set v1.06</a>
+(sections 3, 5, 6, 7.3, 9, and 10). This 2016 document does not establish which firmware revision is
+installed on a particular device. Record the instrument and firmware version when reporting a
+<a class="reference internal" href="../../needs-testing.html"><span class="std std-doc">hardware verification run</span></a>. The tests use its example method and data series
+as fixtures, alongside simulated SOAP exchanges. Thermal overshoot coefficients are not established
+by that command-set document.</p>
+</section>
+</section>
 
 
                 </article>
@@ -856,6 +1124,33 @@
                 <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
                 <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connection-and-physical-setup">Connection and physical setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up">Set up</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#open-the-drawer">Open the drawer</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#load-the-plate-then-close">Load the plate, then close</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-temperatures">Read temperatures</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#define-a-temperature-profile">Define a temperature profile</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#inspect-the-native-method-without-hardware">Inspect the native method without hardware</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-prepare-execute-and-wait">Run: prepare, execute, and wait</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-measured-progress">Read measured progress</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stop-temperature-control">Stop temperature control</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prepare-independently">Prepare independently</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#store-a-named-method">Store a named method</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#retrieve-methods">Retrieve methods</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-a-stored-method">Run a stored method</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#disconnect">Disconnect</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#variant-verification-and-protocol-references">Variant verification and protocol references</a></li>
+</ul>
+  </nav></div>
 
   <div class="sidebar-secondary-item">
 

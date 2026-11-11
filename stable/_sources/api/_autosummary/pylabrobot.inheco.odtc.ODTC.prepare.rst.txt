@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTC.prepare
+===================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. automethod:: ODTC.prepare

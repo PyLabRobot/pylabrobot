@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethodSet.methods
+============================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethodSet.methods

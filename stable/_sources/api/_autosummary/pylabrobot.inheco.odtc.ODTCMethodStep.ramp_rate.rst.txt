@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethodStep.ramp\_rate
+================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethodStep.ramp_rate

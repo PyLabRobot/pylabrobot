@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCProgress.elapsed
+===========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCProgress.elapsed

@@ -643,6 +643,62 @@
 </table>
 </div>
 </section>
+<section id="odtc">
+<h2>ODTC<a class="headerlink" href="#odtc" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTC.html#pylabrobot.inheco.odtc.ODTC" title="pylabrobot.inheco.odtc.ODTC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTC</span></code></a></p></td>
+<td><p>An ODTC, its plate location, and its connection and thermal execution state.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCProtocolStopped.html#pylabrobot.inheco.odtc.ODTCProtocolStopped" title="pylabrobot.inheco.odtc.ODTCProtocolStopped"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCProtocolStopped</span></code></a></p></td>
+<td><p>The user stopped a protocol before it completed.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCProtocol.html#pylabrobot.inheco.odtc.ODTCProtocol" title="pylabrobot.inheco.odtc.ODTCProtocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCProtocol</span></code></a></p></td>
+<td><p>A temperature profile; an omitted name selects the driver's working method slot.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCStage.html#pylabrobot.inheco.odtc.ODTCStage" title="pylabrobot.inheco.odtc.ODTCStage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCStage</span></code></a></p></td>
+<td><p>An ordered sequence of steps or nested stages, repeated a fixed number of times.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCStep.html#pylabrobot.inheco.odtc.ODTCStep" title="pylabrobot.inheco.odtc.ODTCStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCStep</span></code></a></p></td>
+<td><p>Hold a block temperature for <code class="code docutils literal notranslate"><span class="pre">duration</span></code> seconds, with optional ramp and lid settings.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCOvershoot.html#pylabrobot.inheco.odtc.ODTCOvershoot" title="pylabrobot.inheco.odtc.ODTCOvershoot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCOvershoot</span></code></a></p></td>
+<td><p>A temperature excursion relative to a plateau, in degrees C and seconds.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCPID.html#pylabrobot.inheco.odtc.ODTCPID" title="pylabrobot.inheco.odtc.ODTCPID"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCPID</span></code></a></p></td>
+<td><p>Device PID parameters; defaults match the firmware manual's example PID set.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCMethod.html#pylabrobot.inheco.odtc.ODTCMethod" title="pylabrobot.inheco.odtc.ODTCMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCMethod</span></code></a></p></td>
+<td><p>A compiled or downloaded method with explicit device settings and native steps.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCMethodStep.html#pylabrobot.inheco.odtc.ODTCMethodStep" title="pylabrobot.inheco.odtc.ODTCMethodStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCMethodStep</span></code></a></p></td>
+<td><p>A native step including its backward jump and additional repeat count.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCPreMethod.html#pylabrobot.inheco.odtc.ODTCPreMethod" title="pylabrobot.inheco.odtc.ODTCPreMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCPreMethod</span></code></a></p></td>
+<td><p>A stored preparation method that establishes block and lid temperatures.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCMethodSet.html#pylabrobot.inheco.odtc.ODTCMethodSet" title="pylabrobot.inheco.odtc.ODTCMethodSet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCMethodSet</span></code></a></p></td>
+<td><p>Methods and premethods returned by the instrument or uploaded together.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCTemperatures.html#pylabrobot.inheco.odtc.ODTCTemperatures" title="pylabrobot.inheco.odtc.ODTCTemperatures"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCTemperatures</span></code></a></p></td>
+<td><p>Temperature sensor values in degrees C, plus the device's timestamp.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.ODTCProgress.html#pylabrobot.inheco.odtc.ODTCProgress" title="pylabrobot.inheco.odtc.ODTCProgress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ODTCProgress</span></code></a></p></td>
+<td><p>The latest device-reported sample; elapsed time is in seconds, temperatures in C.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.compile_protocol.html#pylabrobot.inheco.odtc.compile_protocol" title="pylabrobot.inheco.odtc.compile_protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compile_protocol</span></code></a></p></td>
+<td><p>Compile a profile without I/O, retaining loops and explicit per-step settings.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.method_set_to_xml.html#pylabrobot.inheco.odtc.method_set_to_xml" title="pylabrobot.inheco.odtc.method_set_to_xml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">method_set_to_xml</span></code></a></p></td>
+<td><p>Serialize methods for an additive SetParameters upload; never delete stored methods.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.inheco.odtc.parse_method_set.html#pylabrobot.inheco.odtc.parse_method_set" title="pylabrobot.inheco.odtc.parse_method_set"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_method_set</span></code></a></p></td>
+<td><p>Read native methods and preparation methods without reconstructing guessed stages.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
 
@@ -696,6 +752,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#thermoshake">ThermoShake</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cpac">CPAC</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scila">SCILA</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#odtc">ODTC</a></li>
 </ul>
   </nav></div>
 

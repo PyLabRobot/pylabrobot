@@ -1,0 +1,6 @@
+﻿pylabrobot.inheco.odtc.parse\_method\_set
+=========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autofunction:: parse_method_set

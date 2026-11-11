@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCProtocol
+===================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCProtocol
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCProtocol.name
+      ~ODTCProtocol.stages
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCProtocol.__init__
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethodStep.duration
+==============================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethodStep.duration

@@ -1,0 +1,39 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCPID
+==============================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCPID
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCPID.d_cooling
+      ~ODTCPID.d_heating
+      ~ODTCPID.i_cooling
+      ~ODTCPID.i_heating
+      ~ODTCPID.i_lid
+      ~ODTCPID.number
+      ~ODTCPID.p_cooling
+      ~ODTCPID.p_heating
+      ~ODTCPID.p_lid
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCPID.__init__
+   
+   

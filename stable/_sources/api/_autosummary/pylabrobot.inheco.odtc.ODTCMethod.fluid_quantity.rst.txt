@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCMethod.fluid\_quantity
+=================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCMethod.fluid_quantity

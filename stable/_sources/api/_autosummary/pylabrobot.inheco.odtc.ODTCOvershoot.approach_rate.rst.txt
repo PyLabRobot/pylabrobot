@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCOvershoot.approach\_rate
+===================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCOvershoot.approach_rate

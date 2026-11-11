@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTC.door\_open
+======================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoproperty:: ODTC.door_open

@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCStage
+================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCStage
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCStage.repeats
+      ~ODTCStage.steps
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCStage.__init__
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCTemperatures.lid\_monitor
+====================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCTemperatures.lid_monitor

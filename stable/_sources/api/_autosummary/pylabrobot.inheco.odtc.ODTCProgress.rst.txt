@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCProgress
+===================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCProgress
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCProgress.elapsed
+      ~ODTCProgress.target_temperature
+      ~ODTCProgress.current_temperature
+      ~ODTCProgress.lid_temperature
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCProgress.__init__
+   
+   

@@ -1,0 +1,6 @@
+﻿pylabrobot.inheco.odtc.ODTCProtocolStopped
+==========================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoexception:: ODTCProtocolStopped

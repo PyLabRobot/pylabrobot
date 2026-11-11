@@ -1,0 +1,39 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCTemperatures
+=======================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCTemperatures
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCTemperatures.timestamp
+      ~ODTCTemperatures.mount
+      ~ODTCTemperatures.mount_monitor
+      ~ODTCTemperatures.lid
+      ~ODTCTemperatures.lid_monitor
+      ~ODTCTemperatures.ambient
+      ~ODTCTemperatures.pcb
+      ~ODTCTemperatures.heatsink
+      ~ODTCTemperatures.heatsink_tec
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCTemperatures.__init__
+   
+   

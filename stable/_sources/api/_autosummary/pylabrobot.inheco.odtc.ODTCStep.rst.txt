@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.inheco.odtc.ODTCStep
+===============================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoclass:: ODTCStep
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCStep.lid_temperature
+      ~ODTCStep.overshoot
+      ~ODTCStep.pid_number
+      ~ODTCStep.ramp_rate
+      ~ODTCStep.temperature
+      ~ODTCStep.duration
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ODTCStep.__init__
+   
+   

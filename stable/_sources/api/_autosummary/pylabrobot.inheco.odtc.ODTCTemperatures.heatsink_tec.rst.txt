@@ -1,0 +1,6 @@
+pylabrobot.inheco.odtc.ODTCTemperatures.heatsink\_tec
+=====================================================
+
+.. currentmodule:: pylabrobot.inheco.odtc
+
+.. autoattribute:: ODTCTemperatures.heatsink_tec
