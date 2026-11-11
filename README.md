@@ -115,12 +115,16 @@ await cf.spin(g=800, duration=60)
 Pumping at 100 rpm for 30 seconds using a Masterflex pump:
 
 ```python
-from pylabrobot.pumps import Pump
-from pylabrobot.pumps.cole_parmer.masterflex import Masterflex
+import asyncio
 
-p = Pump(backend=Masterflex())
-await p.setup()
-await p.run_for_duration(speed=100, duration=30)
+from pylabrobot.cole_parmer import Masterflex
+
+pump = Masterflex(com_port="/dev/ttyUSB0")
+await pump.setup()
+
+await pump.run_continuously(speed=100)
+await asyncio.sleep(30)
+await pump.halt()
 ```
 
 ### Scales ([docs](https://docs.pylabrobot.org/stable/user_guide/02_analytical/scales/scales.html))
@@ -141,12 +145,13 @@ weight = await scale.read_weight()
 Setting the temperature of a heater shaker to 37&deg;C:
 
 ```python
-from pylabrobot.heating_shaking import HeaterShaker, InhecoThermoShakeBackend
+from pylabrobot.inheco import InhecoTECControlBox, inheco_thermoshake
 
-backend = InhecoThermoShakeBackend()
-hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
-await hs.setup()
-await hs.set_temperature(37)
+control_box = InhecoTECControlBox()
+await control_box.setup()
+
+ts = inheco_thermoshake(name="ts", control_box=control_box, index=1)
+await ts.set_temperature(37)
 ```
 
 ### Fans ([docs](https://docs.pylabrobot.org/stable/user_guide/01_material-handling/fans/fans.html))
