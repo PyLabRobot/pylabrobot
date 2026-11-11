@@ -421,7 +421,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
   async def test_setup_does_not_take_what_every_channel_holds_as_the_default(self):
     pipettes = await simulated_channels()
     for channel in range(pipettes.num_channels):
-      await pipettes._set_y_speed(channel, 350.0)
+      await pipettes._set_y_speed(channel=channel, speed=350.0)
     await pipettes._driver.setup()
     for channel in range(pipettes.num_channels):
       self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
@@ -450,19 +450,19 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
 
   async def test_a_y_move_first_gives_a_channel_left_at_another_speed_the_default(self):
     pipettes = await simulated_channels()
-    await pipettes._set_y_speed(7, 10.0)
-    await pipettes._set_y_acceleration_level(7, 1)
+    await pipettes._set_y_speed(channel=7, speed=10.0)
+    await pipettes._set_y_acceleration_level(channel=7, level=1)
     sent = await self.recorded_y_moves(pipettes)
     ys = await pipettes.request_y_positions()
-    await pipettes.move_to_y_positions({7: ys[7] - 5.0})
+    await pipettes.move_to_y_positions(ys={7: ys[7] - 5.0})
     self.assertEqual(sent[:2], ["P8AAyv5939", "P8AAyr4"])
     self.assertTrue(sent[2].startswith("C0JY"))
     self.assertEqual(len(sent), 3)
 
   async def test_a_y_move_never_sends_one_channel_two_commands_at_once(self):
     pipettes = await simulated_channels()
-    await pipettes._set_y_speed(7, 10.0)
-    await pipettes._set_y_acceleration_level(7, 1)
+    await pipettes._set_y_speed(channel=7, speed=10.0)
+    await pipettes._set_y_acceleration_level(channel=7, level=1)
     answer = pipettes._driver.send_command
     in_flight: Set[str] = set()
     overlaps: List[str] = []
@@ -479,14 +479,14 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
 
     pipettes._driver.send_command = one_at_a_time  # type: ignore[assignment]
     ys = await pipettes.request_y_positions()
-    await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0, acceleration_level=1)
+    await pipettes.move_to_y_position(channel=7, y=ys[7] - 5.0, speed=100.0, acceleration_level=1)
     self.assertEqual(overlaps, [])
 
   async def test_a_y_move_given_a_speed_holds_it_for_that_move_only(self):
     pipettes = await simulated_channels()
     sent = await self.recorded_y_moves(pipettes)
     ys = await pipettes.request_y_positions()
-    await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0, acceleration_level=1)
+    await pipettes.move_to_y_position(channel=7, y=ys[7] - 5.0, speed=100.0, acceleration_level=1)
     move = next(index for index, command in enumerate(sent) if command.startswith("C0JY"))
     channels = range(1, pipettes.num_channels + 1)
     given = {f"P{n}AAyv2160" for n in channels} | {f"P{n}AAyr1" for n in channels}
@@ -511,7 +511,7 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     pipettes._driver.send_command = failing  # type: ignore[assignment]
     ys = await pipettes.request_y_positions()
     with self.assertRaises(RuntimeError):
-      await pipettes.move_to_y_position(7, ys[7] - 5.0, speed=100.0)
+      await pipettes.move_to_y_position(channel=7, y=ys[7] - 5.0, speed=100.0)
     move = next(index for index, command in enumerate(sent) if command.startswith("C0JY"))
     self.assertEqual(
       set(sent[move + 1 :]), {f"P{n}AAyv5939" for n in range(1, pipettes.num_channels + 1)}
@@ -698,7 +698,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
   async def test_x_probe_with_no_post_detection_distance_sends_only_the_search(self):
     self._stand_at_x(300.0, 250.04)
     x = await self.pipettes.probe_x_using_clld(
-      0, "left", search_end_position=200.0, post_detection_distance=0
+      channel=0, direction="left", search_end_position=200.0, post_detection_distance=0
     )
     self.assertEqual(self.sent, ["C0XLpn01xs02000"])
     self.moves.assert_not_awaited()
@@ -754,7 +754,9 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     after = list(self.ys)
     after[1] = 250.0
     self._stand_at_y(self.ys, self.ys, after)
-    y = await self.pipettes.probe_y_using_clld(1, "forward", post_detection_distance=0)
+    y = await self.pipettes.probe_y_using_clld(
+      channel=1, direction="forward", post_detection_distance=0
+    )
     self.assertEqual([command[2:4] for command in self.sent], ["YL", "AA"])
     self.moves.assert_not_awaited()
     self.assertEqual(y, 249.4)
@@ -796,7 +798,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0))
     self.moves.assert_awaited_once_with(202.0)
 
-  async def test_y_probe_that_finds_nothing_backs_away_and_answers_none(self):
+  async def test_y_probe_that_finds_nothing_makes_its_post_detection_move_and_answers_none(self):
     for trace in (70, 73):
       self.moves.reset_mock()
       self._answer_the_search_with("YL", f"P2YLid0001er{trace}")
