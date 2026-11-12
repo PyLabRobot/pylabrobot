@@ -365,6 +365,7 @@ class SimulatedPipettes(_Simulated, Pipettes):
       check_fw_string_error(f"{self.channel_id(channel)}{command}id0000er70")
     assert container is not None and surface is not None
     detected = round(surface + below, 2)
+    self.device.last_lld_stop_discs[channel] = detected
     retreat = c.z_drive_increments_to_mm(int(kwargs.get("zi", 0)))
     up = str(kwargs.get("zj", 1)) == "1"
     self.update_location_by_reference_point(
@@ -555,6 +556,11 @@ class SimulatedPipettes(_Simulated, Pipettes):
       )
     if command in ("ZL", "ZE"):
       return self._answer_liquid_search(channel, command, **kwargs)
+    if command == "RH":
+      return (
+        {"rh": c.z_drive_mm_to_increments(self.device.last_lld_stop_discs.get(channel, 0.0))},
+        f"where channel {channel}'s stop disc last detected liquid",
+      )
     if command == "ZH":
       return self._answer_ztouch(channel, **kwargs)
 
@@ -1925,6 +1931,8 @@ class STARSimulationDriver(STARDriver):
     self.liquid_searches: Dict[int, Container] = {}
     # What each channel last detected liquid at, in mm on the deck; 0.0 until a search finds any.
     self.last_lld_heights: Dict[int, float] = {}
+    # Where each channel's stop disc stood when it last detected liquid, in mm on the deck.
+    self.last_lld_stop_discs: Dict[int, float] = {}
     # Where each channel's piston stands, in uL: what its aspirations drew.
     self.dispensing_drive_uL: Dict[int, float] = {}
     # The transport air each channel's tip holds, in uL: the next dispense pushes it out first.

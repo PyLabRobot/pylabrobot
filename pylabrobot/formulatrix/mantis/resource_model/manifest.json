@@ -1,0 +1,43 @@
+{
+  "note": "Modular. The device frame is the main box's: origin at the body's front-left corner, at the bottom of the feet. The base file is authored in that frame and also draws the side lobes outside the box. Every other file is authored in its own resource's frame, its lowest corner at the origin, so declaring it on that resource needs no offset. `measured_at` records where a part sits in the device frame in the pose the manufacturer's model is drawn in, in millimetres.",
+  "units": "mm",
+  "up": "Z",
+  "frames": {
+    "Mantis": {
+      "base": "Mantis.glb",
+      "size": [
+        175.0,
+        212.0,
+        136.0
+      ],
+      "modules": {
+        "left_chip_rack": {
+          "file": "formulatrix_mantis_left_chip_rack.glb",
+          "size": [
+            65.06,
+            121.9,
+            13.53
+          ],
+          "measured_at": [
+            -55.53,
+            51.12,
+            183.97
+          ]
+        },
+        "right_chip_rack": {
+          "file": "formulatrix_mantis_right_chip_rack.glb",
+          "size": [
+            44.42,
+            58.85,
+            13.53
+          ],
+          "measured_at": [
+            167.06,
+            82.93,
+            184.0
+          ]
+        }
+      }
+    }
+  }
+}

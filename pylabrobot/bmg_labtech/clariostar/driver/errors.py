@@ -1,6 +1,9 @@
 """CLARIOstar error types, and the reply bytes that raise them."""
 
-from typing import Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+  from .features.fluorescence import CLARIOstarFluorescenceGridResult
 
 # Reply byte 1 bits that put quit codes in bytes 6-10 of a type 0x01 reply.
 REFUSED_BIT = 1 << 4
@@ -31,6 +34,8 @@ QUIT_CODE_DESCRIPTIONS: Dict[int, str] = {
   1: "the reader received a frame with a wrong checksum",
   2: "the reader received a frame with a wrong end byte",
   3: "the reader received a frame with a wrong length",
+  29: "the scan's last well lies left of its first",
+  30: "the scan's last well lies behind its first",
   55: "the focal height is invalid",
   65: "the kinetic cycle time is too short",
   102: "no new measurement data is available yet",
@@ -65,3 +70,16 @@ class CommandRefusedError(Exception):
     self.payload = payload
     self.quit_codes = quit_codes
     super().__init__(f"CLARIOstar refused {payload.hex()}: {describe_quit_codes(quit_codes)}")
+
+
+class GridScanError(RuntimeError):
+  """A grid scan failed partway; the grids read before it are kept."""
+
+  def __init__(self, message: str, grids: List["CLARIOstarFluorescenceGridResult"]):
+    """
+    Args:
+      message: what failed.
+      grids: the grids read before the failure, in the order the wells or points were given.
+    """
+    self.grids = grids
+    super().__init__(message)

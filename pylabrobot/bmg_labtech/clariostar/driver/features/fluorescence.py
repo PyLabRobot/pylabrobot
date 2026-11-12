@@ -38,6 +38,7 @@ from pylabrobot.lib.optics.holders import (
 )
 from pylabrobot.resources import Coordinate, Plate, Well
 
+from ..errors import GridScanError
 from .measurement import (
   Measurement,
   MeasurementConfiguration,
@@ -126,7 +127,7 @@ class CLARIOstarZProfileResult:
 
 @dataclass(frozen=True)
 class CLARIOstarFluorescenceGridResult:
-  """One grid: the counts over a square grid of points around `position`.
+  """One grid: the values read over a square grid of points around `position`.
 
   Attributes:
     position: the grid's centre, x and y in mm (z 0): on the plate for a well, on the plate holder
@@ -135,7 +136,7 @@ class CLARIOstarFluorescenceGridResult:
     center: where the reader found the signal's centre, in the frame of `position`; None if it
       found none.
     spacing: mm between neighbouring points of the grid.
-    counts: the grid's counts, rows of points in the order the reader sends them; which way the
+    data: the grid's values, rows of points in the order the reader sends them; which way the
       rows and columns run is not verified.
     focal_height: the focal height the grid was read at, mm.
     gain: the detector gain it was read at.
@@ -147,7 +148,7 @@ class CLARIOstarFluorescenceGridResult:
   well: Optional[str]
   center: Optional[Coordinate]
   spacing: float
-  counts: List[List[int]]
+  data: List[List[int]]
   focal_height: float
   gain: int
   start_timestamp: datetime
@@ -1394,6 +1395,9 @@ class Fluorescence(Measurement):
   _GRID_COUNTS_START = 34
   # The plate holder's footprint given points are placed on, mm (the SLAS plate footprint).
   _PLATE_HOLDER_SIZE = (127.76, 85.48)
+  # The pitch given to a made-up plate, mm: a 96-well plate's, so the reader steps its grid by
+  # 330 um as on a 96-well plate (the step follows the x pitch).
+  _GRID_PITCH = 9.0
 
   # -- checks --------------------------------------------------------------------------------------
 
@@ -1419,18 +1423,105 @@ class Fluorescence(Measurement):
 
   # -- `07` parameters -----------------------------------------------------------------------------
 
-  @staticmethod
-  def _encode_grid_geometry(size: Tuple[float, float], points: Sequence[Coordinate]) -> bytes:
-    """A made-up plate's 14 bytes around one or two points, as `_encode_plate_geometry`.
+  @classmethod
+  def _encode_grid_geometry(cls, size: Tuple[float, float], points: Sequence[Coordinate]) -> bytes:
+    """A made-up plate's 14 bytes from the first of two points to the second, as
+    `_encode_plate_geometry`.
 
-    Its first well at the first point and its last at the second (or the first again), with 2
-    columns and 1 row (1 and 1 for one point); Y measured from the back edge.
+    Its columns and rows are the points' distance apart in `_GRID_PITCH` steps, rounded, plus one,
+    so the reader steps its grid about as on a 96-well plate; Y measured from the back edge.
     """
-    first = points[0]
-    last = points[-1]
+    first, last = points
     values = (size[0], size[1], first.x, size[1] - first.y, last.x, size[1] - last.y)
     block = b"".join(round(value * 100).to_bytes(2, "big") for value in values)
-    return block + (bytes([2, 1]) if len(points) == 2 else bytes([1, 1]))
+    columns = round(abs(last.x - first.x) / cls._GRID_PITCH) + 1
+    rows = round(abs(last.y - first.y) / cls._GRID_PITCH) + 1
+    return block + bytes([columns, rows])
+
+  @staticmethod
+  def _encode_sub_plate_geometry(plate: Plate, first: Well, last: Well) -> bytes:
+    """The 14 bytes of the part of `plate` from `first` to `last`, as `_encode_plate_geometry`.
+
+    The two wells' centres, Y from the back edge, and the columns and rows from one to the other,
+    so the reader steps its grid by the plate's own pitch.
+
+    Raises:
+      ValueError: if a well has no location on `plate`.
+    """
+    rows = plate.num_items_y
+    index = {id(well): i for i, well in enumerate(plate.get_all_items())}
+    first_column, first_row = divmod(index[id(first)], rows)
+    last_column, last_row = divmod(index[id(last)], rows)
+    centres: List[float] = []
+    for well in (first, last):
+      if well.location is None:
+        raise ValueError(f"well {well.name} has no location on {plate.name}")
+      center = well.location + well.center()
+      centres += [center.x, plate.get_size_y() - center.y]
+    values = (plate.get_size_x(), plate.get_size_y(), *centres)
+    block = b"".join(round(value * 100).to_bytes(2, "big") for value in values)
+    return block + bytes([abs(last_column - first_column) + 1, abs(last_row - first_row) + 1])
+
+  @staticmethod
+  def _check_grid_geometry(geometry: bytes) -> List[str]:
+    """The reasons the reader would refuse or misread a scan of `geometry`'s 14 bytes.
+
+    It refuses a last point left of the first (quit code 29) or behind it (30), and steps the grid
+    by the x pitch, so fewer than 2 columns read every grid point at one spot.
+    """
+    first_x, first_y, last_x, last_y = (
+      int.from_bytes(geometry[i : i + 2], "big") / 100 for i in range(4, 12, 2)
+    )
+    errors = []
+    if last_x < first_x:
+      errors.append(f"a scan's last point must not lie left of its first ({last_x} < {first_x} mm)")
+    if last_y < first_y:  # Y from the back edge: the last point lies behind the first
+      errors.append(f"a scan's last point must not lie behind its first ({last_y} < {first_y} mm)")
+    if geometry[12] < 2:
+      errors.append("a scan needs at least 2 columns: with 1 its grid step is 0")
+    return errors
+
+  @staticmethod
+  def _get_well_pairs(plate: Plate, wells: Sequence[Well]) -> List[Tuple[Well, Well, int]]:
+    """The scans that read `wells` of `plate`: each scan's first and last well and which to keep.
+
+    - A scan reads the part of the plate from its first well to its last, which must lie in a
+      later column and the same or a later row (`_check_grid_geometry`).
+    - Wells are taken row by row; each is paired with the next such well.
+    - A well left over is scanned with its neighbour in the same row (the next column, or the one
+      before at the right edge), whose grid is not kept.
+    - Keep: 0 the first well, 1 the last, 2 both. A well given twice is scanned once.
+    """
+    items = plate.get_all_items()
+    rows = plate.num_items_y
+    index = {id(well): i for i, well in enumerate(items)}
+    unique: List[Well] = []
+    for well in wells:
+      if all(well is not other for other in unique):
+        unique.append(well)
+    remaining = sorted(unique, key=lambda well: (index[id(well)] % rows, index[id(well)] // rows))
+    pairs: List[Tuple[Well, Well, int]] = []
+    while remaining:
+      first = remaining.pop(0)
+      column, row = divmod(index[id(first)], rows)
+      partner = next(
+        (
+          well
+          for well in remaining
+          if index[id(well)] // rows > column and index[id(well)] % rows >= row
+        ),
+        None,
+      )
+      if partner is not None:
+        remaining = [well for well in remaining if well is not partner]
+        pairs.append((first, partner, 2))
+      elif column + 1 < plate.num_items_x:
+        pairs.append((first, items[(column + 1) * rows + row], 0))
+      elif column > 0:
+        pairs.append((items[(column - 1) * rows + row], first, 1))
+      else:  # a one-column plate: `_check_grid_geometry` refuses the scan
+        pairs.append((first, first, 0))
+    return pairs
 
   def _compute_grid_parameters(
     self,
@@ -1506,7 +1597,7 @@ class Fluorescence(Measurement):
     """The first and last well's centres the reader found, from its PLATE_MAP_XY (`05 04`) reply.
 
     X1, Y1, Xn, Yn at bytes 8-15, u16 BE in 0.01 mm, Y from the back edge of a plate `size_y` mm
-    deep; returned from the front edge. All zero: the reader found none.
+    deep; returned from the front edge. A well's X and Y both zero: the reader found no centre.
 
     Raises:
       ValueError: if the reply is cut short.
@@ -1514,9 +1605,9 @@ class Fluorescence(Measurement):
     if len(reply) < 16:
       raise ValueError(f"PLATE_MAP_XY reply too short, got {len(reply)} bytes")
     x1, y1, x2, y2 = (int.from_bytes(reply[i : i + 2], "big") / 100 for i in range(8, 16, 2))
-    if not any((x1, y1, x2, y2)):
-      return None, None
-    return Coordinate(x1, size_y - y1, 0), Coordinate(x2, size_y - y2, 0)
+    first = Coordinate(x1, size_y - y1, 0) if x1 or y1 else None
+    last = Coordinate(x2, size_y - y2, 0) if x2 or y2 else None
+    return first, last
 
   # -- measuring -----------------------------------------------------------------------------------
 
@@ -1609,7 +1700,7 @@ class Fluorescence(Measurement):
         well=well,
         center=center,
         spacing=spacing,
-        counts=counts,
+        data=counts,
         focal_height=focal_height,
         gain=gain,
         start_timestamp=start_timestamp,
@@ -1631,7 +1722,10 @@ class Fluorescence(Measurement):
     """Measure the signal over a grid of points around each of one or two `positions`.
 
     - The reader reads a 31 x 31 grid around each point, at one focal height and gain, and finds
-      the signal's centre (about 50-80 s a point).
+      the signal's centre (about 50-80 s a point), stepping it about as on a 96-well plate.
+    - A scan runs from back-left to front-right: two points are scanned in that order (swapped if
+      needed); a point on its own, or two less than half a pitch apart in x, with a neighbouring
+      point one pitch away whose grid is not kept.
     - The points need not be wells: any point the optic reaches on the plate holder.
     - Cancelling the call stops it on the reader.
 
@@ -1644,10 +1738,12 @@ class Fluorescence(Measurement):
       timeout: seconds the scan may take; `default_read_timeout` when None.
 
     Returns:
-      a grid for each point, in order.
+      a grid for each point, in the order given.
 
     Raises:
-      ValueError: if an argument is out of range, or a reply is not what the scan sends.
+      ValueError: if an argument is out of range, two points lie in neither order a scan can run
+        in, or a reply is not what the scan sends.
+      GridScanError: if a scan fails after another has been read; it holds the grids read.
       TimeoutError: if the scan takes longer than `timeout` seconds.
       RuntimeError: if the drawer is open, or the scan returns another number of grids than points.
     """
@@ -1664,13 +1760,59 @@ class Fluorescence(Measurement):
         )
     if errors:
       raise ValueError("; ".join(errors))
+    pitch = self._GRID_PITCH
+    # each scan's two points, and the index in `positions` of each of its grids (None: not kept)
+    scans: List[Tuple[List[Coordinate], List[Optional[int]]]] = []
+    on_their_own = list(range(len(positions)))
+    if len(positions) == 2 and round(abs(positions[1].x - positions[0].x) / pitch) > 0:
+      first, last = positions
+      if last.x >= first.x and last.y <= first.y:
+        scans.append(([first, last], [0, 1]))
+      elif first.x >= last.x and first.y <= last.y:
+        scans.append(([last, first], [1, 0]))
+      else:
+        raise ValueError(
+          f"a scan runs from back-left to front-right; {first} and {last} lie in neither order"
+        )
+      on_their_own = []
+    for i in on_their_own:
+      point = positions[i]
+      if point.x + pitch <= size_x:
+        scans.append(([point, Coordinate(point.x + pitch, point.y, point.z)], [i, None]))
+      else:
+        scans.append(([Coordinate(point.x - pitch, point.y, point.z), point], [None, i]))
+    geometries = [
+      self._encode_grid_geometry(size=self._PLATE_HOLDER_SIZE, points=points) for points, _ in scans
+    ]
+    errors = [
+      error for geometry in geometries for error in self._check_grid_geometry(geometry=geometry)
+    ]
+    if errors:
+      raise ValueError("; ".join(errors))
     self._warn_untested("a grid at given positions")
-    geometry = self._encode_grid_geometry(self._PLATE_HOLDER_SIZE, positions)
-    parameters = self._compute_grid_parameters(geometry, filled, optic, focal_height, gain)
-    logger.info("grid: %s at %s", self._describe_fluorescence_channel(filled), positions)
-    return await self._get_grids(
-      parameters, positions, [None] * len(positions), size_y, focal_height, gain, timeout
-    )
+    grids: Dict[int, CLARIOstarFluorescenceGridResult] = {}
+    for (points, kept), geometry in zip(scans, geometries):
+      parameters = self._compute_grid_parameters(geometry, filled, optic, focal_height, gain)
+      logger.info("grid: %s at %s", self._describe_fluorescence_channel(filled), points)
+      try:
+        scanned = await self._get_grids(
+          parameters=parameters,
+          positions=points,
+          wells=[None, None],
+          size_y=size_y,
+          focal_height=focal_height,
+          gain=gain,
+          timeout=timeout,
+        )
+      except Exception as error:
+        if not grids:
+          raise
+        read = [grids[i] for i in sorted(grids)]
+        raise GridScanError(f"the grid scan at {points} failed: {error}", read) from error
+      for index, grid in zip(kept, scanned):
+        if index is not None:
+          grids[index] = grid
+    return [grids[i] for i in range(len(positions))]
 
   async def measure_well_centers(
     self,
@@ -1687,8 +1829,11 @@ class Fluorescence(Measurement):
 
     - Without `focal_height`, a z-scan of the first well (`measure_z_profile`) gives the focal
       height, and the gain too unless `gain` is given; every well is then read at both.
-    - The wells are scanned two at a time (about 50-80 s a well). The plate's first and last well
-      together are the scan the reader is verified with; other wells are untested.
+    - The wells are scanned two at a time (about 50-80 s a well), each scan the part of the plate
+      from its back-left well to its front-right one, so the grid steps by the plate's pitch
+      (`_get_well_pairs`). A well that pairs with no other is scanned with its neighbour in the
+      same row, whose grid is not kept.
+    - Every scan is checked before the first is sent; then each well's centre is logged as read.
     - Cancelling the call stops it on the reader.
 
     Args:
@@ -1703,11 +1848,12 @@ class Fluorescence(Measurement):
       timeout: seconds each scan (and the z-scan) may take; `default_read_timeout` when None.
 
     Returns:
-      a grid for each well, in order, its centre and `center` relative to the plate.
+      a grid for each well, in the order given, its centre and `center` relative to the plate.
 
     Raises:
       RuntimeError: if no plate is in the plate holder, the drawer is open, the z-scan fits no gain,
-        or a scan returns another number of grids than wells.
+        or the first scan returns another number of grids than wells.
+      GridScanError: if a scan fails after another has been read; it holds the grids read.
       ValueError: if an argument is out of range, a well is not on the plate, or a reply is not
         what the scan sends.
       TimeoutError: if a scan takes longer than `timeout` seconds.
@@ -1730,6 +1876,16 @@ class Fluorescence(Measurement):
     )
     items = plate.get_all_items()
     targets = [items[0], items[-1]] if wells is None else list(wells)
+    pairs = self._get_well_pairs(plate=plate, wells=targets)
+    geometries = [
+      self._encode_sub_plate_geometry(plate=plate, first=first, last=last)
+      for first, last, _ in pairs
+    ]
+    errors = [
+      error for geometry in geometries for error in self._check_grid_geometry(geometry=geometry)
+    ]
+    if errors:
+      raise ValueError("; ".join(errors))
     if focal_height is None:
       z_profile = await self.measure_z_profile(
         filled,
@@ -1742,17 +1898,13 @@ class Fluorescence(Measurement):
       gain = z_profile.gain if gain is None else gain
     if gain is None:
       raise RuntimeError("the z-scan fitted no gain")
-    results: List[CLARIOstarFluorescenceGridResult] = []
-    for i in range(0, len(targets), 2):
-      pair = targets[i : i + 2]
+    requested: List[Optional[str]] = [plate.get_child_identifier(well) for well in targets]
+    grids: Dict[Optional[str], CLARIOstarFluorescenceGridResult] = {}
+    for (first, last, keep), geometry in zip(pairs, geometries):
+      pair = [first, last]
       centres = [well.location + well.center() for well in pair if well.location is not None]
-      if len(centres) != len(pair):
-        raise ValueError(f"every well needs a location on {plate.name}")
-      if pair == [items[0], items[-1]]:
-        geometry = self._encode_plate_geometry(plate)
-      else:
-        self._warn_untested("a grid of wells other than the first and last")
-        geometry = self._encode_grid_geometry((plate.get_size_x(), plate.get_size_y()), centres)
+      if keep != 2:
+        self._warn_untested("a grid scanned with a neighbouring well")
       parameters = self._compute_grid_parameters(geometry, filled, optic, focal_height, gain)
       identifiers: List[Optional[str]] = [plate.get_child_identifier(well) for well in pair]
       logger.info(
@@ -1761,10 +1913,27 @@ class Fluorescence(Measurement):
         ", ".join(str(identifier) for identifier in identifiers),
         plate.name,
       )
-      results += await self._get_grids(
-        parameters, centres, identifiers, plate.get_size_y(), focal_height, gain, timeout
-      )
-    return results
+      try:
+        scanned = await self._get_grids(
+          parameters=parameters,
+          positions=centres,
+          wells=identifiers,
+          size_y=plate.get_size_y(),
+          focal_height=focal_height,
+          gain=gain,
+          timeout=timeout,
+        )
+      except Exception as error:
+        if not grids:
+          raise
+        read = [grids[identifier] for identifier in requested if identifier in grids]
+        raise GridScanError(
+          f"the grid scan of {identifiers[0]} and {identifiers[1]} failed: {error}", read
+        ) from error
+      for grid in scanned if keep == 2 else scanned[keep : keep + 1]:
+        grids[grid.well] = grid
+        logger.info("well centre: %s at %s", grid.well, grid.center)
+    return [grids[identifier] for identifier in requested]
 
   # ----------------------------------------
   # Discrete reads

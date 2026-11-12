@@ -2003,6 +2003,9 @@ class Pipettes:
     *,
     make_space: bool = False,
     minimum_traverse_height_start: Optional[float] = None,
+    x_acceleration_level: Optional[int] = None,
+    y_speed: Optional[float] = None,
+    y_acceleration_level: Optional[int] = None,
   ) -> None:
     """Move the channels across the deck: the low ones up first, then X and Y together.
 
@@ -2016,6 +2019,9 @@ class Pipettes:
       make_space: whether the channels not named may be moved in Y. See `move_to_y_positions`.
       minimum_traverse_height_start: the height to raise every low channel's lowest point to
         first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
+      x_acceleration_level: the arm's level for this move. See `move_to_x_position`.
+      y_speed: every channel's Y speed for this move only, in mm/s. See `move_to_y_positions`.
+      y_acceleration_level: every channel's Y level for this move only. See `move_to_y_positions`.
 
     Raises:
       ValueError: If X, a Y or a raise is out of reach, or two channels would stand too close.
@@ -2026,14 +2032,28 @@ class Pipettes:
       else minimum_traverse_height_start
     )
     self._check_reachable("x", x)
+    c = self.configuration
+    for name, value, (low, high) in (
+      (
+        "x_acceleration_level",
+        x_acceleration_level,
+        self.arm.configuration.acceleration_level_range,
+      ),
+      ("y_speed", y_speed, c.y_speed_range),
+      ("y_acceleration_level", y_acceleration_level, c.y_drive_acceleration_level_range),
+    ):
+      if value is not None and not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
     planned_ys = await self._plan_y_positions(ys, make_space)
     raises = await self._traverse_raise_targets(height) if height > 0 else {}
 
     if raises:
       await self.move_stop_disc_to_z_positions(raises)
     results = await asyncio.gather(
-      self.move_to_x_position(x),
-      self._move_to_planned_y_positions(planned_ys),
+      self.move_to_x_position(x=x, acceleration_level=x_acceleration_level),
+      self._move_to_planned_y_positions(
+        channel_locations=planned_ys, speed=y_speed, acceleration_level=y_acceleration_level
+      ),
       return_exceptions=True,
     )
     failed = [result for result in results if isinstance(result, BaseException)]
@@ -2784,6 +2804,22 @@ class Pipettes:
     resp = await self._driver.send_command(module="C0", command="RL", fmt="lh#### (n)")
     return [round(increments / 10, 1) for increments in cast(List[int], resp["lh"])]
 
+  async def _unchecked_fw_request_last_lld_stop_disc_z_position(self, channel: int) -> float:
+    """Read where one channel's stop disc stood when it last detected liquid (`Px RH`).
+
+    The channel's own reading: it does not depend on what the master thinks is mounted.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The stop disc height in mm.
+    """
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="RH", fmt="rh#####"
+    )
+    return self.configuration.z_drive_increments_to_mm(cast(int, resp["rh"]))
+
   async def _clld_search(
     self,
     channel: int,
@@ -2885,7 +2921,8 @@ class Pipettes:
         instead of resting where the search left it.
 
     Returns:
-      The height the channel detected at, in mm, or None if the search found nothing.
+      The tip bottom height the channel detected at, in mm, its stop disc's without a tip; None if
+      the search found nothing.
 
     Raises:
       RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
@@ -2932,7 +2969,11 @@ class Pipettes:
       return None
     if move_to_safe_z_position_after:
       await self.move_to_safe_z()
-    return (await self.request_last_lld_z_positions())[channel]
+    if has_tip:
+      return (await self.request_last_lld_z_positions())[channel]
+    # Bare, the stop disc's own height at detection: the master's (`C0 RL`) can still subtract a
+    # CoRe gripper tool put back in its holder since.
+    return await self._unchecked_fw_request_last_lld_stop_disc_z_position(channel=channel)
 
   async def _unchecked_fw_probe_z_using_plld(
     self,
