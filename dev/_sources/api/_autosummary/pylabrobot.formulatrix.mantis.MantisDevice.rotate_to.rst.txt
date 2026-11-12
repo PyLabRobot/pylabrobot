@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.rotate\_to
+=====================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.rotate_to

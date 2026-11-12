@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.plate\_clamp.PlateClamp.default\_lock\_level
+==========================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.plate_clamp
+
+.. autoattribute:: PlateClamp.default_lock_level

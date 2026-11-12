@@ -1,0 +1,6 @@
+﻿pylabrobot.formulatrix.mantis.driver.errors.MantisError
+=======================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.errors
+
+.. autoexception:: MantisError

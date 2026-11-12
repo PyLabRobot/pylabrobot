@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.stop
+===============================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.stop

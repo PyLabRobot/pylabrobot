@@ -1,0 +1,6 @@
+﻿pylabrobot.formulatrix.mantis.driver.errors.MantisPressureError
+===============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.errors
+
+.. autoexception:: MantisPressureError

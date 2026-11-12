@@ -1,0 +1,6 @@
+﻿pylabrobot.formulatrix.mantis.resource\_model.chip\_rack
+========================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.resource_model
+
+.. autofunction:: chip_rack

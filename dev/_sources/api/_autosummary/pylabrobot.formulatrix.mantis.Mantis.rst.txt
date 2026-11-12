@@ -1,0 +1,6 @@
+﻿pylabrobot.formulatrix.mantis.Mantis
+====================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autofunction:: Mantis

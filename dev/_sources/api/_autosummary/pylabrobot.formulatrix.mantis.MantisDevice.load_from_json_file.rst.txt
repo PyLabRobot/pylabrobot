@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.load\_from\_json\_file
+=================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.load_from_json_file

@@ -1,0 +1,26 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationRfid
+===================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoclass:: MantisSimulationRfid
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationRfid.__init__
+      ~MantisSimulationRfid.request_tag
+      ~MantisSimulationRfid.request_tags
+   
+   

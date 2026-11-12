@@ -1,0 +1,87 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.MantisDevice
+==========================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoclass:: MantisDevice
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisDevice.location
+      ~MantisDevice.name
+      ~MantisDevice.plate_clamp
+      ~MantisDevice.rfid
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisDevice.__init__
+      ~MantisDevice.assign_child_by_anchor
+      ~MantisDevice.assign_child_resource
+      ~MantisDevice.at
+      ~MantisDevice.center
+      ~MantisDevice.centers
+      ~MantisDevice.check_can_drop_resource_here
+      ~MantisDevice.copy
+      ~MantisDevice.deregister_did_assign_resource_callback
+      ~MantisDevice.deregister_did_unassign_resource_callback
+      ~MantisDevice.deregister_state_update_callback
+      ~MantisDevice.deregister_will_assign_resource_callback
+      ~MantisDevice.deregister_will_unassign_resource_callback
+      ~MantisDevice.deserialize
+      ~MantisDevice.find_resource
+      ~MantisDevice.find_resources
+      ~MantisDevice.get_absolute_location
+      ~MantisDevice.get_absolute_rotation
+      ~MantisDevice.get_absolute_size_x
+      ~MantisDevice.get_absolute_size_y
+      ~MantisDevice.get_absolute_size_z
+      ~MantisDevice.get_all_children
+      ~MantisDevice.get_anchor
+      ~MantisDevice.get_highest_known_point
+      ~MantisDevice.get_location_wrt
+      ~MantisDevice.get_resource
+      ~MantisDevice.get_root
+      ~MantisDevice.get_size_x
+      ~MantisDevice.get_size_y
+      ~MantisDevice.get_size_z
+      ~MantisDevice.has_resource
+      ~MantisDevice.is_in_subtree_of
+      ~MantisDevice.load_all_state
+      ~MantisDevice.load_from_json_file
+      ~MantisDevice.load_state
+      ~MantisDevice.load_state_from_file
+      ~MantisDevice.named
+      ~MantisDevice.register_did_assign_resource_callback
+      ~MantisDevice.register_did_unassign_resource_callback
+      ~MantisDevice.register_state_update_callback
+      ~MantisDevice.register_will_assign_resource_callback
+      ~MantisDevice.register_will_unassign_resource_callback
+      ~MantisDevice.rotate
+      ~MantisDevice.rotate_to
+      ~MantisDevice.rotated
+      ~MantisDevice.save
+      ~MantisDevice.save_state_to_file
+      ~MantisDevice.serialize
+      ~MantisDevice.serialize_all_state
+      ~MantisDevice.serialize_state
+      ~MantisDevice.setup
+      ~MantisDevice.stop
+      ~MantisDevice.unassign
+      ~MantisDevice.unassign_child_resource
+   
+   

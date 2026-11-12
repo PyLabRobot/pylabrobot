@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver
+=====================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoclass:: MantisSimulationDriver
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationDriver.default_read_timeout
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationDriver.__init__
+      ~MantisSimulationDriver.discover
+      ~MantisSimulationDriver.request_firmware_version
+      ~MantisSimulationDriver.request_motor_limits
+      ~MantisSimulationDriver.request_name
+      ~MantisSimulationDriver.save_configuration
+      ~MantisSimulationDriver.setup
+      ~MantisSimulationDriver.stop
+   
+   

@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration
+======================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.configuration
+
+.. autoclass:: DeviceConfiguration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DeviceConfiguration.generation
+      ~DeviceConfiguration.firmware_versions
+      ~DeviceConfiguration.motor_limits
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DeviceConfiguration.__init__
+   
+   

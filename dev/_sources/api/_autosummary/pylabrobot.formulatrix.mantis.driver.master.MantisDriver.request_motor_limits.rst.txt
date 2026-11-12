@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.master.MantisDriver.request\_motor\_limits
+===============================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.master
+
+.. automethod:: MantisDriver.request_motor_limits

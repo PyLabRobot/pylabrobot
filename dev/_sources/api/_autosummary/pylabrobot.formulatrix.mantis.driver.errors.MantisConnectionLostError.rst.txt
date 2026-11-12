@@ -1,0 +1,6 @@
+﻿pylabrobot.formulatrix.mantis.driver.errors.MantisConnectionLostError
+=====================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.errors
+
+.. autoexception:: MantisConnectionLostError

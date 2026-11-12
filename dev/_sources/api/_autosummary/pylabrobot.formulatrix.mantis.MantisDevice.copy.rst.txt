@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.copy
+===============================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.copy

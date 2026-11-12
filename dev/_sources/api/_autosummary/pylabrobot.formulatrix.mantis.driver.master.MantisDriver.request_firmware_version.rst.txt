@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.master.MantisDriver.request\_firmware\_version
+===================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.master
+
+.. automethod:: MantisDriver.request_firmware_version

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.save\_state\_to\_file
+================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.save_state_to_file
