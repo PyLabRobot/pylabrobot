@@ -13,11 +13,18 @@ from .configuration import (
   configuration_from_json,
   read_configuration,
 )
-from .errors import MantisConfigurationError, MantisTimeoutError
+from .errors import MantisConfigurationError, MantisPressureError, MantisTimeoutError
 from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
-from .features.pump import PressureController, Pump
+from .features.pump import (
+  CONTROLLER_OFF,
+  CONTROLLER_SETTLED,
+  CONTROLLER_UNSETTLED,
+  PRESSURE_CONTROLLERS,
+  PressureController,
+  Pump,
+)
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
 from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, SEQUENCER_QUEUE_SIZE, MantisDriver
@@ -56,12 +63,90 @@ class MantisSimulationPlateClamp(PlateClamp):
 class MantisSimulationPump(Pump):
   """A pump with no device behind it, answering from the declared configuration.
 
-  Off, its controllers off and disabled, every line at 0, with the recorded sensor calibration.
+  The pump and each controller are as last commanded, off after setup. A line whose controller
+  regulates with the pump on reads its target and settled; an enabled one with the pump off reads
+  0 and unsettled; any other reads 0 and off. Holds pass at once, and the sensor calibration is the
+  recorded one.
   """
 
-  async def measure_pressure(self, *, controller: PressureController) -> float:
-    """0: no line holds pressure."""
+  def __init__(
+    self,
+    *,
+    driver: "MantisSimulationDriver",
+    reservoir_release_controller: Optional[PressureController] = None,
+    tare_and_self_test: bool = False,
+  ):
+    """
+    Args:
+      driver: the simulated driver.
+      reservoir_release_controller: as for ``Pump``.
+      tare_and_self_test: as for ``Pump``.
+    """
+    super().__init__(
+      driver=driver,
+      reservoir_release_controller=reservoir_release_controller,
+      tare_and_self_test=tare_and_self_test,
+    )
+    self._pump_on = False
+    self._enabled: Dict[PressureController, bool] = dict.fromkeys(PRESSURE_CONTROLLERS, False)
+    self._targets: Dict[PressureController, float] = dict.fromkeys(PRESSURE_CONTROLLERS, 0.0)
+
+  async def _sleep(self, *, seconds: float) -> None:
+    """Pass at once."""
+
+  async def _unchecked_fw_set_target_pressure(
+    self, *, controller: PressureController, pressure: float
+  ) -> None:
+    """Hold the target."""
     self._get_controller_index(controller=controller)
+    self._targets[controller] = pressure
+
+  async def _unchecked_fw_set_controller_enabled(
+    self, *, controller: PressureController, enabled: bool
+  ) -> None:
+    """Enable or disable the controller."""
+    self._get_controller_index(controller=controller)
+    self._enabled[controller] = enabled
+
+  async def _unchecked_fw_set_pump_on(self, *, on: bool) -> None:
+    """Turn the pump on or off."""
+    self._pump_on = on
+
+  async def _unchecked_fw_set_feedback_sensor_parameters(
+    self, *, controller: PressureController, scale: float, offset: float
+  ) -> None:
+    """Write nothing: the calibration is the configuration's."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_proportional_valve(
+    self, *, controller: PressureController, pwm: int
+  ) -> None:
+    """Change nothing: no line holds pressure but a regulated one."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_solenoid_valve(
+    self, *, controller: PressureController, pwm: int
+  ) -> None:
+    """Change nothing: no line holds pressure but a regulated one."""
+    self._get_controller_index(controller=controller)
+
+  async def _check_pressure_settled(self, *, controller: PressureController, target: float) -> None:
+    """Pass at once: a regulated line is at its target."""
+
+  async def tare_pressure_sensors(self) -> None:
+    """Zero nothing: a simulated line reads 0 vented, whatever the recorded calibration.
+
+    Raises:
+      MantisPressureError: if the pump runs, as a device's tare.
+    """
+    if self._pump_on:
+      raise MantisPressureError(f"{self._driver.name}: the pump runs; a tare needs it off")
+
+  async def measure_pressure(self, *, controller: PressureController) -> float:
+    """The target of a regulated line, else 0."""
+    self._get_controller_index(controller=controller)
+    if self._pump_on and self._enabled[controller]:
+      return self._targets[controller]
     return 0.0
 
   async def request_feedback_sensor_parameters(
@@ -82,18 +167,20 @@ class MantisSimulationPump(Pump):
     return parameters
 
   async def request_controller_status(self, *, controller: PressureController) -> int:
-    """0: off."""
+    """Settled when it regulates with the pump on, unsettled with the pump off, off if disabled."""
     self._get_controller_index(controller=controller)
-    return 0
+    if not self._enabled[controller]:
+      return CONTROLLER_OFF
+    return CONTROLLER_SETTLED if self._pump_on else CONTROLLER_UNSETTLED
 
   async def request_controller_enabled(self, *, controller: PressureController) -> bool:
-    """False: no controller regulates."""
+    """Whether the controller is enabled."""
     self._get_controller_index(controller=controller)
-    return False
+    return self._enabled[controller]
 
-  async def request_pump_on(self) -> bool:
-    """False: the pump is off."""
-    return False
+  async def request_pump_on(self, *, attempts: int = 3) -> bool:
+    """Whether the pump is on."""
+    return self._pump_on
 
   async def _request_calibration(self) -> Dict[PressureController, Tuple[float, float]]:
     """The generation's recording's calibration; none recorded is none."""
@@ -278,13 +365,14 @@ class MantisSimulationDriver(MantisDriver):
 
   Nothing reaches a wire. The configuration comes from ``declared_configuration_json``, and the
   reads answer from it; a board it leaves ``None`` does not answer. The plate clamp's state changes
-  at once, every RFID slot reads empty, and the LED bar takes every command and holds nothing. The
-  motors read idle at 0, as after power-on. The device name and the motor reads the configuration
-  does not hold are not simulated.
+  at once, every RFID slot reads empty, the pump and its controllers are as last commanded, and the
+  LED bar takes every command and holds nothing. The motors read idle at 0, as after power-on. The
+  device name and the motor reads the configuration does not hold are not simulated.
 
-  The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after setup; started, it
-  plays each item at once. Stop and abort keep what is queued, as on a v4; only a clear drops it.
-  The arm (``MantisSimulationArm``) moves at once; its motors read where it stands.
+  The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after the link opens and
+  started by the pump's setup on a v4; started, it plays each item at once. Stop and abort keep
+  what is queued, as on a v4; only a clear drops it. The arm (``MantisSimulationArm``) moves at
+  once; its motors read where it stands.
   """
 
   def __init__(
@@ -488,7 +576,11 @@ class MantisSimulationDriver(MantisDriver):
     ):
       self.plate_clamp = MantisSimulationPlateClamp(driver=self, levels=self.plate_clamp.levels)
     if self.pump is not None and not isinstance(self.pump, MantisSimulationPump):
-      self.pump = MantisSimulationPump(driver=self)
+      self.pump = MantisSimulationPump(
+        driver=self,
+        reservoir_release_controller=self.pump.reservoir_release_controller,
+        tare_and_self_test=self.pump.tare_and_self_test,
+      )
     if self.led_bar is not None and not isinstance(self.led_bar, MantisSimulationLedBar):
       self.led_bar = MantisSimulationLedBar(
         driver=self,

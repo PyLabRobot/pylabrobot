@@ -11,14 +11,19 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
 )
 from pylabrobot.formulatrix.mantis.driver.features import plate_clamp
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
-from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
+from pylabrobot.formulatrix.mantis.driver.master_tests import (
+  PUMP_HALT,
+  DriverTestCase,
+  FakeLink,
+  make_answers,
+)
 
 RELEASE = (12, 31, bytes.fromhex("000000000000e83f000000000000000088130000"))
 LOCK_AT_LEVEL_2 = (12, 30, bytes.fromhex("0000000000000000e17a14ae47e1ca3fe8030000"))
 STATE_READ = (12, 33, b"")
 # The LED bar's commands on board 12: a colour, the animation stopped, the animation started.
 LED_BAR_COMMANDS = ((12, 13), (12, 16), (12, 17))
-# What a stop sends before the clamp: the sequencer aborted, each motor stopped.
+# What a stop sends first: the sequencer aborted, each motor stopped.
 HALT = [
   (0, 64, b""),
   (0, 24, bytes.fromhex("0000814e1be8b40a8a40")),
@@ -123,6 +128,7 @@ class PlateClampTests(DriverTestCase):
       [RELEASE, STATE_READ, LOCK_AT_LEVEL_2]
       + [STATE_READ] * 8
       + HALT
+      + PUMP_HALT
       + [STATE_READ, RELEASE, STATE_READ, STATE_READ],
     )
 
@@ -130,7 +136,7 @@ class PlateClampTests(DriverTestCase):
     self.link.answers[STATE_READ] = [bytes.fromhex(state) for state in STATES_AT_POWER_ON]
     answer_states_in_turn(link=self.link, turns=[(31, STATES_AFTER_RELEASE_AT_POWER_ON)])
     await self.driver.stop()
-    self.assertEqual(self.sent(), HALT + [STATE_READ, RELEASE, STATE_READ])
+    self.assertEqual(self.sent(), HALT + PUMP_HALT + [STATE_READ, RELEASE, STATE_READ])
 
 
 class PlateClampDiscoveryTests(DriverTestCase):

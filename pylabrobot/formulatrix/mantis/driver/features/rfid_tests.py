@@ -123,7 +123,7 @@ class RfidTests(DriverTestCase):
     driver = await self.set_up(reader=reader)
     await driver.stop()
     self.assertIsNone(driver.rfid)
-    await driver.setup(skip_arm=True)
+    await driver.setup(skip_arm=True, skip_self_test=True)
     self.assertIsNotNone(driver.rfid)
     self.assertEqual(reader.written.count(rfid.RFID_PING_DEVICE_COMMAND), 2)
 

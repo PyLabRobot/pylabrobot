@@ -210,11 +210,13 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_sequencer_plays_what_is_queued_once_started(self):
     driver = self.mantis.driver
+    # Setup leaves it started, after the pump's self-test queued seven valve states.
+    await driver._unchecked_fw_stop_sequencer()
     item = await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
-    self.assertEqual(item, 1)
+    self.assertEqual(item, 8)
     with self.assertRaises(MantisTimeoutError):
       await driver._wait_for_queue_item(item=item, timeout=1.0)
-    self.assertIsNone(driver._sequence_progress)
+    self.assertEqual(driver._sequence_progress, 7)
     await driver._unchecked_fw_start_sequencer()
     await driver._wait_for_queue_item(item=item, timeout=1.0)
     item = await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
@@ -227,6 +229,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_stopped_sequencer_fills_its_queue_and_a_clear_empties_it(self):
     driver = self.mantis.driver
+    await driver._unchecked_fw_stop_sequencer()
     free_slots = [
       (
         await driver._unchecked_fw_queue_write_ppi(

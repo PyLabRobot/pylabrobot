@@ -25,7 +25,7 @@ from pylabrobot.formulatrix.mantis.driver.events import (
   decode_sequence_stopped,
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
-from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
+from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController, Pump
 from pylabrobot.formulatrix.mantis.driver.features.rfid import (
   RFID_PING_DEVICE_COMMAND,
   RFID_READ_TAG_COMMAND,
@@ -79,17 +79,30 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   # The absolute encoders, valid.
   (11, 30, "0000"): "010000000000f43f6740",
   (11, 30, "0100"): "010000000000a0d73940",
-  # The pressure board: each controller's sensor calibration, its reading and its status, and
-  # whether a controller is enabled and the pump on, with the pump off.
+  # The pressure board: each controller's sensor calibration, its reading vented and its status,
+  # and whether a controller is enabled and the pump on, with the pump off.
   (10, 20, "0000"): "0000004049d0853f000000e06f292bc0",
   (10, 20, "0100"): "00000080d1d5853f00000000b4572bc0",
   (10, 20, "0200"): "000000001723853f00000020486343c0",
-  (10, 30, "0000"): "000000003abcf23f",
-  (10, 30, "0100"): "000000004f60f23f",
+  (10, 30, "0000"): "0000000000000000",
+  (10, 30, "0100"): "0000000000000000",
   (10, 30, "0200"): "00000000c0d7e1bf",
   (10, 16, "0000"): "0000",
   (10, 12, "0000"): "0000",
+  (10, 12, "0100"): "0000",
   (10, 14, ""): "0000",
+  # Its writes, each answered with no payload: the controllers, the pump, the bottle and chip
+  # valves, and the targets set when the pump starts after setup (20, 20 psi and -15 inHg).
+  **{(10, 13, f"0{controller}000{enabled}00"): "" for controller in "012" for enabled in "01"},
+  (10, 15, "0000"): "",
+  (10, 15, "0100"): "",
+  **{(10, 32, f"0{controller}00{pwm}"): "" for controller in "01" for pwm in ("0000", "204e")},
+  **{
+    (10, 34, f"0{controller}00{pwm}"): "" for controller in "01" for pwm in ("0000", "1027", "204e")
+  },
+  (10, 11, "00000000000000003440"): "",
+  (10, 11, "01000000000000003440"): "",
+  (10, 11, "02000000000000002ec0"): "",
   # The release and the lock at levels 1, 2 and 3.
   (12, 31, "000000000000e83f000000000000000088130000"): "",
   (12, 30, "0000000000000000105839b4c876be3fd0070000"): "",
@@ -103,12 +116,35 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (12, 16, "0000"): "",
   (12, 17, "0000000056000100"): "0100",
   **{(12, 13, "00001400" + color * 20): "0100" for color in ("1f00", "e007", "0000")},
-  # The sequencer aborted, and each motor stopped at its default deceleration.
+  # The sequencer cleared and started, as the pump's setup does; then aborted, and each motor
+  # stopped at its default deceleration.
+  (0, 61, ""): "0000",
+  (0, 62, ""): "0000",
   (0, 64, ""): "0000",
   (0, 24, "0000814e1be8b40a8a40"): "0000",
   (0, 24, "0100814e1be8b40a8a40"): "0000",
   (0, 24, "0200bb34be4f05c2be40"): "0000",
 }
+# What a stop sends to the pressure board after the motion halt: every controller disabled, the
+# pump off and read back off, both positive lines vented and read, as recorded.
+PUMP_HALT: List[Tuple[int, int, bytes]] = [
+  (10, 13, bytes.fromhex(request)) for request in ("00000000", "01000000", "02000000")
+] + [
+  (10, 15, bytes.fromhex("0000")),
+  (10, 14, b""),
+  *[
+    (10, command, bytes.fromhex(request))
+    for request in ("0000204e", "0100204e")
+    for command in (34, 32)
+  ],
+  *[
+    (10, command, bytes.fromhex(request))
+    for request in ("00000000", "01000000")
+    for command in (34, 32)
+  ],
+  (10, 30, bytes.fromhex("0000")),
+  (10, 30, bytes.fromhex("0100")),
+]
 # The sensor calibration the recorded replies carry, by controller.
 RECORDED_CALIBRATION: Dict[PressureController, Tuple[float, float]] = {
   "bottle": (0.010651180520653725, -13.580931663513184),
@@ -251,6 +287,11 @@ class FakeLink:
     return data
 
 
+async def pass_at_once(self: Pump, *, seconds: float) -> None:
+  """A pump hold that passes at once."""
+  await asyncio.sleep(0)
+
+
 class DriverTestCase(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     # The LED bar's holds are taken, not waited: setup holds "setup_done" for a second.
@@ -262,11 +303,16 @@ class DriverTestCase(unittest.IsolatedAsyncioTestCase):
     driver = MantisDriver(io=link.io, rfid_io=link.reader.io, **kwargs)
     # short, as a board that never answers waits it out; long enough for a slow test runner
     driver.default_read_timeout = 0.25
+    holds = mock.patch.object(Pump, "_sleep", pass_at_once)
+    holds.start()
+    self.addCleanup(holds.stop)
     return driver
 
-  async def set_up_driver(self, *, link: FakeLink, skip_arm: bool = True, **kwargs) -> MantisDriver:
+  async def set_up_driver(
+    self, *, link: FakeLink, skip_arm: bool = True, skip_self_test: bool = True, **kwargs
+  ) -> MantisDriver:
     driver = self.make_driver(link=link, **kwargs)
-    await driver.setup(skip_arm=skip_arm)
+    await driver.setup(skip_arm=skip_arm, skip_self_test=skip_self_test)
     self.addAsyncCleanup(driver.stop)
     return driver
 
@@ -340,7 +386,7 @@ class SetupTests(DriverTestCase):
     link = FakeLink(answers=make_answers())
     driver = await self.set_up_driver(link=link)
     reader = driver._reader
-    await driver.setup(skip_arm=True)
+    await driver.setup(skip_arm=True, skip_self_test=True)
     link.io.setup.assert_awaited_once()
     link.io.set_baudrate.assert_awaited_once()
     self.assertIs(driver._reader, reader)
@@ -356,7 +402,7 @@ class SetupTests(DriverTestCase):
     link.io.read.side_effect = read
     sent_before = len(link.written)
     with self.assertLogs("pylabrobot.formulatrix.mantis", level="INFO") as logs:
-      await driver.setup(skip_arm=True)
+      await driver.setup(skip_arm=True, skip_self_test=True)
     warnings = [record for record in logs.records if record.levelname != "INFO"]
     self.assertEqual(len(warnings), 1)
     self.assertIn("the link was lost", warnings[0].getMessage())
@@ -652,7 +698,7 @@ class SequencerTests(DriverTestCase):
       self.assertEqual(driver._sequence_progress, item)
     self.assertEqual(driver._last_drained_item, 5)
     await driver.stop()
-    await driver.setup(skip_arm=True)
+    await driver.setup(skip_arm=True, skip_self_test=True)
     self.assertIsNone(driver._sequence_progress)
 
   async def test_full_queue_is_sent_again_under_the_next_item(self):

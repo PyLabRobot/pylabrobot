@@ -57,14 +57,17 @@ is the exception: `discover` builds it when it answers its ping on interface A, 
 opening of the link.
 Each feature is an `Optional` attribute of the driver, `None` until `_discover_features` builds
 it: `plate_clamp` is built only when board 12 answered discovery, so a v3 without it has none;
-`pump` only when board 10 answered; `arm` only when board 11 answered (a v4). `led_bar` is gated
-by the generation: built only on a v4 whose board 12 answered, never on a v3, whose install sets
-no LED count. A difference between v3 and v4 is expressed there, by which feature is built, never
-by a branch on the generation inside a command.
+`pump` only when board 10 answered, releasing its reservoir only on a v4, whose install names the
+valve, and tared and self-tested at setup (`tare_and_self_test`) only on a v4; `arm` only when
+board 11 answered (a v4). `led_bar` is gated by the generation: built only on a v4 whose board 12
+answered, never on a v3, whose install sets no LED count. A difference between v3 and v4 is
+expressed there, by which feature is built and with what, never by a branch on the generation
+inside a command.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
 what the device answered: generation, firmware versions, motor limits, and the pressure board's
-sensor calibration (`feedback_sensor_parameters`), read at setup and never written.
+sensor calibration (`feedback_sensor_parameters`), read at setup; on a v4 the tare then writes the
+bottle's and chip's offsets, and the configuration holds what it wrote.
 `save_configuration` writes it; `declared_configuration_json` reads one back and setup refuses if
 the device disagrees on a fitted field (`FITTED_FIELDS`). The calibration is neither saved nor
 declared: the bottle and chip sensors' offsets are re-zeroed on the device between sessions, so
@@ -215,12 +218,19 @@ the dispense clearance, plus `offset`, in the wellplate's frame, and moves as
 default the same `PITCH_HEIGHT` above that point; a traverse below it, a wellplate turned on its
 holder or a resource on no wellplate is refused before anything is sent.
 
+`start_pump` turns the pump on and enables each controller at its last target;
+`start_pressure_control` sets one target and reads the controller's status until it reports
+settled, or raises `MantisPressureError`; `tare_pressure_sensors` refuses with the pump on, vents
+each positive line and writes its offset less the vented reading. `Pump.initialize` tares, then
+runs the connect self-test write for write as in the recorded v4 startup, each block running the
+pump only while its controllers are enabled.
+
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
 | what it touches | prefix | here |
 |---|---|---|
 | the device, doing work | `move_` | `arm.move_z`, `arm.move_to_location` |
-| the device, a process left running | `start_`, `stop_` | |
+| the device, a process left running | `start_`, `stop_` | `pump.start_pump`, `pump.stop_pump` |
 | the device's sensors | `measure_`, `sense_` | `pump.measure_pressure` |
 | the device's memory, reading | `request_` | `request_motor_limits`, `request_motor_status` |
 | the device's memory, writing | `set_` | |
@@ -235,10 +245,15 @@ its own `try`, and the first fault is the one raised. `stop` fails what waits on
 it aborts the sequencer, stops each motor at its default deceleration and, if every motor stopped,
 parks an arm brought up: from away from idle first along its zone's route; then Z up on its own,
 read back by its encoder (command 84), never the demand position (command 27); then queued, as in
-the recorded close, the arms, both, then Z down to `SHUTDOWN_Z` at idle. Then it releases each
-built feature, turns the LED bar off and closes the link. A move that fails part way stops the
-motors it sent a move and logs where their encoders read. A `lock` that does not report clamping
-done releases the clamp before raising, and `stop` releases a clamp that does not read released. A
+the recorded close, the arms, both, then Z down to `SHUTDOWN_Z` at idle. Then it turns the pump off
+and vents the bottle and chip lines (`Pump._halt`, in a `finally` after the motion); then it
+releases each built feature, turns the LED bar off and closes the link. A move that fails part way
+stops the motors it sent a move and logs where their encoders read. `start_pump` and `stop_pump`
+are counted; the last stop disables every controller, turns the pump off and releases the
+reservoir, every step whatever the one before did, then raises the first fault; only `Pump._halt`
+logs a fault and goes on. A failed start, and a failed pump setup, turn the pump off before
+raising, and opened valves are closed on every path. A `lock` that does not report clamping done
+releases the clamp before raising, and `stop` releases a clamp that does not read released. A
 failed `Arm.initialize` or `recover_from_fault` unpowers the arm motors again, and a failed setup's
 `stop` does not park them. Queued moves not reported played abort the sequencer, so nothing more
 plays, and log where the motors stopped. Failure behaviour is designed before coverage.
@@ -249,7 +264,8 @@ warns once at setup; nothing refuses. A set goes in once it has been seen on a d
 **M12. Defaults are public `default_*` attributes on the feature.** (STAR P18.) Declared on the
 class with a type, in PyLabRobot units, round, slightly below the firmware's own. A caller tunes
 one device by assigning on the instance, or every device by assigning on the class; a command
-checks the value it takes before anything is sent. `plate_clamp.default_lock_level` is the first.
+checks the value it takes before anything is sent. `plate_clamp.default_lock_level` is the first;
+`pump.default_settle_timeout` and `pump.default_vent_duration` are checked when assigned.
 
 **M13. Tests assert the wire, against real replies.** (STAR P15.) A test pins the bytes we send. A
 reply in a test is one a device sent, held as a named constant in the test, never rebuilt or
@@ -266,15 +282,17 @@ configuration from the file's `device` block (a field it lacks filled as in M4a)
 answer from it; a board it leaves `None` does not answer, and the device name is not simulated. Each
 feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
 above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
-unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` reads off,
-every line at 0, with the recorded calibration; `MantisSimulationLedBar` takes every command and
-waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
-needs no encoder correction; its offsets are the declared ones, else 0, and its zones, stations and
-stage the declared ones, else none. Each command moves it at once, and the motor reads answer from
-it; without it the motors read idle at 0, as after power-on. A motor read the configuration does
-not hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items,
-stopped and empty after setup, and once started plays each item at once, a queued move moving the
-simulated arm; stop and abort keep what is queued.
+unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` holds the
+pump and each controller as last commanded, off after setup: a regulated line reads its target and
+settled, any other 0; its holds pass at once, its tare writes nothing and the calibration is the
+recorded one. `MantisSimulationLedBar` takes every command and waits no hold.
+`MantisSimulationArm` stands at idle with its absolute encoders reading there, so it needs no
+encoder correction; its offsets are the declared ones, else 0, and its zones, stations and stage
+the declared ones, else none. Each command moves it at once, and the motor reads answer from it;
+without it the motors read idle at 0, as after power-on. A motor read the configuration does not
+hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items, stopped
+and empty when the link opens and started by the pump's setup on a v4, and once started plays each
+item at once, a queued move moving the simulated arm; stop and abort keep what is queued.
 
 **M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
 add commands that the device runs together, each subsystem gets its own lock, taken in declaration
@@ -295,13 +313,15 @@ when none is left, and `error_color` after one that failed. Each colour is an at
 (`setup_color`, ...), checked when it is set and read when it is shown; each bar has its own.
 `show_progress` lights a share of the LEDs from the left in `dispense_progress_color` and sends
 nothing when that many are already lit: each frame holds the link about 62 ms on a v4, so an action
-shows at most `number_of_leds` frames. Setup shows blue, the arm's bring-up with it, then green for
+shows at most `number_of_leds` frames. Setup shows blue, the arm's bring-up and the pump's setup
+with it, the connect self-test's progress one step per test point, then green for
 `SETUP_DONE_HOLD`, then idle; `stop` turns the bar off and shows no colour first: one sent there was
-replaced within milliseconds, too briefly to see. The arm's moves show no colour of their own. An
-LED bar fault only warns: it never fails or masks the action. `show_actions=False` shows no action,
-only the idle animation from setup on. A colour change costs about 0.1 s of link time (two
-commands), so an action that is quick on its own shows none: the plate clamp's lock and unlock,
-where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
+replaced within milliseconds, too briefly to see. The arm's moves and the pump's start, stop,
+pressure and vent show no colour of their own. An LED bar fault only warns: it never fails or masks
+the action. `show_actions=False` shows no action, only the idle animation from setup on, and no
+progress. A colour change costs about 0.1 s of link time (two commands), so an action that is
+quick on its own shows none: the plate clamp's lock and unlock, where a colour took a release from
+0.21 s to 0.34 s on the recorded v4.
 
 ## Open, and where this is not consistent yet
 
@@ -347,8 +367,8 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     motors of the v4. It is read again, up to `ABSOLUTE_ENCODER_READS` (5, ours); the recorded v4
     startup reads it twice. Why it is not valid is not known.
 18. **The vacuum sensor's offset reads about -38.8,** against about -13.6 on the bottle and chip
-    sensors. Nothing uses the calibration yet. The target pressure read (command 10) is left out:
-    no reply to it has been recorded.
+    sensors. The tare rewrites the bottle's and chip's only; the vacuum's is not tared. The target
+    pressure read (command 10) is left out: no reply to it has been recorded.
 19. **A v3's pressure board is unproven.** Setup reads the calibration from any board 10 that
     answers its version; one that does not answer that read leaves it empty, with a warning.
 20. **The LED bar has run on one v4 only.** The `fatal_error` and `unconnected` animations have
@@ -440,3 +460,28 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     the recorded x and y were reproduced without them.
 48. **The arm moves to a wellplate in one joint move,** as `move_to_location`: nothing models the
     chip racks, so it runs only with the path between the head and the wellplate clear.
+49. **The pump, the tare, the self-test and the vent have not run through this driver.** Their
+    writes match the recorded v4 startup write for write, the tare's offsets byte for byte for the
+    same readings, and the vent the one a v4 has run; a device run settles the rest.
+50. **The self-test gives no verdict.** A test point that does not settle is logged; the install's
+    spec values are not used until they are confirmed.
+51. **The tare, settle and self-test values are the install's, as constants.** They are the same
+    in the v3 and v4 installs seen, the test points' order aside; they are not read per unit.
+52. **A tare whose readings do not agree within 5 s writes nothing.** Ours: a line not steady when
+    vented is not taken as atmospheric.
+53. **A v3's pump is not set up.** Setup neither tares nor runs the self-test on a v3, and its pump
+    releases no reservoir, its install naming none; stop still turns the pump off and vents valves
+    0 and 1, not seen on a v3.
+54. **The vacuum is neither vented nor read at stop,** as in the recorded close; the v4 reads
+    about -11 inHg after a stop. No aux output is written on a v4: the recorded close sends none.
+55. **The pump starts at the self-test's last targets** (bottle and chip 20 psi, vacuum -15 inHg)
+    after a setup, a skipped self-test included; a target `start_pressure_control` sets replaces
+    its line's.
+56. **The pump stops at once.**
+57. **`start_pressure_control`'s ranges are not the device's.** No range of the device's is
+    known. The bottle and chip take 0 to 20 psi, the self-test's highest point; the install's
+    bottle maximum (5) is not enforced, as the recorded self-test sends the bottle 20. The vacuum
+    takes -16 to 0 inHg, the deepest a liquid class sets; no recorded run went below -15 inHg, the
+    self-test's deepest, so -16 is unconfirmed on the device.
+58. **The self-test's solenoid toggles hold nothing between writes.** The recorded ones take about
+    1 s each on the wire, though the install's toggle interval is 200 ms; the writes are the same.

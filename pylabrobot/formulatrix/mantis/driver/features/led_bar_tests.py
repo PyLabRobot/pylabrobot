@@ -31,7 +31,12 @@ from pylabrobot.formulatrix.mantis.driver.features.plate_clamp_tests import (
 )
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
-from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
+from pylabrobot.formulatrix.mantis.driver.master_tests import (
+  PUMP_HALT,
+  DriverTestCase,
+  FakeLink,
+  make_answers,
+)
 
 OFF, BLUE, GREEN, WHITE, RED, MAGENTA = 0x0000, 0x001F, 0x07E0, 0xFFFF, 0xF800, 0xF81F
 # "#00FFFF", "#8000FF" and "#FF4000"; a dim white; "#FF0080".
@@ -246,7 +251,8 @@ class SetupAndStopTests(LedBarTestCase):
     driver = await self.set_up_bar()
     await driver.stop()
     self.assertEqual(
-      self.sent(), [*HALT, STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)]
+      self.sent(),
+      [*HALT, *PUMP_HALT, STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)],
     )
 
   async def test_stop_without_show_actions_turns_off_only(self):
@@ -263,7 +269,7 @@ class SetupAndStopTests(LedBarTestCase):
     with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING"):
       await driver.stop()
     self.sent_before = len(self.link.written)
-    await driver.setup(skip_arm=True)
+    await driver.setup(skip_arm=True, skip_self_test=True)
     self.assertEqual(self.states(), [BLUE, GREEN, "idle"])
 
   async def test_clamp_lock_and_unlock_show_nothing(self):

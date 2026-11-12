@@ -52,7 +52,7 @@ from .events import (
 from .features.arm import Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
-from .features.pump import Pump
+from .features.pump import RESERVOIR_RELEASE_CONTROLLER, Pump
 from .features.rfid import RFID_BAUD_RATE, RFID_FTDI_INTERFACE, Rfid, _initialize_rfid_module
 from .framing import (
   ABSOLUTE_POSITION_SENSOR_BOARD,
@@ -978,7 +978,14 @@ class MantisDriver:
           raise MantisConfigurationError(f"malformed plate_clamp block: {error!r}") from error
       self.plate_clamp = PlateClamp(driver=self, levels=levels)
     if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
-      self.pump = Pump(driver=self)
+      # Only a v4's install names a controller that releases the reservoir; only a v4 is tared and
+      # self-tested at setup.
+      v4 = self.configuration.generation == "v4"
+      self.pump = Pump(
+        driver=self,
+        reservoir_release_controller=RESERVOIR_RELEASE_CONTROLLER if v4 else None,
+        tare_and_self_test=v4,
+      )
     # The LED bar is the v4's, on board 12: a v3 has none.
     if (
       self.configuration.generation == "v4"
@@ -1246,8 +1253,8 @@ class MantisDriver:
 
   async def stop(self) -> None:
     """Fail the command in flight and every event waiter; on a v4, abort the sequencer, stop the
-    motors and park an arm brought up; release the plate clamp, turn the LED bar off, stop reading
-    the link and close it.
+    motors and park an arm brought up; turn the pump off and vent (``Pump._halt``); release the
+    plate clamp, turn the LED bar off, stop reading the link and close it.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
     nothing is sent: the link is closed.
@@ -1266,7 +1273,11 @@ class MantisDriver:
       if not waiter.done():
         waiter.set_exception(MantisNotConnectedError(stopped))
     if self._connected:
-      await self._halt()
+      try:
+        await self._halt()
+      finally:
+        if self.pump is not None:
+          await self.pump._halt()
     if self.plate_clamp is not None and self._connected:
       try:
         if await self.plate_clamp.request_state(attempts=1) != UNCLAMPING_DONE:
@@ -1281,20 +1292,24 @@ class MantisDriver:
     self._connected = False
     await self._close()
 
-  async def setup(self, *, skip_arm: bool = False) -> None:
-    """Open the link if it is not open, read the device's configuration and check it, then bring
-    the arm and Z up on a v4 (``Arm.initialize``). This moves the device.
+  async def setup(self, *, skip_arm: bool = False, skip_self_test: bool = False) -> None:
+    """Open the link if it is not open, read the device's configuration and check it, then on a v4
+    bring the arm and Z up (``Arm.initialize``), zero the pressure sensors and run the connect
+    self-test (``Pump.initialize``). This moves the device and runs its pump.
 
-    On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
-    ``SETUP_DONE_HOLD``, then idle.
+    On a v4 the LED bar shows the setup, the arm's bring-up and the pump's setup with it, then
+    "setup_done" for ``SETUP_DONE_HOLD``, then idle.
 
     Args:
       skip_arm: do not bring the arm up; nothing moves.
+      skip_self_test: skip the connect self-test, on a reconnect after one since power-on; the
+        sensors are still zeroed.
 
     Raises:
       MantisConfigurationError: if the device does not match the declared configuration, or the arm
         is brought up without the unit's ``arm`` block.
       MantisMotionError: if the arm is not where it is moved straight to idle from, or faults.
+      MantisPressureError: if the pump runs before the sensors are zeroed; it is turned off.
     """
     if self._reader is not None and self._reader.done():
       await self.stop()  # reading the link failed: close it before opening it again
@@ -1308,6 +1323,8 @@ class MantisDriver:
       async with self._show_action(action="setup", show_inner_actions=False):
         if self.arm is not None and not skip_arm:
           await self.arm.initialize()
+        if self.pump is not None:
+          await self.pump.initialize(skip_self_test=skip_self_test)
         if self.led_bar is not None and self.led_bar.show_actions:
           await self.led_bar._show_setup_done()
     except BaseException:
