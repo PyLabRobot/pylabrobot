@@ -2003,6 +2003,9 @@ class Pipettes:
     *,
     make_space: bool = False,
     minimum_traverse_height_start: Optional[float] = None,
+    x_acceleration_level: Optional[int] = None,
+    y_speed: Optional[float] = None,
+    y_acceleration_level: Optional[int] = None,
   ) -> None:
     """Move the channels across the deck: the low ones up first, then X and Y together.
 
@@ -2016,6 +2019,9 @@ class Pipettes:
       make_space: whether the channels not named may be moved in Y. See `move_to_y_positions`.
       minimum_traverse_height_start: the height to raise every low channel's lowest point to
         first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
+      x_acceleration_level: the arm's level for this move. See `move_to_x_position`.
+      y_speed: every channel's Y speed for this move only, in mm/s. See `move_to_y_positions`.
+      y_acceleration_level: every channel's Y level for this move only. See `move_to_y_positions`.
 
     Raises:
       ValueError: If X, a Y or a raise is out of reach, or two channels would stand too close.
@@ -2026,14 +2032,28 @@ class Pipettes:
       else minimum_traverse_height_start
     )
     self._check_reachable("x", x)
+    c = self.configuration
+    for name, value, (low, high) in (
+      (
+        "x_acceleration_level",
+        x_acceleration_level,
+        self.arm.configuration.acceleration_level_range,
+      ),
+      ("y_speed", y_speed, c.y_speed_range),
+      ("y_acceleration_level", y_acceleration_level, c.y_drive_acceleration_level_range),
+    ):
+      if value is not None and not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}, is {value}")
     planned_ys = await self._plan_y_positions(ys, make_space)
     raises = await self._traverse_raise_targets(height) if height > 0 else {}
 
     if raises:
       await self.move_stop_disc_to_z_positions(raises)
     results = await asyncio.gather(
-      self.move_to_x_position(x),
-      self._move_to_planned_y_positions(planned_ys),
+      self.move_to_x_position(x=x, acceleration_level=x_acceleration_level),
+      self._move_to_planned_y_positions(
+        channel_locations=planned_ys, speed=y_speed, acceleration_level=y_acceleration_level
+      ),
       return_exceptions=True,
     )
     failed = [result for result in results if isinstance(result, BaseException)]
