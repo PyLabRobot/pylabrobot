@@ -706,8 +706,10 @@ runs or failures. See <a class="reference internal" href="../user_guide/needs-te
 </section>
 <section id="adding-resources">
 <h3>Adding resources<a class="headerlink" href="#adding-resources" title="Link to this heading">#</a></h3>
-<p>If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial">partial function</a> is enough. There are many examples, like <a class="reference external" href="https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/resources/hamilton/tip_racks.py">tip_racks.py</a>. If you are writing a new kind of resource, you should probably subclass resource in a new file.</p>
-<p>Make sure to add your file to the imports in <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code> of your resources package.</p>
+<p>Follow the <a class="reference internal" href="contributing-new-resources.html"><span class="std std-doc">resource contribution guide</span></a> to add a definition,
+document its measurements, export it, and update the resource library. A definition that only
+configures existing resource classes needs no tests. Test the underlying implementations
+independently of individual definitions.</p>
 </section>
 <section id="writing-a-new-backend">
 <h3>Writing a new backend<a class="headerlink" href="#writing-a-new-backend" title="Link to this heading">#</a></h3>
