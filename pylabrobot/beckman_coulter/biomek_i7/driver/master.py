@@ -45,6 +45,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import INTERLOCK_TRIPPED_CODE, ace_error
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
 from pylabrobot.io.usb import USB
@@ -166,6 +167,7 @@ class BiomekI7Driver:
   async def setup(
     self,
     skip_device_initialization: bool = False,
+    skip_pipettes: bool = False,
     *,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
@@ -181,6 +183,8 @@ class BiomekI7Driver:
     Args:
       skip_device_initialization: do not load motor tables, even into a board that has lost them.
         A pod with an axis not configured is then left as it is, and cannot move.
+      skip_pipettes: leave the pod carrying the Span-8 as it is (STAR's per-feature skip). A pod's
+        axes come up together, so this skips the whole pod, its gripper included.
       skip_left_x_arm: leave the left pod as it is: not configured, enabled or moved.
       skip_right_x_arm: leave the right pod as it is.
       force_initialize: home again axes that are already homed, as Biomek's Home All does.
@@ -190,10 +194,10 @@ class BiomekI7Driver:
         fault, or a pod would move on the X rail beside a skipped pod whose X is not homed.
     """
     logger.warning(
-      "The Biomek i7 driver's discovery, configuration, interlock, Home All and moves have run on "
-      "one instrument; its commands were compared with Biomek's logs where Biomek ran the same "
-      "operation; it is untested on other instruments. Please report what works and what does "
-      "not."
+      "The Biomek i7 driver has run on one instrument (Home All, moves, prime, the Span-8's tips "
+      "and transfers, park); its commands were compared with Biomek's logs where Biomek ran the "
+      "same operation; it is untested on other instruments. Please report what works and what "
+      "does not."
     )
     if not self._connected:
       await self._open()
@@ -201,6 +205,7 @@ class BiomekI7Driver:
       await self.discover()
       await self.initialize(
         skip_device_initialization=skip_device_initialization,
+        skip_pipettes=skip_pipettes,
         skip_left_x_arm=skip_left_x_arm,
         skip_right_x_arm=skip_right_x_arm,
         force_initialize=force_initialize,
@@ -292,6 +297,7 @@ class BiomekI7Driver:
     self.rail = XRail({pod.side: pod.declared for pod in self.arms})
     self._watch_faults()
     for pod in self.arms:
+      pod.driver = self
       pod.rail = self.rail
       self.rail.readers[pod.side] = pod.request_rail_pose
     modules: List[Tuple[str, ModuleConfiguration]] = [("chassis", await self.chassis.discover())]
@@ -481,10 +487,30 @@ class BiomekI7Driver:
         return pod
     raise KeyError(f"no pod {name!r}; have {[(p.side, p.component) for p in self.arms]}")
 
+  def _one_with(self, feature: str) -> Optional[Pod]:
+    """The one pod carrying `feature`, None if none does.
+
+    Raises:
+      ValueError: if more than one pod carries it; reach it through the pod instead.
+    """
+    carriers = [pod for pod in self.arms if getattr(pod, feature) is not None]
+    if len(carriers) > 1:
+      raise ValueError(
+        f"both pods have a {feature}, so `{feature}` is ambiguous - reach it through "
+        f"`left_x_arm.{feature}` or `right_x_arm.{feature}`."
+      )
+    return carriers[0] if carriers else None
+
   @property
   def front_cover(self) -> Optional[Door]:
     """The door, by STAR's name for it, once discovery has found the chassis."""
     return None if self.chassis is None else self.chassis.front_cover
+
+  @property
+  def pipettes(self) -> Optional[Pipettes]:
+    """The Span-8 channels, on an instrument where one pod has them."""
+    pod = self._one_with("pipettes")
+    return pod.pipettes if pod is not None else None
 
   async def request_axis_states(self) -> Dict[str, Dict[str, p.AxisStateName]]:
     """Every axis's state, by pod side then axis name. Moves nothing."""
@@ -500,14 +526,25 @@ class BiomekI7Driver:
     return self.chassis
 
   def skipped_sides(
-    self, *, skip_left_x_arm: bool = False, skip_right_x_arm: bool = False
+    self,
+    *,
+    skip_pipettes: bool = False,
+    skip_left_x_arm: bool = False,
+    skip_right_x_arm: bool = False,
   ) -> Set[str]:
-    """The sides (`"left"`, `"right"`) a setup with these skips leaves as they are."""
-    return {s for s, skip in (("left", skip_left_x_arm), ("right", skip_right_x_arm)) if skip}
+    """The sides (`"left"`, `"right"`) a setup with these skips leaves as they are: the sides
+    named, and the pod carrying each feature named (STAR's per-feature skips; a feature this
+    instrument does not have skips nothing). Known after discovery."""
+    sides = {s for s, skip in (("left", skip_left_x_arm), ("right", skip_right_x_arm)) if skip}
+    for pod in self.arms:
+      if skip_pipettes and pod.pipettes is not None:
+        sides.add(pod.side)
+    return sides
 
   async def initialize(
     self,
     skip_device_initialization: bool = False,
+    skip_pipettes: bool = False,
     *,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
@@ -533,7 +570,11 @@ class BiomekI7Driver:
       AceError: if an axis cannot be enabled, or a move or home fails; the interlock is then
         tripped and ERROR shown.
     """
-    skipped = self.skipped_sides(skip_left_x_arm=skip_left_x_arm, skip_right_x_arm=skip_right_x_arm)
+    skipped = self.skipped_sides(
+      skip_pipettes=skip_pipettes,
+      skip_left_x_arm=skip_left_x_arm,
+      skip_right_x_arm=skip_right_x_arm,
+    )
     pods = [pod for pod in self.arms if pod.side not in skipped]
     if skip_device_initialization and not pods:
       return

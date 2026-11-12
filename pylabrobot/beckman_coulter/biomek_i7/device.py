@@ -14,7 +14,7 @@ The frame here is the device resource's own: origin at the front left bottom cor
 
 import logging
 import os
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7 import units
 from pylabrobot.beckman_coulter.biomek_i7.deck import (
@@ -34,9 +34,17 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import (
+  DEFAULT_TRASH as SPAN8_TRASH,
+)
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
-from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import RECORDING_ENV, simulated_boards
+from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import (
+  RECORDING_ENV,
+  sense_recorded_tips,
+  simulated_boards,
+)
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import cm, pod_model
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import PROBES
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
@@ -46,6 +54,7 @@ from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
   place_span8_channel,
   span8_channels,
 )
+from pylabrobot.resources.beckman_coulter.tips import beckman_coulter_biomek_tip_1070uL
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
@@ -85,9 +94,11 @@ class BiomekI7Device(Resource):
   the driver moves it, placed as Biomek's collision model places it, so the resource tree takes up
   the X the rail guard counts. The rest follows the pod's other axes (`_show_pod`): the
   Multichannel's carriage its Y and its head (an `NChannelPipette`) its Z, each Span-8 probe's
-  channel its own Y and Z, and the gripper (a `MechanicalGripper`) GY, GZ, GR and GG. Each bridge
-  marks the point its pod's X names (`resource_model.pods.pod_model`). `update_bridge_location`,
-  `update_pod_location` and `update_probe_location` place the models by hand; nothing moves.
+  channel its own Y and Z, and the gripper (a `MechanicalGripper`) GY, GZ, GR and GG. The Span-8's
+  probes are its feature's resources, so the tips they carry hang from their shafts, as the STAR's
+  do. Each bridge marks the point its pod's X names (`resource_model.pods.pod_model`).
+  `update_bridge_location`, `update_pod_location` and `update_probe_location` place the models by
+  hand; nothing moves.
   """
 
   def __init__(
@@ -170,45 +181,86 @@ class BiomekI7Device(Resource):
     """The door, by STAR's name for it (known after `setup`)."""
     return self.driver.front_cover
 
+  @property
+  def pipettes(self) -> Optional[Pipettes]:
+    """The Span-8 channels, on an instrument where one pod has them."""
+    return self.driver.pipettes
+
   async def setup(
     self,
     skip_device_initialization: bool = False,
+    skip_pipettes: bool = False,
     *,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
     force_initialize: bool = False,
+    discard_tips: bool = True,
     park: bool = True,
   ) -> None:
-    """Bring the instrument up. This homes the arms, then parks the pods, as Biomek's Home All
-    does (`park`).
+    """Bring the instrument up. This homes the arms, then, as the STAR does, takes off any tips
+    left on (`discard_tips`), and parks the pods, as Biomek's Home All does (`park`).
 
     Args:
       skip_device_initialization: as `BiomekI7Driver.setup` takes it.
+      skip_pipettes: as `BiomekI7Driver.setup` takes it.
       skip_left_x_arm: as `BiomekI7Driver.setup` takes it.
       skip_right_x_arm: as `BiomekI7Driver.setup` takes it.
       force_initialize: as `BiomekI7Driver.setup` takes it.
+      discard_tips: shuck tips found on a Span-8 that was brought up into its trash: the probes
+        the tip sensor finds a tip on. Needs the trash position on the deck.
       park: park every pod that was brought up (`park`).
     """
     await self.driver.setup(
       skip_device_initialization=skip_device_initialization,
+      skip_pipettes=skip_pipettes,
       skip_left_x_arm=skip_left_x_arm,
       skip_right_x_arm=skip_right_x_arm,
       force_initialize=force_initialize,
     )
     self._follow_driver()
     skipped = self.driver.skipped_sides(
-      skip_left_x_arm=skip_left_x_arm, skip_right_x_arm=skip_right_x_arm
+      skip_pipettes=skip_pipettes,
+      skip_left_x_arm=skip_left_x_arm,
+      skip_right_x_arm=skip_right_x_arm,
     )
+    if discard_tips:
+      await self._discard_found_tips(skipped)
     if park:
       await self.park(skip=skipped)
 
+  async def _discard_found_tips(self, skipped: Set[str]) -> None:
+    """Shuck the tips found on the pods not `skipped` (`setup`'s `discard_tips`). A Span-8 probe
+    the sensor finds a tip on that the session did not record is taken to carry the longest
+    Biomek tip, so its travel to the trash clears the deck; a recorded tip the sensor does not
+    find is forgotten."""
+    names = set(self.deck.position_names)
+    for pod in self.arms:
+      if pod.side in skipped:
+        continue
+      if pod.pipettes is not None and SPAN8_TRASH in names:
+        pipettes = pod.pipettes
+        states = await pipettes.sense_tip_presence()
+        found = [n for n, state in enumerate(states, start=1) if state == "loaded"]
+        gone = [n for n, t in enumerate(pipettes.tips, start=1) if t is not None and n not in found]
+        if gone:
+          pipettes._set_tips({n: None for n in gone})
+        if found:
+          assumed = beckman_coulter_biomek_tip_1070uL("assumed tip")
+          pipettes._set_tips({n: pipettes._carried_tip(n) or assumed for n in found})
+          logger.warning("%s: tips found on probes %s; discarding them", pod, found)
+          await pipettes.discard_tips(use_channels=[n - 1 for n in found])
+
   async def park(self, skip: Iterable[str] = ()) -> None:
-    """Park the pods as Biomek does (`Pod.park`), the left pod first, as each pod's park is at its
-    own end of the rail. `skip`: sides to leave as they are."""
+    """Park the pods as Biomek does (`Pod.park`; a Span-8 over its wash station,
+    `pipettes.park`), the left pod first, as each pod's park is at its own end of the rail. `skip`:
+    sides to leave as they are."""
     for pod in sorted(self.driver.arms, key=lambda p: p.side != "left"):
       if pod.side in skip:
         continue
-      await pod.park()
+      if pod.pipettes is not None:
+        await pod.pipettes.park()
+      else:
+        await pod.park()
 
   async def pause(self) -> None:
     """Pause for access, as Biomek's Pause step: the pods' drive power is cut and PAUSED shown,
@@ -271,9 +323,17 @@ class BiomekI7Device(Resource):
         self._show_parked(pod.side, pod.declared)
       pod.resource = self.bridges[pod.side]
       self.bridges[pod.side].load_all_state(saved)
+      self._give_heads(pod)
       if pod.declared is not None:
         self._unfollow.append(pod.add_position_listener(self._show_pod))
         self._show_pod(pod)
+
+  def _give_heads(self, pod: Pod) -> None:
+    """Hand a Span-8's probes to its feature, as the STAR's driver hands each feature its
+    resources; the feature takes the tips their shafts carry as its own."""
+    if pod.pipettes is not None:
+      pod.pipettes.resources = span8_channels(self.bridges[pod.side])
+      pod.pipettes._adopt_tips()
 
   def _tips_changed(self) -> None:
     """A head's tips changed: save the tree's state, when there is a `state_json`."""
@@ -553,6 +613,7 @@ def BiomekI7(
       time_scale=motion_time_scale if simulate_motion_time else 0.0,
     )
     driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json, boards=boards)
+    sense_recorded_tips(driver, boards)  # the simulator does not model tips
   elif driver is None:
     driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json)
   return BiomekI7Device(driver=driver, deck=deck, name=name, state_json=state_json)

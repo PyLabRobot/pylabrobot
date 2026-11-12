@@ -97,3 +97,17 @@ the 96-head cannot sense tips, so that is how they are known across sessions.
 gripper rise to a traverse height (by default near the top of travel; per call, as STAR's
 `minimum_traverse_height_*`). A height below what the deck model and Biomek's per-pod obstacles need
 is refused, not routed.
+
+## Operation features
+
+A feature exists once discovery says it is fitted (STAR's P2): `pipettes` on a Span-8 pod. Shortcuts
+(`driver.pipettes`, `lh.pipettes`) give it when exactly one pod carries it. Calls take STAR's shape:
+the arguments every PyLabRobot liquid handler shares are positional, in STAR's order; the rest are
+keyword-only, so a STAR positional argument this driver lacks is refused, not misread. Where the
+Span-8 applies one value to all probes, a per-channel list whose values differ is refused.
+
+**I13. Pipetting follows Biomek's templates** (`driver/liquid.py`): its height rule (from the
+bottom, top or liquid), following the liquid, mixes, conditioning, blowout, trailing air and the
+touch-off, for any PyLabRobot container from its height <-> volume function. A setting the driver
+does not build yet is refused, never run without it. The Span-8's tips are checked by its tip
+sensor; it cannot drop tips into a rack, only discard them.
