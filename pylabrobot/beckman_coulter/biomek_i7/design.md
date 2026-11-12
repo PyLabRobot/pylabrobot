@@ -122,3 +122,7 @@ shuck. It has no tip sensor, so `setup` ejects over its trash even with no tips 
 carry, place. The grip point is the resource's `preferred_pickup_location`; the widths default to
 Biomek's margins around the labware's width; a close that reaches its target met nothing and is
 refused. A pod's own gripper and pipettor are kept apart (`driver/pod_collision.py`).
+
+**I15. Biomek's techniques are a translation, not a mode.** `techniques.py` turns a Biomek technique
+and liquid type into the features' keyword arguments, which a caller splats and overrides. There is
+no `technique=` argument and no selection by rank.

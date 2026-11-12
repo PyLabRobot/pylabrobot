@@ -1211,7 +1211,8 @@ class Pipettes:
     """Draw `volumes` (uL, one per channel) from `containers`, as Biomek's "S8 Pipetting" template
     does (see `driver/liquid.py`): one batch per set of containers the probes reach in one move
     (a shared container: the probes centred in it at the narrowest span). STAR's `Pipettes`
-    signature.
+    signature; `techniques.aspirate_arguments(..., arm=pod)` gives the keywords a Biomek
+    technique stands for (`liquid_height`, `flow_rate` as one value for every channel).
 
     Args:
       containers: one per channel.
