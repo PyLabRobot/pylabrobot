@@ -128,6 +128,23 @@ class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
       await self.api.get_connected_modules(), (ModuleInfo("module", "temperatureModuleType"),)
     )
 
+  async def test_run_listing_says_which_run_is_current_and_when_it_was_created(self) -> None:
+    self.io.request.return_value = {
+      "data": [
+        {"id": "a", "status": "stopped", "current": False, "createdAt": "2026-11-03T09:00:00Z"},
+        {"id": "b", "status": "idle", "current": True, "createdAt": "2026-11-04T12:00:00Z"},
+      ]
+    }
+    earlier, current = await self.api.get_runs()
+    self.assertEqual(earlier, RunInfo("a", "stopped", False, "2026-11-03T09:00:00Z"))
+    self.assertTrue(earlier.finished)
+    self.assertEqual((current.current, current.finished), (True, False))
+
+  async def test_a_run_whose_current_is_not_a_boolean_is_rejected(self) -> None:
+    self.io.request.return_value = {"data": [{"id": "a", "current": "yes"}]}
+    with self.assertRaises(OpentronsProtocolError):
+      await self.api.get_runs()
+
   async def test_rail_lights_are_read_and_set_through_the_robot_endpoint(self) -> None:
     self.io.request.side_effect = [{"on": False}, {"on": True}]
     self.assertFalse(await self.api.get_rail_lights())
