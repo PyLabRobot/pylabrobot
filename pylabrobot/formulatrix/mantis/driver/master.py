@@ -65,7 +65,8 @@ from .framing import (
   parse_frame,
   split_frames,
 )
-from .oem_config import _load_unit_configuration
+from .oem_config import UNKNOWN_ZONE, WASH_STATIONS, ZONES, _load_unit_configuration
+from .sequence_files import Waypoint
 
 logger = logging.getLogger(__name__)
 
@@ -864,13 +865,66 @@ class MantisDriver:
         )
     return calibration
 
+  def _get_route_blocks(self) -> Dict[str, Any]:
+    """The ``zones`` and ``stations`` blocks as the arm takes them, by argument; each None without
+    its block.
+
+    Raises:
+      MantisConfigurationError: if a block is malformed: a zone missing, a rectangle not four
+        numbers, a waypoint not three numbers or None, or a route to safe XY that moves Z.
+    """
+
+    def to_route(lines: Any) -> List[Waypoint]:
+      route = []
+      for line in lines:
+        x, y, z = (None if value is None else float(value) for value in line)
+        route.append((x, y, z))
+      return route
+
+    routes: Dict[str, Any] = {
+      "zone_rectangles": None,
+      "safe_xy_routes": None,
+      "idle_routes": None,
+      "waste_station_route": None,
+      "wash_station_routes": None,
+    }
+    zones = self._unit_blocks.get("zones")
+    stations = self._unit_blocks.get("stations")
+    try:
+      if zones is not None:
+        rectangles = {}
+        for zone in ZONES:
+          minimum_x, maximum_x, minimum_y, maximum_y = (float(v) for v in zones["rectangles"][zone])
+          rectangles[zone] = (minimum_x, maximum_x, minimum_y, maximum_y)
+        routes["zone_rectangles"] = rectangles
+        for field in ("safe_xy_routes", "idle_routes"):
+          routes[field] = {zone: to_route(zones[field][zone]) for zone in (*ZONES, UNKNOWN_ZONE)}
+      if stations is not None:
+        if "waste" in stations:
+          routes["waste_station_route"] = to_route(stations["waste"])
+        routes["wash_station_routes"] = {
+          int(station): to_route(lines) for station, lines in stations.get("wash", {}).items()
+        }
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+      raise MantisConfigurationError(f"malformed zones or stations block: {error!r}") from error
+    if routes["safe_xy_routes"] is not None and any(
+      x is None or z is not None for route in routes["safe_xy_routes"].values() for x, _, z in route
+    ):
+      raise MantisConfigurationError("zones block: a route to safe XY moves the arms only")
+    if routes["wash_station_routes"] is not None and not set(routes["wash_station_routes"]) <= set(
+      WASH_STATIONS
+    ):
+      raise MantisConfigurationError(f"stations block: the wash stations are {WASH_STATIONS}")
+    return routes
+
   def _discover_features(self) -> None:
     """Build the features the configuration says are fitted, with the unit's values.
 
     A feature already built is kept.
 
     Raises:
-      MantisConfigurationError: if the ``plate_clamp``, ``led_bar`` or ``arm`` block is malformed.
+      MantisConfigurationError: if the ``plate_clamp``, ``led_bar``, ``arm``, ``zones`` or
+        ``stations`` block is malformed.
     """
     if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
@@ -906,7 +960,7 @@ class MantisDriver:
       )
     sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
     if sensor_board is not None and self.arm is None:
-      self.arm = Arm(driver=self, **self._get_arm_calibration())
+      self.arm = Arm(driver=self, **self._get_arm_calibration(), **self._get_route_blocks())
 
   def _show_action(
     self, *, action: str, show_inner_actions: bool = True, only_when_idle: bool = False

@@ -5,14 +5,19 @@ import json
 import os
 import tempfile
 import unittest
-from typing import Dict
+from typing import Any, Dict, List, Optional
 
 from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 from pylabrobot.formulatrix.mantis.driver.oem_config import (
+  COMMON_SEQUENCE_DIRECTORY,
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
+  UNKNOWN_ZONE,
+  WASTE_STATION_ADAPTER_FILE,
+  WASTE_STATION_FILE,
+  ZONES,
   _load_unit_configuration,
   _parse_config_entries,
 )
@@ -94,6 +99,113 @@ SYNTHETIC_CORRECTION_ROWS = [(row, row - 0.25) for row in range(1, 201)]
 SYNTHETIC_CORRECTION_CSV = "\ufeff" + "".join(
   f"{ideal},{measured},{measured}\r\n" for ideal, measured in SYNTHETIC_CORRECTION_ROWS
 )
+
+
+# Synthetic zones in DeviceZone.config's layout: (minimum x, maximum x, minimum y, maximum y), mm.
+SYNTHETIC_ZONE_RECTANGLES = {
+  "Front": [-10.0, 40.0, 30.0, 150.0],
+  "RightBack": [40.0, 190.0, -90.0, -30.0],
+  "RightMiddle": [40.0, 190.0, -30.0, 60.0],
+  "RightFront": [40.0, 190.0, 60.0, 150.0],
+  "LeftBack": [-160.0, -10.0, -90.0, -30.0],
+  "LeftMiddle": [-160.0, -10.0, -30.0, 60.0],
+  "LeftFront": [-160.0, -10.0, 60.0, 150.0],
+}
+SYNTHETIC_IDLE = [15.0, 31.177]
+# Synthetic routes: each zone's safe XY, then to idle through it; the Front zone's and the Unknown
+# zone's in the shape every install has, the Unknown zone's straight to idle.
+SYNTHETIC_SAFE_XY = {
+  "Front": SYNTHETIC_IDLE,
+  "RightBack": [90.0, -50.0],
+  "RightMiddle": [80.0, 0.0],
+  "RightFront": [60.0, 70.0],
+  "LeftBack": [-80.0, -50.0],
+  "LeftMiddle": [-60.0, -10.0],
+  "LeftFront": [-35.0, 70.0],
+  UNKNOWN_ZONE: SYNTHETIC_IDLE,
+}
+SYNTHETIC_SAFE_XY_ROUTES = {zone: [[*xy, None]] for zone, xy in SYNTHETIC_SAFE_XY.items()}
+SYNTHETIC_IDLE_ROUTES: Dict[str, List[List[Optional[float]]]] = {
+  zone: [[*xy, None], [*xy, 0.0], [*SYNTHETIC_IDLE, 0.0]] for zone, xy in SYNTHETIC_SAFE_XY.items()
+}
+SYNTHETIC_IDLE_ROUTES["Front"] = [
+  [None, None, 0.0],
+  [*SYNTHETIC_IDLE, None],
+  [*SYNTHETIC_IDLE, 0.0],
+]
+SYNTHETIC_IDLE_ROUTES[UNKNOWN_ZONE] = [[*SYNTHETIC_IDLE, 0.0]]
+SYNTHETIC_ZONES_BLOCK = {
+  "rectangles": SYNTHETIC_ZONE_RECTANGLES,
+  "safe_xy_routes": SYNTHETIC_SAFE_XY_ROUTES,
+  "idle_routes": SYNTHETIC_IDLE_ROUTES,
+}
+# Synthetic station routes from idle, in the shape of a v4 install's: the waste station's starts
+# with a line naming no axis, the ready position and the safe height, Z -1.570.
+SYNTHETIC_WASTE_ROUTE: List[List[Optional[float]]] = [
+  [None, None, None],
+  [15.0, 30.0, None],
+  [None, None, -1.57],
+  [15.0, 30.0, -1.57],
+  [None, None, -1.57],
+  [-50.0, 20.0, -1.57],
+  [None, None, 30.0],
+  [-60.0, 10.0, 30.0],
+  [-60.0, 10.0, 35.0],
+]
+SYNTHETIC_WASH_ROUTE: List[List[Optional[float]]] = [
+  [None, None, -1.57],
+  [60.0, 40.0, -1.57],
+  [85.0, 0.0, -1.57],
+  [None, None, 40.0],
+  [75.0, -50.0, 45.0],
+]
+SYNTHETIC_STATIONS_BLOCK = {"waste": SYNTHETIC_WASTE_ROUTE, "wash": {"1": SYNTHETIC_WASH_ROUTE}}
+
+
+def get_route_text(*, route: List[List[Optional[float]]]) -> str:
+  """A route as a sequence file writes it."""
+  lines = []
+  for waypoint in route:
+    axes = "".join(
+      f"{axis} {value:.3f} " for axis, value in zip("XYZ", waypoint) if value is not None
+    )
+    lines.append(f"MoveSequenceItem %00 True {axes} 0\r\n")
+  return "".join(lines)
+
+
+def get_zone_config(*, rectangles: Dict[str, List[float]]) -> str:
+  """A DeviceZone.config naming each zone's route files."""
+  entries = [
+    f'\t<add key="{zone}Zone{bound}" value="{value:g}" />\r\n'
+    for zone, rectangle in rectangles.items()
+    for bound, value in zip(("MinimumX", "MaximumX", "MinimumY", "MaximumY"), rectangle)
+  ]
+  for family in ("SafeMoveToIdleFrom", "SafeMoveToSafeXYPositionFrom"):
+    for zone in (*ZONES, UNKNOWN_ZONE):
+      entries.append(
+        f'\t<add key="{family}{zone}ZoneSequenceFile" value="{family}{zone}ZoneSequence.seq.txt" />'
+        "\r\n"
+      )
+  return HEAD + "".join(entries) + TAIL
+
+
+def get_route_files(*, zones: Dict[str, Any], stations: Dict[str, Any]) -> Dict[str, str]:
+  """The route files of an install's System/Sequences/Common folder, by file name."""
+  files = {}
+  for family, field in (
+    ("SafeMoveToIdleFrom", "idle_routes"),
+    ("SafeMoveToSafeXYPositionFrom", "safe_xy_routes"),
+  ):
+    for zone, route in zones[field].items():
+      files[f"{family}{zone}ZoneSequence.seq.txt"] = get_route_text(route=route)
+  if "waste" in stations:
+    files[WASTE_STATION_FILE] = (
+      "RemarkSequenceItem Move%32To%32Waste%32Station \r\n"
+      + get_route_text(route=stations["waste"])
+    )
+  for station, route in stations.get("wash", {}).items():
+    files[f"MoveToWashStation{station}.seq.txt"] = get_route_text(route=route)
+  return files
 
 
 def write_files(*, directory: str, files: Dict[str, str]) -> str:
@@ -205,6 +317,86 @@ class ArmBlockTests(unittest.TestCase):
         },
         corrections={0: descending, 1: SYNTHETIC_CORRECTION_CSV},
       )
+
+
+def write_zone_install(
+  *, directory: str, zones: Dict[str, Any], stations: Dict[str, Any], zone_config: bool = True
+) -> str:
+  """Lay out a v4 install's Data folder with zones and stations; return its Device/Configs."""
+  configs = {"Device.config": V4_DEVICE_CONFIG}
+  if zone_config:
+    configs["DeviceZone.config"] = get_zone_config(rectangles=zones["rectangles"])
+  configs_directory = write_install(directory=directory, configs=configs, corrections={})
+  sequence_directory = os.path.join(directory, "Data", COMMON_SEQUENCE_DIRECTORY)
+  os.makedirs(sequence_directory)
+  write_files(directory=sequence_directory, files=get_route_files(zones=zones, stations=stations))
+  return configs_directory
+
+
+class RouteBlockTests(unittest.TestCase):
+  def load(self, *, zones=SYNTHETIC_ZONES_BLOCK, stations=SYNTHETIC_STATIONS_BLOCK, **kwargs):
+    with tempfile.TemporaryDirectory() as directory:
+      return _load_unit_configuration(
+        oem_config_directory=write_zone_install(
+          directory=directory, zones=zones, stations=stations, **kwargs
+        )
+      )
+
+  def test_a_v4_install_gives_its_zones_and_stations(self):
+    blocks = self.load()
+    self.assertEqual(blocks["zones"], SYNTHETIC_ZONES_BLOCK)
+    self.assertEqual(blocks["stations"], SYNTHETIC_STATIONS_BLOCK)
+
+  def test_without_device_zone_config_there_are_no_zones(self):
+    blocks = self.load(zone_config=False)
+    self.assertNotIn("zones", blocks)
+    # A v3 does not read the v4's waste station route.
+    self.assertEqual(blocks["stations"], {"wash": SYNTHETIC_STATIONS_BLOCK["wash"]})
+
+  def test_each_generation_reads_its_own_waste_station_route(self):
+    # Every unit seen has both files: a v4 (with DeviceZone.config) reads one, a v3 the other.
+    for zone_config, expected in ((True, SYNTHETIC_WASTE_ROUTE), (False, SYNTHETIC_WASH_ROUTE)):
+      with self.subTest(zone_config=zone_config):
+        with tempfile.TemporaryDirectory() as directory:
+          configs_directory = write_zone_install(
+            directory=directory,
+            zones=SYNTHETIC_ZONES_BLOCK,
+            stations={"waste": SYNTHETIC_WASTE_ROUTE},
+            zone_config=zone_config,
+          )
+          write_files(
+            directory=os.path.join(directory, "Data", COMMON_SEQUENCE_DIRECTORY),
+            files={WASTE_STATION_ADAPTER_FILE: get_route_text(route=SYNTHETIC_WASH_ROUTE)},
+          )
+          blocks = _load_unit_configuration(oem_config_directory=configs_directory)
+        self.assertEqual(blocks["stations"], {"waste": expected})
+
+  def test_a_missing_route_refuses(self):
+    zones = {
+      **SYNTHETIC_ZONES_BLOCK,
+      "idle_routes": {
+        zone: route for zone, route in SYNTHETIC_IDLE_ROUTES.items() if zone != "LeftBack"
+      },
+    }
+    with self.assertRaisesRegex(MantisConfigurationError, "a route is missing"):
+      self.load(zones=zones)
+
+  def test_a_route_to_safe_xy_that_moves_z_refuses(self):
+    zones = {
+      **SYNTHETIC_ZONES_BLOCK,
+      "safe_xy_routes": {**SYNTHETIC_SAFE_XY_ROUTES, "LeftBack": [[-80.0, -50.0, 0.0]]},
+    }
+    with self.assertRaisesRegex(MantisConfigurationError, "moves the arms only"):
+      self.load(zones=zones)
+
+  def test_a_rectangle_that_is_missing_or_inverted_refuses(self):
+    rectangles = {**SYNTHETIC_ZONE_RECTANGLES, "Front": [40.0, -10.0, 30.0, 150.0]}
+    with self.assertRaisesRegex(MantisConfigurationError, "minimums are not below"):
+      self.load(zones={**SYNTHETIC_ZONES_BLOCK, "rectangles": rectangles})
+    rectangles = {zone: values for zone, values in SYNTHETIC_ZONE_RECTANGLES.items()}
+    del rectangles["LeftFront"]
+    with self.assertRaisesRegex(MantisConfigurationError, "has no LeftFrontZoneMinimumX"):
+      self.load(zones={**SYNTHETIC_ZONES_BLOCK, "rectangles": rectangles})
 
 
 class UnitBlockSourceTests(DriverTestCase):

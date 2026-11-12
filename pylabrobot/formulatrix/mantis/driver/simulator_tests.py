@@ -17,10 +17,16 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
+from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
+  SYNTHETIC_STATIONS_BLOCK,
+  SYNTHETIC_WASTE_ROUTE,
+  SYNTHETIC_ZONES_BLOCK,
+)
 from pylabrobot.formulatrix.mantis.driver.simulator import (
   MantisSimulationArm,
   MantisSimulationLedBar,
 )
+from pylabrobot.resources import Coordinate
 
 
 class SimulationTests(unittest.IsolatedAsyncioTestCase):
@@ -233,6 +239,80 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
   async def test_simulated_mantis_sends_nothing(self):
     with self.assertRaisesRegex(NotImplementedError, "sends nothing"):
       await self.mantis.driver._send_command(board=0, command=3)
+
+
+class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
+  """A simulated Mantis declaring the unit's zones and stations, synthetic."""
+
+  async def asyncSetUp(self):
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recording = json.load(f)
+    directory = tempfile.TemporaryDirectory()
+    self.addCleanup(directory.cleanup)
+    path = os.path.join(directory.name, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(
+        {**recording, "zones": SYNTHETIC_ZONES_BLOCK, "stations": SYNTHETIC_STATIONS_BLOCK}, f
+      )
+    self.mantis = Mantis(simulation=True, declared_configuration_json=path)
+    await self.mantis.setup()
+    self.addAsyncCleanup(self.mantis.stop)
+    arm = self.mantis.arm
+    assert isinstance(arm, MantisSimulationArm)
+    self.arm = arm
+
+  async def assert_head_at(self, *, x: float, y: float, z: float):
+    head = await self.arm.request_head_position()
+    for name, value, expected in (("x", head.x, x), ("y", head.y, y), ("z", head.z, z)):
+      with self.subTest(axis=name):
+        self.assertAlmostEqual(value, expected, places=6)
+
+  async def test_a_move_to_a_location_and_back_to_idle(self):
+    await self.arm.move_to_location(Coordinate(-57.0, 0.0, -10.0))
+    await self.assert_head_at(x=-57.0, y=0.0, z=-10.0)
+    self.assertFalse(await self.arm.request_is_parked())
+    await self.arm.park()
+    await self.assert_head_at(x=15.0, y=31.177, z=0.0)
+    self.assertTrue(await self.arm.request_is_parked())
+
+  async def test_z_waypoints_and_joint_moves(self):
+    await self.arm.move_z(1.57)
+    await self.assert_head_at(x=15.0, y=31.177, z=1.57)
+    await self.arm.move_through_waypoints(
+      [Coordinate(60.0, 70.0, 0.0), Coordinate(-35.0, 70.0, 1.0)]
+    )
+    await self.assert_head_at(x=-35.0, y=70.0, z=1.0)
+    await self.arm.move_to_joint_position({2: 5.0})
+    self.assertEqual((await self.arm.request_joint_position())[2], 5.0)
+
+  async def test_the_waste_station_is_reached_from_idle_only(self):
+    await self.arm.move_to_waste_station()
+    x, y, z = SYNTHETIC_WASTE_ROUTE[-1]
+    assert x is not None and y is not None and z is not None
+    await self.assert_head_at(x=x, y=y, z=-z)
+    with self.assertRaisesRegex(MantisMotionError, "park"):
+      await self.arm.move_to_wash_station(station=1)
+    await self.arm.park()
+    await self.arm.move_to_wash_station(station=1)
+
+  async def test_stop_from_a_back_zone_parks_along_its_route_and_lowers_z(self):
+    await self.arm.move_to_waste_station()
+    await self.mantis.stop()
+    self.assertAlmostEqual(
+      self.arm._positions[2], compute_device_position(motor=2, position=SHUTDOWN_Z)
+    )
+    idle = compute_joint_angles(x=15.0, y=31.177)
+    for motor in (0, 1):
+      self.assertAlmostEqual(
+        self.arm._positions[motor], compute_device_position(motor=motor, position=idle[motor])
+      )
+    await self.mantis.setup()
+
+  async def test_recover_from_fault_brings_the_head_back_to_idle(self):
+    await self.arm.move_to_location(Coordinate(80.0, -40.0, -5.0))
+    await self.arm.recover_from_fault()
+    self.assertTrue(self.arm.is_initialized)
+    await self.assert_head_at(x=15.0, y=31.177, z=0.0)
 
 
 if __name__ == "__main__":

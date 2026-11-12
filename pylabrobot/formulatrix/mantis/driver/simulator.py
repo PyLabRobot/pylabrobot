@@ -21,6 +21,7 @@ from .features.pump import PressureController, Pump
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
 from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, SEQUENCER_QUEUE_SIZE, MantisDriver
+from .sequence_files import Waypoint
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,11 @@ class MantisSimulationArm(Arm):
     offsets: Optional[Dict[int, float]],
     homing_position_a: Optional[Dict[int, float]],
     encoder_correction: Optional[Dict[int, List[Tuple[float, float]]]],
+    zone_rectangles: Optional[Dict[str, Tuple[float, float, float, float]]] = None,
+    safe_xy_routes: Optional[Dict[str, List[Waypoint]]] = None,
+    idle_routes: Optional[Dict[str, List[Waypoint]]] = None,
+    waste_station_route: Optional[List[Waypoint]] = None,
+    wash_station_routes: Optional[Dict[int, List[Waypoint]]] = None,
   ):
     """
     Args:
@@ -153,12 +159,22 @@ class MantisSimulationArm(Arm):
       offsets: each arm motor's offset, as for ``Arm``; None takes 0.
       homing_position_a: as for ``Arm``; unused.
       encoder_correction: as for ``Arm``; unused.
+      zone_rectangles: as for ``Arm``.
+      safe_xy_routes: as for ``Arm``.
+      idle_routes: as for ``Arm``.
+      waste_station_route: as for ``Arm``.
+      wash_station_routes: as for ``Arm``.
     """
     super().__init__(
       driver=driver,
       offsets=offsets if offsets is not None else {motor: 0.0 for motor in ARM_MOTORS},
       homing_position_a=homing_position_a,
       encoder_correction=encoder_correction,
+      zone_rectangles=zone_rectangles,
+      safe_xy_routes=safe_xy_routes,
+      idle_routes=idle_routes,
+      waste_station_route=waste_station_route,
+      wash_station_routes=wash_station_routes,
     )
     self._positions: Dict[int, float] = {0: 0.0, 1: 0.0, Z_MOTOR: 0.0}
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
@@ -202,9 +218,10 @@ class MantisSimulationArm(Arm):
 
   async def _unchecked_fw_move_absolute(
     self, *, motor: int, position: float, speed: float, acceleration: float
-  ) -> None:
-    """Move the motor there at once."""
+  ) -> int:
+    """Move the motor there at once; answer no error."""
     self._set_position(motor=motor, position=position)
+    return 0
 
   async def _unchecked_fw_stop(self, *, motor: int, deceleration: float) -> None:
     """Stop nothing: a simulated motor is never moving."""
@@ -466,6 +483,11 @@ class MantisSimulationDriver(MantisDriver):
         offsets=self.arm.offsets,
         homing_position_a=self.arm.homing_position_a,
         encoder_correction=self.arm.encoder_correction,
+        zone_rectangles=self.arm.zone_rectangles,
+        safe_xy_routes=self.arm.safe_xy_routes,
+        idle_routes=self.arm.idle_routes,
+        waste_station_route=self.arm.waste_station_route,
+        wash_station_routes=self.arm.wash_station_routes,
       )
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")
