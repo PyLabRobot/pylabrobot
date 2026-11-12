@@ -43,6 +43,7 @@ from pylabrobot.io.usb import USB
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
+  from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
 
 # Names the recording the simulator answers from (identity and sensor reads, recorded at an
 # instrument's cold start) when no path is given. A generic one ships in `defaults/`
@@ -162,7 +163,8 @@ class SimulatedAceUSB(ReplayAceUSB):
   model answers "interlock tripped" without power and 0x3D for a stuck fault.
 
   A move with a force limit stops where the axis meets something (`_AxisModel.obstacle`, set by a
-  test). A move with a sensor stops where the sensor fires (`_AxisModel.sensed_at`), and the
+  test), and the axis then reads `stalled_effort` as its control effort (a gripper holding a
+  plate). A move with a sensor stops where the sensor fires (`_AxisModel.sensed_at`), and the
   Move All carries that axis's report (LLS_LIQUID_SENSED and the position) under its sequence.
   A pump keeps the valve it was last
   moved through. Get Tip Status answers `tip_states` when set, else `tip_sensor()` when set (the
@@ -276,6 +278,8 @@ class SimulatedAceUSB(ReplayAceUSB):
             return [header + b"\x00\x3d"]
         axis.state = AxisState(params[0])
         return [done]
+      if opcode == 0x31:
+        return [done + struct.pack("<i", axis.effort)]
       if opcode == 0x40:
         if not configured:
           return [header + b"\x00\x30"]
@@ -402,6 +406,9 @@ class _AxisModel:
   # Where a force-limited move meets something, and where a sensor fires; None: nowhere.
   obstacle: Optional[int] = None
   sensed_at: Optional[int] = None
+  # The control effort the axis reads at rest, and while stalled against an obstacle.
+  effort: int = 0
+  stalled_effort: int = -1000
   # The pending move's top speed (counts/s) and acceleration (counts/s2), as last set.
   velocity: int = 0
   acceleration: int = 0
@@ -429,8 +436,9 @@ class _AxisModel:
     if (
       self.force and obstacle is not None and obstacle != self.position and low <= obstacle <= high
     ):
-      self.position = obstacle
+      self.position, self.effort = obstacle, self.stalled_effort
       return "stalled"
+    self.effort = 0
     if self.sensor and sensed_at is not None and low <= sensed_at <= high:
       self.position = sensed_at
       return "sensed"
@@ -497,6 +505,21 @@ def simulated_boards(
     )
     boards.append(AceBoard(io=usb, name=f"simulated {module}", default_timeout=default_timeout))
   return boards
+
+
+def simulate_grips(driver: "BiomekI7Driver", boards: Sequence[AceBoard]) -> None:
+  """Have each simulated pod's GG stop, force-limited, at the width of what its gripper closes on
+  (and read the stalled control effort a held grip reads), so a simulated run's grips and grip
+  checks behave as the instrument's. `boards`: the driver's simulated boards."""
+  models = {b.name: b.io for b in boards if isinstance(b.io, SimulatedAceUSB)}
+
+  def grip(pod: "Pod", width: Optional[float]) -> None:
+    io = models.get(f"simulated {pod.module_type}")
+    if io is None or pod.declared is None:
+      return
+    io.axis_model("GG").obstacle = None if width is None else pod.declared.to_counts("GG", width)
+
+  driver.simulated_grip = grip
 
 
 def sense_recorded_tips(driver: "BiomekI7Driver", boards: Sequence[AceBoard]) -> None:

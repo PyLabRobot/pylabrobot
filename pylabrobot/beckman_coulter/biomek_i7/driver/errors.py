@@ -141,6 +141,11 @@ def english(error: AceError, axis_names: Mapping[Tuple[int, int], str]) -> str:
   return f"{error.request} failed: {error.reason}."
 
 
+class GripCheckError(RuntimeError):
+  """The gripper holds no labware when it should, or holds labware when it should not: the Master
+  Controller's `AG` / `AU`."""
+
+
 class TipCheckError(RuntimeError):
   """A probe's tip is not what was expected, or cannot be determined: the Master Controller's
   `VT`."""

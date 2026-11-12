@@ -7,7 +7,8 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
+import asyncio
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
 from pylabrobot.beckman_coulter.biomek_i7.defaults import GENERIC_CONFIGURATION, GENERIC_RECORDING
@@ -18,6 +19,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import ReplayAceUSB, 
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7Device
+  from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
 
 _GENERIC: Optional[Dict[str, Any]] = None
 
@@ -132,3 +134,17 @@ def generic_biomek(**kwargs: Any) -> "BiomekI7Device":
   kwargs.setdefault("declared_configuration_json", str(GENERIC_CONFIGURATION))
   kwargs.setdefault("simulator_recording", str(GENERIC_RECORDING))
   return BiomekI7(**kwargs)
+
+
+def generic_pods() -> Tuple["Pod", "Pod"]:
+  """The generic instrument's pods (the Multichannel's, the Span-8's), discovered on the replayed
+  cold start: what an argument given per arm (`arm=`) takes its units from."""
+
+  async def discover() -> Tuple["Pod", "Pod"]:
+    driver = generic_driver()
+    await driver.discover()
+    await driver.stop()
+    assert driver.left_x_arm is not None and driver.right_x_arm is not None
+    return driver.left_x_arm, driver.right_x_arm
+
+  return asyncio.run(discover())

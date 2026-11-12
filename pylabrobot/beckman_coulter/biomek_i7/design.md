@@ -116,3 +116,9 @@ sensor; it cannot drop tips into a rack, only discard them.
 (`driver/recipes/tip_load.py`, its arguments from the configuration) and ejected by the plunger's
 shuck. It has no tip sensor, so `setup` ejects over its trash even with no tips recorded
 (`precautionary_discard`).
+
+**I14. A grip is Biomek's.** `<pod>.gripper` takes STAR's iSWAP / CoRe gripper calls with a
+`direction`: travel turned, open, down, a force-limited close that stops on the labware, lift clear,
+carry, place. The grip point is the resource's `preferred_pickup_location`; the widths default to
+Biomek's margins around the labware's width; a close that reaches its target met nothing and is
+refused. A pod's own gripper and pipettor are kept apart (`driver/pod_collision.py`).

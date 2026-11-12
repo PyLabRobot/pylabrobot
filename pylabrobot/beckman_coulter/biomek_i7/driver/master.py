@@ -45,6 +45,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import INTERLOCK_TRIPPED_CODE, ace_error
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import Gripper
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
@@ -163,6 +164,9 @@ class BiomekI7Driver:
     # The deck the operations work on (STAR's `driver.deck`), set by `BiomekI7`; None without one.
     # Moves, homing and the rail guard never need it.
     self.deck: Optional["BiomekI7Deck"] = None
+    # In simulation, what has a pod's GG stop on labware the gripper closes on (its width, cm;
+    # None: nothing between the fingers). Set by `simulator.simulate_grips`.
+    self.simulated_grip: Optional[Callable[[Pod, Optional[float]], None]] = None
 
   # -- lifecycle -------------------------------------------------------------
 
@@ -199,9 +203,9 @@ class BiomekI7Driver:
     """
     logger.warning(
       "The Biomek i7 driver has run on one instrument (Home All, prime, tips and transfers on "
-      "both heads, park); its commands were compared with Biomek's logs where Biomek ran the "
-      "same operation; it is untested on other instruments. Please report what works and what "
-      "does not."
+      "both heads, grips on both pods, park); its commands were compared with Biomek's logs "
+      "where Biomek ran the same operation; it is untested on other instruments. Please report "
+      "what works and what does not."
     )
     if not self._connected:
       await self._open()
@@ -523,6 +527,13 @@ class BiomekI7Driver:
     """The Span-8 channels, on an instrument where one pod has them."""
     pod = self._one_with("pipettes")
     return pod.pipettes if pod is not None else None
+
+  @property
+  def gripper(self) -> Optional[Gripper]:
+    """The gripper, on an instrument with one pod that has one (a pod has a gripper where its
+    declared configuration describes one)."""
+    pod = self._one_with("gripper")
+    return pod.gripper if pod is not None else None
 
   async def request_axis_states(self) -> Dict[str, Dict[str, p.AxisStateName]]:
     """Every axis's state, by pod side then axis name. Moves nothing."""
