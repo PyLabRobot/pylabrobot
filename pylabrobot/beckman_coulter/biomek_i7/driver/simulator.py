@@ -19,7 +19,9 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
+  TYPE_CHECKING,
   Any,
+  Callable,
   Dict,
   Iterable,
   List,
@@ -38,6 +40,9 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.protocol import (
   Device,
 )
 from pylabrobot.io.usb import USB
+
+if TYPE_CHECKING:
+  from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
 
 # Names the recording the simulator answers from (identity and sensor reads, recorded at an
 # instrument's cold start) when no path is given. A generic one ships in `defaults/`
@@ -159,7 +164,10 @@ class SimulatedAceUSB(ReplayAceUSB):
   A move with a force limit stops where the axis meets something (`_AxisModel.obstacle`, set by a
   test). A move with a sensor stops where the sensor fires (`_AxisModel.sensed_at`), and the
   Move All carries that axis's report (LLS_LIQUID_SENSED and the position) under its sequence.
-  A pump keeps the valve it was last moved through.
+  A pump keeps the valve it was last
+  moved through. Get Tip Status answers `tip_states` when set, else `tip_sensor()` when set (the
+  simulator does not model tips; `sense_recorded_tips` has it report the session's), else from the
+  recording.
 
   Moves complete at once unless `time_scale` is set: then a Move or Move All is accepted at once
   and done after the slowest axis's move would take (`_AxisModel.duration`), times `time_scale`
@@ -196,6 +204,10 @@ class SimulatedAceUSB(ReplayAceUSB):
       state = AxisState.ENABLED if configured else AxisState.NOT_CONFIGURED
       self.axes[(a.device, a.index)] = _AxisModel(a.name, a.name in homed, state, a.drive)
     self.axes_list = list(axes)
+    # Get Tip Status's answer, one byte per probe (0 loaded, 1 cannot tell, 2 unloaded); None
+    # answers from the recording.
+    self.tip_states: Optional[bytes] = None
+    self.tip_sensor: Optional[Callable[[], bytes]] = None
 
   def _apply_power(self) -> None:
     """An enabled CiA 402 drive faults when its motor power goes. One configured with the power
@@ -309,6 +321,12 @@ class SimulatedAceUSB(ReplayAceUSB):
             + struct.pack("<i", model.position)
           )
       return [accepted, *reports, done]
+    if device == Device.TIP_SENSOR and opcode == 0x10 and self.tip_states is not None:
+      return [done + self.tip_states]
+    if device == Device.TIP_SENSOR and opcode == 0x10 and self.tip_sensor is not None:
+      return [done + self.tip_sensor()]
+    if device == Device.TIP_SENSOR and opcode == 0x41:  # LLS/CD sensitivity: done, as logged
+      return [done]
     if device == Device.MODULE and opcode == 0x0F:
       return [done]
     if device == Device.INTERLOCK and opcode == 0x10:
@@ -479,3 +497,19 @@ def simulated_boards(
     )
     boards.append(AceBoard(io=usb, name=f"simulated {module}", default_timeout=default_timeout))
   return boards
+
+
+def sense_recorded_tips(driver: "BiomekI7Driver", boards: Sequence[AceBoard]) -> None:
+  """Have each simulated Span-8 board's tip sensor report the tips its pod's `pipettes` record (0 loaded, 2 unloaded per probe), so a simulated run's tip checks pass where the
+  pickups and discards it ran would leave tips. `boards`: the driver's simulated boards."""
+  for board in boards:
+    io = board.io
+    if not isinstance(io, SimulatedAceUSB) or board.name != "simulated span8":
+      continue
+
+    def sense() -> bytes:
+      pod = next((p for p in driver.arms if p.module_type == "span8"), None)
+      tips = pod.pipettes.tips if pod is not None and pod.pipettes is not None else [None] * 8
+      return bytes(0x00 if t is not None else 0x02 for t in tips[:8])
+
+    io.tip_sensor = sense

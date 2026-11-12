@@ -139,3 +139,8 @@ def english(error: AceError, axis_names: Mapping[Tuple[int, int], str]) -> str:
   if error.code in _MOTION_FAILED_CODES and error.device is not None:
     return motion_failed(error)
   return f"{error.request} failed: {error.reason}."
+
+
+class TipCheckError(RuntimeError):
+  """A probe's tip is not what was expected, or cannot be determined: the Master Controller's
+  `VT`."""

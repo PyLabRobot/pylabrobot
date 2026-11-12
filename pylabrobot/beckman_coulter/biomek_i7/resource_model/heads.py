@@ -1,6 +1,7 @@
 """The Biomek i7's pipetting heads in the resource tree, as the STAR's are: the Multichannel head an
 `NChannelPipette` of 96 `TipMountingShaft`s (category `head96`), each Span-8 probe a channel
-(category `pipette_channel`) carrying one shaft.
+(category `pipette_channel`) carrying one shaft. A tip a head carries is a child of its shaft
+(`show_tip`), so it rides the head and the viewer draws it.
 
 Sized in centimetres from the instrument file's pod entry (`HeadBodyXSpan`, `HeadHeight`,
 `HeadFlangeHeight`, `Head/PodToMandrel1`, `PodToHeadBody*Offset`, `Mandrel1*Offset`, the mandrels'
@@ -22,6 +23,7 @@ from pylabrobot.resources.n_channel_pipettes import (
   TipMountingShaft,
 )
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 from .units import cm
@@ -186,3 +188,40 @@ def span8_channel(
   # Stated on a plain `Resource`, as the STAR states it on its channels.
   channel.reference_point = Coordinate(axis_x, depth / 2, -length)  # type: ignore[attr-defined]
   return channel
+
+
+def shaft_of(channel: Resource) -> TipMountingShaft:
+  """A Span-8 channel's shaft."""
+  for child in channel.children:
+    if isinstance(child, TipMountingShaft):
+      return child
+  raise ValueError(f"{channel.name} carries no tip mounting shaft")
+
+
+def show_tip(shaft: TipMountingShaft, tip: Optional[Tip]) -> None:
+  """Put `tip` on `shaft` in the tree, or take whatever it carries off (None).
+
+  A tip already on the shaft stays. A tip that cannot go in the tree as it is - one held on
+  another shaft, or whose name the tree already has - is shown by a copy named after the
+  shaft."""
+  if shaft.tip is tip and tip is not None:
+    return
+  if shaft.has_tip():
+    shaft.release_tip()
+  if tip is None:
+    return
+  if isinstance(tip.parent, TipMountingShaft) or _name_taken(shaft, tip):
+    tip = Tip.deserialize({**tip.serialize(), "name": f"{shaft.name}_tip"})
+    assert isinstance(tip, Tip)
+  shaft.mount_tip(tip)
+
+
+def _name_taken(shaft: Resource, tip: Tip) -> bool:
+  root = shaft.get_root()
+  if tip.parent is not None and tip.get_root() is root:
+    return False  # it is the one by that name, and moves rather than copies
+  try:
+    root.get_resource(tip.name)
+  except Exception:
+    return False
+  return True

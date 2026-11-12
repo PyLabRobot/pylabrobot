@@ -29,6 +29,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
   PodConfiguration,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import AceError, NotHomedError, english
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.module import (
   read_analog_inputs,
   read_module,
@@ -43,6 +44,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
 
 if TYPE_CHECKING:
+  from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
   from pylabrobot.resources.resource import Resource
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,12 @@ logger = logging.getLogger(__name__)
 # driver was written against; whether that holds on every build is not established.
 POD_NUMBERS = {"left": 1, "right": 2}
 COMPONENT_PREFIXES = {"multichannel": "MC", "span8": "SPAN8"}
+# What each module type carries besides the pod's own axes, by the feature's name on `Pod`. The
+# module type is what the board reports (Get Module ID, `protocol.MODULE_TYPES`); a new pod type is
+# a new entry here and in the motor tables.
+MODULE_FEATURES: Dict[str, Tuple[str, ...]] = {
+  "span8": ("pipettes",),
+}
 # The axes that change what a pod takes up along the X rail.
 RAIL_AXES = ("X", "GR", "GG")
 # The gripper's axes; a move of these, or of the channels' Y or Z, is checked against the pod's own
@@ -107,7 +115,8 @@ class Pod:
   Holds what every pod has: one board and its axes, moved together (`move_axes`, the Master
   Controller's `AM`), the position record the Master Controller keeps, homing, and the pod's pose
   on the shared X rail. `module_type` is what the board reports itself to be: `multichannel` (a
-  96-channel head) or `span8` (eight independent channels).
+  96-channel head) or `span8` (eight independent channels). What else the pod carries is its
+  features (`MODULE_FEATURES`): on a `span8`, its channels (`pipettes`).
   """
 
   def __init__(
@@ -126,6 +135,9 @@ class Pod:
     # What the instrument's declared configuration says about this pod: its conversions, travel
     # limits and geometry. None when nothing is declared for this side.
     self.declared = declared
+    # The driver this pod belongs to, set at discovery: what the features reach the deck and the
+    # declared deck positions through. None for a pod used on its own.
+    self.driver: Optional["BiomekI7Driver"] = None
     # The shared X rail, set by the driver once both pods are found. Every move that changes what
     # the pod takes up along it (X, the gripper's GR or GG) goes through it.
     self.rail: Optional[XRail] = None
@@ -138,7 +150,7 @@ class Pod:
     # (position, adjusted); position None until read. Starts as after homing.
     self._cpositions: Dict[str, motion.CPos] = {a.name: (None, a.home_position) for a in self.axes}
     # The pumps' state, kept with the positions as the Master Controller keeps it in the Span-8's
-    # state record, because every pump move carries it. Each syringe
+    # state record, because every pump move carries it; set through `pipettes`. Each syringe
     # pump's valve as last set (None until then), and the cutoff velocity (`CV`), counts/s,
     # clamped to each pump's range when used.
     self._valves: Dict[str, Optional[p.Valve]] = {a.name: None for a in self.axes if a.is_pump}
@@ -155,6 +167,9 @@ class Pod:
         self.default_minimum_traverse_height = units.to_mm(float(safe))
     # Who follows the position record (`add_position_listener`).
     self._listeners: List[Callable[["Pod"], None]] = []
+    # What the pod carries (STAR's arm features): what its module type has (`MODULE_FEATURES`).
+    features = MODULE_FEATURES.get(module_type, ())
+    self.pipettes: Optional[Pipettes] = Pipettes(self) if "pipettes" in features else None
 
   @property
   def pod_number(self) -> int:
@@ -350,7 +365,7 @@ class Pod:
     if self.module_type == "span8":
       # Each probe's Y counts from its own narrowest place (`probe_y`), not probe 1's.
       v.update({n: d.probe_y(i, counts[n]) for i, n in enumerate(ys, 1)})  # type: ignore[arg-type]
-    lengths: Dict[str, float] = {}  # no channel carries a tip
+    lengths = self._carried_tip_lengths()
     gripper = pc.GripperState(v["GY"], v["GZ"], v["GR"], v["GG"], self._held_labware)
     pipettor = pc.PipettorState(
       tuple(v[n] for n in ys),
@@ -523,7 +538,8 @@ class Pod:
 
     Targets are in counts. On the Span-8 Z channels they are adjusted positions (the channel's
     hysteresis is added to downward moves, as Biomek does). Syringe pumps move through the valve
-    each was last set to, at the cutoff velocity last set, as the Master Controller carries both.
+    each was last set to (`pipettes.set_valves`), at the cutoff velocity last set (an aspirate's
+    or dispense's `cutoff_velocity`), as the Master Controller carries both.
 
     A move of X, GR or GG is checked against the other pod first (`driver/x_rail.py`). One that
     would run into it is refused, and nothing is sent. One crossing only the path of the other
@@ -570,7 +586,9 @@ class Pod:
       axis = self.axis(name)
       axis.check_position(target)
       if axis.is_pump and self._valves[name] is None:
-        raise RuntimeError(f"{self}: {name}'s valve has not been set")
+        raise RuntimeError(
+          f"{self}: {name}'s valve has not been set; call `pipettes.set_valves` first"
+        )
     stray = sorted({*forces, *sensors} - set(targets))
     if stray:
       raise ValueError(f"{self}: a force or sensor on {stray}, which have no target")
@@ -673,7 +691,8 @@ class Pod:
 
   async def park(self) -> None:
     """Biomek's park (`_park`): the channels and the gripper raised, the pod to its park X and Y,
-    the gripper turned and closed to its park."""
+    the gripper turned and closed to its park. A Span-8 parks over its wash station
+    (`pipettes.park`)."""
     await self._park()
 
   async def _park(self, over: Optional[Mapping[str, int]] = None) -> None:
@@ -681,7 +700,8 @@ class Pod:
     (`_traverse_ceilings`), the pod to the park X (`XMargin` in from its own end of the rail) and
     `Y`, the gripper turned and closed to its park (`GR`, `GY`, then `GG`). As logged after a
     prime (2026-10-09), to the count. `over`: X/Y targets (counts) for a pod whose park declares
-    none. Without either, it parks where it stands.
+    none; a Span-8 parks over its wash station (`pipettes.park`). Without either, it parks where
+    it stands.
 
     Raises:
       RuntimeError: without a declared configuration.
@@ -762,8 +782,8 @@ class Pod:
       clearance: the lowest height the deck under the path allows, from the deck model
         (`BiomekI7._traverse_clearance`), if known.
       allow_below_clearance: travel lower than `clearance` and the obstacles allow, deliberately.
-      tip_lengths: per channel Z axis, how far below its bottom the tip it carries ends, cm; none
-        when None.
+      tip_lengths: per channel Z axis, how far below its bottom the tip it carries ends, cm. The
+        pod's own record when None (`_carried_tip_lengths`).
       gripper_height: GZ (cm) to travel at. Default: its traverse height, no higher than clears
         the pod's own pipettor for the travel's GR (`_gripper_traverse_height`).
 
@@ -778,7 +798,7 @@ class Pod:
     stray = sorted(set(targets) & set(channels))
     if stray:
       raise ValueError(f"{self}: {stray} in a travel's targets; use z_final")
-    lengths = {} if tip_lengths is None else dict(tip_lengths)
+    lengths = self._carried_tip_lengths() if tip_lengths is None else dict(tip_lengths)
     await self._read_unknown_positions()
     area = self._travel_area(targets)
     need = g.obstacle_clearance(d.obstacles, *area)
@@ -861,6 +881,14 @@ class Pod:
       gripper_height=units.optional_cm(gripper_height),
     )
 
+  def carried_tip_lengths(self) -> Dict[str, float]:
+    """Per channel Z axis carrying a tip, how far below the channel the tip ends, mm.
+
+    Raises:
+      RuntimeError: for a carried tip whose length is not known.
+    """
+    return {axis: units.to_mm(v) for axis, v in self._carried_tip_lengths().items()}
+
   def traverse_heights(self) -> Dict[str, float]:
     """The height each Z-type axis (the channels' and the gripper's GZ) travels at by default, mm
     of its bottom above the deck: its ceiling (`traverse_ceilings`), or
@@ -870,6 +898,15 @@ class Pod:
   def traverse_ceilings(self) -> Dict[str, float]:
     """The highest each Z-type axis travels, mm of its bottom above the deck (`_traverse_ceilings`)."""
     return {axis: units.to_mm(v) for axis, v in self._traverse_ceilings().items()}
+
+  def _carried_tip_lengths(self) -> Dict[str, float]:
+    """Per channel Z axis carrying a tip, how far below the channel the tip ends, cm: from the
+    head's or the probes' tip record.
+
+    Raises:
+      RuntimeError: for a carried tip whose length is not known.
+    """
+    return {} if self.pipettes is None else self.pipettes._carried_tip_lengths()
 
   def _traverse_targets(
     self, minimum_traverse_height: Optional[float], tip_lengths: Mapping[str, float]
@@ -914,7 +951,7 @@ class Pod:
     Raises:
       ValueError: for a height a channel cannot lift its tip to. Nothing is sent.
     """
-    lengths = {} if tip_lengths is None else tip_lengths
+    lengths = self._carried_tip_lengths() if tip_lengths is None else tip_lengths
     heights, _, _ = self._traverse_targets(minimum_traverse_height, lengths)
     await self._read_unknown_positions()
     await self._raise_to({n: heights[n] for n in self.channel_z_axes}, speed)
