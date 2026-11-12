@@ -2953,12 +2953,14 @@ class Pipettes:
       return None
     if move_to_safe_z_position_after:
       await self.move_to_safe_z()
-    # The channel's own stop disc height at detection (`Px RH`): the master's (`C0 RL`) can still
+    if has_tip:
+      return (await self.request_last_lld_z_positions())[channel]
+    # Bare, the stop disc's own height at detection (`Px RH`): the master's (`C0 RL`) can still
     # subtract a CoRe gripper tool put back in its holder since.
     resp = await self._driver.send_command(
       module=self.channel_id(channel), command="RH", fmt="rh#####"
     )
-    return round(c.z_drive_increments_to_mm(cast(int, resp["rh"])) - overhang, 2)
+    return c.z_drive_increments_to_mm(cast(int, resp["rh"]))
 
   async def _unchecked_fw_probe_z_using_plld(
     self,

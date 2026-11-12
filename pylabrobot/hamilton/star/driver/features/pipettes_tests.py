@@ -888,19 +888,16 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
 
   async def test_z_probe_searches_from_the_top_on_the_stop_disc_and_reads_the_height(self):
     self._mount_a_tip(51.9)
-    c = self.pipettes.configuration
-    self._answer_the_heights_with({"rh": c.z_drive_mm_to_increments(175.3)})
+    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
     z = await self.pipettes.probe_z_using_clld(1)
-    end = c.z_range_increments[0]  # the drive's floor, on the stop disc
-    self.assertEqual(self.sent, [f"P2ZLzh{end:05}zc31200zl00932zr075gt0010gl0002zj1zi0186", "P2RH"])
-    # The channel's own stop disc height, less the tip's overhang.
-    assert z is not None
-    self.assertAlmostEqual(z, 123.4, delta=0.01)
+    end = self.pipettes.configuration.z_range_increments[0]  # the drive's floor, on the stop disc
+    self.assertEqual(self.sent, [f"P2ZLzh{end:05}zc31200zl00932zr075gt0010gl0002zj1zi0186", "C0RL"])
+    self.assertEqual(z, 123.4)
     self.moves.assert_not_awaited()
 
   async def test_z_probe_window_is_in_tip_bottom_heights_and_sent_on_the_stop_disc(self):
     self._mount_a_tip(51.9)
-    self._answer_the_heights_with({"rh": 20000})
+    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
     await self.pipettes.probe_z_using_clld(
       2,
       search_start_position=250.0,
@@ -910,7 +907,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     c = self.pipettes.configuration
     start, end = c.z_drive_mm_to_increments(301.9), c.z_drive_mm_to_increments(201.9)
     self.assertEqual(
-      self.sent, [f"P3ZLzh{end:05}zc{start:05}zl00932zr075gt0010gl0002zj1zi0186", "P3RH"]
+      self.sent, [f"P3ZLzh{end:05}zc{start:05}zl00932zr075gt0010gl0002zj1zi0186", "C0RL"]
     )
     self.moves.assert_awaited_once()
 
@@ -945,7 +942,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._answer_the_search_with("ZL", "P2ZLid0001er70")
     self.assertIsNone(await self.pipettes.probe_z_using_clld(1))
     self.moves.assert_awaited_once()
-    self.assertNotIn("P2RH", self.sent)
+    self.assertNotIn("C0RL", self.sent)
 
   async def test_z_probe_raises_any_other_channel_error(self):
     self._mount_a_tip(51.9)
@@ -966,8 +963,8 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     c = self.pipettes.configuration
     self._answer_the_heights_with({"rh": c.z_drive_mm_to_increments(234.74)})
     z = await self.pipettes.probe_z_using_clld(1, allow_without_tip=True)
-    # No overhang: the window is the drive's own, floor to top, and the height the stop disc's.
-    # The master's `C0 RL` is not asked: it can still subtract a tool put back since.
+    # No overhang: the window is the drive's own, floor to top, and the height the stop disc's,
+    # from the channel: the master's `C0 RL` can still subtract a tool put back since.
     floor, top = c.z_range_increments
     self.assertEqual(
       self.sent, [f"P2ZLzh{floor:05}zc{top:05}zl00932zr075gt0010gl0002zj1zi0186", "P2RH"]
@@ -1356,10 +1353,7 @@ class TestLiquidProbingInSimulation(unittest.IsolatedAsyncioTestCase):
     found = await self.pipettes.probe_z_using_clld(0, search_end_position=floor)
     assert found is not None
     self.assertAlmostEqual(found, self._surface(self.a1), delta=0.1)
-    # The master reports it to 0.1 mm, the channel's own steps finer.
-    self.assertAlmostEqual(
-      (await self.pipettes.request_last_lld_z_positions())[0], found, delta=0.05
-    )
+    self.assertAlmostEqual((await self.pipettes.request_last_lld_z_positions())[0], found)
 
   async def test_a_clld_miss_answers_none_zeroes_the_latch_and_comes_up(self):
     floor = await self._over(self.d1)
