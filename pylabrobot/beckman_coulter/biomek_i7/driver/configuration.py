@@ -176,8 +176,12 @@ class Obstacle:
 POD_SETTINGS: Tuple[str, ...] = ()
 GRIPPER_SETTINGS: Tuple[str, ...] = ("GripperSqueezeForce",)
 TYPE_SETTINGS: Dict[str, Tuple[str, ...]] = {
-  "span8": ("ProbeSize",),
+  "span8": (
+    "ProbeSize",
+    "DefaultTipHubInfo",
+  ),
   "multichannel": (
+    "Head/PodToMandrel1",
     "HeadBodyXSpan",
     "HeadBodyYSpan",
   ),

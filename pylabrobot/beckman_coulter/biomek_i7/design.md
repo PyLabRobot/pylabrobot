@@ -71,3 +71,29 @@ must clear the other pod's range and any move it has in flight, or the move is r
 anything is sent (`driver/x_rail.py`, Biomek's own rule). The driver does not move the other pod out
 of the way; a caller makes room (`Pod.move_aside`, `Pod.park`). The guard uses the configuration
 only, so it holds without a deck.
+
+## The deck and the device
+
+**I8. The deck is optional; the device holds the models.** The driver homes, parks and moves with no
+deck. `BiomekI7Device` (built by `BiomekI7(...)`, or `simulation=True`) is the resource tree: the
+deck, and per pod a bridge and pod model built from the declared geometry, following the pod's axes.
+The features hold their heads as the STAR's do (`head96.resource`, `pipettes.resources`).
+
+**I9. Targeting is PyLabRobot-native, with one Biomek correction** (`targeting.py`): a target is the
+resource's location on the deck plus the offset, in Biomek's frame, plus the moving pod's
+calibration of the deck position it stands on. Positions centre their labware, as Biomek does.
+
+**I10. Labware is Biomek's own.** Biomek's labware and tip classes are PyLabRobot definitions
+(`pylabrobot.resources.beckman_coulter`); `resource_model/labware.py` names them by class, and
+`layouts.place_labware` places a method's Instrument Setup. A tip's end is its length less its
+seating depth; a tip-loading position's adaptor plate takes its labware 0.254 cm lower.
+
+**I11. Tips are shaft state.** A tip a head carries is a child of its `TipMountingShaft`, whose
+state is the tip (`serialize_state`). The device saves the tree's state (`state_json`) whenever a
+head's tips change, restores it when built, and carries it over to the models it rebuilds at setup:
+the 96-head cannot sense tips, so that is how they are known across sessions.
+
+**I12. Travel is a traverse height, not a path planner.** Before X/Y travel the channels and the
+gripper rise to a traverse height (by default near the top of travel; per call, as STAR's
+`minimum_traverse_height_*`). A height below what the deck model and Biomek's per-pod obstacles need
+is refused, not routed.

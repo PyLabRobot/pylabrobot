@@ -4,6 +4,7 @@ import logging
 import math
 from dataclasses import dataclass, field
 from typing import (
+  TYPE_CHECKING,
   Callable,
   Dict,
   Iterable,
@@ -40,6 +41,9 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   Homer,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
+
+if TYPE_CHECKING:
+  from pylabrobot.resources.resource import Resource
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +129,9 @@ class Pod:
     # The shared X rail, set by the driver once both pods are found. Every move that changes what
     # the pod takes up along it (X, the gripper's GR or GG) goes through it.
     self.rail: Optional[XRail] = None
+    # The pod's model in the resource tree, its bridge (STAR's `x_arm.resource`): set by the device
+    # that draws it (`BiomekI7`), which keeps it in step with the pod's axes; None without one.
+    self.resource: Optional["Resource"] = None
     # What the gripper holds, as the rail counts it; the pod cannot sense it.
     self._held_labware: Optional[g.HeldLabware] = None
     # Where this driver last put each axis, as the Master Controller keeps it (`cpositions`):
@@ -474,7 +481,7 @@ class Pod:
   def add_position_listener(self, listener: Callable[["Pod"], None]) -> Callable[[], None]:
     """Call `listener(pod)` whenever the position record changes: after a move, a read, homing,
     or a position becoming unknown. Returns what removes it. For what follows the pod, such as its
-    model in a resource tree; a listener that raises is logged and kept."""
+    model in a resource tree (`BiomekI7`); a listener that raises is logged and kept."""
     self._listeners.append(listener)
     return lambda: self._listeners.remove(listener)
 
@@ -752,7 +759,8 @@ class Pod:
         always.
       z_final: where to set the channels' bottoms once there; None leaves them at the traverse
         height.
-      clearance: the lowest height the deck under the path allows, from a deck model, if known.
+      clearance: the lowest height the deck under the path allows, from the deck model
+        (`BiomekI7._traverse_clearance`), if known.
       allow_below_clearance: travel lower than `clearance` and the obstacles allow, deliberately.
       tip_lengths: per channel Z axis, how far below its bottom the tip it carries ends, cm; none
         when None.

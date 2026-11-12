@@ -1,4 +1,4 @@
-"""A generic Biomek i7: what a simulation is given when it has no instrument's own files.
+"""A generic Biomek i7: what `BiomekI7(simulation=True)` simulates when given no instrument's files.
 
 Made from one instrument's declared configuration and cold-start recording, with every serial
 number and name removed. Its physical values (motor tables, conversions, travel, geometry,
