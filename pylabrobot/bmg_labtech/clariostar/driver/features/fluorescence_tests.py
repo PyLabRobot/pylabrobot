@@ -1887,6 +1887,12 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       self.assertLessEqual(max(max(row) for row in result.data), 260_000)
     grid = bytes.fromhex(ground_truth["replies"][5])
     self.assertEqual(first.data[0][0], int.from_bytes(ftdi_extract_payload(grid)[34:38], "big"))
+    # the reader scans back and forth: its second row comes right to left, returned left to right
+    sent = ftdi_extract_payload(grid)
+    second_row = [
+      int.from_bytes(sent[i : i + 4], "big") for i in range(34 + 4 * 31, 34 + 4 * 62, 4)
+    ]
+    self.assertEqual(first.data[1], second_row[::-1])
 
   async def test_given_points_make_up_a_plate_at_a_96_well_plates_pitch(self):
     feature = make_fluorescence(FakeFTDI())

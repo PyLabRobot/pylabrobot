@@ -136,8 +136,8 @@ class CLARIOstarFluorescenceGridResult:
     center: where the reader found the signal's centre, in the frame of `position`; None if it
       found none.
     spacing: mm between neighbouring points of the grid.
-    data: the grid's values, rows of points in the order the reader sends them; which way the
-      rows and columns run is not verified.
+    data: the grid's values, `spacing` apart: rows from the back of the grid to the front, each
+      from left to right.
     focal_height: the focal height the grid was read at, mm.
     gain: the detector gain it was read at.
     start_timestamp: when the scan started.
@@ -1580,7 +1580,8 @@ class Fluorescence(Measurement):
     """A grid's well and counts, from its data reply.
 
     Bytes 7-8 the points, 23-24 and 25-26 the well's column and row (from 1, u16 BE), then the
-    counts, u32 BE from byte 34, `side` to a row.
+    counts, u32 BE from byte 34, `side` to a row, from the back row to the front. The reader scans
+    back and forth, so every second row comes right to left; it is returned left to right.
 
     Raises:
       ValueError: if the reply does not hold `side` squared counts.
@@ -1591,7 +1592,8 @@ class Fluorescence(Measurement):
       raise ValueError(f"grid reply does not hold {points} counts, got {len(reply)} bytes")
     counts = [int.from_bytes(reply[i : i + 4], "big") for i in range(start, start + 4 * points, 4)]
     well = (int.from_bytes(reply[23:25], "big"), int.from_bytes(reply[25:27], "big"))
-    return well, [counts[row : row + side] for row in range(0, points, side)]
+    rows = [counts[row : row + side] for row in range(0, points, side)]
+    return well, [row[::-1] if index % 2 else row for index, row in enumerate(rows)]
 
   @staticmethod
   def _decode_grid_centers(
