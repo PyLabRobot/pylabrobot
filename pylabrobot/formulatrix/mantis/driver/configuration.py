@@ -46,6 +46,8 @@ UNIT_BLOCKS = (
   "stage",
   "chip_changer",
   "chip_sequences",
+  "pump_sequence_volumes",
+  "input_volumes",
 )
 # The blocks that calibrate motion: never taken from a recording; without them motion refuses.
 MOTION_CALIBRATION_BLOCKS = ("arm", "zones", "stations", "stage", "chip_changer")

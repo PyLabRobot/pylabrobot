@@ -57,6 +57,26 @@ def compute_valve_bank_state(*, valves: str, outputs: str) -> int:
   return state
 
 
+def is_fill_state(*, state: int) -> bool:
+  """Whether a valve bank state fills a diaphragm: the fill valve and the large or small one open.
+
+  Args:
+    state: the valve bank's state.
+  """
+  return not state & FILL_CLOSED and (not state & LARGE_CLOSED or not state & SMALL_CLOSED)
+
+
+def is_empty_state(*, state: int) -> bool:
+  """Whether a valve bank state empties a diaphragm through the outputs: an output open, the fill,
+  large and small valves closed.
+
+  Args:
+    state: the valve bank's state.
+  """
+  closed = FILL_CLOSED | LARGE_CLOSED | SMALL_CLOSED
+  return not state & OUTPUTS_CLOSED and state & closed == closed
+
+
 def _parse_valve_state_line(*, path: str, number: int, tokens: List[str]) -> Tuple[int, int]:
   """One valve state line's (state, duration), from the tokens after its class name.
 

@@ -1220,7 +1220,41 @@ class StationTests(ArmTestCase):
       await driver.arm.move_to_wash_station(station=2)
     with self.assertRaisesRegex(ValueError, "station must be one of"):
       await driver.arm.move_to_wash_station(station=3)
+    with self.assertRaisesRegex(MantisConfigurationError, "no route to the waste station"):
+      driver.arm._get_waste_station_return_moves()
     self.assertEqual(self.sent(link), [])
+
+  async def test_the_way_back_from_the_waste_station_retraces_its_route(self):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_stations(link=link)
+    safe = {2: compute_device_position(motor=2, position=-1.57)}
+    ready = get_arm_positions(x=15.0, y=30.0)
+    idle_position = [{}, ready, safe, {**ready, **safe}]
+    to_idle = [
+      {2: compute_device_position(motor=2, position=0.0)},
+      get_arm_positions(x=15.0, y=31.177),
+    ]
+    # As in the recorded v4 prime: the route reversed, the idle position, then idle with Z first;
+    # item numbers are given when queued, so only each move's targets are compared.
+    expected = [
+      [payload[6:] for payload in self.get_expected_waste_moves(first_item=0)[::-1]]
+      + [get_queued_move(item=0, targets=targets)[6:] for targets in idle_position],
+      [get_queued_move(item=0, targets=targets)[6:] for targets in to_idle],
+    ]
+    groups = driver.arm._get_waste_station_return_moves()
+    sent = [
+      [struct.pack("<9d", *[value for target in move for value in target]) for move in moves]
+      for moves in groups
+    ]
+    self.assertEqual(sent, expected)
+    self.assertNotIn(68, [command for _, command, _ in self.sent(link)])
+
+  async def test_the_way_back_without_the_idle_position_route_refuses(self):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_stations(link=link)
+    driver.arm.idle_position_route = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no idle position route"):
+      driver.arm._get_waste_station_return_moves()
 
 
 # A stage that only moves the wellplate frame by its origin, so where a well is is worked by hand.

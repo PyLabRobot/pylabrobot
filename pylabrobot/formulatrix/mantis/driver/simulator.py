@@ -16,6 +16,7 @@ from .configuration import (
 )
 from .errors import MantisConfigurationError, MantisPressureError, MantisTimeoutError
 from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm
+from .features.drop_sensor import DropSensor
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import (
@@ -23,6 +24,7 @@ from .features.pump import (
   CONTROLLER_SETTLED,
   CONTROLLER_UNSETTLED,
   PRESSURE_CONTROLLERS,
+  VALVE_BANK_PPI_ADDRESS,
   PressureController,
   Pump,
 )
@@ -30,6 +32,7 @@ from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
 from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, SEQUENCER_QUEUE_SIZE, MantisDriver
 from .sequence_files import Waypoint
+from .valve_sequences import is_empty_state
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,8 @@ class MantisSimulationPump(Pump):
     reservoir_release_controller: Optional[PressureController] = None,
     tare_and_self_test: bool = False,
     chip_sequences: Optional[Dict[str, Dict[str, List[Tuple[int, int]]]]] = None,
+    pump_sequence_volumes: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
+    input_volumes: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
   ):
     """
     Args:
@@ -84,12 +89,16 @@ class MantisSimulationPump(Pump):
       reservoir_release_controller: as for ``Pump``.
       tare_and_self_test: as for ``Pump``.
       chip_sequences: as for ``Pump``.
+      pump_sequence_volumes: as for ``Pump``.
+      input_volumes: as for ``Pump``.
     """
     super().__init__(
       driver=driver,
       reservoir_release_controller=reservoir_release_controller,
       tare_and_self_test=tare_and_self_test,
       chip_sequences=chip_sequences,
+      pump_sequence_volumes=pump_sequence_volumes,
+      input_volumes=input_volumes,
     )
     self._pump_on = False
     self._enabled: Dict[PressureController, bool] = dict.fromkeys(PRESSURE_CONTROLLERS, False)
@@ -194,6 +203,14 @@ class MantisSimulationPump(Pump):
     return {
       controller: (float(scale), float(offset)) for controller, (scale, offset) in recorded.items()
     }
+
+
+class MantisSimulationDropSensor(DropSensor):
+  """A drop sensor with no device behind it: it sees a drop each time the simulated sequencer plays
+  a valve state that empties a diaphragm through the outputs, wherever the head is."""
+
+  async def _unchecked_fw_set_drop_detection(self, *, value: int) -> None:
+    """Enable nothing: the simulated sensor always sees."""
 
 
 class MantisSimulationRfid(Rfid):
@@ -422,7 +439,8 @@ class MantisSimulationDriver(MantisDriver):
   The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after the link opens and
   started by the pump's setup on a v4; started, it plays each item at once. Stop and abort keep
   what is queued, as on a v4; only a clear drops it. The arm (``MantisSimulationArm``) moves at
-  once; its motors read where it stands.
+  once; its motors read where it stands. The drop sensor (``MantisSimulationDropSensor``) sees a
+  drop for each valve state played that empties a diaphragm.
   """
 
   def __init__(
@@ -449,6 +467,7 @@ class MantisSimulationDriver(MantisDriver):
     )
     self._queued_items: List[int] = []
     self._queued_moves: Dict[int, List[Tuple[float, float, float]]] = {}
+    self._queued_valve_states: Dict[int, int] = {}
     self._sequencer_started = False
 
   def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
@@ -540,18 +559,22 @@ class MantisSimulationDriver(MantisDriver):
     raise NotImplementedError(f"{self.name}: the absolute encoders are not simulated")
 
   def _play_queued_items(self) -> None:
-    """Play every queued item at once, if the sequencer is started; a move moves the arm."""
+    """Play every queued item at once, if the sequencer is started; a move moves the arm, and a
+    valve state that empties a diaphragm is a drop the drop sensor sees."""
     if self._sequencer_started and self._queued_items:
       for item in self._queued_items:
         targets = self._queued_moves.pop(item, None)
         if targets is not None and isinstance(self.arm, MantisSimulationArm):
           self.arm._play_move(targets=targets)
+        state = self._queued_valve_states.pop(item, None)
+        if state is not None and is_empty_state(state=state) and self.drop_sensor is not None:
+          self.drop_sensor._update_drop_count()
       self._sequence_progress = self._last_drained_item = self._queued_items[-1]
       self._queued_items = []
 
   async def _unchecked_fw_clear_sequencer(self) -> int:
     """Empty the queue."""
-    self._queued_items, self._queued_moves = [], {}
+    self._queued_items, self._queued_moves, self._queued_valve_states = [], {}, {}
     return 0
 
   async def _unchecked_fw_start_sequencer(self) -> int:
@@ -577,6 +600,8 @@ class MantisSimulationDriver(MantisDriver):
     if len(self._queued_items) >= SEQUENCER_QUEUE_SIZE:
       return -1, 0
     self._queued_items.append(item)
+    if start_address == VALVE_BANK_PPI_ADDRESS and len(values) == 1:
+      self._queued_valve_states[item] = values[0]
     free = SEQUENCER_QUEUE_SIZE - len(self._queued_items)
     self._play_queued_items()
     return free, 0
@@ -631,6 +656,8 @@ class MantisSimulationDriver(MantisDriver):
         reservoir_release_controller=self.pump.reservoir_release_controller,
         tare_and_self_test=self.pump.tare_and_self_test,
         chip_sequences=self.pump.chip_sequences,
+        pump_sequence_volumes=self.pump.pump_sequence_volumes,
+        input_volumes=self.pump.input_volumes,
       )
     if self.led_bar is not None and not isinstance(self.led_bar, MantisSimulationLedBar):
       self.led_bar = MantisSimulationLedBar(
@@ -638,6 +665,10 @@ class MantisSimulationDriver(MantisDriver):
         number_of_leds=self.led_bar.number_of_leds,
         show_actions=self.led_bar.show_actions,
       )
+    if self.drop_sensor is not None and not isinstance(
+      self.drop_sensor, MantisSimulationDropSensor
+    ):
+      self.drop_sensor = MantisSimulationDropSensor(driver=self)
     if self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
       self.arm = MantisSimulationArm(
         driver=self,
@@ -679,6 +710,7 @@ class MantisSimulationDriver(MantisDriver):
     logger.info("[%s] simulated, from %s", self.name, self.declared_configuration_json)
     self._next_item, self._last_drained_item, self._sequence_progress = 1, None, None
     self._queued_items, self._queued_moves, self._sequencer_started = [], {}, False
+    self._queued_valve_states = {}
 
   async def _close(self) -> None:
     """Close nothing: there is no link."""

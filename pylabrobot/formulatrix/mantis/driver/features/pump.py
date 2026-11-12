@@ -4,22 +4,26 @@ Each controller regulates one line, bottle, chip or vacuum, from its feedback se
 and chip lines each have their own exhaust valves. The pump runs only while something has started
 it (``start_pump``); stop turns it off and vents both positive lines. On a v4, setup zeroes the
 bottle and chip sensors and runs the connect self-test, as in the recorded v4 startup, and a
-chip type's valve sequences from the configuration folder are queued on the chip valve bank.
+chip type's valve sequences from the configuration folder are queued on the chip valve bank, its
+drops too: a prime plays them at the waste station.
 """
 
 import asyncio
 import logging
+import math
 import struct
 import time
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Tuple
 
+from ...liquid_classes.base import MantisLiquidClass
 from ...resource_model.chip import MANTIS_CHIP_FACTORIES
-from ..errors import MantisConfigurationError, MantisPressureError
+from ..errors import MantisConfigurationError, MantisPressureError, MantisPrimeError
 from ..framing import PRESSURE_BOARD
-from ..valve_sequences import VALVE_SEQUENCE_FILES
+from ..valve_sequences import VALVE_SEQUENCE_FILES, is_empty_state, is_fill_state
 
 if TYPE_CHECKING:
   from ..master import MantisDriver
+  from .drop_sensor import DropSensor
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +56,9 @@ _TARGET_RANGES: Dict[PressureController, Tuple[float, float]] = {
   "chip": (0.0, 20.0),
   "vacuum": (-16.0, 0.0),
 }
+# Seconds the bottle line's solenoid exhausts it when a prime turns the bottle off, at
+# ``TARE_SOLENOID_PWM``, as in the recorded v4 prime.
+BOTTLE_OFF_DELAY = 0.5
 # Seconds the reservoir release holds its valves open.
 RELEASE_RESERVOIR_DELAY = 2.0
 # Seconds a started pump runs before anything else is sent.
@@ -91,8 +98,107 @@ SOLENOID_CHECK_TOGGLE_COUNT = 5
 VALVE_BANK_PPI_ADDRESS = 40
 VALVES_CLOSED, VALVES_OPEN, VALVES_AFTER_CONNECT = 31, 0, 17
 VALVE_STATE_SHORT, VALVE_STATE_HOLD = 10, 500
-# Seconds to wait for queued valve states to be reported played.
+# Seconds to wait for queued valve states to be reported played; for a full queue of drops.
 VALVE_STATE_TIMEOUT = 10.0
+DROP_QUEUE_TIMEOUT = 60.0
+# Where a chip's input is filled from: each takes its own default volumes.
+InputSource = Literal["tube", "pipette_tip"]
+INPUT_SOURCES: Tuple[InputSource, ...] = ("tube", "pipette_tip")
+# Seconds a prime waits for the vacuum and the chip to settle, where a chip type's install waits
+# other than the pump's default_settle_timeout (2 s).
+PREPARING_PRESSURE_SETTLE_TIMEOUTS: Dict[str, float] = {"xl_volume_pfe": 4.0}
+# The most prime pump cycles a prime that stops on drops plays, by chip type: the install's cap
+# (100 for high volume and XL chips, 400 for low volume), less one.
+MAXIMUM_AUTO_PRIME_CYCLES: Dict[str, int] = {
+  "high_volume": 99,
+  "high_volume_pfe": 99,
+  "high_volume_3pfe": 99,
+  "high_volume_hi_fi": 99,
+  "xl_volume_pfe": 99,
+  "low_volume": 399,
+  "low_volume_pfe": 399,
+  "low_volume_3pfe": 399,
+  "low_volume_hi_fi": 399,
+}
+
+
+def _round_half_away_from_zero(*, value: float, digits: int) -> float:
+  """``value`` rounded to ``digits`` decimals, a half away from zero."""
+  scale = 10.0**digits
+  fraction, whole = math.modf(value * scale)
+  if abs(fraction) >= 0.5:
+    whole += math.copysign(1.0, fraction)
+  return whole / scale
+
+
+def compute_pump_cycle(
+  *,
+  target_volume: float,
+  large_diaphragm_volume: float,
+  small_diaphragm_volume: float,
+  allow_all_zero: bool,
+) -> Tuple[int, int]:
+  """The (large, small) drops that come closest to a volume, as in the recorded v4 primes.
+
+  The large drops rounded down and rounded up are each topped up with small drops; the split
+  closer to the volume wins, the one rounded down on a tie. A remainder within half a small drop of
+  a large drop is a large drop.
+
+  Args:
+    target_volume: uL.
+    large_diaphragm_volume: one large drop, uL.
+    small_diaphragm_volume: one small drop, uL.
+    allow_all_zero: whether a volume above 0 may give no drop; if not, it gives one small drop.
+  """
+
+  def split(round_large: Callable[[float], int]) -> Tuple[int, int]:
+    large = int(round_large(target_volume / large_diaphragm_volume + 0.0005))
+    remainder = target_volume - large * large_diaphragm_volume
+    if remainder < small_diaphragm_volume / 2:
+      return large, 0
+    if large_diaphragm_volume - remainder < small_diaphragm_volume / 2:
+      return large + 1, 0
+    small = _round_half_away_from_zero(value=remainder / small_diaphragm_volume + 0.0005, digits=0)
+    return large, int(small)
+
+  def get_error(drops: Tuple[int, int]) -> float:
+    large, small = drops
+    return abs(target_volume - (large * large_diaphragm_volume + small * small_diaphragm_volume))
+
+  down, up = split(round_large=math.floor), split(round_large=math.ceil)
+  large, small = down if get_error(drops=down) <= get_error(drops=up) else up
+  if large + small == 0 and target_volume != 0 and not allow_all_zero:
+    small = 1
+  return large, small
+
+
+def _apply_liquid_class_delays(
+  *,
+  states: List[Tuple[int, int]],
+  liquid_class: MantisLiquidClass,
+  drop: Literal["large", "small"],
+) -> List[Tuple[int, int]]:
+  """A drop's valve states with their diaphragm's fill and empty steps held for the liquid class's
+  delays, in the sequencer's time steps; every other state as the install's file writes it.
+
+  The files hold the 1 cP class's delays, so the 1 cP class changes nothing.
+
+  Args:
+    states: the drop's (state, duration) pairs.
+    liquid_class: whose delays to take.
+    drop: whose diaphragm: "large" or "small".
+  """
+  if drop == "large":
+    fill, empty = liquid_class.large_fill_delay, liquid_class.large_empty_delay
+  else:
+    fill, empty = liquid_class.small_fill_delay, liquid_class.small_empty_delay
+  return [
+    (
+      state,
+      fill if is_fill_state(state=state) else empty if is_empty_state(state=state) else duration,
+    )
+    for state, duration in states
+  ]
 
 
 class Pump:
@@ -113,6 +219,8 @@ class Pump:
     reservoir_release_controller: Optional[PressureController] = None,
     tare_and_self_test: bool = False,
     chip_sequences: Optional[Dict[str, Dict[str, List[Tuple[int, int]]]]] = None,
+    pump_sequence_volumes: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
+    input_volumes: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
   ):
     """
     Args:
@@ -122,11 +230,17 @@ class Pump:
       tare_and_self_test: whether ``initialize`` tares and runs the connect self-test (a v4).
       chip_sequences: each chip type's valve sequences, (state, duration) pairs by name, from the
         install; None when there are none, and then none is queued.
+      pump_sequence_volumes: each chip type's uL per play of its valve sequences, by pump type
+        ("dispense", "prime", "recovery") and name, from the install; None when there are none.
+      input_volumes: each chip type's default volumes, uL, by input source and use ("prime"), from
+        the install; None when there are none.
     """
     self._driver = driver
     self.reservoir_release_controller = reservoir_release_controller
     self.tare_and_self_test = tare_and_self_test
     self.chip_sequences = chip_sequences
+    self.pump_sequence_volumes = pump_sequence_volumes
+    self.input_volumes = input_volumes
     self._pump_starts = 0
     # Each controller's last target, set again when the pump starts.
     self._last_targets: Dict[PressureController, float] = {}
@@ -846,3 +960,191 @@ class Pump:
       await self.vent()
     except Exception:
       logger.warning("[%s] could not vent", self._driver.name, exc_info=True)
+
+  # -- prime ------------------------------------------------------------------
+
+  def _get_dispense_sequences(
+    self, *, chip_type: str
+  ) -> Tuple[Tuple[str, float], Tuple[str, float]]:
+    """A chip type's small and large drop: each its valve sequence's name and uL, from the
+    install's pump sequence files. The smaller volume is the small drop; of two the same, the one
+    the file lists first.
+
+    Raises:
+      MantisConfigurationError: without two dispense sequences for the chip type.
+    """
+    volumes = (self.pump_sequence_volumes or {}).get(chip_type, {}).get("dispense", {})
+    if len(volumes) != 2:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: the install names no small and large drop for {chip_type}; give its "
+        "configuration folder (oem_config_directory) or a configuration saved with it"
+      )
+    small, large = sorted(volumes.items(), key=lambda item: item[1])
+    return small, large
+
+  def _get_prime_volume(self, *, chip_type: str, input_source: InputSource) -> float:
+    """A chip type's default prime volume for an input source, uL, from the install.
+
+    Raises:
+      ValueError: if ``input_source`` is not one of ``INPUT_SOURCES``.
+      MantisConfigurationError: without it.
+    """
+    if input_source not in INPUT_SOURCES:
+      raise ValueError(f"input_source must be one of {INPUT_SOURCES}, got {input_source!r}")
+    volume = (self.input_volumes or {}).get(chip_type, {}).get(input_source, {}).get("prime")
+    if volume is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: the install names no {input_source} prime volume for {chip_type}; "
+        "pass a volume, or give its configuration folder (oem_config_directory)"
+      )
+    return volume
+
+  def _get_drop_states(
+    self,
+    *,
+    chip_type: str,
+    name: str,
+    liquid_class: MantisLiquidClass,
+    drop: Literal["large", "small"],
+  ) -> List[Tuple[int, int]]:
+    """A drop's valve sequence with the liquid class's delays (``_apply_liquid_class_delays``).
+
+    Raises:
+      ValueError, MantisConfigurationError: as ``_get_valve_sequence``.
+    """
+    return _apply_liquid_class_delays(
+      states=self._get_valve_sequence(chip_type=chip_type, name=name),
+      liquid_class=liquid_class,
+      drop=drop,
+    )
+
+  async def _prepare_pressures(
+    self, *, chip_pressure: float, vacuum: float, timeout: float
+  ) -> None:
+    """Set the pressures drops are played at, as in the recorded v4 prime: the vacuum, settled;
+    the bottle off, its line exhausted for ``BOTTLE_OFF_DELAY``; the chip, settled.
+
+    Args:
+      chip_pressure: psi.
+      vacuum: inHg.
+      timeout: seconds each of the vacuum and the chip waits to settle.
+
+    Raises:
+      ValueError, MantisPressureError: as ``start_pressure_control``.
+    """
+    await self.start_pressure_control(controller="vacuum", pressure=vacuum, timeout=timeout)
+    await self._unchecked_fw_set_controller_enabled(controller="bottle", enabled=False)
+    await self._unchecked_fw_set_proportional_valve(controller="bottle", pwm=0)
+    await self._unchecked_fw_set_solenoid_valve(controller="bottle", pwm=TARE_SOLENOID_PWM)
+    try:
+      await self._sleep(seconds=BOTTLE_OFF_DELAY)
+    except BaseException:
+      await self._close_valves(controllers=("bottle",))
+      raise
+    await self._unchecked_fw_set_solenoid_valve(controller="bottle", pwm=0)
+    await self.start_pressure_control(controller="chip", pressure=chip_pressure, timeout=timeout)
+
+  async def _play_drops(self, *, states: List[Tuple[int, int]]) -> None:
+    """Queue valve states on the started sequencer and wait until the last is played; none, nothing.
+    If a queue write or the wait fails, the sequencer is aborted so nothing more plays.
+
+    The sequencer is not cleared or started here: ``move_to_waste_station`` left it started, and a
+    prime's cycles follow on it, as in the recorded v4 prime.
+
+    Raises:
+      MantisTimeoutError: if the last is not reported played within ``DROP_QUEUE_TIMEOUT``.
+    """
+    if not states:
+      return
+    try:
+      item = await self._queue_valve_states(states=states)
+      await self._driver._wait_for_queue_item(item=item, timeout=DROP_QUEUE_TIMEOUT)
+    except BaseException:
+      try:
+        await self._driver._unchecked_fw_abort_sequencer()
+      except Exception:
+        logger.warning("[%s] could not abort the sequencer", self._driver.name, exc_info=True)
+      raise
+
+  async def _prime(
+    self,
+    *,
+    chip_pressure: float,
+    vacuum: float,
+    settle_timeout: float,
+    drops: List[Tuple[int, int]],
+    post_prime: List[Tuple[int, int]],
+    drop_sensor: Optional["DropSensor"],
+    cycles: Optional[int] = None,
+    consecutive_drops: Optional[int] = None,
+  ) -> None:
+    """Prime the chip on the head, standing over the waste station: start the pump, prepare the
+    pressures, play the drops and the post-prime; the pump is stopped on every path. A failed
+    stop is raised after a prime that succeeded, and logged after one that failed.
+
+    Without ``cycles`` the drops play once, and a drop sensor that saw no drop raises. With it,
+    the drops (one prime pump cycle) play until the sensor has seen ``consecutive_drops`` in a row
+    after a cycle, for at most ``cycles`` cycles. The sensor is reset first. With the LED bar
+    showing actions, each cycle shows one more step of progress of ``cycles``; a fault only warns.
+
+    Args:
+      chip_pressure: psi.
+      vacuum: inHg.
+      settle_timeout: seconds each of the vacuum and the chip waits to settle.
+      drops: the (state, duration) pairs to play, or one cycle's.
+      post_prime: the chip's post-prime (state, duration) pairs, played last.
+      drop_sensor: the drop sensor; None without one.
+      cycles: the most cycles to play; None plays ``drops`` once.
+      consecutive_drops: with ``cycles``, the drops in a row that end the prime.
+
+    Raises:
+      MantisConfigurationError: if ``cycles`` is given without a drop sensor or
+        ``consecutive_drops``; nothing is sent.
+      MantisPrimeError: if the sensor saw no drop, or not ``consecutive_drops`` in a row in
+        ``cycles`` cycles.
+      MantisPressureError, MantisTimeoutError: if a pressure does not settle, or the drops are not
+        reported played.
+    """
+    if cycles is not None and (drop_sensor is None or consecutive_drops is None):
+      raise MantisConfigurationError(
+        f"{self._driver.name}: a prime that stops on drops needs a drop sensor and a count"
+      )
+    if drop_sensor is not None:
+      drop_sensor.reset()
+    await self.start_pump()
+    try:
+      await self._prepare_pressures(
+        chip_pressure=chip_pressure, vacuum=vacuum, timeout=settle_timeout
+      )
+      if cycles is None or drop_sensor is None or consecutive_drops is None:
+        await self._play_drops(states=drops)
+        if drop_sensor is not None and not drop_sensor.drop_detected:
+          raise MantisPrimeError(
+            f"{self._driver.name}: the prime played its drops, but the drop sensor saw none: no "
+            "liquid reached the nozzle"
+          )
+      else:
+        bar = self._driver.led_bar
+        if bar is not None and not bar.show_actions:
+          bar = None
+        for cycle in range(1, cycles + 1):
+          await self._play_drops(states=drops)
+          if bar is not None:
+            await bar._show_fill(done=cycle, total=cycles)
+          if drop_sensor.consecutive_drops >= consecutive_drops:
+            break
+        else:
+          raise MantisPrimeError(
+            f"{self._driver.name}: the drop sensor saw no {consecutive_drops} drops in a row in "
+            f"{cycles} prime cycles (last {drop_sensor.consecutive_drops}): no steady flow"
+          )
+      await self._play_drops(states=post_prime)
+    except BaseException:
+      try:
+        await self.stop_pump()
+      except Exception:
+        logger.warning(
+          "[%s] could not stop the pump after the prime", self._driver.name, exc_info=True
+        )
+      raise
+    await self.stop_pump()

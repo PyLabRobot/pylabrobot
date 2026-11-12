@@ -6,13 +6,14 @@ import os
 import struct
 import tempfile
 import unittest
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisConfigurationError,
   MantisPressureError,
+  MantisPrimeError,
   MantisTimeoutError,
 )
 from pylabrobot.formulatrix.mantis.driver.features import pump as pump_module
@@ -30,10 +31,17 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   led_bar_frames,
   make_led_bar_answers,
 )
-from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController, Pump
+from pylabrobot.formulatrix.mantis.driver.features.plate_clamp_tests import LED_BAR_COMMANDS
+from pylabrobot.formulatrix.mantis.driver.features.pump import (
+  PressureController,
+  Pump,
+  _apply_liquid_class_delays,
+  compute_pump_cycle,
+)
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
+  DROP_SENSOR_ENABLED,
   PUMP_HALT,
   RECORDED_CALIBRATION,
   RECORDED_ITEM_1_PLAYED,
@@ -43,6 +51,7 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import (
   FakeLink,
   make_answers,
 )
+from pylabrobot.formulatrix.mantis.liquid_classes import mantis_mapping
 
 Sent = Tuple[int, int, bytes]
 
@@ -411,7 +420,7 @@ class TareTests(PumpTestCase):
     self.assertEqual(
       [read for read in sent if read[0] == 10], [(10, 1, b"")] + CALIBRATION_READS + TARE_AT_ZERO
     )
-    self.assertEqual(sent[-5:], [(0, 61, b""), (0, 62, b"")] + SETUP_DONE)
+    self.assertEqual(sent[-6:], [(0, 61, b""), (0, 62, b""), DROP_SENSOR_ENABLED] + SETUP_DONE)
 
   async def test_the_vented_reading_is_taken_off_the_offset(self):
     driver, pump = await self.set_up_pump(link=FakeLink(answers=make_answers()))
@@ -683,7 +692,7 @@ class SelfTestTests(PumpTestCase):
     await driver.setup(skip_arm=True, skip_self_test=True)
     self.addAsyncCleanup(driver.stop)
     sent = [parse_frame(frame=frame)[1:] for frame in link.written]
-    self.assertEqual(sent[-5:], [(0, 61, b""), (0, 62, b"")] + SETUP_DONE)
+    self.assertEqual(sent[-6:], [(0, 61, b""), (0, 62, b""), DROP_SENSOR_ENABLED] + SETUP_DONE)
 
 
 class LedBarTests(PumpTestCase):
@@ -693,7 +702,7 @@ class LedBarTests(PumpTestCase):
     sent = [parse_frame(frame=frame)[1:] for frame in link.written]
     blue_at = sent.index(color_write(colors=[BLUE] * 20))
     self.assertEqual(sent[blue_at + 1], TARE_AT_ZERO[0])
-    self.assertEqual(sent[-5:], [(0, 61, b""), (0, 62, b"")] + SETUP_DONE)
+    self.assertEqual(sent[-6:], [(0, 61, b""), (0, 62, b""), DROP_SENSOR_ENABLED] + SETUP_DONE)
     self.assertEqual(bar_states(written=link.written), [BLUE, GREEN, "idle"])
 
   async def test_a_failed_pump_setup_shows_red_then_turns_off(self):
@@ -755,6 +764,8 @@ class LedBarTests(PumpTestCase):
 LOW_VOLUME_HI_FI_SEQUENCES: Dict[str, List[List[int]]] = {
   "pre_attach": [[31, 100]],
   "dispense_100nl": [[30, 1], [22, 38], [23, 14], [21, 15], [29, 21], [31, 13]],
+  "dispense_500nl": [[26, 104], [27, 1], [25, 12], [29, 19], [31, 10]],
+  "prime_pump": [[18, 77], [19, 14], [17, 15], [29, 21], [31, 13]],
   "pre_detach": [[16, 100], [18, 100], [30, 100], [31, 100]],
   "post_prime": [],
 }
@@ -975,6 +986,389 @@ class PumpDiscoveryTests(DriverTestCase):
     self.assertEqual(
       declared, {controller: list(value) for controller, value in RECORDED_CALIBRATION.items()}
     )
+
+
+class PumpCycleTests(unittest.TestCase):
+  def test_the_closest_split(self):
+    cases = [
+      # A v4 primed 100.4 uL on a low volume chip as 200 large and 4 small drops, and dispensed
+      # 0.6 uL as 1 of each.
+      ((100.4, 0.5, 0.1), (200, 4)),
+      ((0.6, 0.5, 0.1), (1, 1)),
+      ((0.9, 0.5, 0.1), (1, 4)),
+      ((300.0, 50.0, 50.0), (6, 0)),
+      ((0.01, 0.5, 0.1), (0, 1)),
+    ]
+    for (volume, large, small), drops in cases:
+      with self.subTest(volume=volume):
+        self.assertEqual(
+          compute_pump_cycle(
+            target_volume=volume,
+            large_diaphragm_volume=large,
+            small_diaphragm_volume=small,
+            allow_all_zero=False,
+          ),
+          drops,
+        )
+
+  def test_no_drop_if_allowed(self):
+    self.assertEqual(
+      compute_pump_cycle(
+        target_volume=0.01,
+        large_diaphragm_volume=0.5,
+        small_diaphragm_volume=0.1,
+        allow_all_zero=True,
+      ),
+      (0, 0),
+    )
+
+
+class LiquidClassDelayTests(unittest.TestCase):
+  def test_the_prime_pump_cycle_takes_the_large_drops_delays(self):
+    # The low volume Hi-Fi chip's prime pump cycle, as a v4 was sent it with the 1 cP class.
+    states = [tuple(state) for state in LOW_VOLUME_HI_FI_SEQUENCES["prime_pump"]]
+    self.assertEqual(
+      _apply_liquid_class_delays(
+        states=states,  # type: ignore[arg-type]
+        liquid_class=mantis_mapping[("1 cP", "low_volume_hi_fi")],
+        drop="large",
+      ),
+      [(18, 104), (19, 14), (17, 15), (29, 19), (31, 13)],
+    )
+
+  def test_the_1_cp_class_changes_no_drop(self):
+    for name, drop in (("dispense_100nl", "small"), ("dispense_500nl", "large")):
+      with self.subTest(name=name):
+        states = [tuple(state) for state in LOW_VOLUME_HI_FI_SEQUENCES[name]]
+        self.assertEqual(
+          _apply_liquid_class_delays(
+            states=states,  # type: ignore[arg-type]
+            liquid_class=mantis_mapping[("1 cP", "low_volume_hi_fi")],
+            drop=drop,  # type: ignore[arg-type]
+          ),
+          states,
+        )
+
+
+# A prime on a v4, low volume Hi-Fi chip, 1 cP: the vacuum at -12.5 inHg read until settled, the
+# bottle off, the chip at 12 psi read until settled, as recorded.
+PREPARE_PRESSURE_WRITES = frames(
+  "10:13:02000100", "10:11:02000000000000000000", "10:11:020000000000000029c0",
+  "10:16:0200", "10:30:0200", "10:16:0200", "10:30:0200", "10:16:0200", "10:30:0200",
+  "10:16:0200", "10:30:0200", "10:16:0200", "10:30:0200",
+  "10:13:00000000", "10:32:00000000", "10:34:00001027", "10:34:00000000",
+  "10:13:01000100", "10:11:01000000000000002840",
+  "10:16:0100", "10:30:0100", "10:16:0100", "10:30:0100", "10:16:0100", "10:30:0100",
+)  # fmt: skip
+PREPARE_PRESSURE_READS = {
+  "0200": (
+    ["0200", "0200", "0200", "0200", "0100"],
+    [
+      "000000c0207a24c0", "00000040cc2327c0", "00000000569d27c0", "000000c050e727c0",
+      "00000080b74b28c0",
+    ],
+  ),
+  "0100": (
+    ["0200", "0200", "0100"],
+    ["0000002098fc2640", "00000020a7bb2740", "0000006007cc2740"],
+  ),
+}  # fmt: skip
+# The same prime by drops, items 31 to 60 in cycles of five, each write's reply and the frames sent
+# after it: items played, the drop sensor's input on and off; the first cycle saw no drop.
+PRIME_CYCLE_QUEUE_REPLIES = {
+  f"{item:02x}00{duration:02x}0028000100{state:02x}00": free
+  for start in range(0x1F, 0x3D, 5)
+  for item, (duration, state), free in zip(
+    range(start, start + 5),
+    ((0x68, 18), (0x0E, 19), (0x0F, 17), (0x13, 29), (0x0D, 31)),
+    ("c7000000", "c7000000", "c6000000", "c5000000", "c4000000"),
+  )
+}
+PRIME_CYCLE_FRAMES_AFTER = {
+  "23000d00280001001f00": [
+    "12000000ac010000000010031f000400c4007102",
+    "12000000ac0100000000100320000300c5004802",
+    "12000000ac0100000000100321000200c6004b02",
+    "12000000ac0100000000100322000100c7004a02",
+    "12000000ac0100000000100323000000c8004502",
+  ],
+  "28000d00280001001f00": [
+    "12000000b10100000000100324000400c4005702",
+    "12000000b10100000000100325000300c5005002",
+    "12000000b10100000000100326000200c6005102",
+    "10000000b101000000002103000001008102",
+    "12000000b10100000000100327000100c7005202",
+    "12000000b10100000000100328000000c8005302",
+  ],
+  "2b000f00280001001100": ["10000000b401000000002103000000008502"],
+  "2d000d00280001001f00": [
+    "12000000b60100000000100329000400c4005d02",
+    "12000000b6010000000010032a000300c5005802",
+    "12000000b6010000000010032b000200c6005b02",
+    "10000000b601000000002103000001008602",
+    "12000000b6010000000010032c000100c7005e02",
+    "12000000b6010000000010032d000000c8005102",
+  ],
+  "2f000e00280001001300": ["10000000b801000000002103000000008902"],
+  "32000d00280001001f00": [
+    "12000000bb010000000010032e000400c4005702",
+    "12000000bb010000000010032f000300c5005002",
+    "12000000bb0100000000100330000200c6004d02",
+    "10000000bb01000000002103000001008b02",
+    "12000000bb0100000000100331000100c7004e02",
+    "12000000bb0100000000100332000000c8004302",
+  ],
+  "35000f00280001001100": ["10000000be01000000002103000000008f02"],
+  "37000d00280001001f00": [
+    "12000000c00100000000100333000400c4003102",
+    "12000000c00100000000100334000300c5003002",
+    "12000000c00100000000100335000200c6003302",
+    "10000000c00100000000210300000100f002",
+    "12000000c00100000000100336000100c7003202",
+    "12000000c00100000000100337000000c8003d02",
+  ],
+  "39000e00280001001300": ["10000000c20100000000210300000000f302"],
+  "3c000d00280001001f00": [
+    "12000000c50100000000100338000400c4003f02",
+    "12000000c50100000000100339000300c5003802",
+    "12000000c5010000000010033a000200c6003902",
+    "10000000c50100000000210300000100f502",
+    "12000000c5010000000010033b000100c7003a02",
+    "12000000c5010000000010033c000000c8003302",
+  ],
+}
+# A prime by volume on the same chip: the first 29 queue writes of a 100.4 uL prime, 4 small drops
+# and 1 large, items 31 to 59, and each one's reply, as recorded; the sensor saw no drop by then.
+PRIME_DROP_QUEUE_REPLIES = {
+  f"{item:02x}00{duration:02x}0028000100{state:02x}00": free
+  for item, (state, duration), free in zip(
+    range(0x1F, 0x3C),
+    [(30, 1), (22, 38), (23, 14), (21, 15), (29, 21), (31, 13)] * 4
+    + [(26, 104), (27, 1), (25, 12), (29, 19), (31, 10)],
+    [
+      "c7000000", "c7000000", "c7000000", "c6000000", "c5000000", "c5000000",
+      "c4000000", "c4000000", "c4000000", "c3000000", "c3000000", "c2000000",
+      "c3000000", "c2000000", "c1000000", "c0000000", "c0000000", "c0000000",
+      "bf000000", "bf000000", "be000000", "be000000", "bf000000", "be000000",
+      "bd000000", "bd000000", "bc000000", "bc000000", "bc000000",
+    ],
+  )
+}  # fmt: skip
+# The drop sensor's input turning on, as it first did later in that prime.
+RECORDED_DROP_SEEN = "100000008e0100000000210300000100be02"
+
+
+class PrimeTests(PumpTestCase):
+  async def set_up_prime(
+    self, *, events: Dict[Tuple[int, int, bytes], List[bytes]], show_actions: bool = True
+  ):
+    answers = make_led_bar_answers()
+    for write in PREPARE_PRESSURE_WRITES:
+      if write[1] != 16 and write[1] != 30:
+        answers[write] = [b""]
+    for replies in (PRIME_CYCLE_QUEUE_REPLIES, PRIME_DROP_QUEUE_REPLIES):
+      for request, reply in replies.items():
+        answers.setdefault((0, 65, bytes.fromhex(request)), [bytes.fromhex(reply)])
+    directory = tempfile.TemporaryDirectory()
+    self.addCleanup(directory.cleanup)
+    path = os.path.join(directory.name, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(
+        {**RECORDING, "chip_sequences": {"low_volume_hi_fi": LOW_VOLUME_HI_FI_SEQUENCES}}, f
+      )
+    driver, pump = await self.set_up_pump(
+      link=FakeLink(answers=answers, events=events),
+      declared_configuration_json=path,
+      show_actions=show_actions,
+    )
+    # The lines read while the pressures settle, once setup has tared them at rest.
+    for controller, (statuses, readings) in PREPARE_PRESSURE_READS.items():
+      self.link.answers[(10, 16, bytes.fromhex(controller))] = [
+        bytes.fromhex(reply) for reply in statuses
+      ]
+      self.link.answers[(10, 30, bytes.fromhex(controller))] = [
+        bytes.fromhex(reply) for reply in readings
+      ]
+    driver._next_item = 0x1F  # numbered as the recorded prime
+    return driver, pump
+
+  def get_states(self, *, pump: Pump, name: str, drop: str) -> List[Tuple[int, int]]:
+    return pump._get_drop_states(
+      chip_type="low_volume_hi_fi",
+      name=name,
+      liquid_class=mantis_mapping[("1 cP", "low_volume_hi_fi")],
+      drop=drop,  # type: ignore[arg-type]
+    )
+
+  async def test_a_prime_stopping_on_drops_as_a_v4_played_it(self):
+    driver, pump = await self.set_up_prime(
+      events={
+        (0, 65, bytes.fromhex(request)): [bytes.fromhex(frame) for frame in after]
+        for request, after in PRIME_CYCLE_FRAMES_AFTER.items()
+      }
+    )
+    assert driver.drop_sensor is not None
+    await pump._prime(
+      chip_pressure=12.0,
+      vacuum=-12.5,
+      settle_timeout=2.0,
+      drops=self.get_states(pump=pump, name="prime_pump", drop="large"),
+      post_prime=[],
+      drop_sensor=driver.drop_sensor,
+      cycles=400,
+      consecutive_drops=5,
+    )
+    queued = [(0, 65, bytes.fromhex(request)) for request in PRIME_CYCLE_QUEUE_REPLIES]
+    self.assertEqual(self.pump_sent(), PUMP_START + PREPARE_PRESSURE_WRITES + queued + PUMP_STOP)
+    self.assertEqual(driver.drop_sensor.consecutive_drops, 5)
+    # the first of 400 cycles lights one LED
+    self.assertEqual(
+      bar_states(written=self.link.written[self.sent_before :]), [[GREEN] + [OFF] * 19]
+    )
+
+  def pump_sent(self) -> List[Sent]:
+    return [frame for frame in self.sent() if frame[:2] not in LED_BAR_COMMANDS]
+
+  async def prime_three_cycles(
+    self, *, show_actions: bool = True, unanswered: Optional[Sent] = None
+  ) -> None:
+    driver, pump = await self.set_up_prime(
+      events={
+        (0, 65, bytes.fromhex(request)): [bytes.fromhex(frame) for frame in after]
+        for request, after in PRIME_CYCLE_FRAMES_AFTER.items()
+      },
+      show_actions=show_actions,
+    )
+    if unanswered is not None:
+      del self.link.answers[unanswered]
+    with self.assertRaisesRegex(MantisPrimeError, "no 5 drops in a row in 3 prime cycles"):
+      await pump._prime(
+        chip_pressure=12.0,
+        vacuum=-12.5,
+        settle_timeout=2.0,
+        drops=self.get_states(pump=pump, name="prime_pump", drop="large"),
+        post_prime=[],
+        drop_sensor=driver.drop_sensor,
+        cycles=3,
+        consecutive_drops=5,
+      )
+
+  async def test_too_few_cycles_raise_and_stop_the_pump(self):
+    driver, pump = await self.set_up_prime(
+      events={
+        (0, 65, bytes.fromhex(request)): [bytes.fromhex(frame) for frame in after]
+        for request, after in PRIME_CYCLE_FRAMES_AFTER.items()
+      }
+    )
+    with self.assertRaisesRegex(MantisPrimeError, "no 5 drops in a row in 3 prime cycles"):
+      await pump._prime(
+        chip_pressure=12.0,
+        vacuum=-12.5,
+        settle_timeout=2.0,
+        drops=self.get_states(pump=pump, name="prime_pump", drop="large"),
+        post_prime=[],
+        drop_sensor=driver.drop_sensor,
+        cycles=3,
+        consecutive_drops=5,
+      )
+    queued = [(0, 65, bytes.fromhex(request)) for request in list(PRIME_CYCLE_QUEUE_REPLIES)[:15]]
+    self.assertEqual(self.pump_sent(), PUMP_START + PREPARE_PRESSURE_WRITES + queued + PUMP_STOP)
+
+  async def test_each_cycle_shows_one_step_of_progress(self):
+    await self.prime_three_cycles()
+    self.assertEqual(
+      bar_states(written=self.link.written[self.sent_before :]),
+      [[GREEN] * 7 + [OFF] * 13, [GREEN] * 13 + [OFF] * 7, GREEN],
+    )
+
+  async def test_without_show_actions_the_cycles_show_no_progress(self):
+    await self.prime_three_cycles(show_actions=False)
+    self.assertEqual(led_bar_frames(written=self.link.written[self.sent_before :]), [])
+
+  async def test_a_progress_fault_only_warns(self):
+    first = color_write(colors=[GREEN] * 7 + [OFF] * 13)
+    with self.assertLogs("pylabrobot.formulatrix.mantis.driver.features.led_bar", "WARNING"):
+      await self.prime_three_cycles(unanswered=first)
+    queued = [(0, 65, bytes.fromhex(request)) for request in list(PRIME_CYCLE_QUEUE_REPLIES)[:15]]
+    self.assertEqual(self.pump_sent(), PUMP_START + PREPARE_PRESSURE_WRITES + queued + PUMP_STOP)
+
+  async def prime_by_volume(self, *, pump: Pump, driver: MantisDriver) -> None:
+    drops = self.get_states(pump=pump, name="dispense_100nl", drop="small") * 4 + self.get_states(
+      pump=pump, name="dispense_500nl", drop="large"
+    )
+    # The last item's report with none left queued is not recorded: the wait passes at once.
+    with mock.patch.object(driver, "_wait_for_queue_item", mock.AsyncMock()):
+      await pump._prime(
+        chip_pressure=12.0,
+        vacuum=-12.5,
+        settle_timeout=2.0,
+        drops=drops,
+        post_prime=[],
+        drop_sensor=driver.drop_sensor,
+      )
+
+  async def test_a_prime_by_volume_that_saw_no_drop_raises_and_stops_the_pump(self):
+    driver, pump = await self.set_up_prime(events={})
+    with self.assertRaisesRegex(MantisPrimeError, "the drop sensor saw none"):
+      await self.prime_by_volume(pump=pump, driver=driver)
+    queued = [(0, 65, bytes.fromhex(request)) for request in PRIME_DROP_QUEUE_REPLIES]
+    self.assertEqual(self.sent(), PUMP_START + PREPARE_PRESSURE_WRITES + queued + PUMP_STOP)
+
+  async def test_a_prime_by_volume_that_saw_a_drop(self):
+    last = (0, 65, bytes.fromhex(list(PRIME_DROP_QUEUE_REPLIES)[-1]))
+    driver, pump = await self.set_up_prime(events={last: [bytes.fromhex(RECORDED_DROP_SEEN)]})
+    await self.prime_by_volume(pump=pump, driver=driver)
+    assert driver.drop_sensor is not None
+    self.assertTrue(driver.drop_sensor.drop_detected)
+    self.assertEqual(self.sent()[-len(PUMP_STOP) :], PUMP_STOP)
+
+  async def test_a_vacuum_that_does_not_settle_stops_the_pump_and_queues_nothing(self):
+    driver, pump = await self.set_up_prime(events={})
+    self.link.answers[(10, 16, bytes.fromhex("0200"))] = [bytes.fromhex("0200")]
+    with self.assertRaisesRegex(MantisPressureError, "vacuum controller did not settle"):
+      await pump._prime(
+        chip_pressure=12.0,
+        vacuum=-12.5,
+        settle_timeout=0.05,
+        drops=self.get_states(pump=pump, name="prime_pump", drop="large"),
+        post_prime=[],
+        drop_sensor=driver.drop_sensor,
+      )
+    self.assertNotIn(65, [command for _, command, _ in self.sent()])
+    self.assertEqual(self.sent()[-len(PUMP_STOP) :], PUMP_STOP)
+
+  async def test_the_installs_drops_and_prime_volume(self):
+    _, pump = await self.set_up_prime(events={})
+    pump.pump_sequence_volumes = {
+      "low_volume_hi_fi": {"dispense": {"dispense_100nl": 0.1, "dispense_500nl": 0.5}},
+      "xl_volume_pfe": {"dispense": {"dispense_100nl": 50.0, "dispense_500nl": 50.0}},
+    }
+    pump.input_volumes = {"low_volume_hi_fi": {"tube": {"prime": 100.4}}}
+    self.assertEqual(
+      pump._get_dispense_sequences(chip_type="low_volume_hi_fi"),
+      (("dispense_100nl", 0.1), ("dispense_500nl", 0.5)),
+    )
+    self.assertEqual(
+      pump._get_dispense_sequences(chip_type="xl_volume_pfe"),
+      (("dispense_100nl", 50.0), ("dispense_500nl", 50.0)),
+    )
+    self.assertEqual(
+      pump._get_prime_volume(chip_type="low_volume_hi_fi", input_source="tube"), 100.4
+    )
+    cases = [
+      (lambda: pump._get_dispense_sequences(chip_type="high_volume"), "no small and large drop"),
+      (
+        lambda: pump._get_prime_volume(chip_type="low_volume_hi_fi", input_source="pipette_tip"),
+        "no pipette_tip prime volume",
+      ),
+    ]
+    for get, message in cases:
+      with self.subTest(message=message):
+        with self.assertRaisesRegex(MantisConfigurationError, message):
+          get()
+    bottle: Any = "bottle"
+    with self.assertRaisesRegex(ValueError, "input_source must be one of"):
+      pump._get_prime_volume(chip_type="low_volume_hi_fi", input_source=bottle)
 
 
 if __name__ == "__main__":

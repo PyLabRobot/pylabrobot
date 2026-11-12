@@ -27,6 +27,8 @@ needed.
 | `stage` | `Device.config`: `MicroplateTransformationMatrix`, `MicroplateOffsetX/Y`, `ArmType`, `ArmTypeTranslation`, `ArmTypeRotationDegree`; the `Data/Device/Adapters/SBS Adapter.ad.txt` origin; only where the matrix is set | takes it from it, else none: a move to a wellplate refuses | needs it to move to a wellplate; never taken from a recording |
 | `chip_changer` | `ChipChanger.config`: each position of type 0 (the chip racks) and its `SafeStart`, `MoveAttach`, `Origin`, `Shift` and `SafeStop` routes from `Data/System/Sequences/ChipChanger`; an LC3's positions are not read | takes it from it, else none | needs it for a chip position's path; never taken from a recording |
 | `chip_sequences` | each chip type's folder in `Data/System/Chips`: its valve sequences (`VALVE_SEQUENCE_FILES`), as the valve bank's (state, duration) | takes it from it, else none | needs it to queue a chip's valve sequence, on a v4 |
+| `pump_sequence_volumes` | `Data/Device/Others/PumpSequenceFiles.txt`: the uL each of those sequences plays, by chip type and pump type (`dispense`, `prime`, `recovery`) | takes it from it, else none | needs it to prime by volume: its dispense sequences are the small and large drops |
+| `input_volumes` | `Data/System/Inputs/Default.config`: each chip type's default volumes by input source (`tube`, `pipette_tip`): its `prime` volume | takes it from it, else none | gives the prime volume when none is passed |
 
 For each unit block, setup takes:
 
@@ -37,7 +39,8 @@ For each unit block, setup takes:
    less accurate on this one. `save_configuration` does not save a block taken from a recording.
    A block that calibrates motion (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`,
    `stage`, `chip_changer`) is never taken from a recording, and no recording holds one: without
-   it, the motion it calibrates refuses. No recording holds `chip_sequences` either.
+   it, the motion it calibrates refuses. No recording holds `chip_sequences`,
+   `pump_sequence_volumes` or `input_volumes` either.
 
 A declared file saved before a block or a non-fitted `device` field existed still loads: each
 value it lacks comes from the folder, else the recording, on a device and in simulation, with one

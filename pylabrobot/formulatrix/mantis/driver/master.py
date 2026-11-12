@@ -41,15 +41,18 @@ from .errors import (
 )
 from .events import (
   EVENT_PAYLOAD_FORMATS,
+  INPUT_CHANGED_EVENT,
   MOTION_EVENTS,
   MOTOR_ERROR_EVENT,
   SEQUENCE_PROGRESS_EVENT,
   SEQUENCE_STOPPED_EVENT,
+  decode_input_changed,
   decode_motor_error,
   decode_sequence_progress,
   describe_event,
 )
 from .features.arm import Arm
+from .features.drop_sensor import DROP_SENSOR_INPUT, DropSensor
 from .features.led_bar import LedBar
 from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
 from .features.pump import RESERVOIR_RELEASE_CONTROLLER, Pump
@@ -184,6 +187,7 @@ class MantisDriver:
     self.pump: Optional[Pump] = None
     self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
+    self.drop_sensor: Optional[DropSensor] = None
     self.led_bar: Optional[LedBar] = None
     self._show_actions = show_actions
     # The latest sequencer item the device reported played; the sequencer sets it.
@@ -229,6 +233,7 @@ class MantisDriver:
   def _handle_event(self, *, board: int, code: int, payload: bytes) -> None:
     """Log an event by its content and hand it to every waiter for its board and code whose match
     accepts it. A motor error fails every waiter for a motion event (``MOTION_EVENTS``) at once.
+    Board 0's input ``DROP_SENSOR_INPUT`` turning on is a drop the drop sensor counts.
 
     A motor error, a sequencer stop and a code not decoded log a warning; the rest log at debug.
 
@@ -248,6 +253,12 @@ class MantisDriver:
         self._sequence_progress = item  # the LED bar's dispense progress follows it
         if queued == 0:
           self._last_drained_item = item
+    elif code == INPUT_CHANGED_EVENT:
+      logger.debug("[%s] board %d: %s", self.name, board, description)
+      input_number, on = decode_input_changed(payload=payload)
+      if (board, input_number, on) == (MOTION_BOARD, DROP_SENSOR_INPUT, True):
+        if self.drop_sensor is not None:
+          self.drop_sensor._update_drop_count()
     elif code in EVENT_PAYLOAD_FORMATS and code != SEQUENCE_STOPPED_EVENT:
       logger.debug("[%s] board %d: %s", self.name, board, description)
     else:
@@ -996,6 +1007,27 @@ class MantisDriver:
     except (TypeError, ValueError, AttributeError) as error:
       raise MantisConfigurationError(f"malformed chip_sequences block: {error!r}") from error
 
+  def _get_volume_block(self, *, block: str) -> Optional[Dict[str, Dict[str, Dict[str, float]]]]:
+    """The ``pump_sequence_volumes`` or ``input_volumes`` block as the pump takes it: uL, three
+    keys deep; None without it.
+
+    Raises:
+      MantisConfigurationError: if the block is malformed: a volume not a number.
+    """
+    values = self._unit_blocks.get(block)
+    if values is None:
+      return None
+    try:
+      return {
+        chip_type: {
+          group: {name: float(volume) for name, volume in volumes.items()}
+          for group, volumes in groups.items()
+        }
+        for chip_type, groups in values.items()
+      }
+    except (TypeError, ValueError, AttributeError) as error:
+      raise MantisConfigurationError(f"malformed {block} block: {error!r}") from error
+
   def _discover_features(self) -> None:
     """Build the features the configuration says are fitted, with the unit's values.
 
@@ -1021,11 +1053,15 @@ class MantisDriver:
       # self-tested at setup, and plays the install's valve sequences.
       v4 = self.configuration.generation == "v4"
       chip_sequences = self._get_chip_sequences()
+      pump_sequence_volumes = self._get_volume_block(block="pump_sequence_volumes")
+      input_volumes = self._get_volume_block(block="input_volumes")
       self.pump = Pump(
         driver=self,
         reservoir_release_controller=RESERVOIR_RELEASE_CONTROLLER if v4 else None,
         tare_and_self_test=v4,
         chip_sequences=chip_sequences if v4 else None,
+        pump_sequence_volumes=pump_sequence_volumes if v4 else None,
+        input_volumes=input_volumes if v4 else None,
       )
     # The LED bar is the v4's, on board 12: a v3 has none.
     if (
@@ -1045,6 +1081,10 @@ class MantisDriver:
       self.led_bar = LedBar(
         driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
       )
+    # Board 12 enables the drop sensor, which only a v4 has; it reports on board 0.
+    lc3_answered = self.configuration.firmware_versions.get(LC3_BOARD) is not None
+    if lc3_answered and self.configuration.generation == "v4" and self.drop_sensor is None:
+      self.drop_sensor = DropSensor(driver=self)
     sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
     if sensor_board is not None and self.arm is None:
       self.arm = Arm(
@@ -1336,7 +1376,8 @@ class MantisDriver:
   async def setup(self, *, skip_arm: bool = False, skip_self_test: bool = False) -> None:
     """Open the link if it is not open, read the device's configuration and check it, then on a v4
     bring the arm and Z up (``Arm.initialize``), zero the pressure sensors and run the connect
-    self-test (``Pump.initialize``). This moves the device and runs its pump.
+    self-test (``Pump.initialize``), and enable the drop sensor (``DropSensor.initialize``). This
+    moves the device and runs its pump.
 
     On a v4 the LED bar shows the setup, the arm's bring-up and the pump's setup with it, then
     "setup_done" for ``SETUP_DONE_HOLD``, then idle.
@@ -1366,6 +1407,8 @@ class MantisDriver:
           await self.arm.initialize()
         if self.pump is not None:
           await self.pump.initialize(skip_self_test=skip_self_test)
+        if self.drop_sensor is not None:
+          await self.drop_sensor.initialize()
         if self.led_bar is not None and self.led_bar.show_actions:
           await self.led_bar._show_setup_done()
     except BaseException:

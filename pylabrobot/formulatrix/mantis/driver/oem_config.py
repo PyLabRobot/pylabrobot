@@ -48,6 +48,29 @@ CHIP_CHANGER_ROUTES = {
 }
 # The chip changer type of a position in the fixed chip racks; type 1 is an LC3's, not supported.
 CHIP_RACK_TYPE = 0
+# Each chip type's name in the install's files.
+CHIP_NAMES = {
+  "high_volume": "High Volume",
+  "low_volume": "Low Volume",
+  "high_volume_pfe": "High Volume PFE",
+  "low_volume_pfe": "Low Volume PFE",
+  "high_volume_3pfe": "High Volume 3PFE",
+  "low_volume_3pfe": "Low Volume 3PFE",
+  "hv_continuous_flow": "Continuous Flow",
+  "high_volume_hi_fi": "High Volume Hi-Fi",
+  "low_volume_hi_fi": "Low Volume Hi-Fi",
+  "high_viscosity_continuous_flow": "High Viscosity Continuous Flow",
+  "xl_volume_pfe": "XL Volume PFE",
+}
+# Where an install keeps the uL each valve sequence plays, from its ``Data/Device`` folder, and the
+# pump types read from it by their name there; a wash plays the recovery's file.
+PUMP_SEQUENCE_FILE = os.path.join("Others", "PumpSequenceFiles.txt")
+PUMP_TYPES = {"dispense": "Dispense", "prime": "Prime", "recovery": "Recovery"}
+# Where an install keeps each chip type's default volumes, from its ``Data`` folder: by input
+# source, each use's ``<chip name>.<source>.<use>.Volume`` key; the uses read here.
+INPUT_VOLUME_FILE = os.path.join("System", "Inputs", "Default.config")
+INPUT_SOURCE_KEYS = {"tube": "Tube", "pipette_tip": "PipetteTip"}
+INPUT_VOLUME_KEYS = {"prime": "Prime"}
 
 
 def _parse_config_entries(*, path: str) -> Dict[str, str]:
@@ -324,6 +347,62 @@ def _load_chip_sequences(*, chip_directory: str) -> Dict[str, Any]:
   return block
 
 
+def _decode_name(*, text: str) -> str:
+  """A name as the install's files write it, each ``%NN`` the character of that decimal code."""
+  return re.sub(r"%(\d{2})", lambda match: chr(int(match.group(1))), text)
+
+
+def _load_pump_sequence_volumes(*, path: str) -> Dict[str, Any]:
+  """The ``pump_sequence_volumes`` block: the uL each valve sequence (``VALVE_SEQUENCE_FILES``)
+  plays, by chip type and pump type (``PUMP_TYPES``), in the file's order.
+
+  A row of a chip, pump type or file not known here is left out.
+
+  Raises:
+    MantisConfigurationError: if a row is not four tab-separated columns or its volume no number.
+  """
+  chip_types = {name: chip_type for chip_type, name in CHIP_NAMES.items()}
+  pump_types = {name: pump_type for pump_type, name in PUMP_TYPES.items()}
+  sequences = {f"{stem}.seq.txt".lower(): name for name, stem in VALVE_SEQUENCE_FILES.items()}
+  block: Dict[str, Any] = {}
+  with open(path, encoding="utf-8-sig") as f:
+    for number, line in enumerate(f, start=1):
+      text = line.replace("\ufeff", "").strip()
+      if not text or text.startswith(("[", "//")):
+        continue
+      columns = [column.strip() for column in text.split("\t")]
+      if len(columns) != 4:
+        raise MantisConfigurationError(f"{path}, line {number}: not four tab-separated columns")
+      chip_name, pump_type_name, volume_text, file_name = columns
+      volume = _get_number(path=path, key=f"line {number}", text=volume_text)
+      chip_type = chip_types.get(_decode_name(text=chip_name))
+      pump_type = pump_types.get(pump_type_name)
+      name = sequences.get(file_name.lower())
+      if chip_type is None or pump_type is None or name is None:
+        continue
+      block.setdefault(chip_type, {}).setdefault(pump_type, {})[name] = volume
+  return block
+
+
+def _load_input_volumes(*, path: str) -> Dict[str, Any]:
+  """The ``input_volumes`` block: each chip type's default volumes, uL, by input source
+  (``INPUT_SOURCE_KEYS``) and use (``INPUT_VOLUME_KEYS``), each use the file names.
+
+  Raises:
+    MantisConfigurationError: if the file is not readable or a volume is no number.
+  """
+  values = _parse_config_entries(path=path)
+  block: Dict[str, Any] = {}
+  for chip_type, chip_name in CHIP_NAMES.items():
+    for source, source_key in INPUT_SOURCE_KEYS.items():
+      for use, use_key in INPUT_VOLUME_KEYS.items():
+        key = f"{chip_name}.{source_key}.{use_key}.Volume"
+        if key in values:
+          volume = _get_number(path=path, key=key, text=values[key])
+          block.setdefault(chip_type, {}).setdefault(source, {})[use] = volume
+  return block
+
+
 def _load_chip_changer(*, path: str, sequence_directory: str) -> Dict[str, Any]:
   """The ``chip_changer`` block: each position in the chip racks (``CHIP_RACK_TYPE``), by number,
   with its routes (``CHIP_CHANGER_ROUTES``) in the arm frame; an LC3's positions are left out.
@@ -376,6 +455,9 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   only where ``Device.config`` sets the matrix.
   ``chip_sequences``: each chip type's valve sequences, from the install's ``System/Chips``, where
   it holds any.
+  ``pump_sequence_volumes``: the uL each of those plays, from ``Data/Device/Others``'s
+  ``PumpSequenceFiles.txt``; ``input_volumes``: each chip type's default volumes, from
+  ``Data/System/Inputs/Default.config``; each where its file exists and names any.
   ``chip_changer``: each chip rack position's routes, from ``ChipChanger.config`` and the install's
   ``System/Sequences/ChipChanger``, only where ``ChipChanger.config`` exists.
 
@@ -505,6 +587,18 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   chip_sequences = _load_chip_sequences(chip_directory=os.path.join(data_directory, CHIP_DIRECTORY))
   if chip_sequences:
     blocks["chip_sequences"] = chip_sequences
+  pump_sequence_file = os.path.join(
+    os.path.dirname(os.path.normpath(oem_config_directory)), PUMP_SEQUENCE_FILE
+  )
+  if os.path.isfile(pump_sequence_file):
+    pump_sequence_volumes = _load_pump_sequence_volumes(path=pump_sequence_file)
+    if pump_sequence_volumes:
+      blocks["pump_sequence_volumes"] = pump_sequence_volumes
+  input_volume_file = os.path.join(data_directory, INPUT_VOLUME_FILE)
+  if os.path.isfile(input_volume_file):
+    input_volumes = _load_input_volumes(path=input_volume_file)
+    if input_volumes:
+      blocks["input_volumes"] = input_volumes
   chip_changer_config = os.path.join(oem_config_directory, "ChipChanger.config")
   if os.path.isfile(chip_changer_config):
     blocks["chip_changer"] = _load_chip_changer(

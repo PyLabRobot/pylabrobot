@@ -17,6 +17,8 @@ from pylabrobot.formulatrix.mantis.driver.oem_config import (
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
   IDLE_POSITION_FILE,
+  INPUT_VOLUME_FILE,
+  PUMP_SEQUENCE_FILE,
   SBS_ADAPTER_FILE,
   UNKNOWN_ZONE,
   WASTE_STATION_ADAPTER_FILE,
@@ -637,6 +639,82 @@ class ChipBlockTests(unittest.TestCase):
       with self.subTest(message=message):
         with self.assertRaisesRegex(MantisConfigurationError, message):
           self.load(chip_changer=text)
+
+
+# Lines of an install's PumpSequenceFiles.txt, in its layout: a chip of no chip type here and a
+# wash, which plays the recovery's file, are left out.
+PUMP_SEQUENCE_LINES = (
+  "[ Version: 1 ]\r\n// File format: tab separated value\r\n"
+  "// Columns: ChipName, PumpType, Volume , SequenceFileName\r\n"
+  "Low%32Volume%32Hi-Fi\tDispense\t0.1\tdispense_100nl.seq.txt\r\n"
+  "Low%32Volume%32Hi-Fi\tDispense\t0.5\tdispense_500nl.seq.txt\r\n"
+  "Low%32Volume%32Hi-Fi\tPrime\t0.6\tPrimePump.seq.txt\r\n"
+  "Low%32Volume%32Hi-Fi\tRecovery\t0.6\tReversePump.seq.txt\r\n"
+  "Low%32Volume%32Hi-Fi\tWash\t0.6\tReversePump.seq.txt\r\n"
+  "Low%32Volume%323PFE\tDispense\t0.1\tdispense_100nl.seq.txt\r\n"
+  "Dome\tDispense\t0.1\tdispense_100nl.seq.txt\r\n"
+)
+PUMP_SEQUENCE_VOLUMES_BLOCK = {
+  "low_volume_hi_fi": {
+    "dispense": {"dispense_100nl": 0.1, "dispense_500nl": 0.5},
+    "prime": {"prime_pump": 0.6},
+    "recovery": {"reverse_pump": 0.6},
+  },
+  "low_volume_3pfe": {"dispense": {"dispense_100nl": 0.1}},
+}
+# An install's Default.config for one chip type: every tube volume; the pipette tip lacks its
+# prime volume, so it gives none.
+INPUT_VOLUME_USES = {
+  "Prime": 100.4,
+  "Wash1": 250.0,
+  "Wash2": 250.0,
+  "Rinse": 250.0,
+  "ReagentRecovery": 100.0,
+  "PreDispense": 0.6,
+}
+DEFAULT_CONFIG = (
+  HEAD
+  + "".join(
+    f'    <add key="Low Volume Hi-Fi.{source}.{use}.Volume" value="{volume:g}" />\r\n'
+    for source in ("Tube", "PipetteTip")
+    for use, volume in INPUT_VOLUME_USES.items()
+    if (source, use) != ("PipetteTip", "Prime")
+  )
+  + '    <add key="Low Volume Hi-Fi.Tube.AutoPrime.Value" value="5" />\r\n'
+  + TAIL
+)
+INPUT_VOLUMES_BLOCK = {"low_volume_hi_fi": {"tube": {"prime": 100.4}}}
+
+
+class VolumeBlockTests(unittest.TestCase):
+  def load(self, *, pump_sequences: str, default_config: str) -> Dict[str, Any]:
+    with tempfile.TemporaryDirectory() as directory:
+      configs_directory = write_install(
+        directory=directory, configs={"Device.config": V4_DEVICE_CONFIG}, corrections={}
+      )
+      for path, text in (
+        (os.path.join(directory, "Data", "Device", PUMP_SEQUENCE_FILE), pump_sequences),
+        (os.path.join(directory, "Data", INPUT_VOLUME_FILE), default_config),
+      ):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="") as f:
+          f.write(text)
+      return _load_unit_configuration(oem_config_directory=configs_directory)
+
+  def test_the_volumes_of_each_sequence_and_input(self):
+    blocks = self.load(pump_sequences=PUMP_SEQUENCE_LINES, default_config=DEFAULT_CONFIG)
+    self.assertEqual(blocks["pump_sequence_volumes"], PUMP_SEQUENCE_VOLUMES_BLOCK)
+    self.assertEqual(blocks["input_volumes"], INPUT_VOLUMES_BLOCK)
+
+  def test_a_malformed_line_refuses(self):
+    cases = [
+      ("Low%32Volume\tDispense\t0.1\r\n", "not four tab-separated columns"),
+      ("Low%32Volume\tDispense\tsmall\tdispense_100nl.seq.txt\r\n", "is not a number"),
+    ]
+    for line, message in cases:
+      with self.subTest(message=message):
+        with self.assertRaisesRegex(MantisConfigurationError, message):
+          self.load(pump_sequences=PUMP_SEQUENCE_LINES + line, default_config=DEFAULT_CONFIG)
 
 
 class UnitBlockSourceTests(DriverTestCase):

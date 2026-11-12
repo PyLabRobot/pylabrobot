@@ -9,7 +9,7 @@ last section lists what is open and where the code does not follow a rule yet.
 ```
 device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
                              the driver, the parts; places the arm's links from a pose read; picks
-                             up and drops a chip, and keeps which one is on the head.
+                             up, drops and primes a chip, and keeps which one is on the head.
 driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
                              the sequencer, discovery and the saved configuration; reads the
                              motors; halts the device at stop; shows setup and stop on the LED
@@ -22,8 +22,8 @@ driver/events.py             The events the device sends unasked: their codes, w
                              and how it is logged.
 driver/simulator.py          MantisSimulationDriver, MantisSimulationArm,
                              MantisSimulationPlateClamp, MantisSimulationPump, MantisSimulationRfid,
-                             MantisSimulationLedBar. Answer from the declared configuration and the
-                             chips placed; nothing reaches a wire.
+                             MantisSimulationLedBar, MantisSimulationDropSensor. Answer from the
+                             declared configuration and the chips placed; nothing reaches a wire.
 driver/framing.py            The frame: header, check word, splitting, payload strings, boards.
 driver/errors.py             MantisError and one error per kind; what the device's codes mean.
 driver/configuration.py      DeviceConfiguration: what the device answered about itself.
@@ -36,7 +36,7 @@ driver/valve_sequences.py    A chip's valve sequences: each file's valve states 
 driver/confirmed_firmware_versions.py
                              The firmware sets confirmed on a device, per generation.
 driver/features/             One class per thing the device is fitted with: Arm, PlateClamp, Pump,
-                             Rfid, LedBar.
+                             Rfid, LedBar, DropSensor.
 driver/recordings/           One real Mantis of each generation: its configuration and unit values.
 resource_model/              The parts the device is modelled as, their files and manifest; the chip
                              spots in the chip racks, and MantisChip with a factory per chip type.
@@ -63,10 +63,11 @@ Each feature is an `Optional` attribute of the driver, `None` until `_discover_f
 it: `plate_clamp` is built only when board 12 answered discovery, so a v3 without it has none;
 `pump` only when board 10 answered, releasing its reservoir only on a v4, whose install names the
 valve, tared and self-tested at setup (`tare_and_self_test`) and given the install's valve
-sequences (`chip_sequences`) only on a v4; `arm` only when board 11 answered (a v4). `led_bar` is
-gated by the generation: built only on a v4 whose board 12 answered, never on a v3, whose install
-sets no LED count. A difference between v3 and v4 is expressed there, by which feature is built and
-with what, never by a branch on the generation inside a command.
+sequences (`chip_sequences`) and their volumes only on a v4; `arm` only when board 11 answered (a
+v4); `drop_sensor` only when board 12 answered on a v4, enabled at setup. `led_bar` is gated by the
+generation: built only on a v4 whose board 12 answered, never on a v3, whose install sets no LED
+count. A difference between v3 and v4 is expressed there, by which feature is built and with what,
+never by a branch on the generation inside a command.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
 what the device answered: generation, firmware versions, motor limits, and the pressure board's
@@ -101,7 +102,9 @@ the routes to the waste and wash stations and to the idle position, from
 arm type and the plate holder's origin from the `Data` folder; `chip_changer` where the unit
 declares a chip changer, each chip rack position's routes from `System/Sequences/ChipChanger`;
 `chip_sequences` where `System/Chips` holds a chip type's folder, its valve sequences
-(`VALVE_SEQUENCE_FILES`).
+(`VALVE_SEQUENCE_FILES`); `pump_sequence_volumes`, the uL each sequence plays, where the unit
+declares them; `input_volumes`, each chip type's default prime volume by input source, where the
+configuration folder declares them.
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
 (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`, `stage`, `chip_changer`) comes from the
@@ -145,8 +148,9 @@ setup to stop. A frame with a code from 0x0200 is an event: it is logged by its 
 registered for its board and code whose `match` accepts its payload (`_expect_event`, before the
 command that causes it is sent, then `_wait_for_event`). A motor-error event fails every waiter for
 a motion event (`MOTION_EVENTS`) at once with `MantisMotionError`. An event whose payload does not
-match its layout is dropped before any waiter sees it. A reply nobody is waiting for is logged and
-dropped.
+match its layout is dropped before any waiter sees it. An input event from board 0 turning input 0
+(`DROP_SENSOR_INPUT`) on is a drop the drop sensor counts. A reply nobody is waiting for is logged
+and dropped.
 A size field no frame can have (`MAXIMUM_FRAME_SIZE`) drops one byte at a time until a frame
 starts. A read that times out is resent with the same packet number, up to `attempts`. A command
 that writes or moves is sent once (`attempts=1`), never resent. A failed read ends the reader: the
@@ -249,6 +253,22 @@ first (`CHIP_CHANGER_IDLE_ROUTE`), to the ready position at the travel height
 the unit's (`IDLE_POSITION_FILE`). A drop plays the routes in reverse order, each reversed.
 A chip is dropped only into the slot it was picked up from.
 
+`prime_chip` is the device's too: the chip on the head, from idle. Every argument, sequence and
+target is checked first, then the head goes into the waste station (`move_to_waste_station`) and
+`Pump._prime` runs, as in the recorded v4 prime: the drop sensor reset; the pump started; the vacuum
+set and read until settled, the bottle disabled and its line exhausted for `BOTTLE_OFF_DELAY`, the
+chip set and read until settled (`_prepare_pressures`, the liquid class's prime pressure and
+vacuum); the drops queued and the last waited for (`_play_drops`); the post-prime; the pump
+stopped. By volume, the drops are the install's small then large dispense sequence, the closest
+split (`compute_pump_cycle`), each fill and empty step held for the liquid class's delays
+(`_apply_liquid_class_delays`); a drop sensor that saw no drop raises `MantisPrimeError`. By drops,
+the chip's prime pump sequence with the large drop's delays is played and waited for, cycle by
+cycle, until the sensor has seen `consecutive_drops` in a row, for at most `max_cycles`
+(`MAXIMUM_AUTO_PRIME_CYCLES`), else `MantisPrimeError`. The head then comes back as in the recorded
+v4 prime: the route's lines last first, each as written, then the move to the idle position
+(`_get_idle_position_route`); then to idle Z first (`CHIP_CHANGER_IDLE_ROUTE`), as the recorded v4's
+next chip move opens (`_get_waste_station_return_moves`).
+
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
 | what it touches | prefix | here |
@@ -282,9 +302,11 @@ failed `Arm.initialize` or `recover_from_fault` unpowers the arm motors again, a
 `stop` does not park them. `MantisDevice.stop` first drops a chip on the head into its slot,
 parking first; one it cannot drop is left there with a warning, and the rest of stop still runs.
 A pick-up or a drop that fails once the head moves leaves its chip possibly on the head: every
-chip move is refused until `confirm_chip_attached`. Queued moves not reported played abort the
-sequencer, so nothing more plays, and log where the motors stopped; a chip's valve sequence not
-reported played aborts it too. Failure behaviour is designed before coverage.
+chip move is refused until `confirm_chip_attached`. A prime stops the pump on every path, a failed
+stop logged after a failed prime; one that fails leaves the head over the waste station with its
+chip, which `stop` parks along its zone's route. Queued moves not reported played abort the
+sequencer, so nothing more plays, and log where the motors stopped; a chip's valve sequence or
+drops not reported played abort it too. Failure behaviour is designed before coverage.
 
 **M11. Firmware is confirmed, never gated.** A version set outside `CONFIRMED_FIRMWARE_VERSIONS`
 warns once at setup; nothing refuses. A set goes in once it has been seen on a device.
@@ -293,7 +315,8 @@ warns once at setup; nothing refuses. A set goes in once it has been seen on a d
 class with a type, in PyLabRobot units, round, slightly below the firmware's own. A caller tunes
 one device by assigning on the instance, or every device by assigning on the class; a command
 checks the value it takes before anything is sent. `plate_clamp.default_lock_level` is the first;
-`pump.default_settle_timeout` and `pump.default_vent_duration` are checked when assigned.
+`pump.default_settle_timeout`, `pump.default_vent_duration` and the device's
+`default_consecutive_drops` are checked when assigned.
 
 **M13. Tests assert the wire, against real replies.** (STAR P15.) A test pins the bytes we send. A
 reply in a test is one a device sent, held as a named constant in the test, never rebuilt or
@@ -316,6 +339,8 @@ the head leaves its slot reading empty; `MantisSimulationPump` holds the pump an
 as last commanded, off after setup: a regulated line reads its target and settled, any other 0;
 its holds pass at once, its tare writes nothing and the calibration is the recorded one.
 `MantisSimulationLedBar` takes every command and waits no hold.
+`MantisSimulationDropSensor` sees a drop each time the sequencer plays a valve state that empties a
+diaphragm through the outputs, wherever the head is.
 `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it needs no
 encoder correction; its offsets are the declared ones, else 0, and its zones, stations and stage
 the declared ones, else none. Each command moves it at once, and the motor reads answer from it;
@@ -355,11 +380,13 @@ with it, the connect self-test's progress one step per test point, then green fo
 `SETUP_DONE_HOLD`, then idle; `stop` turns the bar off and shows no colour first: one sent there was
 replaced within milliseconds, too briefly to see. `pick_up_chip` and `drop_chip` show theirs
 (`pick_up_chip_color`, `drop_chip_color`) once their checks pass, the valve sequence and the moves
-inside. The arm's moves and the pump's start, stop, pressure and vent show no colour of their own.
-An LED bar fault only warns: it never fails or masks the action. `show_actions=False` shows no
-action, only the idle animation from setup on, and no progress. A colour change costs about 0.1 s
-of link time (two commands), so an action that is quick on its own shows none: the plate clamp's
-lock and unlock, where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
+inside; `prime_chip` shows its own (`prime_chip_color`) once its checks pass, the way in, the prime
+and the way back inside, and a prime by drops its progress one step per cycle up to its cap. The
+arm's moves and the pump's start, stop, pressure and vent show no colour of their own. An LED bar
+fault only warns: it never fails or masks the action. `show_actions=False` shows no action, only
+the idle animation from setup on, and no progress. A colour change costs about 0.1 s of link time
+(two commands), so an action that is quick on its own shows none: the plate clamp's lock and
+unlock, where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 
 ## Open, and where this is not consistent yet
 
@@ -396,8 +423,9 @@ lock and unlock, where a colour took a release from 0.21 s to 0.34 s on the reco
     reads.
 14. **The RFID multiplexer delay is taken as ms.** Every unit seen holds 0, so the unit of
     `RfidMultiplexerDelay` is unconfirmed.
-15. **The liquid classes' units are unconfirmed.** The delays may be ms or the valve sequence's time
-    steps, the pressures psi and the vacuum inHg; the dispensing PR settles them.
+15. **The liquid classes' delays are the sequencer's time steps, their pressures psi and inHg.**
+    The 1 cP classes' delays are the install's own sequence durations, and a v4 was sent them as
+    such; its pressures went to the controllers as targets as written. A step is 1 ms (M5a).
 16. **Some motor read fields are named by their order only.** The three currents, and the
     configuration's flag and three values, have no meaning confirmed on the wire; the
     position read returns its first field, the demand position, and drops the five after it.
@@ -579,3 +607,29 @@ lock and unlock, where a colour took a release from 0.21 s to 0.34 s on the reco
     chip changer's stage homing is not read: no recording shows a home around a pick-up or a drop.
 70. **The chip on the head is drawn below the right long link's far joint.** How far it hangs below
     the head, and whether it turns with it, is not measured.
+71. **Priming has not run through this driver.** Its pressure writes and queued drops match a v4's
+    prime that stopped on drops write for write (six cycles, the first with no drop), and the first
+    29 queue writes of its 100.4 uL prime item for item. Its way back from the waste station has the
+    lines a v4 was sent coming back from a prime, in their order, and the move to idle that opens
+    its next chip move; tests check it on a synthetic route only.
+72. **The pump starts once the head is over the waste station.** Ours: a v4 has been sent the pump
+    start while the head still moved there.
+73. **The closest split is seen on the wire at a few volumes only.** 100.4 uL gave 200 large and 4
+    small drops and 0.6 uL one of each, as computed; its rounding at halves is not confirmed.
+74. **A prime by volume that sees no drop raises, though nothing failed.** A dry line pumps air
+    before the first drop; a volume too small for liquid to reach the nozzle raises
+    `MantisPrimeError` after its drops, the pump stopped.
+75. **Drops in a row are drops within `DROP_GAP` (0.5 s, ours) of each other.** A steady flow's
+    drops came 150 to 180 ms apart. The cap is the unit's cycle cap less one, as in the recorded
+    v4 prime; never reached on a device.
+    With a drop sensor and no volume, `prime_chip` stops on drops; no recorded v4 shows a default.
+76. **The drop sensor is enabled after the pump's setup.** The recorded v4 startup enables it right
+    after the tare, before the sequencer restarts. What the value 1 selects is not known; the reply
+    is empty.
+77. **A chip's small and large drops are its two dispense sequences by volume.** The XL chip's two
+    hold the same states and volume. Only the low volume Hi-Fi chip has primed on the wire; its
+    post-prime is empty. The XL chip's settle wait is its install's 4 s; the pressures its install
+    names there are not used, the liquid class's are, as for every chip.
+78. **A prime ends with every chip valve closed, not in the chip's safe state.** The recorded v4
+    prime ends in the chip's safe state; ours ends after the post-prime, as a v4 has also primed.
+    Playing it needs its duration there confirmed: the install's file and the wire differ.

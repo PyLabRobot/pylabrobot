@@ -109,6 +109,8 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (12, 30, "0000000000000000e17a14ae47e1ca3fe8030000"): "",
   (12, 30, "0000000000000000333333333333d33ff4010000"): "",
   (12, 33, ""): "0600",
+  # The drop sensor enabled at setup.
+  (12, 53, "01000000"): "",
   # The RFID antenna switch to each of the six antennas.
   **{(0, 41, f"78000100{antenna:02x}00"): "" for antenna in (0, 1, 4, 5, 6, 7)},
   # The LED bar: the animation stopped, the idle animation, and setup's blue and green and stop's
@@ -145,6 +147,8 @@ PUMP_HALT: List[Tuple[int, int, bytes]] = [
   (10, 30, bytes.fromhex("0000")),
   (10, 30, bytes.fromhex("0100")),
 ]
+# The drop sensor enabled, as setup sends it on a v4 after the pump's setup.
+DROP_SENSOR_ENABLED = (12, 53, bytes.fromhex("01000000"))
 # The sensor calibration the recorded replies carry, by controller.
 RECORDED_CALIBRATION: Dict[PressureController, Tuple[float, float]] = {
   "bottle": (0.010651180520653725, -13.580931663513184),

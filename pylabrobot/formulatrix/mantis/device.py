@@ -19,12 +19,21 @@ from .driver.arm_kinematics import (
 from .driver.configuration import RECORDING_MANTIS_V4
 from .driver.errors import MantisConfigurationError, MantisMotionError
 from .driver.features.arm import Arm
+from .driver.features.drop_sensor import DropSensor
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
-from .driver.features.pump import Pump
+from .driver.features.pump import (
+  INPUT_SOURCES,
+  MAXIMUM_AUTO_PRIME_CYCLES,
+  PREPARING_PRESSURE_SETTLE_TIMEOUTS,
+  InputSource,
+  Pump,
+  compute_pump_cycle,
+)
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
 from .driver.simulator import MantisSimulationDriver, MantisSimulationRfid
+from .liquid_classes import MantisLiquidClass, mantis_mapping
 from .resource_model import CHIP_SLOT_RACKS, MANIFEST, MantisChip, arm_link, chip_rack, z_column
 
 logger = logging.getLogger(__name__)
@@ -38,6 +47,8 @@ PLATE_HOLDER_SIZE_X, PLATE_HOLDER_SIZE_Y = 127.76, 85.48
 # frame is the device frame moved there and mirrored in y.
 ARM_BASE_X, ARM_BASE_Y = MANIFEST["joints"]["base_right"]
 ARM_Z = MANIFEST["joints"]["arm_z"]
+# The viscosity band of the liquid class a prime takes when given none: water's.
+WATER_VISCOSITY_BAND = "1 cP"
 
 
 class MantisDevice(Resource):
@@ -48,8 +59,11 @@ class MantisDevice(Resource):
   (``driver.configuration.generation``). A chip placed in a chip spot is checked at setup against
   the tag the RFID reader reads in its slot. On a v4 a chip is picked up from its slot and dropped
   back into it (``pick_up_chip``, ``drop_chip``); on the head it is a child of the right long link,
-  where the long links meet (``attached_chip``).
+  where the long links meet (``attached_chip``), and primed at the waste station (``prime_chip``).
   """
+
+  # Where ``default_consecutive_drops`` starts: the install's value for every chip.
+  _default_consecutive_drops: int = 5
 
   def _update_arm_model(self, *, theta_1: float, theta_2: float) -> None:
     """Turn the arm's links to two link angles, the geometry's own, in degrees.
@@ -230,6 +244,22 @@ class MantisDevice(Resource):
   def arm(self) -> Optional[Arm]:
     """The arm and Z, once setup found board 11 (a v4); None before or without it."""
     return self.driver.arm
+
+  @property
+  def drop_sensor(self) -> Optional[DropSensor]:
+    """The drop sensor, once setup found board 12 on a v4; None before or without it."""
+    return self.driver.drop_sensor
+
+  @property
+  def default_consecutive_drops(self) -> int:
+    """The drops in a row that end a prime that stops on drops, when ``prime_chip`` names none."""
+    return self._default_consecutive_drops
+
+  @default_consecutive_drops.setter
+  def default_consecutive_drops(self, value: int) -> None:
+    if not value >= 1:
+      raise ValueError(f"default_consecutive_drops must be 1 or more, got {value}")
+    self._default_consecutive_drops = value
 
   def _get_placed_chips(self) -> Dict[int, MantisChip]:
     """The chip placed in each chip spot, by slot; a spot holding none is left out."""
@@ -564,6 +594,177 @@ class MantisDevice(Resource):
     self._update_chip_location(chip=chip, slot=None)
     self._attached_chip, self._attached_chip_slot = chip, slot
     self._update_simulated_tags()
+
+  def _get_liquid_class(
+    self, *, chip: MantisChip, liquid_class: Optional[MantisLiquidClass]
+  ) -> MantisLiquidClass:
+    """The liquid class for a chip: the one given, else its type's at ``WATER_VISCOSITY_BAND``.
+
+    Raises:
+      ValueError: if the one given is in ``mantis_mapping`` for other chip types only.
+      MantisConfigurationError: if none is given and the chip type has none.
+    """
+    if liquid_class is None:
+      default = mantis_mapping.get((WATER_VISCOSITY_BAND, chip.chip_type))
+      if default is None:
+        raise MantisConfigurationError(
+          f"{self.name}: no {WATER_VISCOSITY_BAND} liquid class for {chip.chip_type}; pass one"
+        )
+      return default
+    chip_types = {
+      chip_type for (_, chip_type), mapped in mantis_mapping.items() if mapped is liquid_class
+    }
+    if chip_types and chip.chip_type not in chip_types:
+      raise ValueError(
+        f"the liquid class is for {sorted(chip_types)}, not {chip.name}'s {chip.chip_type}"
+      )
+    return liquid_class
+
+  async def prime_chip(
+    self,
+    *,
+    volume: Optional[float] = None,
+    liquid_class: Optional[MantisLiquidClass] = None,
+    input_source: Optional[InputSource] = None,
+    drop_detection: Optional[bool] = None,
+    consecutive_drops: Optional[int] = None,
+    max_cycles: Optional[int] = None,
+  ) -> None:
+    """Prime the chip on the head at the waste station, from idle (v4).
+
+    The head goes into the waste station along the unit's route. The pump starts; the vacuum and
+    the chip take the liquid class's prime pressures, the bottle off; the drops play, then the
+    chip's post-prime; the pump stops on every path. The head comes back along the route, last line
+    first, to the idle position, then to idle, as in the recorded v4 prime. By volume, the drops
+    are the closest split into small then large drops (``compute_pump_cycle``), and a drop sensor
+    that saw none raises. By drops, the chip's prime pump cycle plays until the drop sensor sees
+    ``consecutive_drops`` in a row, for at most ``max_cycles`` cycles. Every argument and target is
+    checked before anything moves. The LED bar shows "prime_chip" meanwhile.
+
+    Args:
+      volume: uL; None takes the install's prime volume for ``input_source``.
+      liquid_class: the pressures and diaphragm delays; None takes the chip type's at
+        ``WATER_VISCOSITY_BAND``.
+      input_source: by volume, "tube" or "pipette_tip": whose prime volume None takes; None takes
+        "tube".
+      drop_detection: stop on drops; None does with a drop sensor and no ``volume`` or
+        ``input_source``.
+      consecutive_drops: by drops, the drops in a row that end it; None takes
+        ``default_consecutive_drops``.
+      max_cycles: by drops, the most cycles; None takes ``MAXIMUM_AUTO_PRIME_CYCLES``.
+
+    Raises:
+      ValueError: if an argument is out of range or not for the kind of prime, or the liquid class
+        is another chip type's or its prime pressure or vacuum out of range.
+      MantisMotionError: if no chip is on the head, one may be, the head is not at idle, or a
+        motor faults.
+      MantisConfigurationError: before setup or on a v3; for a continuous flow chip; without the
+        unit's waste station or idle position route, the install's valve sequences or volumes; or by
+        drops without a drop sensor.
+      MantisPressureError: if the vacuum or the chip does not settle.
+      MantisPrimeError: if the drop sensor saw no drop, or not ``consecutive_drops`` in a row.
+    """
+    arm, pump = self._get_arm_and_pump()
+    chip = self._attached_chip
+    if chip is None:
+      raise MantisMotionError(f"{self.name}: no chip is on the head; pick_up_chip() first")
+    if chip.dispense_type != "standard":
+      raise MantisConfigurationError(
+        f"{self.name}: {chip.name} is a {chip.chip_type} chip; only a chip that dispenses drops is "
+        "primed"
+      )
+    liquid_class = self._get_liquid_class(chip=chip, liquid_class=liquid_class)
+    if not liquid_class.prime_pressure >= 0:
+      raise ValueError(
+        "the liquid class's prime_pressure must be 0 or above, in psi, got "
+        f"{liquid_class.prime_pressure}"
+      )
+    if not liquid_class.prime_vacuum <= 0:
+      raise ValueError(
+        "the liquid class's prime_vacuum must be 0 or below, in inHg, got "
+        f"{liquid_class.prime_vacuum}"
+      )
+    drop_sensor = self.driver.drop_sensor
+    if drop_detection is None:
+      drop_detection = drop_sensor is not None and volume is None and input_source is None
+    cycles: Optional[int] = None
+    if drop_detection:
+      if drop_sensor is None:
+        raise MantisConfigurationError(
+          f"{self.name}: a prime that stops on drops needs the drop sensor, which a v4 has"
+        )
+      if volume is not None or input_source is not None:
+        raise ValueError("a prime that stops on drops takes no volume and no input_source")
+      if consecutive_drops is None:
+        consecutive_drops = self.default_consecutive_drops
+      cycles = MAXIMUM_AUTO_PRIME_CYCLES[chip.chip_type] if max_cycles is None else max_cycles
+      for name, value in (("consecutive_drops", consecutive_drops), ("max_cycles", cycles)):
+        if not value >= 1:
+          raise ValueError(f"{name} must be 1 or more, got {value}")
+      drops = pump._get_drop_states(
+        chip_type=chip.chip_type, name="prime_pump", liquid_class=liquid_class, drop="large"
+      )
+      logger.info(
+        "[%s] priming %s until %d drops in a row, at most %d cycles",
+        self.name,
+        chip.name,
+        consecutive_drops,
+        cycles,
+      )
+    else:
+      if consecutive_drops is not None or max_cycles is not None:
+        raise ValueError("consecutive_drops and max_cycles are for a prime that stops on drops")
+      if input_source is None:
+        input_source = "tube"
+      if input_source not in INPUT_SOURCES:
+        raise ValueError(f"input_source must be one of {INPUT_SOURCES}, got {input_source!r}")
+      if volume is None:
+        volume = pump._get_prime_volume(chip_type=chip.chip_type, input_source=input_source)
+      if not volume > 0:
+        raise ValueError(f"volume must be above 0, got {volume}")
+      small, large = pump._get_dispense_sequences(chip_type=chip.chip_type)
+      large_drops, small_drops = compute_pump_cycle(
+        target_volume=volume,
+        large_diaphragm_volume=large[1],
+        small_diaphragm_volume=small[1],
+        allow_all_zero=False,
+      )
+      drops = [
+        *pump._get_drop_states(
+          chip_type=chip.chip_type, name=small[0], liquid_class=liquid_class, drop="small"
+        )
+        * small_drops,
+        *pump._get_drop_states(
+          chip_type=chip.chip_type, name=large[0], liquid_class=liquid_class, drop="large"
+        )
+        * large_drops,
+      ]
+      logger.info(
+        "[%s] priming %s with %g uL: %d small and %d large drops",
+        self.name,
+        chip.name,
+        volume,
+        small_drops,
+        large_drops,
+      )
+    post_prime = pump._get_valve_sequence(chip_type=chip.chip_type, name="post_prime")
+    return_moves = arm._get_waste_station_return_moves()
+    settle_timeout = PREPARING_PRESSURE_SETTLE_TIMEOUTS.get(
+      chip.chip_type, pump.default_settle_timeout
+    )
+    async with self.driver._show_action(action="prime_chip"):
+      await arm.move_to_waste_station()
+      await pump._prime(
+        chip_pressure=liquid_class.prime_pressure,
+        vacuum=liquid_class.prime_vacuum,
+        settle_timeout=settle_timeout,
+        drops=drops,
+        post_prime=post_prime,
+        drop_sensor=drop_sensor,
+        cycles=cycles,
+        consecutive_drops=consecutive_drops,
+      )
+      await arm._play_queued_move_groups(groups=return_moves)
 
   async def stop(self) -> None:
     """Drop a chip on the head back into its slot, parking first; then stop the motors, park an

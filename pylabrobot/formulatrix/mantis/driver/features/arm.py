@@ -65,8 +65,8 @@ FRONT_IDLE_ROUTE: List[Waypoint] = [
   (*POST_HOMING_POSITION, None),
   (*POST_HOMING_POSITION, 0.0),
 ]
-# The queued move to idle that opens and closes the recorded v4 pick-up and drop: Z to its flag
-# with the arms held, then the arms to idle with Z held.
+# The queued move to idle that opens and closes the recorded v4 pick-up and drop, and ends
+# prime_chip: Z to its flag with the arms held, then the arms to idle with Z held.
 CHIP_CHANGER_IDLE_ROUTE: List[Waypoint] = [(None, None, 0.0), (*POST_HOMING_POSITION, None)]
 # The arms' largest following error, in device units, set at bring-up.
 ARM_MAXIMUM_FOLLOWING_ERROR = 4.0
@@ -1455,6 +1455,34 @@ class Arm:
       MantisMotionError: if the arm is not brought up or the head not at idle, or a motor faults.
     """
     await self._move_to_station(name="waste station", route=self.waste_station_route)
+
+  def _get_waste_station_return_moves(self) -> List[List[List[Tuple[float, float, float]]]]:
+    """The queued moves back from the waste station to idle, in the groups waited for in turn, at
+    the route profile; every target is checked, nothing moves.
+
+    As in the recorded v4 prime: the route's lines last first, each as written, then the move to
+    the idle position (``_get_idle_position_route``); then to idle Z first
+    (``CHIP_CHANGER_IDLE_ROUTE``), as the recorded v4's next chip move opens.
+
+    Raises:
+      MantisMotionError: if the arm is not brought up.
+      MantisConfigurationError: without the unit's waste station or idle position route.
+      MantisKinematicsError, ValueError: as ``_get_route_targets``.
+    """
+    self._check_initialized()
+    if self.waste_station_route is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no route to the waste station for this unit; give its configuration "
+        "folder (oem_config_directory) or a configuration saved with it"
+      )
+    back = self._get_route_targets(route=self.waste_station_route[::-1])
+    idle_position = self._get_route_targets(route=self._get_idle_position_route())
+    to_idle = self._get_route_targets(route=CHIP_CHANGER_IDLE_ROUTE)
+    profiles = self._get_route_profiles()
+    return [
+      [self._get_queued_move(targets=targets, profiles=profiles) for targets in steps]
+      for steps in (back + idle_position, to_idle)
+    ]
 
   async def move_to_wash_station(self, *, station: int) -> None:
     """Move the head from idle into a wash station along the unit's route.
