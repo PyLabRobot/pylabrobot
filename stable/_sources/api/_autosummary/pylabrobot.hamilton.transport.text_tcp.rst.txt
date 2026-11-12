@@ -1,0 +1,42 @@
+﻿:orphan:
+
+pylabrobot.hamilton.transport.text\_tcp
+=======================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.text_tcp
+
+.. automodule:: pylabrobot.hamilton.transport.text_tcp
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      discover_instruments
+      parse_discovery_reply
+      resolve_host
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: class.rst
+   
+      HamiltonInstrumentInfo
+      HamiltonTextTCP
+   
+   
+
+   
+   
+   

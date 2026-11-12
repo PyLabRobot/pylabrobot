@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.text\_tcp.parse\_discovery\_reply
+===============================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.text_tcp
+
+.. autofunction:: parse_discovery_reply
