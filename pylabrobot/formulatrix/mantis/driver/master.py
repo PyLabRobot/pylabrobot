@@ -1,7 +1,8 @@
-"""The Mantis driver: the link on the FTDI's interface B, discovery and the device reads.
+"""The Mantis driver: the link on the FTDI's interface B, discovery, the device reads, events
+and the sequencer.
 
-Every command sent here reads the device; the features in ``features/`` send the commands that
-act, and the LED bar shows setup and stop. Reads return the device's units. The motor reads are
+The features in ``features/`` send the commands that act; the sequencer here plays what they
+queue, and the LED bar shows setup and stop. Reads return the device's units. The motor reads are
 here until the arm feature takes them; the pressure reads are on the pump.
 """
 
@@ -10,7 +11,8 @@ import contextlib
 import json
 import logging
 import struct
-from typing import Any, AsyncContextManager, Dict, List, Optional, Set, Tuple
+import time
+from typing import Any, AsyncContextManager, Callable, Dict, List, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -29,10 +31,22 @@ from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
 from .errors import (
   CommandRefusedError,
   FrameError,
+  InvalidQueueItemError,
   MantisConfigurationError,
   MantisConnectionLostError,
+  MantisMotionError,
   MantisNotConnectedError,
   MantisTimeoutError,
+)
+from .events import (
+  EVENT_PAYLOAD_FORMATS,
+  MOTION_EVENTS,
+  MOTOR_ERROR_EVENT,
+  SEQUENCE_PROGRESS_EVENT,
+  SEQUENCE_STOPPED_EVENT,
+  decode_motor_error,
+  decode_sequence_progress,
+  describe_event,
 )
 from .features.led_bar import LedBar
 from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
@@ -59,10 +73,20 @@ ABSOLUTE_ENCODER_MOTORS = (0, 1)
 # How often an absolute encoder is read for a valid position; each motor's first after connecting
 # is not.
 ABSOLUTE_ENCODER_READS = 5
+# The sequencer's queue holds 200 items: a v4 not started took 200 before answering -1, and every
+# progress event's queued and free counts add to it.
+SEQUENCER_QUEUE_SIZE = 200
+# Queue items are numbered from 1 to 0x7FFF, the largest int16, then from 1 again.
+LAST_QUEUE_ITEM = 0x7FFF
+# The PPI address every queued write seen has gone to: the valve bank.
+QUEUED_PPI_ADDRESSES = (40,)
 
 
 class MantisDriver:
   """Talks to a Mantis: one command in flight, events logged as they come."""
+
+  # Where `default_queue_full_timeout` starts.
+  _default_queue_full_timeout: float = 60.0
 
   def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
     """Build the link to the Mantis ``device_id`` names, or to the first one found."""
@@ -134,7 +158,12 @@ class MantisDriver:
     self._packet_number = 0
     self._buffer = bytearray()
     self._pending: Optional[Tuple[int, int, "asyncio.Future[Tuple[int, bytes]]"]] = None
-    self._event_waiters: List[Tuple[int, int, "asyncio.Future[bytes]"]] = []
+    # Each waiter: board, code, the match its payload must pass (None: any) and its future.
+    self._event_waiters: List[
+      Tuple[int, int, Optional[Callable[[bytes], bool]], "asyncio.Future[bytes]"]
+    ] = []
+    self._next_item = 1  # the next queue item, per opening of the link
+    self._last_drained_item: Optional[int] = None  # the last item played with none left queued
     self._reader: Optional["asyncio.Task[None]"] = None
     self.rfid_io: Optional[FTDI] = (
       rfid_io
@@ -162,6 +191,17 @@ class MantisDriver:
       raise ValueError(f"default_read_timeout must be positive, got {value}")
     self._default_read_timeout = value
 
+  @property
+  def default_queue_full_timeout(self) -> float:
+    """Seconds a queue write is sent again under a new item while the sequencer's queue is full."""
+    return self._default_queue_full_timeout
+
+  @default_queue_full_timeout.setter
+  def default_queue_full_timeout(self, value: float) -> None:
+    if value <= 0:
+      raise ValueError(f"default_queue_full_timeout must be positive, got {value}")
+    self._default_queue_full_timeout = value
+
   # -- link -----------------------------------------------------------------
 
   async def _set_up_line(self) -> None:
@@ -176,15 +216,53 @@ class MantisDriver:
     await self.io.usb_purge_tx_buffer()
 
   def _handle_event(self, *, board: int, code: int, payload: bytes) -> None:
-    """Log an event and hand it to every waiter for its board and code."""
-    logger.info("[%s] event 0x%04x from board %d: %s", self.name, code, board, payload.hex())
-    waiting = self._event_waiters
-    self._event_waiters = []
-    for waiter_board, waiter_code, future in waiting:
-      if (waiter_board, waiter_code) != (board, code):
-        self._event_waiters.append((waiter_board, waiter_code, future))
-      elif not future.done():
-        future.set_result(payload)
+    """Log an event by its content and hand it to every waiter for its board and code whose match
+    accepts it. A motor error fails every waiter for a motion event (``MOTION_EVENTS``) at once.
+
+    A motor error, a sequencer stop and a code not decoded log a warning; the rest log at debug.
+
+    Raises:
+      FrameError: if a known event's payload does not match its layout; no waiter sees it.
+    """
+    description = describe_event(code=code, payload=payload)
+    failure: Optional[Tuple[str, int, int]] = None
+    if code == MOTOR_ERROR_EVENT:
+      logger.warning("[%s] board %d: %s", self.name, board, description)
+      motor, error = decode_motor_error(payload=payload)
+      failure = (f"{self.name}: {description}", motor, error)
+    elif code == SEQUENCE_PROGRESS_EVENT:
+      logger.debug("[%s] board %d: %s", self.name, board, description)
+      item, queued, _ = decode_sequence_progress(payload=payload)
+      if board == MOTION_BOARD:
+        self._sequence_progress = item  # the LED bar's dispense progress follows it
+        if queued == 0:
+          self._last_drained_item = item
+    elif code in EVENT_PAYLOAD_FORMATS and code != SEQUENCE_STOPPED_EVENT:
+      logger.debug("[%s] board %d: %s", self.name, board, description)
+    else:
+      logger.warning("[%s] board %d: %s", self.name, board, description)
+    waiting, self._event_waiters = self._event_waiters, []
+    for waiter in waiting:
+      waiter_board, waiter_code, match, future = waiter
+      if future.done():
+        continue
+      if waiter_board != board:
+        self._event_waiters.append(waiter)
+      elif failure is not None and waiter_code in MOTION_EVENTS:
+        message, motor, error = failure
+        future.set_exception(MantisMotionError(message, motor=motor, code=error))
+      elif waiter_code != code:
+        self._event_waiters.append(waiter)
+      else:
+        try:
+          accepted = match is None or match(payload)
+        except Exception as match_error:
+          future.set_exception(match_error)
+          continue
+        if accepted:
+          future.set_result(payload)
+        else:
+          self._event_waiters.append(waiter)
 
   def _handle_frame(self, *, frame: bytes) -> None:
     """Route one device frame: an event by its board and code, a reply to the command it echoes."""
@@ -218,7 +296,7 @@ class MantisDriver:
           if not future.done():
             future.set_exception(lost)
         waiting, self._event_waiters = self._event_waiters, []
-        for _, _, waiter in waiting:
+        for _, _, _, waiter in waiting:
           if not waiter.done():
             waiter.set_exception(lost)
         raise
@@ -314,11 +392,19 @@ class MantisDriver:
       raise CommandRefusedError(message, board=board, command=command, status=status)
     return reply
 
-  def _expect_event(self, *, board: int, code: int) -> "asyncio.Future[bytes]":
-    """Register a waiter for the next event with ``board`` and ``code``, before the command that
-    causes it is sent; pass it to ``_wait_for_event``."""
+  def _expect_event(
+    self, *, board: int, code: int, match: Optional[Callable[[bytes], bool]] = None
+  ) -> "asyncio.Future[bytes]":
+    """Register a waiter for the next event with ``board`` and ``code`` that ``match`` accepts,
+    before the command that causes it is sent; pass it to ``_wait_for_event``.
+
+    Args:
+      board: the board the event comes from.
+      code: the event's code.
+      match: takes the event's payload and returns whether it is the one awaited; None takes any.
+    """
     future: "asyncio.Future[bytes]" = asyncio.get_running_loop().create_future()
-    self._event_waiters.append((board, code, future))
+    self._event_waiters.append((board, code, match, future))
     return future
 
   async def _wait_for_event(self, *, waiter: "asyncio.Future[bytes]", timeout: float) -> bytes:
@@ -326,6 +412,7 @@ class MantisDriver:
 
     Raises:
       MantisTimeoutError: if the event does not come within ``timeout`` seconds.
+      MantisMotionError: at once, if a motor reports an error while it waits for a motion event.
       MantisNotConnectedError: if the driver stops first.
       MantisConnectionLostError: if reading the link fails first.
     """
@@ -334,9 +421,7 @@ class MantisDriver:
     except asyncio.TimeoutError as error:
       raise MantisTimeoutError(f"{self.name}: no event within {timeout} s") from error
     finally:
-      self._event_waiters = [
-        (board, code, future) for board, code, future in self._event_waiters if future is not waiter
-      ]
+      self._event_waiters = [entry for entry in self._event_waiters if entry[3] is not waiter]
 
   # -- device reads ---------------------------------------------------------
 
@@ -501,6 +586,157 @@ class MantisDriver:
       f"{self.name}: motor {motor}'s absolute encoder read no valid position in "
       f"{ABSOLUTE_ENCODER_READS} reads"
     )
+
+  # -- sequencer ------------------------------------------------------------
+
+  def _decode_sequencer_reply(self, *, command: int, reply: bytes) -> int:
+    """The int16 a sequencer command answers.
+
+    Raises:
+      FrameError: if the reply is shorter than 2 bytes.
+    """
+    if len(reply) < 2:
+      raise FrameError(f"{self.name}: command {command}'s reply is 2 bytes, got {reply.hex()}")
+    (word,) = struct.unpack_from("<h", reply)
+    return int(word)
+
+  async def _unchecked_fw_clear_sequencer(self) -> int:
+    """Clear the sequencer's queue (board 0, command 61), sent once; return the reply's word.
+
+    Only a clear drops queued items. A running sequencer keeps running: stop it first to halt it.
+    As seen on a v4, the word is 2 when sent while running and 0 when idle; 8 and 9, also seen,
+    are not explained.
+    """
+    reply = await self._send_command(board=MOTION_BOARD, command=61, attempts=1)
+    return self._decode_sequencer_reply(command=61, reply=reply)
+
+  async def _unchecked_fw_start_sequencer(self) -> int:
+    """Start the sequencer (board 0, command 62), sent once; return the reply's word, 0 as seen."""
+    reply = await self._send_command(board=MOTION_BOARD, command=62, attempts=1)
+    return self._decode_sequencer_reply(command=62, reply=reply)
+
+  async def _unchecked_fw_stop_sequencer(self) -> int:
+    """Stop the sequencer (board 0, command 63), sent once; return the reply's word.
+
+    As seen on a v4: a running sequencer plays what is queued, then reports it stopped
+    (``SEQUENCE_STOPPED_EVENT``), and the word is 2. An idle one keeps its queue, reports nothing
+    and answers 0.
+    """
+    reply = await self._send_command(board=MOTION_BOARD, command=63, attempts=1)
+    return self._decode_sequencer_reply(command=63, reply=reply)
+
+  async def _unchecked_fw_abort_sequencer(self) -> int:
+    """Abort the sequencer (board 0, command 64), sent once; return the reply's word.
+
+    As seen on a v4: a running sequencer finishes the item playing, reports it stopped
+    (``SEQUENCE_STOPPED_EVENT``) and keeps the items still queued, which play at the next start;
+    the word is 2. An idle one keeps its queue, reports nothing and answers 0.
+    """
+    reply = await self._send_command(board=MOTION_BOARD, command=64, attempts=1)
+    return self._decode_sequencer_reply(command=64, reply=reply)
+
+  async def _unchecked_fw_queue_write_ppi(
+    self, *, item: int, duration: int, start_address: int, values: List[int]
+  ) -> Tuple[int, int]:
+    """Queue a PPI write on the sequencer (board 0, command 65), sent once.
+
+    Never resent: a v4 queued a frame written twice under one packet number as two items.
+    Returns the reply's free slots, -1 when the queue was full and the item not queued, and its
+    error word.
+
+    Args:
+      item: the item's number, 1 to ``LAST_QUEUE_ITEM``.
+      duration: how long the sequencer holds the write, in its time steps of 1 ms.
+      start_address: the first PPI address written.
+      values: the values written from there.
+
+    Raises:
+      FrameError: if the reply is shorter than 4 bytes.
+    """
+    payload = struct.pack("<hhhh", item, duration, start_address, len(values)) + b"".join(
+      struct.pack("<H", value) for value in values
+    )
+    reply = await self._send_command(board=MOTION_BOARD, command=65, payload=payload, attempts=1)
+    if len(reply) < 4:
+      raise FrameError(f"{self.name}: a queue write's reply is 4 bytes, got {reply.hex()}")
+    free, error = struct.unpack_from("<hh", reply)
+    return int(free), int(error)
+
+  def _get_next_item(self) -> int:
+    """Number the next queue item: 1 to ``LAST_QUEUE_ITEM``, then 1 again."""
+    item = self._next_item
+    self._next_item = item % LAST_QUEUE_ITEM + 1
+    return item
+
+  async def _queue_ppi_write(self, *, duration: int, start_address: int, values: List[int]) -> int:
+    """Queue a PPI write on the sequencer and return its item.
+
+    An item the device answers -1 free slots to was not queued: the write is sent again under the
+    next item until one is, for at most ``default_queue_full_timeout``. No item is sent twice: a
+    v4 queues a write resent with its packet number as a second item, so a lost reply raises.
+
+    Args:
+      duration: how long the sequencer holds the write, in its time steps of 1 ms, 1 to 0x7FFF.
+      start_address: the first PPI address written, one of ``QUEUED_PPI_ADDRESSES``.
+      values: the values written from there, each 0 to 0xFFFF; at least one.
+
+    Raises:
+      ValueError: if an argument is out of range; nothing is sent.
+      InvalidQueueItemError: if a reply's error word is not 0.
+      MantisTimeoutError: if the queue stays full for ``default_queue_full_timeout``.
+    """
+    self._check_index(name="start_address", value=start_address, allowed=QUEUED_PPI_ADDRESSES)
+    if not 1 <= duration <= 0x7FFF:
+      raise ValueError(f"duration must be 1 to 0x7FFF, an int16, got {duration}")
+    if len(values) == 0 or any(not 0 <= value <= 0xFFFF for value in values):
+      raise ValueError(f"values must be one or more uint16, got {values}")
+    deadline = time.monotonic() + self.default_queue_full_timeout
+    while True:
+      item = self._get_next_item()
+      free, error = await self._unchecked_fw_queue_write_ppi(
+        item=item, duration=duration, start_address=start_address, values=values
+      )
+      if error != 0:
+        raise InvalidQueueItemError(
+          f"{self.name}: queue item {item} answered error {error}", command=65, error=error
+        )
+      if free >= 0:
+        return item
+      if time.monotonic() >= deadline:
+        raise MantisTimeoutError(
+          f"{self.name}: the sequencer's queue stayed full for {self.default_queue_full_timeout} s"
+        )
+      logger.debug("[%s] queue full, item %d not queued; sending it again", self.name, item)
+
+  async def _wait_for_queue_item(self, *, item: int, timeout: float) -> None:
+    """Wait until the sequencer reports ``item`` played with no item left queued.
+
+    Returns at once if it was reported already: a short item's report can come with the reply
+    that queued it, before the wait begins.
+
+    Args:
+      item: the last item queued.
+      timeout: seconds to wait.
+
+    The simulation answers at once: it returns or raises ``MantisTimeoutError``.
+
+    Raises:
+      MantisMotionError: at once, if a motor reports an error first.
+      MantisTimeoutError: if it is not reported within ``timeout``.
+    """
+    if self._last_drained_item == item:
+      return
+    waiter = self._expect_event(
+      board=MOTION_BOARD,
+      code=SEQUENCE_PROGRESS_EVENT,
+      match=lambda payload: decode_sequence_progress(payload=payload)[:2] == (item, 0),
+    )
+    try:
+      await self._wait_for_event(waiter=waiter, timeout=timeout)
+    except MantisTimeoutError as error:
+      raise MantisTimeoutError(
+        f"{self.name}: queue item {item} not reported played within {timeout} s"
+      ) from error
 
   # -- discovery and setup --------------------------------------------------
 
@@ -749,6 +985,7 @@ class MantisDriver:
     await self.io.setup()
     await self._set_up_line()
     self._buffer.clear()
+    self._next_item, self._last_drained_item, self._sequence_progress = 1, None, None
     self._reader = asyncio.create_task(self._read_frames())
     logger.info("[%s] connected to FTDI %s", self.name, self.io.device_id)
     if self.rfid_io is not None:
@@ -803,7 +1040,7 @@ class MantisDriver:
       if not future.done():
         future.set_exception(MantisNotConnectedError(stopped))
     waiting, self._event_waiters = self._event_waiters, []
-    for _, _, waiter in waiting:
+    for _, _, _, waiter in waiting:
       if not waiter.done():
         waiter.set_exception(MantisNotConnectedError(stopped))
     if self.plate_clamp is not None and self._connected:

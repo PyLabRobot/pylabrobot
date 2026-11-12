@@ -19,7 +19,7 @@ from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
-from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, MantisDriver
+from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, SEQUENCER_QUEUE_SIZE, MantisDriver
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,9 @@ class MantisSimulationDriver(MantisDriver):
   at once, every RFID slot reads empty, and the LED bar takes every command and holds nothing. The
   motors read idle at 0, as after power-on. The device name and the motor reads the configuration
   does not hold are not simulated.
+
+  The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after setup; started, it
+  plays each item at once. Stop and abort keep what is queued, as on a v4; only a clear drops it.
   """
 
   def __init__(
@@ -162,6 +165,8 @@ class MantisSimulationDriver(MantisDriver):
       oem_config_directory=oem_config_directory,
       show_actions=show_actions,
     )
+    self._queued_items: List[int] = []
+    self._sequencer_started = False
 
   def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
     """Build no link."""
@@ -247,6 +252,53 @@ class MantisSimulationDriver(MantisDriver):
     self._check_index(name="motor", value=motor, allowed=ABSOLUTE_ENCODER_MOTORS)
     raise NotImplementedError(f"{self.name}: the absolute encoders are not simulated")
 
+  def _play_queued_items(self) -> None:
+    """Play every queued item at once, if the sequencer is started."""
+    if self._sequencer_started and self._queued_items:
+      self._sequence_progress = self._last_drained_item = self._queued_items[-1]
+      self._queued_items = []
+
+  async def _unchecked_fw_clear_sequencer(self) -> int:
+    """Empty the queue."""
+    self._queued_items = []
+    return 0
+
+  async def _unchecked_fw_start_sequencer(self) -> int:
+    """Start the sequencer; it plays what is queued."""
+    self._sequencer_started = True
+    self._play_queued_items()
+    return 0
+
+  async def _unchecked_fw_stop_sequencer(self) -> int:
+    """Stop the sequencer; what is queued stays."""
+    self._sequencer_started = False
+    return 0
+
+  async def _unchecked_fw_abort_sequencer(self) -> int:
+    """Stop the sequencer; what is queued stays."""
+    self._sequencer_started = False
+    return 0
+
+  async def _unchecked_fw_queue_write_ppi(
+    self, *, item: int, duration: int, start_address: int, values: List[int]
+  ) -> Tuple[int, int]:
+    """Queue the item unless the queue is full; started, play it. Writes nothing."""
+    if len(self._queued_items) >= SEQUENCER_QUEUE_SIZE:
+      return -1, 0
+    self._queued_items.append(item)
+    free = SEQUENCER_QUEUE_SIZE - len(self._queued_items)
+    self._play_queued_items()
+    return free, 0
+
+  async def _wait_for_queue_item(self, *, item: int, timeout: float) -> None:
+    """Return if ``item`` was the last played, with none left queued.
+
+    Raises:
+      MantisTimeoutError: at once otherwise: the sequencer is stopped or played a later item.
+    """
+    if self._last_drained_item != item:
+      raise MantisTimeoutError(f"{self.name}: queue item {item} is not reported played last")
+
   async def _request_configuration(self) -> DeviceConfiguration:
     """The declared configuration's ``device`` block, a field it lacks filled as for the unit
     blocks; the generation from its boards, as a device's is."""
@@ -295,8 +347,10 @@ class MantisSimulationDriver(MantisDriver):
       )
 
   async def _open(self) -> None:
-    """Open nothing: there is no link."""
+    """Open nothing: there is no link. The sequencer is stopped and empty."""
     logger.info("[%s] simulated, from %s", self.name, self.declared_configuration_json)
+    self._next_item, self._last_drained_item, self._sequence_progress = 1, None, None
+    self._queued_items, self._sequencer_started = [], False
 
   async def _close(self) -> None:
     """Close nothing: there is no link."""
