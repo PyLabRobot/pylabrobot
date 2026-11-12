@@ -1,5 +1,5 @@
 {
-  "note": "Modular. The device frame is the main box's: origin at the body's front-left corner, at the bottom of the feet. The base file is authored in that frame and also draws the side lobes outside the box. Every other file is authored in its own resource's frame, its lowest corner at the origin, so declaring it on that resource needs no offset. `measured_at` records where a part sits in the device frame in the pose the manufacturer's model is drawn in, in millimetres. An arm link is drawn as its box (no model file): `proximal_joint` and `distal_joint` sit in its own frame, and `above` is how far an outer link sits above the short link it hangs from. `joints` record where, in the device frame and the pose drawn (the arm at idle), the right motor turns (`base_right`, at the height `arm_z`).",
+  "note": "Modular. The device frame is the main box's: origin at the body's front-left corner, at the bottom of the feet. The base file is authored in that frame and also draws the side lobes outside the box. Every other file is authored in its own resource's frame, its lowest corner at the origin, so declaring it on that resource needs no offset. `measured_at` records where a part sits in the device frame in the pose the manufacturer's model is drawn in, in millimetres. An arm link is drawn as its box (no model file): `proximal_joint` and `distal_joint` sit in its own frame, and `above` is how far an outer link sits above the short link it hangs from. `joints` record where, in the device frame and the pose drawn (the arm at idle), the right motor turns (`base_right`, at the height `arm_z`). `chip_slots` record each input slot of the chip racks, from the manufacturer's model: its rack, the centre of its closed end (x, y in the device frame) and the direction of its axis from the closed end toward the opening, in degrees; `chip_slot` their shared shape: width, the closed end's radius, the length of the straight walls from the closed end, and the height of the slot's floor above its rack's origin.",
   "units": "mm",
   "up": "Z",
   "frames": {
@@ -131,6 +131,62 @@
           142.594
         ],
         "arm_z": 204.41
+      },
+      "chip_slot": {
+        "width": 17.4,
+        "end_radius": 7.1,
+        "length": 30.25,
+        "floor": 5.6
+      },
+      "chip_slots": {
+        "1": {
+          "rack": "right",
+          "closed_end_centre": [
+            200.975,
+            129.712
+          ],
+          "axis": 200.598
+        },
+        "2": {
+          "rack": "right",
+          "closed_end_centre": [
+            195.112,
+            101.052
+          ],
+          "axis": 187.57
+        },
+        "3": {
+          "rack": "left",
+          "closed_end_centre": [
+            -9.153,
+            61.852
+          ],
+          "axis": 77.427
+        },
+        "4": {
+          "rack": "left",
+          "closed_end_centre": [
+            -27.949,
+            88.153
+          ],
+          "axis": 61.121
+        },
+        "5": {
+          "rack": "left",
+          "closed_end_centre": [
+            -40.673,
+            118.705
+          ],
+          "axis": 43.675
+        },
+        "6": {
+          "rack": "left",
+          "closed_end_centre": [
+            -45.193,
+            151.458
+          ],
+          "axis": 26.139
+        }
       }
     }
   }

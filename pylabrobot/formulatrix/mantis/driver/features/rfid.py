@@ -12,6 +12,7 @@ import struct
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from ...resource_model.chip import RFID_CHIP_TYPE_CODES
 from ..errors import MantisConfigurationError, MantisNotConnectedError, MantisTimeoutError
 from ..framing import MOTION_BOARD
 
@@ -35,20 +36,7 @@ RFID_TAG_BLOCK_COUNT = 24
 RFID_REPLY_TIMEOUT = 1.0  # s
 # The PPI address of the antenna multiplexer on board 0; the valve bank sits elsewhere.
 RFID_MULTIPLEXER_BASE_INDEX = 120
-# The chip type each tag code names; 0x7FFF marks a tag whose chip type is invalid.
-RFID_CHIP_TYPE_CODES: Dict[int, str] = {
-  0x00: "high_volume",
-  0x01: "low_volume",
-  0x02: "high_volume_pfe",
-  0x03: "low_volume_pfe",
-  0x04: "high_volume_3pfe",
-  0x05: "low_volume_3pfe",
-  0x06: "hv_continuous_flow",
-  0x07: "high_volume_hi_fi",
-  0x08: "low_volume_hi_fi",
-  0x09: "high_viscosity_continuous_flow",
-  0x0A: "xl_volume_pfe",
-}
+# 0x7FFF marks a tag whose chip type is invalid; ``RFID_CHIP_TYPE_CODES`` names the others.
 RFID_CHIP_TYPE_INVALID = 0x7FFF
 # Where the fields sit in a tag: 1 flag byte, then the blocks.
 RFID_TAG_SERIAL_OFFSET = 5  # blocks 1-4
@@ -215,6 +203,25 @@ class Rfid:
       return None
     return bytes.fromhex(match.group(1).decode("ascii"))
 
+  def _check_slot(self, *, slot: int) -> None:
+    """Check that ``slot`` can be read, before anything is sent.
+
+    Raises:
+      MantisConfigurationError: if there are no antennas, or ``multiplexer_delay_raw`` is not 0.
+      ValueError: if ``slot`` is not one of ``slot_to_antenna``.
+    """
+    if self.multiplexer_delay_raw != 0:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: RFID multiplexer delay {self.multiplexer_delay_raw} has an "
+        "unconfirmed unit; only 0 is supported"
+      )
+    if self.slot_to_antenna is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no RFID antennas for this unit or its generation; give its "
+        "configuration folder (oem_config_directory)"
+      )
+    self._driver._check_index(name="slot", value=slot, allowed=tuple(sorted(self.slot_to_antenna)))
+
   async def request_tag(self, *, slot: int) -> Optional[Dict[str, Any]]:
     """Read the tag of the chip in an input slot.
 
@@ -231,17 +238,8 @@ class Rfid:
         nothing is sent.
       ValueError: if ``slot`` is not one of them; nothing is sent.
     """
-    if self.multiplexer_delay_raw != 0:
-      raise MantisConfigurationError(
-        f"{self._driver.name}: RFID multiplexer delay {self.multiplexer_delay_raw} has an "
-        "unconfirmed unit; only 0 is supported"
-      )
-    if self.slot_to_antenna is None:
-      raise MantisConfigurationError(
-        f"{self._driver.name}: no RFID antennas for this unit or its generation; give its "
-        "vendor folder (oem_config_directory)"
-      )
-    self._driver._check_index(name="slot", value=slot, allowed=tuple(sorted(self.slot_to_antenna)))
+    self._check_slot(slot=slot)
+    assert self.slot_to_antenna is not None
     async with self._lock:
       await self._switch_antenna(antenna=self.slot_to_antenna[slot])
       tag = await self._read_tag()

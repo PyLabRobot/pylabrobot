@@ -245,6 +245,22 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     await driver._unchecked_fw_clear_sequencer()
     await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
 
+  async def test_a_chips_valve_sequence_plays_on_the_started_sequencer(self):
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recording = json.load(f)
+    sequences = {"low_volume_hi_fi": {"pre_detach": [[16, 100], [18, 100], [30, 100], [31, 100]]}}
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "declared.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump({**recording, "chip_sequences": sequences}, f)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      await mantis.setup()
+      self.addAsyncCleanup(mantis.stop)
+    assert mantis.pump is not None
+    item = await mantis.pump._queue_valve_sequence(chip_type="low_volume_hi_fi", name="pre_detach")
+    assert item is not None
+    await mantis.driver._wait_for_queue_item(item=item, timeout=1.0)
+
   async def test_simulated_mantis_sends_nothing(self):
     with self.assertRaisesRegex(NotImplementedError, "sends nothing"):
       await self.mantis.driver._send_command(board=0, command=3)

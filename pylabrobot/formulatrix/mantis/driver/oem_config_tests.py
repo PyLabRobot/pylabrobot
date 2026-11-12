@@ -11,6 +11,8 @@ from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 from pylabrobot.formulatrix.mantis.driver.oem_config import (
+  CHIP_CHANGER_SEQUENCE_DIRECTORY,
+  CHIP_DIRECTORY,
   COMMON_SEQUENCE_DIRECTORY,
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
@@ -22,6 +24,7 @@ from pylabrobot.formulatrix.mantis.driver.oem_config import (
   _load_unit_configuration,
   _parse_config_entries,
 )
+from pylabrobot.formulatrix.mantis.driver.valve_sequences_tests import get_valve_state_line
 
 with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
   RECORDING = json.load(f)
@@ -486,6 +489,139 @@ class StageBlockTests(unittest.TestCase):
       with self.subTest(message=message):
         with self.assertRaisesRegex(MantisConfigurationError, message):
           self.load(**kwargs)
+
+
+# Synthetic valve sequences of two chip types, as the install's files write them, and the states
+# they give: the low volume Hi-Fi chip's also hold a sequence that moves the arm.
+SYNTHETIC_CHIP_SEQUENCE_FILES = {
+  "LowVolumeHi-Fi": {
+    "dispense_100nl.seq.txt": get_valve_state_line(duration=1, open_valves=(2, 6))
+    + get_valve_state_line(duration=38, open_valves=(0, 2, 6)),
+    "PreAttach.seq.txt": "\ufeff" + get_valve_state_line(duration=100, open_valves=(16,)),
+    "PostPrime.seq.txt": "",
+    "WashInput.seq.txt": "MoveSequenceItem %00 True Z 0 0\r\n"
+    + get_valve_state_line(duration=35, open_valves=(0, 1)),
+    "DetachRecovery.seq.txt": get_valve_state_line(duration=77, open_valves=(0, 1)),
+  },
+  "HighVolume": {"SafeState.seq.txt": get_valve_state_line(duration=700, open_valves=(0, 1))},
+  "Unknown": {"SafeState.seq.txt": get_valve_state_line(duration=10)},
+}
+SYNTHETIC_CHIP_SEQUENCES_BLOCK = {
+  "low_volume_hi_fi": {
+    "dispense_100nl": [[30, 1], [22, 38]],
+    "post_prime": [],
+    "pre_attach": [[31, 100]],
+  },
+  "high_volume": {"safe_state": [[19, 700]]},
+}
+# A synthetic chip changer: positions 1 and 2 in the chip racks, 3 an LC3's, each with its routes.
+SYNTHETIC_CHIP_CHANGER_BLOCK: Dict[str, Dict[str, List[List[Optional[float]]]]] = {
+  str(position): {
+    "safe_start": [[70.0 + position, 60.0, -1.57]],
+    "move_attach": [
+      [80.0 + position, 10.0, -1.57],
+      [120.0 + position, 10.0, -1.57],
+      [120.0 + position, 10.0, 11.0],
+    ],
+    "origin": [[120.0 + position, 10.0, 11.0]],
+    "shift": [[118.0 + position, 11.0, 10.5]],
+    "safe_stop": [
+      [118.0 + position, 11.0, None],
+      [118.0 + position, 11.0, -1.57],
+      [90.0, 10.0, -1.57],
+    ],
+  }
+  for position in (1, 2)
+}
+CHIP_CHANGER_KEYS = {
+  "safe_start": "SafeStart",
+  "move_attach": "MoveAttach",
+  "origin": "Origin",
+  "shift": "Shift",
+  "safe_stop": "SafeStop",
+}
+
+
+def get_chip_changer_config(*, types: Dict[int, int]) -> str:
+  """A synthetic ChipChanger.config, naming each position's route files."""
+  entries = [f'    <add key="ChipChanger.Count" value="{len(types)}" />\r\n']
+  for position, kind in types.items():
+    entries.append(f'    <add key="ChipChanger.{position}.Type" value="{kind}" />\r\n')
+    keys = {f"{key}Sequence": key for key in CHIP_CHANGER_KEYS.values()}
+    for key, file_stem in {**keys, "PostSafeStop": "PostSafeStop"}.items():
+      entries.append(
+        f'    <add key="ChipChanger.{position}.{key}" value="{file_stem}{position}.seq.txt" />\r\n'
+      )
+  entries.append('    <add key="ChipChanger.MovementZ" value="-1.57" />\r\n')
+  return HEAD + "".join(entries) + TAIL
+
+
+def write_chip_install(*, directory: str, chip_changer: Optional[str], lc3_route: str = "") -> str:
+  """Lay out a v4 install's chips and chip changer; return its Device/Configs."""
+  configs = {"Device.config": V4_DEVICE_CONFIG}
+  if chip_changer is not None:
+    configs["ChipChanger.config"] = chip_changer
+  configs_directory = write_install(directory=directory, configs=configs, corrections={})
+  for folder, files in SYNTHETIC_CHIP_SEQUENCE_FILES.items():
+    sequence_directory = os.path.join(directory, "Data", CHIP_DIRECTORY, folder, "Sequences")
+    os.makedirs(sequence_directory)
+    write_files(directory=sequence_directory, files=files)
+  route_directory = os.path.join(directory, "Data", CHIP_CHANGER_SEQUENCE_DIRECTORY)
+  os.makedirs(route_directory)
+  files = {}
+  for position, routes in SYNTHETIC_CHIP_CHANGER_BLOCK.items():
+    for field, key in CHIP_CHANGER_KEYS.items():
+      files[f"{key}{position}.seq.txt"] = get_route_text(route=routes[field])
+    # Read by no pick-up: its moves are relative to where the head is.
+    files[f"PostSafeStop{position}.seq.txt"] = (
+      "MoveSequenceItem %00 True dX -10.000 dY -2.000 0\r\n"
+    )
+  for key in CHIP_CHANGER_KEYS.values():
+    files[f"{key}3.seq.txt"] = lc3_route
+  write_files(directory=route_directory, files=files)
+  return configs_directory
+
+
+class ChipBlockTests(unittest.TestCase):
+  def load(self, *, chip_changer: Optional[str] = None, **kwargs):
+    with tempfile.TemporaryDirectory() as directory:
+      return _load_unit_configuration(
+        oem_config_directory=write_chip_install(
+          directory=directory, chip_changer=chip_changer, **kwargs
+        )
+      )
+
+  def test_each_chip_types_valve_sequences(self):
+    # A file that also moves the arm is left out, as is a folder of no chip type.
+    blocks = self.load()
+    self.assertEqual(blocks["chip_sequences"], SYNTHETIC_CHIP_SEQUENCES_BLOCK)
+    self.assertNotIn("chip_changer", blocks)
+
+  def test_a_valve_state_it_cannot_set_refuses(self):
+    with tempfile.TemporaryDirectory() as directory:
+      configs_directory = write_chip_install(directory=directory, chip_changer=None)
+      write_files(
+        directory=os.path.join(directory, "Data", CHIP_DIRECTORY, "HighVolume", "Sequences"),
+        files={"SafeState.seq.txt": get_valve_state_line(duration=700, open_valves=(5,))},
+      )
+      with self.assertRaisesRegex(MantisConfigurationError, r"head valves \[5\] have no known"):
+        _load_unit_configuration(oem_config_directory=configs_directory)
+
+  def test_the_chip_rack_positions_routes_and_no_lc3s(self):
+    # The LC3's route files are empty: they are never read.
+    blocks = self.load(chip_changer=get_chip_changer_config(types={1: 0, 2: 0, 3: 1}))
+    self.assertEqual(blocks["chip_changer"], SYNTHETIC_CHIP_CHANGER_BLOCK)
+
+  def test_a_missing_or_malformed_position_refuses(self):
+    cases = [
+      (get_chip_changer_config(types={1: 0, 2: 0, 3: 0}), "moves nothing"),
+      (get_chip_changer_config(types={1: 0, 2: 0, 4: 0}), "has no ChipChanger.3.Type"),
+      (get_chip_changer_config(types={1: 0}).replace('"0"', '"zero"'), "is not a number"),
+    ]
+    for text, message in cases:
+      with self.subTest(message=message):
+        with self.assertRaisesRegex(MantisConfigurationError, message):
+          self.load(chip_changer=text)
 
 
 class UnitBlockSourceTests(DriverTestCase):

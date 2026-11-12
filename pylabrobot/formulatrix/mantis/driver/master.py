@@ -65,7 +65,13 @@ from .framing import (
   parse_frame,
   split_frames,
 )
-from .oem_config import UNKNOWN_ZONE, WASH_STATIONS, ZONES, _load_unit_configuration
+from .oem_config import (
+  CHIP_CHANGER_ROUTES,
+  UNKNOWN_ZONE,
+  WASH_STATIONS,
+  ZONES,
+  _load_unit_configuration,
+)
 from .sequence_files import Waypoint
 
 logger = logging.getLogger(__name__)
@@ -866,12 +872,13 @@ class MantisDriver:
     return calibration
 
   def _get_route_blocks(self) -> Dict[str, Any]:
-    """The ``zones`` and ``stations`` blocks as the arm takes them, by argument; each None without
-    its block.
+    """The ``zones``, ``stations`` and ``chip_changer`` blocks as the arm takes them, by argument;
+    each None without its block.
 
     Raises:
-      MantisConfigurationError: if a block is malformed: a zone missing, a rectangle not four
-        numbers, a waypoint not three numbers or None, or a route to safe XY that moves Z.
+      MantisConfigurationError: if a block is malformed: a zone or a position's route missing, a
+        rectangle not four numbers, a waypoint not three numbers or None, or a route to safe XY
+        that moves Z.
     """
 
     def to_route(lines: Any) -> List[Waypoint]:
@@ -887,9 +894,11 @@ class MantisDriver:
       "idle_routes": None,
       "waste_station_route": None,
       "wash_station_routes": None,
+      "chip_changer_routes": None,
     }
     zones = self._unit_blocks.get("zones")
     stations = self._unit_blocks.get("stations")
+    chip_changer = self._unit_blocks.get("chip_changer")
     try:
       if zones is not None:
         rectangles = {}
@@ -905,8 +914,15 @@ class MantisDriver:
         routes["wash_station_routes"] = {
           int(station): to_route(lines) for station, lines in stations.get("wash", {}).items()
         }
+      if chip_changer is not None:
+        routes["chip_changer_routes"] = {
+          int(position): {field: to_route(position_routes[field]) for field in CHIP_CHANGER_ROUTES}
+          for position, position_routes in chip_changer.items()
+        }
     except (KeyError, TypeError, ValueError, AttributeError) as error:
-      raise MantisConfigurationError(f"malformed zones or stations block: {error!r}") from error
+      raise MantisConfigurationError(
+        f"malformed zones, stations or chip_changer block: {error!r}"
+      ) from error
     if routes["safe_xy_routes"] is not None and any(
       x is None or z is not None for route in routes["safe_xy_routes"].values() for x, _, z in route
     ):
@@ -956,14 +972,34 @@ class MantisDriver:
       "arm_type_translation": vectors["arm_type_translation"],
     }
 
+  def _get_chip_sequences(self) -> Optional[Dict[str, Dict[str, List[Tuple[int, int]]]]]:
+    """The ``chip_sequences`` block as the pump takes it; None without it.
+
+    Raises:
+      MantisConfigurationError: if the block is malformed: a state not a (state, duration) pair of
+        integers.
+    """
+    block = self._unit_blocks.get("chip_sequences")
+    if block is None:
+      return None
+    try:
+      return {
+        chip_type: {
+          name: [(int(state), int(duration)) for state, duration in states]
+          for name, states in sequences.items()
+        }
+        for chip_type, sequences in block.items()
+      }
+    except (TypeError, ValueError, AttributeError) as error:
+      raise MantisConfigurationError(f"malformed chip_sequences block: {error!r}") from error
+
   def _discover_features(self) -> None:
     """Build the features the configuration says are fitted, with the unit's values.
 
     A feature already built is kept.
 
     Raises:
-      MantisConfigurationError: if the ``plate_clamp``, ``led_bar``, ``arm``, ``zones``,
-        ``stations`` or ``stage`` block is malformed.
+      MantisConfigurationError: if a block the features take is malformed.
     """
     if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
@@ -979,12 +1015,14 @@ class MantisDriver:
       self.plate_clamp = PlateClamp(driver=self, levels=levels)
     if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
       # Only a v4's install names a controller that releases the reservoir; only a v4 is tared and
-      # self-tested at setup.
+      # self-tested at setup, and plays the install's valve sequences.
       v4 = self.configuration.generation == "v4"
+      chip_sequences = self._get_chip_sequences()
       self.pump = Pump(
         driver=self,
         reservoir_release_controller=RESERVOIR_RELEASE_CONTROLLER if v4 else None,
         tare_and_self_test=v4,
+        chip_sequences=chip_sequences if v4 else None,
       )
     # The LED bar is the v4's, on board 12: a v3 has none.
     if (

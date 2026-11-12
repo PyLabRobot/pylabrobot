@@ -1,5 +1,6 @@
 """Formulatrix Mantis liquid dispenser as a PyLabRobot resource."""
 
+import logging
 import math
 import os
 from typing import Dict, Optional
@@ -16,14 +17,17 @@ from .driver.arm_kinematics import (
   compute_head_position,
 )
 from .driver.configuration import RECORDING_MANTIS_V4
+from .driver.errors import MantisConfigurationError
 from .driver.features.arm import Arm
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
 from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
-from .driver.simulator import MantisSimulationDriver
-from .resource_model import MANIFEST, arm_link, chip_rack, z_column
+from .driver.simulator import MantisSimulationDriver, MantisSimulationRfid
+from .resource_model import CHIP_SLOT_RACKS, MANIFEST, MantisChip, arm_link, chip_rack, z_column
+
+logger = logging.getLogger(__name__)
 
 # The main box's size, in mm, from the manufacturer's model: up to the top plate's surface.
 SIZE_X, SIZE_Y, SIZE_Z = MANIFEST["size"]
@@ -39,8 +43,10 @@ ARM_Z = MANIFEST["joints"]["arm_z"]
 class MantisDevice(Resource):
   """A Formulatrix Mantis, v3 or v4: its main box, the parts on it and the driver that runs it.
 
-  The main box carries the deck with its plate holder, the two chip racks and the Z column with the
-  arm. The generation is read at setup (``driver.configuration.generation``).
+  The main box carries the deck with its plate holder, the two chip racks with a chip spot per input
+  slot (``chip_spots``), and the Z column with the arm. The generation is read at setup
+  (``driver.configuration.generation``). A chip placed in a chip spot is checked at setup against
+  the tag the RFID reader reads in its slot.
   """
 
   def _update_arm_model(self, *, theta_1: float, theta_2: float) -> None:
@@ -162,6 +168,13 @@ class MantisDevice(Resource):
     self.assign_child_resource(self.left_chip_rack, location=measured_at["left_chip_rack"])
     self.right_chip_rack = chip_rack(name=f"{name}_right_chip_rack", side="right")
     self.assign_child_resource(self.right_chip_rack, location=measured_at["right_chip_rack"])
+    # Each input slot's chip spot, by slot, as the RFID reader and the chip changer number them.
+    self.chip_spots: Dict[int, ResourceHolder] = {}
+    for slot, side in CHIP_SLOT_RACKS.items():
+      rack = self.left_chip_rack if side == "left" else self.right_chip_rack
+      spot = rack.get_resource(f"{rack.name}_spot_{slot}")
+      assert isinstance(spot, ResourceHolder)
+      self.chip_spots[slot] = spot
 
     # The Z column and the arm it carries, drawn at idle until setup reads where the arm is. The
     # column is drawn where it stands with Z at 0: how far it travels with Z is not measured.
@@ -211,15 +224,78 @@ class MantisDevice(Resource):
     """The arm and Z, once setup found board 11 (a v4); None before or without it."""
     return self.driver.arm
 
+  def _get_placed_chips(self) -> Dict[int, MantisChip]:
+    """The chip placed in each chip spot, by slot; a spot holding none is left out."""
+    return {
+      slot: spot.resource
+      for slot, spot in self.chip_spots.items()
+      if isinstance(spot.resource, MantisChip)
+    }
+
+  async def _check_chips(self) -> None:
+    """Check each chip placed in a chip spot against the tag the RFID reader reads in its slot.
+
+    Nothing is read when no chip is placed; without a reader or its antennas the chips are not
+    checked, with a warning. A simulated reader reads the chips placed.
+
+    Raises:
+      MantisConfigurationError: if a slot with a chip placed has no antenna, reads no tag, or reads
+        a tag of another chip type or none known.
+    """
+    placed = self._get_placed_chips()
+    if not placed:
+      return
+    rfid = self.driver.rfid
+    if rfid is None or rfid.slot_to_antenna is None:
+      logger.warning("[%s] no RFID reader or antennas: the chips placed are not checked", self.name)
+      return
+    if isinstance(rfid, MantisSimulationRfid):
+      rfid.chip_types = {slot: chip.chip_type for slot, chip in placed.items()}
+    missing = sorted(set(placed) - set(rfid.slot_to_antenna))
+    if missing:
+      raise MantisConfigurationError(
+        f"{self.name}: chips placed in slots {missing}, which have no antenna"
+      )
+    tags = await rfid.request_tags()
+    found = sorted(slot for slot, tag in tags.items() if tag is not None)
+    for slot, chip in placed.items():
+      tag = tags[slot]
+      if tag is None:
+        raise MantisConfigurationError(
+          f"{self.name}: {chip.name} is placed in slot {slot}, which holds no chip (RFID); chips "
+          f"were read in slots {found}"
+        )
+      if tag["chip_type"] != chip.chip_type:
+        raise MantisConfigurationError(
+          f"{self.name}: slot {slot} holds chip {tag['serial']} of type {tag['chip_type']!r} "
+          f"(RFID code {tag['chip_type_code']}), but {chip.name} of type {chip.chip_type!r} is "
+          "placed there"
+        )
+      logger.info(
+        "[%s] slot %d: chip %s, %s (RFID)", self.name, slot, tag["serial"], chip.chip_type
+      )
+
   async def setup(self, *, skip_arm: bool = False, skip_self_test: bool = False) -> None:
     """Connect, read the device's configuration and check it, then bring the arm and Z up, zero
-    the pressure sensors and run the pump's connect self-test.
+    the pressure sensors and run the pump's connect self-test; then check the chips placed in the
+    chip spots by RFID (``_check_chips``), and stop if they do not match.
 
     Args:
       skip_arm: do not bring the arm up; nothing moves.
       skip_self_test: skip the connect self-test, on a reconnect after one since power-on.
+
+    Raises:
+      MantisConfigurationError: as the driver's setup, or if a chip placed is not the one read.
     """
     await self.driver.setup(skip_arm=skip_arm, skip_self_test=skip_self_test)
+    try:
+      await self._check_chips()
+    except BaseException:
+      try:
+        await self.driver.stop()
+      except Exception:
+        logger.warning("[%s] stop after a failed chip check failed", self.name, exc_info=True)
+      raise
     arm = self.driver.arm
     if arm is not None and arm.is_initialized:
       theta_1, theta_2 = await arm.request_link_angles()

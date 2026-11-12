@@ -3,7 +3,8 @@
 Each controller regulates one line, bottle, chip or vacuum, from its feedback sensor; the bottle
 and chip lines each have their own exhaust valves. The pump runs only while something has started
 it (``start_pump``); stop turns it off and vents both positive lines. On a v4, setup zeroes the
-bottle and chip sensors and runs the connect self-test, as in the recorded v4 startup.
+bottle and chip sensors and runs the connect self-test, as in the recorded v4 startup, and a
+chip type's valve sequences from the configuration folder are queued on the chip valve bank.
 """
 
 import asyncio
@@ -12,8 +13,10 @@ import struct
 import time
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
-from ..errors import MantisPressureError
+from ...resource_model.chip import MANTIS_CHIP_FACTORIES
+from ..errors import MantisConfigurationError, MantisPressureError
 from ..framing import PRESSURE_BOARD
+from ..valve_sequences import VALVE_SEQUENCE_FILES
 
 if TYPE_CHECKING:
   from ..master import MantisDriver
@@ -109,6 +112,7 @@ class Pump:
     driver: "MantisDriver",
     reservoir_release_controller: Optional[PressureController] = None,
     tare_and_self_test: bool = False,
+    chip_sequences: Optional[Dict[str, Dict[str, List[Tuple[int, int]]]]] = None,
   ):
     """
     Args:
@@ -116,10 +120,13 @@ class Pump:
       reservoir_release_controller: the controller whose valves release the reservoir when the
         pump stops (``RESERVOIR_RELEASE_CONTROLLER`` on a v4); None releases nothing.
       tare_and_self_test: whether ``initialize`` tares and runs the connect self-test (a v4).
+      chip_sequences: each chip type's valve sequences, (state, duration) pairs by name, from the
+        install; None when there are none, and then none is queued.
     """
     self._driver = driver
     self.reservoir_release_controller = reservoir_release_controller
     self.tare_and_self_test = tare_and_self_test
+    self.chip_sequences = chip_sequences
     self._pump_starts = 0
     # Each controller's last target, set again when the pump starts.
     self._last_targets: Dict[PressureController, float] = {}
@@ -566,14 +573,51 @@ class Pump:
       if enabled:
         await self._unchecked_fw_set_controller_enabled(controller=controller, enabled=True)
 
-  async def _play_valve_states(self, *, states: List[Tuple[int, int]]) -> None:
-    """Queue chip valve bank states, each (state, duration), and wait until the last is played."""
+  async def _queue_valve_states(self, *, states: List[Tuple[int, int]]) -> int:
+    """Queue chip valve bank states, each (state, duration), and return the last one's item."""
     item = 0
     for state, duration in states:
       item = await self._driver._queue_ppi_write(
         duration=duration, start_address=VALVE_BANK_PPI_ADDRESS, values=[state]
       )
+    return item
+
+  async def _play_valve_states(self, *, states: List[Tuple[int, int]]) -> None:
+    """Queue chip valve bank states, each (state, duration), and wait until the last is played."""
+    item = await self._queue_valve_states(states=states)
     await self._driver._wait_for_queue_item(item=item, timeout=VALVE_STATE_TIMEOUT)
+
+  async def _queue_valve_sequence(self, *, chip_type: str, name: str) -> Optional[int]:
+    """Queue a chip type's valve sequence on the sequencer, state by state, as the install's file
+    writes it; return its last item, None for a sequence with no state. The caller waits for it.
+
+    Args:
+      chip_type: a key of ``MANTIS_CHIP_FACTORIES``.
+      name: a key of ``VALVE_SEQUENCE_FILES``.
+
+    Raises:
+      ValueError: if ``chip_type`` or ``name`` is not one; nothing is sent.
+      MantisConfigurationError: without the install's sequence; nothing is sent.
+    """
+    if chip_type not in MANTIS_CHIP_FACTORIES:
+      raise ValueError(
+        f"chip_type must be one of {sorted(MANTIS_CHIP_FACTORIES)}, got {chip_type!r}"
+      )
+    if name not in VALVE_SEQUENCE_FILES:
+      raise ValueError(f"name must be one of {sorted(VALVE_SEQUENCE_FILES)}, got {name!r}")
+    if self.chip_sequences is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no valve sequences for this unit; give its configuration folder "
+        "(oem_config_directory) or a configuration saved with it"
+      )
+    sequence = self.chip_sequences.get(chip_type, {}).get(name)
+    if sequence is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: the install holds no {name} valve sequence for {chip_type}"
+      )
+    if not sequence:
+      return None
+    return await self._queue_valve_states(states=sequence)
 
   async def _end_pump_block(self, *, release_reservoir: bool) -> None:
     """Disable every controller and turn the pump off, as each self-test block ends; then release

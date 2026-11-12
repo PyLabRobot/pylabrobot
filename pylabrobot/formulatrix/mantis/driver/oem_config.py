@@ -9,8 +9,10 @@ import re
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Dict, List, Optional
 
+from ..resource_model.chip import MANTIS_CHIP_FACTORIES
 from .errors import MantisConfigurationError
 from .sequence_files import Waypoint, parse_move_sequence
+from .valve_sequences import VALVE_SEQUENCE_FILES, parse_valve_sequence
 
 # Where a v4 install keeps each arm motor's absolute encoder correction, from its ``Data`` folder.
 ENCODER_CORRECTION_DIRECTORY = os.path.join("System", "Encoder Correction", "Sampling File")
@@ -29,6 +31,21 @@ WASH_STATIONS = (1, 2)
 SBS_ADAPTER_FILE = os.path.join("Adapters", "SBS Adapter.ad.txt")
 # The only arm type on every unit seen; how the stage is framed for another is unknown.
 STANDARD_ARM_TYPE = "Standard"
+# Where an install keeps each chip type's folder, from its ``Data`` folder; its sequences sit in
+# that folder's ``Sequences``.
+CHIP_DIRECTORY = os.path.join("System", "Chips")
+# Where an install keeps the routes to each chip changer position, from its ``Data`` folder.
+CHIP_CHANGER_SEQUENCE_DIRECTORY = os.path.join("System", "Sequences", "ChipChanger")
+# A chip changer position's routes, in the order a pick-up plays them, by ChipChanger.config key.
+CHIP_CHANGER_ROUTES = {
+  "safe_start": "SafeStartSequence",
+  "move_attach": "MoveAttachSequence",
+  "origin": "OriginSequence",
+  "shift": "ShiftSequence",
+  "safe_stop": "SafeStopSequence",
+}
+# The chip changer type of a position in the fixed chip racks; type 1 is an LC3's, not supported.
+CHIP_RACK_TYPE = 0
 
 
 def _parse_config_entries(*, path: str) -> Dict[str, str]:
@@ -270,6 +287,68 @@ def _load_stations(*, sequence_directory: str, waste_station_file: str) -> Dict[
   return stations
 
 
+def _load_chip_sequences(*, chip_directory: str) -> Dict[str, Any]:
+  """The ``chip_sequences`` block: each chip type's valve sequences (``VALVE_SEQUENCE_FILES``), as
+  (state, duration) pairs, by name; only those whose file exists and holds valve states only.
+
+  A sequence whose file holds another line, such as a move, is left out, as is a chip type with no
+  folder.
+
+  Args:
+    chip_directory: the install's ``System/Chips``.
+
+  Raises:
+    MantisConfigurationError: if a valve state line is malformed or opens a valve it cannot set.
+  """
+  block: Dict[str, Any] = {}
+  for chip_type, factory in MANTIS_CHIP_FACTORIES.items():
+    folder = os.path.join(chip_directory, factory(name=chip_type).sequence_folder, "Sequences")
+    if not os.path.isdir(folder):
+      continue
+    files = {file_name.lower(): file_name for file_name in os.listdir(folder)}
+    sequences = {}
+    for name, stem in VALVE_SEQUENCE_FILES.items():
+      file_name = files.get(f"{stem}.seq.txt".lower())
+      if file_name is None:
+        continue
+      states = parse_valve_sequence(path=os.path.join(folder, file_name))
+      if states is not None:
+        sequences[name] = [list(state) for state in states]
+    if sequences:
+      block[chip_type] = sequences
+  return block
+
+
+def _load_chip_changer(*, path: str, sequence_directory: str) -> Dict[str, Any]:
+  """The ``chip_changer`` block: each position in the chip racks (``CHIP_RACK_TYPE``), by number,
+  with its routes (``CHIP_CHANGER_ROUTES``) in the arm frame; an LC3's positions are left out.
+
+  Raises:
+    MantisConfigurationError: if a key is missing or not a number, or a position's route is missing
+      or malformed.
+  """
+  values = _parse_config_entries(path=path)
+
+  def get_value(key: str) -> str:
+    return _get_setting(path=path, settings=values, key=key)
+
+  positions: Dict[str, Any] = {}
+  count = int(
+    _get_number(path=path, key="ChipChanger.Count", text=get_value(key="ChipChanger.Count"))
+  )
+  for position in range(1, count + 1):
+    key = f"ChipChanger.{position}.Type"
+    if _get_number(path=path, key=key, text=get_value(key=key)) != CHIP_RACK_TYPE:
+      continue
+    positions[str(position)] = {
+      field: _parse_route(
+        path=os.path.join(sequence_directory, get_value(key=f"ChipChanger.{position}.{key_name}"))
+      )
+      for field, key_name in CHIP_CHANGER_ROUTES.items()
+    }
+  return positions
+
+
 def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   """The unit's blocks, as declared configurations hold them, from its vendor ``.config`` files.
 
@@ -289,6 +368,10 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   ``stage``: ``Device.config``'s ``MicroplateTransformationMatrix``, ``MicroplateOffsetX/Y`` and
   ``ArmType*``, and the plate holder's origin from ``Data/Device/Adapters/SBS Adapter.ad.txt``,
   only where ``Device.config`` sets the matrix.
+  ``chip_sequences``: each chip type's valve sequences, from the install's ``System/Chips``, where
+  it holds any.
+  ``chip_changer``: each chip rack position's routes, from ``ChipChanger.config`` and the install's
+  ``System/Sequences/ChipChanger``, only where ``ChipChanger.config`` exists.
 
   Args:
     oem_config_directory: the unit's ``Data/Device/Configs`` folder.
@@ -411,4 +494,15 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   )
   if stations:
     blocks["stations"] = stations
+
+  data_directory = os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory)))
+  chip_sequences = _load_chip_sequences(chip_directory=os.path.join(data_directory, CHIP_DIRECTORY))
+  if chip_sequences:
+    blocks["chip_sequences"] = chip_sequences
+  chip_changer_config = os.path.join(oem_config_directory, "ChipChanger.config")
+  if os.path.isfile(chip_changer_config):
+    blocks["chip_changer"] = _load_chip_changer(
+      path=chip_changer_config,
+      sequence_directory=os.path.join(data_directory, CHIP_CHANGER_SEQUENCE_DIRECTORY),
+    )
   return blocks

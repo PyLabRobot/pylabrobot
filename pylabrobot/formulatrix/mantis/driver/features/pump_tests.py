@@ -10,7 +10,11 @@ from typing import Dict, List, Tuple
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
-from pylabrobot.formulatrix.mantis.driver.errors import MantisPressureError, MantisTimeoutError
+from pylabrobot.formulatrix.mantis.driver.errors import (
+  MantisConfigurationError,
+  MantisPressureError,
+  MantisTimeoutError,
+)
 from pylabrobot.formulatrix.mantis.driver.features import pump as pump_module
 from pylabrobot.formulatrix.mantis.driver.features.arm_tests import TURN_OFF
 from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
@@ -743,6 +747,101 @@ class LedBarTests(PumpTestCase):
     sent = [parse_frame(frame=frame)[1:] for frame in link.written]
     self.assertEqual([read for read in sent if read[0] == 10][-len(TARE_AT_ZERO) :], TARE_AT_ZERO)
     self.assertEqual(sent[-1], START_IDLE_ANIMATION)
+
+
+# A low volume Hi-Fi chip's valve sequences as the install's files give them, (state, duration).
+LOW_VOLUME_HI_FI_SEQUENCES: Dict[str, List[List[int]]] = {
+  "pre_attach": [[31, 100]],
+  "dispense_100nl": [[30, 1], [22, 38], [23, 14], [21, 15], [29, 21], [31, 13]],
+  "pre_detach": [[16, 100], [18, 100], [30, 100], [31, 100]],
+  "post_prime": [],
+}
+# The queue writes a Mantis v4 was sent for them in a dispense, by request, and its replies: the
+# pre-attach as item 1, a 100 nl drop as items 31 to 36, the pre-detach as items 38 to 41.
+RECORDED_VALVE_SEQUENCE_QUEUE_REPLIES: Dict[str, Dict[str, str]] = {
+  "pre_attach": {"01006400280001001f00": "c7000000"},
+  "dispense_100nl": {
+    "1f000100280001001e00": "c7000000",
+    "20002600280001001600": "c7000000",
+    "21000e00280001001700": "c7000000",
+    "22000f00280001001500": "c6000000",
+    "23001500280001001d00": "c5000000",
+    "24000d00280001001f00": "c5000000",
+  },
+  "pre_detach": {
+    "26006400280001001000": "c7000000",
+    "27006400280001001200": "c7000000",
+    "28006400280001001e00": "c6000000",
+    "29006400280001001f00": "c5000000",
+  },
+}
+
+
+class ValveSequenceTests(PumpTestCase):
+  async def asyncSetUp(self):
+    answers = make_answers()
+    for replies in RECORDED_VALVE_SEQUENCE_QUEUE_REPLIES.values():
+      for request, reply in replies.items():
+        answers[(0, 65, bytes.fromhex(request))] = [bytes.fromhex(reply)]
+    self.directory = tempfile.TemporaryDirectory()
+    self.addCleanup(self.directory.cleanup)
+    path = os.path.join(self.directory.name, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(
+        {**RECORDING, "chip_sequences": {"low_volume_hi_fi": LOW_VOLUME_HI_FI_SEQUENCES}}, f
+      )
+    self.driver, self.pump = await self.set_up_pump(
+      link=FakeLink(answers=answers), declared_configuration_json=path
+    )
+
+  async def test_each_state_is_queued_as_recorded(self):
+    for name, first_item in (("pre_attach", 1), ("dispense_100nl", 31), ("pre_detach", 38)):
+      with self.subTest(name=name):
+        self.driver._next_item = first_item  # the item the recorded write was queued under
+        self.sent_before = len(self.link.written)
+        item = await self.pump._queue_valve_sequence(chip_type="low_volume_hi_fi", name=name)
+        requests = list(RECORDED_VALVE_SEQUENCE_QUEUE_REPLIES[name])
+        self.assertEqual(self.sent(), [(0, 65, bytes.fromhex(request)) for request in requests])
+        self.assertEqual(item, first_item + len(requests) - 1)
+
+  async def test_a_sequence_with_no_state_queues_nothing(self):
+    self.assertIsNone(
+      await self.pump._queue_valve_sequence(chip_type="low_volume_hi_fi", name="post_prime")
+    )
+    self.assertEqual(self.sent(), [])
+
+  async def test_refused_before_anything_is_sent(self):
+    cases = [
+      ({"chip_type": "low_volume_hi_fi", "name": "wash_input"}, ValueError, "name must be one"),
+      ({"chip_type": "dome", "name": "pre_attach"}, ValueError, "chip_type must be one"),
+      (
+        {"chip_type": "high_volume", "name": "pre_attach"},
+        MantisConfigurationError,
+        "the install holds no pre_attach valve sequence for high_volume",
+      ),
+      (
+        {"chip_type": "low_volume_hi_fi", "name": "safe_state"},
+        MantisConfigurationError,
+        "no safe_state valve sequence",
+      ),
+    ]
+    for kwargs, error, message in cases:
+      with self.subTest(message=message):
+        with self.assertRaisesRegex(error, message):
+          await self.pump._queue_valve_sequence(**kwargs)
+    self.pump.chip_sequences = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no valve sequences for this unit"):
+      await self.pump._queue_valve_sequence(chip_type="low_volume_hi_fi", name="pre_attach")
+    self.assertEqual(self.sent(), [])
+
+  async def test_a_v3_plays_none(self):
+    link = FakeLink(answers=make_answers(absent_boards=(11,)))
+    path = os.path.join(self.directory.name, "declared_v3.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump({"chip_sequences": {"low_volume_hi_fi": LOW_VOLUME_HI_FI_SEQUENCES}}, f)
+    driver = await self.set_up_driver(link=link, declared_configuration_json=path)
+    assert driver.pump is not None
+    self.assertIsNone(driver.pump.chip_sequences)
 
 
 class PumpDiscoveryTests(DriverTestCase):

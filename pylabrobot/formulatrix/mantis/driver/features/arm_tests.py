@@ -52,6 +52,7 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import (
   make_answers,
 )
 from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
+  SYNTHETIC_CHIP_CHANGER_BLOCK,
   SYNTHETIC_IDLE_ROUTES,
   SYNTHETIC_SAFE_XY,
   SYNTHETIC_STAGE_BLOCK,
@@ -1351,6 +1352,72 @@ class RouteDiscoveryTests(ArmTestCase):
         )
         with self.assertRaises(MantisConfigurationError):
           await driver.setup(skip_arm=True)
+
+
+class ChipChangerTests(ArmTestCase):
+  async def test_each_routes_targets_in_the_order_a_pick_up_plays_them(self):
+    link = FakeLink(answers=make_answers())
+    driver = await self.set_up_arm(link=link, chip_changer=SYNTHETIC_CHIP_CHANGER_BLOCK)
+    assert driver.arm is not None
+    targets = driver.arm._get_chip_changer_targets(slot=2)
+    self.assertEqual(list(targets), ["safe_start", "move_attach", "origin", "shift", "safe_stop"])
+    for route, lines in SYNTHETIC_CHIP_CHANGER_BLOCK["2"].items():
+      for steps, (x, y, z) in zip(targets[route], lines):
+        with self.subTest(route=route, x=x, y=y, z=z):
+          assert x is not None and y is not None  # every synthetic line moves the arms
+          angles = compute_joint_angles(x=x, y=y)
+          expected = {
+            motor: compute_device_position(
+              motor=motor, position=angles[motor] - SYNTHETIC_OFFSETS[motor]
+            )
+            for motor in (0, 1)
+          }
+          if z is not None:
+            expected[2] = compute_device_position(motor=2, position=z)
+          self.assertEqual(steps, expected)
+    self.assertEqual(self.sent(link=link), [])
+
+  async def test_refused_without_the_block_or_for_another_position(self):
+    driver = await self.set_up_arm(
+      link=FakeLink(answers=make_answers()), chip_changer=SYNTHETIC_CHIP_CHANGER_BLOCK
+    )
+    assert driver.arm is not None
+    with self.assertRaisesRegex(ValueError, "an LC3's positions are not supported"):
+      driver.arm._get_chip_changer_targets(slot=7)
+    driver.arm.chip_changer_routes = {
+      1: {**driver.arm.chip_changer_routes[1], "shift": [(400.0, 0.0, None)]}
+    }
+    with self.assertRaises(MantisKinematicsError):
+      driver.arm._get_chip_changer_targets(slot=1)
+    driver.arm.chip_changer_routes = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no chip changer routes"):
+      driver.arm._get_chip_changer_targets(slot=1)
+
+  async def test_never_taken_from_a_recording_and_saved_when_declared(self):
+    path = os.path.join(self.directory, "recording.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump({**RECORDING, "chip_changer": SYNTHETIC_CHIP_CHANGER_BLOCK}, f)
+    with mock.patch.object(master_module, "RECORDING_MANTIS_V4", path):
+      driver = await self.set_up_driver(link=FakeLink(answers=make_answers()))
+    assert driver.arm is not None
+    self.assertIsNone(driver.arm.chip_changer_routes)
+    driver = await self.set_up_arm(
+      link=FakeLink(answers=make_answers()), chip_changer=SYNTHETIC_CHIP_CHANGER_BLOCK
+    )
+    saved = os.path.join(self.directory, "saved.json")
+    driver.save_configuration(path=saved)
+    with open(saved, encoding="utf-8") as f:
+      self.assertEqual(json.load(f)["chip_changer"], SYNTHETIC_CHIP_CHANGER_BLOCK)
+
+  async def test_a_malformed_block_refuses_setup(self):
+    block = {"1": {**SYNTHETIC_CHIP_CHANGER_BLOCK["1"]}}
+    del block["1"]["shift"]
+    driver = self.make_driver(
+      link=FakeLink(answers=make_answers()),
+      declared_configuration_json=self.declare(arm_block=SYNTHETIC_ARM_BLOCK, chip_changer=block),
+    )
+    with self.assertRaisesRegex(MantisConfigurationError, "malformed zones, stations or chip"):
+      await driver.setup(skip_arm=True)
 
 
 if __name__ == "__main__":

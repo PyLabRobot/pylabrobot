@@ -1,10 +1,11 @@
 """A simulated Mantis: the driver with no device behind it, answering from its configuration."""
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
+from ..resource_model.chip import MANTIS_CHIP_FACTORIES
 from .configuration import (
   RECORDING_MANTIS_V3,
   RECORDING_MANTIS_V4,
@@ -75,17 +76,20 @@ class MantisSimulationPump(Pump):
     driver: "MantisSimulationDriver",
     reservoir_release_controller: Optional[PressureController] = None,
     tare_and_self_test: bool = False,
+    chip_sequences: Optional[Dict[str, Dict[str, List[Tuple[int, int]]]]] = None,
   ):
     """
     Args:
       driver: the simulated driver.
       reservoir_release_controller: as for ``Pump``.
       tare_and_self_test: as for ``Pump``.
+      chip_sequences: as for ``Pump``.
     """
     super().__init__(
       driver=driver,
       reservoir_release_controller=reservoir_release_controller,
       tare_and_self_test=tare_and_self_test,
+      chip_sequences=chip_sequences,
     )
     self._pump_on = False
     self._enabled: Dict[PressureController, bool] = dict.fromkeys(PRESSURE_CONTROLLERS, False)
@@ -193,14 +197,53 @@ class MantisSimulationPump(Pump):
 
 
 class MantisSimulationRfid(Rfid):
-  """An RFID reader with no device behind it: every slot reads empty."""
+  """An RFID reader with no device behind it: a slot reads the chip type ``chip_types`` gives it,
+  every other slot empty. ``MantisDevice`` gives it the chips placed in its chip spots at setup."""
+
+  def __init__(
+    self,
+    *,
+    driver: "MantisSimulationDriver",
+    slot_to_antenna: Optional[Dict[int, int]],
+    multiplexer_delay_raw: float,
+  ):
+    """
+    Args:
+      driver: the simulated driver.
+      slot_to_antenna: as for ``Rfid``.
+      multiplexer_delay_raw: as for ``Rfid``.
+    """
+    super().__init__(
+      driver=driver, slot_to_antenna=slot_to_antenna, multiplexer_delay_raw=multiplexer_delay_raw
+    )
+    self.chip_types: Dict[int, str] = {}
 
   async def _unchecked_fw_write_ppi(self, *, start_address: int, values: List[int]) -> None:
     """Select nothing: there is no multiplexer."""
 
   async def _read_tag(self) -> Optional[bytes]:
-    """No tag: every slot is empty."""
+    """No tag: a tag is not simulated byte for byte."""
     return None
+
+  async def request_tag(self, *, slot: int) -> Optional[Dict[str, Any]]:
+    """The tag of the chip type ``chip_types`` gives ``slot``, valid, with no serial, date or bytes;
+    None for any other slot.
+
+    Raises:
+      MantisConfigurationError, ValueError: as for ``Rfid.request_tag``.
+    """
+    self._check_slot(slot=slot)
+    chip_type = self.chip_types.get(slot)
+    if chip_type is None:
+      return None
+    return {
+      "serial": None,
+      "chip_type": chip_type,
+      "chip_type_code": MANTIS_CHIP_FACTORIES[chip_type](name=chip_type).rfid_chip_type_code,
+      "date_of_manufacture": None,
+      "valid": True,
+      "tag_hex": None,
+    }
 
 
 class MantisSimulationLedBar(LedBar):
@@ -245,6 +288,7 @@ class MantisSimulationArm(Arm):
     stage_offset_y: Optional[Tuple[float, float, float]] = None,
     arm_type_rotation_degree: Optional[float] = None,
     arm_type_translation: Optional[Tuple[float, float, float]] = None,
+    chip_changer_routes: Optional[Dict[int, Dict[str, List[Waypoint]]]] = None,
   ):
     """
     Args:
@@ -263,6 +307,7 @@ class MantisSimulationArm(Arm):
       stage_offset_y: as for ``Arm``.
       arm_type_rotation_degree: as for ``Arm``.
       arm_type_translation: as for ``Arm``.
+      chip_changer_routes: as for ``Arm``.
     """
     super().__init__(
       driver=driver,
@@ -280,6 +325,7 @@ class MantisSimulationArm(Arm):
       stage_offset_y=stage_offset_y,
       arm_type_rotation_degree=arm_type_rotation_degree,
       arm_type_translation=arm_type_translation,
+      chip_changer_routes=chip_changer_routes,
     )
     self._positions: Dict[int, float] = {0: 0.0, 1: 0.0, Z_MOTOR: 0.0}
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
@@ -365,9 +411,10 @@ class MantisSimulationDriver(MantisDriver):
 
   Nothing reaches a wire. The configuration comes from ``declared_configuration_json``, and the
   reads answer from it; a board it leaves ``None`` does not answer. The plate clamp's state changes
-  at once, every RFID slot reads empty, the pump and its controllers are as last commanded, and the
-  LED bar takes every command and holds nothing. The motors read idle at 0, as after power-on. The
-  device name and the motor reads the configuration does not hold are not simulated.
+  at once, an RFID slot reads the chip type it is given, else empty, the pump and its controllers
+  are as last commanded, and the LED bar takes every command and holds nothing. The motors read idle
+  at 0, as after power-on. The device name and the motor reads the configuration does not hold are
+  not simulated.
 
   The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after the link opens and
   started by the pump's setup on a v4; started, it plays each item at once. Stop and abort keep
@@ -580,6 +627,7 @@ class MantisSimulationDriver(MantisDriver):
         driver=self,
         reservoir_release_controller=self.pump.reservoir_release_controller,
         tare_and_self_test=self.pump.tare_and_self_test,
+        chip_sequences=self.pump.chip_sequences,
       )
     if self.led_bar is not None and not isinstance(self.led_bar, MantisSimulationLedBar):
       self.led_bar = MantisSimulationLedBar(
@@ -604,6 +652,7 @@ class MantisSimulationDriver(MantisDriver):
         stage_offset_y=self.arm.stage_offset_y,
         arm_type_rotation_degree=self.arm.arm_type_rotation_degree,
         arm_type_translation=self.arm.arm_type_translation,
+        chip_changer_routes=self.arm.chip_changer_routes,
       )
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")

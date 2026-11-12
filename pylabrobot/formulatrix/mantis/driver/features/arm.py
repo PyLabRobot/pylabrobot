@@ -36,7 +36,7 @@ from ..errors import (
 )
 from ..events import HOME_DONE_EVENT, decode_home_done
 from ..framing import MOTION_BOARD
-from ..oem_config import UNKNOWN_ZONE, WASH_STATIONS, ZONES
+from ..oem_config import CHIP_CHANGER_ROUTES, UNKNOWN_ZONE, WASH_STATIONS, ZONES
 from ..sequence_files import Waypoint
 from ..stage_transform import PITCH_HEIGHT, REFERENCE_HEIGHT, compute_arm_frame_position
 
@@ -137,6 +137,7 @@ class Arm:
     stage_offset_y: Optional[Tuple[float, float, float]] = None,
     arm_type_rotation_degree: Optional[float] = None,
     arm_type_translation: Optional[Tuple[float, float, float]] = None,
+    chip_changer_routes: Optional[Dict[int, Dict[str, List[Waypoint]]]] = None,
   ):
     """
     Args:
@@ -155,6 +156,7 @@ class Arm:
       stage_offset_y: the stage's y offset, (x, y, z); its z tilts the stage.
       arm_type_rotation_degree: the arm type's rotation, degrees.
       arm_type_translation: the arm type's translation, (x, y, z), mm.
+      chip_changer_routes: each chip rack position's routes (``CHIP_CHANGER_ROUTES``), by number.
     """
     self._driver = driver
     self.offsets = offsets
@@ -171,6 +173,7 @@ class Arm:
     self.stage_offset_y = stage_offset_y
     self.arm_type_rotation_degree = arm_type_rotation_degree
     self.arm_type_translation = arm_type_translation
+    self.chip_changer_routes = chip_changer_routes
     self._initialized = False
 
   @property
@@ -695,6 +698,32 @@ class Arm:
       MantisKinematicsError, ValueError: as ``_get_waypoint_targets``.
     """
     return [self._get_waypoint_targets(waypoint=waypoint) for waypoint in route]
+
+  def _get_chip_changer_targets(self, *, slot: int) -> Dict[str, List[Dict[int, float]]]:
+    """The targets of a chip rack position's routes, as ``_get_route_targets``, by route in the
+    order a pick-up plays them (``CHIP_CHANGER_ROUTES``); every target is checked, nothing moves.
+
+    Args:
+      slot: a chip rack position of the unit's ``chip_changer`` block; an LC3's are not in it.
+
+    Raises:
+      MantisConfigurationError: without the unit's ``arm`` or ``chip_changer`` block.
+      ValueError: if ``slot`` is not a chip rack position, or a target is outside its limits.
+      MantisKinematicsError: if a waypoint is out of the arm's reach.
+    """
+    self._check_calibrated()
+    if self.chip_changer_routes is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no chip changer routes for this unit; give its configuration folder "
+        "(oem_config_directory) or a configuration saved with it"
+      )
+    if slot not in self.chip_changer_routes:
+      raise ValueError(
+        f"slot must be a chip rack position, one of {tuple(sorted(self.chip_changer_routes))}, "
+        f"got {slot}; an LC3's positions are not supported"
+      )
+    routes = self.chip_changer_routes[slot]
+    return {route: self._get_route_targets(route=routes[route]) for route in CHIP_CHANGER_ROUTES}
 
   async def _move_along_route(self, *, steps: List[Dict[int, float]]) -> None:
     """Move to each step's targets in turn at the route profile, each motor on its own (command

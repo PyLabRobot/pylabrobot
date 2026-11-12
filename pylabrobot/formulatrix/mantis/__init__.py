@@ -41,3 +41,18 @@ from .driver import (
 )
 from .driver.configuration import RECORDING_MANTIS_V3
 from .liquid_classes import MantisLiquidClass, mantis_mapping
+from .resource_model import (
+  MantisChip,
+  get_chip_factory,
+  mantis_high_viscosity_continuous_flow_chip,
+  mantis_high_volume_3pfe_chip,
+  mantis_high_volume_chip,
+  mantis_high_volume_hi_fi_chip,
+  mantis_high_volume_pfe_chip,
+  mantis_hv_continuous_flow_chip,
+  mantis_low_volume_3pfe_chip,
+  mantis_low_volume_chip,
+  mantis_low_volume_hi_fi_chip,
+  mantis_low_volume_pfe_chip,
+  mantis_xl_volume_pfe_chip,
+)

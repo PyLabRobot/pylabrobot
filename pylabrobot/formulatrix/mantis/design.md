@@ -21,8 +21,8 @@ driver/events.py             The events the device sends unasked: their codes, w
                              and how it is logged.
 driver/simulator.py          MantisSimulationDriver, MantisSimulationArm,
                              MantisSimulationPlateClamp, MantisSimulationPump, MantisSimulationRfid,
-                             MantisSimulationLedBar. Answer from the declared configuration;
-                             nothing reaches a wire.
+                             MantisSimulationLedBar. Answer from the declared configuration and the
+                             chips placed; nothing reaches a wire.
 driver/framing.py            The frame: header, check word, splitting, payload strings, boards.
 driver/errors.py             MantisError and one error per kind; what the device's codes mean.
 driver/configuration.py      DeviceConfiguration: what the device answered about itself.
@@ -30,12 +30,15 @@ driver/oem_config.py         The unit's own values, read from its vendor
                              .config and sequence files, into a declared configuration.
 driver/sequence_files.py     The unit's sequence files: the waypoints of a route that moves the
                              arm.
+driver/valve_sequences.py    A chip's valve sequences: each file's valve states as the chip valve
+                             bank's states.
 driver/confirmed_firmware_versions.py
                              The firmware sets confirmed on a device, per generation.
 driver/features/             One class per thing the device is fitted with: Arm, PlateClamp, Pump,
                              Rfid, LedBar.
 driver/recordings/           One real Mantis of each generation: its configuration and unit values.
-resource_model/              The parts the device is modelled as, their files and manifest.
+resource_model/              The parts the device is modelled as, their files and manifest; the chip
+                             spots in the chip racks, and MantisChip with a factory per chip type.
 liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity band and chip type.
 ```
 
@@ -58,11 +61,11 @@ opening of the link.
 Each feature is an `Optional` attribute of the driver, `None` until `_discover_features` builds
 it: `plate_clamp` is built only when board 12 answered discovery, so a v3 without it has none;
 `pump` only when board 10 answered, releasing its reservoir only on a v4, whose install names the
-valve, and tared and self-tested at setup (`tare_and_self_test`) only on a v4; `arm` only when
-board 11 answered (a v4). `led_bar` is gated by the generation: built only on a v4 whose board 12
-answered, never on a v3, whose install sets no LED count. A difference between v3 and v4 is
-expressed there, by which feature is built and with what, never by a branch on the generation
-inside a command.
+valve, tared and self-tested at setup (`tare_and_self_test`) and given the install's valve
+sequences (`chip_sequences`) only on a v4; `arm` only when board 11 answered (a v4). `led_bar` is
+gated by the generation: built only on a v4 whose board 12 answered, never on a v3, whose install
+sets no LED count. A difference between v3 and v4 is expressed there, by which feature is built and
+with what, never by a branch on the generation inside a command.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
 what the device answered: generation, firmware versions, motor limits, and the pressure board's
@@ -94,16 +97,21 @@ declares the arms' absolute encoder references (a v4), its encoder correction fr
 folder; `zones` where the unit declares its zones (a v4), with each zone's routes, and `stations`,
 the routes to the waste and wash stations, from `System/Sequences/Common`; `stage` where the unit
 declares its stage transform, with its tilt and arm type and the plate holder's origin from the
-`Data` folder.
+`Data` folder; `chip_changer` where the unit declares a chip changer, each chip rack position's
+routes from `System/Sequences/ChipChanger`; `chip_sequences` where `System/Chips` holds a chip
+type's folder, its valve sequences (`VALVE_SEQUENCE_FILES`).
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
-(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`, `stage`) comes from the unit's folder or
-its declared file only; no recording holds one. Without it, nothing that needs it is sent: without
-`arm` `Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`; without `zones` the head
-is moved to idle from near idle only; without `stations` a move to a station refuses; without
-`stage` a move to a wellplate refuses. An arm type other than `Standard` is refused. A route file is
-read whole and refused on any line it does not understand, never skipped. Factory files (encoder
-corrections, taught sequences) are never committed; tests use synthetic tables.
+(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`, `stage`, `chip_changer`) comes from the
+unit's folder or its declared file only; no recording holds one. Without it, nothing that needs it
+is sent: without `arm` `Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`;
+without `zones` the head is moved to idle from near idle only; without `stations` a move to a
+station refuses; without `stage` a move to a wellplate refuses; without `chip_changer` a chip
+position's path refuses (`Arm._get_chip_changer_targets`). An arm type other than `Standard` is
+refused, and so is an LC3's chip changer position. A route file is read whole and refused on any
+line it does not understand, never skipped; a valve sequence file holding any line but valve states
+is not a valve sequence and is not read. Factory files (encoder corrections, taught sequences) are
+never committed; tests use synthetic tables.
 
 Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 
@@ -113,10 +121,10 @@ Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 | arm offsets `Motor.1/2.Offset`; homing `Motor.1/2.HomingPositionN`, `HomingPositionA` (v4) | `RobotArm.config` | the unit's |
 | absolute-encoder correction (v4) | `System/Encoder Correction/*.csv` | the unit's |
 | plate holder origin | `Device/Adapters/SBS Adapter.ad.txt` | the unit's |
-| chip changer and sequence safe Z (`ChipChanger.MovementZ`, `*.seq.txt`) | `ChipChanger.config`, sequences | unit or generation, unsettled |
+| chip changer routes and sequence safe Z (`*.seq.txt`, `ChipChanger.MovementZ`) | `ChipChanger.config`, `System/Sequences/ChipChanger` | unit or generation, unsettled; read as the unit's |
 | clamp levels, RFID antennas, LED count (`NumberOfLed`, v4) | `Device.config`, `RFID.config` | one unit seen; read as the unit's |
 | deck reference points and heights, arm geometry, drop verification | `StageTuning.config`, `RobotArm.config`, `DropVerification.config` | the same on both units |
-| chip catalogue and liquid classes | `System/`, `Device/Others/` | the software's; liquid classes ship as code (M4c) |
+| chip catalogue, valve sequences and liquid classes | `System/`, `Device/Others/` | the software's; the chip types ship as code, the valve sequences are read from the install, liquid classes ship as code (M4c) |
 
 **M4b. Errors are one class per kind, under `MantisError`.** (STAR's errors by kind.) Each also
 subclasses the built-in it corresponds to, so an `except RuntimeError`, `ValueError` or
@@ -282,8 +290,9 @@ configuration from the file's `device` block (a field it lacks filled as in M4a)
 answer from it; a board it leaves `None` does not answer, and the device name is not simulated. Each
 feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
 above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
-unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` holds the
-pump and each controller as last commanded, off after setup: a regulated line reads its target and
+unclamping done; `MantisSimulationRfid` reads the chip types it is given (`chip_types`, the chips
+placed in the chip spots at setup), every other slot empty; `MantisSimulationPump` holds the pump
+and each controller as last commanded, off after setup: a regulated line reads its target and
 settled, any other 0; its holds pass at once, its tare writes nothing and the calibration is the
 recorded one. `MantisSimulationLedBar` takes every command and waits no hold.
 `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it needs no
@@ -305,7 +314,10 @@ master's links. Interface B carries the command frames; interface A, the RFID re
 **M18. The resource model mirrors the device; it never decides for it.** (STAR P12.) `MantisDevice`
 builds the parts and holds the driver; a feature reaches the parts through the device, and moves
 keep them in step. A driver with no resource tree still drives. The Z column carries the arm's
-four links (`LinkBody`), turned to the joint angles setup reads after the bring-up.
+four links (`LinkBody`), turned to the joint angles setup reads after the bring-up. Each chip rack
+holds a chip spot per input slot (`chip_spots`, placed from the manufacturer's model); a chip
+placed in one is a `MantisChip` of its type, and setup checks it against the tag the RFID reader
+reads in that slot, refusing a slot that reads no chip or another type.
 
 **M19. The LED bar shows what the device does, never at the cost of it.** An action runs inside
 `_show_action`: the bar shows its colour, the enclosing action's when it ends, the idle animation
@@ -485,3 +497,32 @@ quick on its own shows none: the plate clamp's lock and unlock, where a colour t
     self-test's deepest, so -16 is unconfirmed on the device.
 58. **The self-test's solenoid toggles hold nothing between writes.** The recorded ones take about
     1 s each on the wire, though the install's toggle interval is 200 ms; the writes are the same.
+59. **The valve bank's state encodes three head valves and the outputs.** The small, large and fill
+    valves and any output valve open each clear a bit; bit 4 is always set. The other places a
+    chip's files set (`UNENCODED_VALVES`) leave the state unchanged in the recorded v4 exchanges;
+    any other place, or an input valve, opened refuses. Only the low and high volume Hi-Fi chips'
+    sequences are in the recordings.
+60. **Sequences that move the arm or time their valves are not read.** A chip's files that hold a
+    move (`DetachRecovery`, `WashInput` in some installs) or a timed valve state (the continuous
+    flow chips' dispense and prime) are left out of `chip_sequences`; playing one refuses.
+    Recovering a chip left on the head needs `DetachRecovery`, so a reader of mixed files.
+61. **`Pump._queue_valve_sequence` queues; it does not wait.** A chip's valve states run back to
+    back with moves, so the caller waits for the last item. Nothing has queued a chip's sequence
+    through this driver; its writes match the pre-attach, a 100 nl drop and the pre-detach of a
+    recorded v4 dispense, item for item.
+62. **A chip's size is measured on a chip,** not taken from the manufacturer's model; it draws the
+    chip only. The chip spots' shape and places are the model's.
+63. **Only RFID codes 0x07 and 0x08 have been read off a tag.** The other chip types' codes are not
+    confirmed.
+64. **Chips are checked after the bring-up.** Setup reads the tags once the arm is up and the
+    pump set up; a chip that does not match stops the device then. Without an RFID reader or its
+    antennas (a v3) the chips placed are not checked, with a warning.
+65. **A chip position's path is read as its five routes, nothing more.** `SafeStart`,
+    `MoveAttach`, `Origin`, `Shift` and `SafeStop` are the routes of a recorded v4 chip pick-up and
+    drop; `OriginToSafe` and `PostSafeStop` move relative to where the head is and are not in the
+    recordings, so they are not read. The chip changer's Z movement is not read: the routes' own Z
+    is what the recorded v4 exchanges send. The paths derived from a v4's configuration folder
+    match the joint angles in the recordings for slots 1, 2 and 6 to under 0.001 degrees; slots 3
+    to 5 are not in the recordings, and none has moved through this driver. Where `Origin` starts
+    at `MoveAttach`'s last waypoint the target is kept twice; whether a pick-up queues or collapses
+    it is not decided here.
