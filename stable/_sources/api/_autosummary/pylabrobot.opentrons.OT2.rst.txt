@@ -33,11 +33,14 @@ pylabrobot.opentrons.OT2
       ~OT2.get_health
       ~OT2.get_mounted_pipettes
       ~OT2.get_rail_lights
+      ~OT2.get_run
       ~OT2.get_runs
+      ~OT2.get_unfinished_run
       ~OT2.home
       ~OT2.list_connected_modules
       ~OT2.set_rail_lights
       ~OT2.setup
       ~OT2.stop
+      ~OT2.stop_run
    
    
