@@ -218,6 +218,22 @@ class TestXYMove(unittest.IsolatedAsyncioTestCase):
       moves[2:], ["X0XPla05000lr3lw7", jy("4200 3000 2000 1600 1420 1240 1060 0880")]
     )
 
+  async def test_a_given_speed_and_levels_reach_x_and_y(self):
+    await self.pipettes.move_to_xy_positions(
+      500.0, {0: 420.0}, x_acceleration_level=1, y_speed=100.0, y_acceleration_level=1
+    )
+    self.assertIn("X0XPla05000lr1lw7", self.sent)
+    move = self._first("C0JY")
+    self.assertIn("P1AAyv2160", self.sent[:move])
+    self.assertIn("P1AAyr1", self.sent[:move])
+
+  async def test_an_out_of_range_speed_or_level_moves_nothing(self):
+    for given in ({"x_acceleration_level": 9}, {"y_speed": 1000.0}, {"y_acceleration_level": 9}):
+      with self.assertRaises(ValueError):
+        await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, **given)
+    moves = [command for command in self.sent if command[2:4] in ("ZA", "XP", "JY", "AA")]
+    self.assertEqual(moves, [])
+
   async def test_a_raise_out_of_reach_moves_nothing(self):
     with self.assertRaises(ValueError):
       await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, minimum_traverse_height_start=400)

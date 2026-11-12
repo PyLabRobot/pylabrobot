@@ -79,6 +79,35 @@ class ModuleInfo:
 
 
 @dataclass(frozen=True)
+class DoorStatus:
+  """The front door as the OT-2's door switch reports it."""
+
+  closed: bool
+  required_closed_for_protocol: bool
+
+  @classmethod
+  def from_response(cls, data: Dict[str, Any]) -> "DoorStatus":
+    """Parse the ``data`` object of ``GET /robot/door/status``.
+
+    Args:
+      data: the response's ``data`` object.
+
+    Raises:
+      OpentronsProtocolError: If the status is neither "open" nor "closed", or the requirement is
+        not a boolean.
+    """
+    status = _string(data, "status")
+    if status not in {"open", "closed"}:
+      raise OpentronsProtocolError(f"Unknown door status {status!r}")
+    required = data.get("doorRequiredClosedForProtocol")
+    if not isinstance(required, bool):
+      raise OpentronsProtocolError(
+        f"Expected a boolean for 'doorRequiredClosedForProtocol', got {required!r}"
+      )
+    return cls(closed=status == "closed", required_closed_for_protocol=required)
+
+
+@dataclass(frozen=True)
 class DeckFixture:
   """A fixture installed in a Flex deck cutout."""
 
@@ -91,16 +120,45 @@ class DeckFixture:
     return cls(_string(data, "cutoutId"), _optional_string(data, "cutoutFixtureId"))
 
 
+FINISHED_RUN_STATUSES = frozenset({"stopped", "failed", "succeeded"})
+"""Run statuses that no longer hold the robot: another run can be created beside them."""
+
+
 @dataclass(frozen=True)
 class RunInfo:
-  """A run's identity and reported execution status."""
+  """A run's identity and reported execution status.
+
+  ``current`` says whether the robot holds this run as its current one, and ``created_at`` when it
+  was created (ISO 8601, as the server reports it). Both are None where the response leaves them
+  out: the robot reports them in a listing of its runs.
+  """
 
   id: str
   status: Optional[str] = None
+  current: Optional[bool] = None
+  created_at: Optional[str] = None
+
+  @property
+  def finished(self) -> bool:
+    """Whether the run no longer holds the robot."""
+    return self.status in FINISHED_RUN_STATUSES
 
   @classmethod
   def from_response(cls, data: Dict[str, Any]) -> "RunInfo":
-    return cls(id=_string(data, "id"), status=_optional_string(data, "status"))
+    """Parse a run from a run listing or a run reading.
+
+    Raises:
+      OpentronsProtocolError: If ``current`` is present but not a boolean.
+    """
+    current = data.get("current")
+    if current is not None and not isinstance(current, bool):
+      raise OpentronsProtocolError(f"Expected a boolean for 'current', got {current!r}")
+    return cls(
+      id=_string(data, "id"),
+      status=_optional_string(data, "status"),
+      current=current,
+      created_at=_optional_string(data, "createdAt"),
+    )
 
 
 @dataclass(frozen=True)
