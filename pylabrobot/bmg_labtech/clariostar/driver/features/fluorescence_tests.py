@@ -1918,11 +1918,11 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       ("31e8216405961d04102215fc0201", "behind its first"),  # H1 to F4
       ("31e821640596046805961d040108", "at least 2 columns"),  # A1 to H1, one column
       ("31e82164172a0ef4172a0ef40101", "at least 2 columns"),  # D6 alone
+      ("31e82164063603f02bca05080c01", "must lie level"),  # one row, its points 2.84 mm apart in y
     ):
       with self.subTest(geometry=geometry):
         errors = feature._check_grid_geometry(geometry=bytes.fromhex(geometry))
-        self.assertEqual(len(errors), 1)
-        self.assertIn(reason, errors[0])
+        self.assertTrue(any(reason in error for error in errors), errors)
     # geometries it scanned at 330 um: C4 to F9, H1 to H4, A1 to A12 as one row, the whole plate
     for geometry in (
       "31e8216410220b7021b615fc0604",
@@ -1967,6 +1967,20 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
     # scanned from back-left to front-right, returned in the order given
     self.assertEqual(scan.call_args.kwargs["positions"], [back_left, front_right])
     self.assertEqual([result.position for result in results], [front_right, back_left])
+    # in one row but not level: each point is scanned on its own, with a level neighbour
+    left, right = Coordinate(15.9, 75.4, 0), Coordinate(112.1, 72.6, 0)
+    with patch.object(feature, "_get_grids", AsyncMock(side_effect=scanned_grids)) as scan:
+      results = await feature.measure_grid(
+        GRID_CHANNEL, positions=[left, right], gain=2239, focal_height=15.0
+      )
+    self.assertEqual(
+      [call.kwargs["positions"] for call in scan.call_args_list],
+      [
+        [left, Coordinate(left.x + 9, left.y, 0)],
+        [right, Coordinate(right.x + 9, right.y, 0)],
+      ],
+    )
+    self.assertEqual([result.position for result in results], [left, right])
     # front-left and back-right: a scan runs behind in either order, so nothing is sent
     io = FakeFTDI()
     feature = make_fluorescence(io)

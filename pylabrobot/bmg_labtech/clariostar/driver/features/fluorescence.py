@@ -1467,7 +1467,8 @@ class Fluorescence(Measurement):
     """The reasons the reader would refuse or misread a scan of `geometry`'s 14 bytes.
 
     It refuses a last point left of the first (quit code 29) or behind it (30), and steps the grid
-    by the x pitch, so fewer than 2 columns read every grid point at one spot.
+    by the x pitch, so fewer than 2 columns read every grid point at one spot. In one row it scans
+    both points at the first's y and reports both centres at the last's.
     """
     first_x, first_y, last_x, last_y = (
       int.from_bytes(geometry[i : i + 2], "big") / 100 for i in range(4, 12, 2)
@@ -1479,6 +1480,8 @@ class Fluorescence(Measurement):
       errors.append(f"a scan's last point must not lie behind its first ({last_y} < {first_y} mm)")
     if geometry[12] < 2:
       errors.append("a scan needs at least 2 columns: with 1 its grid step is 0")
+    if geometry[13] == 1 and last_y != first_y:
+      errors.append(f"a one-row scan's points must lie level ({first_y} != {last_y} mm)")
     return errors
 
   @staticmethod
@@ -1724,8 +1727,9 @@ class Fluorescence(Measurement):
     - The reader reads a 31 x 31 grid around each point, at one focal height and gain, and finds
       the signal's centre (about 50-80 s a point), stepping it about as on a 96-well plate.
     - A scan runs from back-left to front-right: two points are scanned in that order (swapped if
-      needed); a point on its own, or two less than half a pitch apart in x, with a neighbouring
-      point one pitch away whose grid is not kept.
+      needed); a point on its own, two less than half a pitch apart in x, or two less than half a
+      pitch apart in y that do not lie level, with a neighbouring point one pitch away whose grid
+      is not kept.
     - The points need not be wells: any point the optic reaches on the plate holder.
     - Cancelling the call stops it on the reader.
 
@@ -1764,8 +1768,13 @@ class Fluorescence(Measurement):
     # each scan's two points, and the index in `positions` of each of its grids (None: not kept)
     scans: List[Tuple[List[Coordinate], List[Optional[int]]]] = []
     on_their_own = list(range(len(positions)))
-    if len(positions) == 2 and round(abs(positions[1].x - positions[0].x) / pitch) > 0:
-      first, last = positions
+    first, last = positions[0], positions[-1]
+    # one row reads its last point at the first's y: two points share a row only if level
+    level = round(first.y * 100) == round(last.y * 100)
+    in_one_row = round(abs(last.y - first.y) / pitch) == 0
+    if (
+      len(positions) == 2 and round(abs(last.x - first.x) / pitch) > 0 and (level or not in_one_row)
+    ):
       if last.x >= first.x and last.y <= first.y:
         scans.append(([first, last], [0, 1]))
       elif first.x >= last.x and first.y <= last.y:
