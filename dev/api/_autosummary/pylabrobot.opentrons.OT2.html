@@ -625,8 +625,14 @@ operations are exposed on <code class="docutils literal notranslate"><span class
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_rail_lights.html#pylabrobot.opentrons.OT2.get_rail_lights" title="pylabrobot.opentrons.OT2.get_rail_lights"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_rail_lights</span></code></a>()</p></td>
 <td><p>Read whether the rail lights are on.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_runs.html#pylabrobot.opentrons.OT2.get_runs" title="pylabrobot.opentrons.OT2.get_runs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_runs</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_run.html#pylabrobot.opentrons.OT2.get_run" title="pylabrobot.opentrons.OT2.get_run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_run</span></code></a>(run_id)</p></td>
+<td><p>Read one server run by id, without selecting or stopping it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_runs.html#pylabrobot.opentrons.OT2.get_runs" title="pylabrobot.opentrons.OT2.get_runs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_runs</span></code></a>()</p></td>
 <td><p>Read server runs without selecting, stopping, or replacing the active run.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.get_unfinished_run.html#pylabrobot.opentrons.OT2.get_unfinished_run" title="pylabrobot.opentrons.OT2.get_unfinished_run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_unfinished_run</span></code></a>()</p></td>
+<td><p>Return the robot's current run when it is not finished, or None.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.home.html#pylabrobot.opentrons.OT2.home" title="pylabrobot.opentrons.OT2.home"><code class="xref py py-obj docutils literal notranslate"><span class="pre">home</span></code></a>()</p></td>
 <td><p>Home the gantry and pipette axes.</p></td>
@@ -642,6 +648,9 @@ operations are exposed on <code class="docutils literal notranslate"><span class
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.stop.html#pylabrobot.opentrons.OT2.stop" title="pylabrobot.opentrons.OT2.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
 <td><p>Stop the run and close the transport, retaining state if run shutdown fails.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2.stop_run.html#pylabrobot.opentrons.OT2.stop_run" title="pylabrobot.opentrons.OT2.stop_run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop_run</span></code></a>(run_id[, timeout])</p></td>
+<td><p>Stop a run the robot holds and wait until the robot reports it finished.</p></td>
 </tr>
 </tbody>
 </table>

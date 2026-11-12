@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2.get\_unfinished\_run
+=============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2.get_unfinished_run
