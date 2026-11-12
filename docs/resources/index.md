@@ -192,6 +192,7 @@ library/perkin_elmer
 library/pioreactor
 library/porvair
 library/revvity
+library/sarstedt
 library/sergi
 library/thermo_fisher
 library/vwr
