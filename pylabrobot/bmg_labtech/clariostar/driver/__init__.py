@@ -2,7 +2,7 @@ from pylabrobot.bmg_labtech.protocol.errors import ChecksumError, FrameError
 
 from .configuration import DeviceConfiguration
 from .confirmed_firmware_versions import CONFIRMED_FIRMWARE_VERSIONS
-from .errors import CommandRefusedError
+from .errors import CommandRefusedError, GridScanError
 from .features import (
   Absorbance,
   AbsorbanceConfiguration,

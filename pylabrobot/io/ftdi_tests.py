@@ -1,4 +1,5 @@
 import asyncio
+import ctypes
 import logging
 import tempfile
 import threading
@@ -7,7 +8,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 from unittest import mock
 
 from pylabrobot.events import EventBus, use_event_bus
@@ -199,9 +200,11 @@ class FTDITopologyLifecycleTests(unittest.IsolatedAsyncioTestCase):
   @staticmethod
   def _ftdi_without_optional_dependency_checks() -> FTDI:
     io = FTDI.__new__(FTDI)
+    io.ftdi_library = "libftdi"
     io._interface_select = None
     io._detached_kernel_driver = None
     io._dev = None
+    io._d2xx_dev = None
     io._executor = None
     io._unread = bytearray()
     io._pending_read = None
@@ -373,6 +376,200 @@ class FTDIReadlineTests(unittest.IsolatedAsyncioTestCase):
     io = self._ftdi(b"")
     with self.assertRaises(ValueError):
       await io.readline(terminator=b"")
+
+
+class FakeD2XXLibrary:
+  """FTDI's D2XX library, answering through the same ctypes arguments: lists ``channels`` as
+  (serial number, VID:PID ID, flags), holds bytes queued for reading, and logs each setting."""
+
+  def __init__(self, *, channels: List[Any]):
+    self.channels = channels
+    self.settings: List[Any] = []
+    self.opened: List[str] = []
+    self.queued = bytearray()
+    self.write_limit: Optional[int] = None
+
+  def FT_CreateDeviceInfoList(self, count):
+    count._obj.value = len(self.channels)
+    return 0
+
+  def FT_GetDeviceInfoList(self, nodes, count):
+    for node, (serial_number, device_id, flags) in zip(nodes, self.channels):
+      node.SerialNumber = serial_number.encode("ascii")
+      node.ID = device_id
+      node.Flags = flags
+    count._obj.value = len(self.channels)
+    return 0
+
+  def FT_OpenEx(self, serial_number, flags, handle):
+    self.opened.append(serial_number.value.decode("ascii"))
+    handle._obj.value = 1
+    return 0
+
+  def FT_Close(self, handle):
+    return 0
+
+  def FT_SetTimeouts(self, handle, read_timeout_ms, write_timeout_ms):
+    self.settings.append(("timeouts", read_timeout_ms.value, write_timeout_ms.value))
+    return 0
+
+  def FT_SetLatencyTimer(self, handle, latency):
+    self.settings.append(("latency", latency.value))
+    return 0
+
+  def FT_SetFlowControl(self, handle, flowctrl, xon, xoff):
+    self.settings.append(("flow", flowctrl.value, xon.value, xoff.value))
+    return 0
+
+  def FT_SetRts(self, handle):
+    self.settings.append(("rts", True))
+    return 0
+
+  def FT_Write(self, handle, data, count, written):
+    written._obj.value = min(count.value, self.write_limit or count.value)
+    return 0
+
+  def FT_GetQueueStatus(self, handle, queued):
+    queued._obj.value = len(self.queued)
+    return 0
+
+  def FT_Read(self, handle, buffer, count, received):
+    data = bytes(self.queued[: count.value])
+    del self.queued[: count.value]
+    ctypes.memmove(buffer, data, len(data))
+    received._obj.value = len(data)
+    return 0
+
+
+# One FT2232H chip's two channels as D2XX lists them: serial number plus interface letter.
+FT2232H_ID = 0x0403 << 16 | 0x6010
+TWO_CHANNEL_CHIP = [("SERIALA", FT2232H_ID, 0), ("SERIALB", FT2232H_ID, 0)]
+
+
+class FTDID2XXTests(unittest.IsolatedAsyncioTestCase):
+  def use_library(self, *, channels: List[Any]) -> FakeD2XXLibrary:
+    library = FakeD2XXLibrary(channels=channels)
+    patcher = mock.patch.object(ftdi_module, "_d2xx_library", library)
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    return library
+
+  async def set_up_interface_b(self) -> "tuple[FTDI, FakeD2XXLibrary]":
+    library = self.use_library(channels=TWO_CHANNEL_CHIP)
+    io = FTDI(human_readable_device_name="test", interface_select=2, ftdi_library="d2xx")
+    await io.setup()
+    self.addAsyncCleanup(io.stop)
+    return io, library
+
+  def test_automatic_choice_is_d2xx_only_on_windows_and_only_when_asked(self):
+    self.use_library(channels=[])
+    with (
+      mock.patch.object(ftdi_module, "HAS_PYLIBFTDI", True),
+      mock.patch.object(ftdi_module, "HAS_PYUSB", True),
+    ):
+      for platform, chosen in (("win32", "d2xx"), ("darwin", "libftdi"), ("linux", "libftdi")):
+        with (
+          self.subTest(platform=platform),
+          mock.patch.object(ftdi_module.sys, "platform", platform),
+        ):
+          automatic = FTDI(human_readable_device_name="test", ftdi_library=None)
+          self.assertEqual(automatic.ftdi_library, chosen)
+          self.assertEqual(FTDI(human_readable_device_name="test").ftdi_library, "libftdi")
+
+  def test_unknown_library_is_refused(self):
+    with self.assertRaisesRegex(ValueError, "ftdi_library must be"):
+      FTDI(human_readable_device_name="test", ftdi_library="serial")
+
+  async def test_interface_b_opens_its_channel_and_keeps_the_base_serial(self):
+    io, library = await self.set_up_interface_b()
+    self.assertEqual(library.opened, ["SERIALB"])
+    self.assertEqual(io.device_id, "SERIAL")
+
+  async def test_no_interface_takes_channel_a_as_libftdi_does(self):
+    library = self.use_library(channels=TWO_CHANNEL_CHIP)
+    io = FTDI(human_readable_device_name="test", device_id="SERIAL", ftdi_library="d2xx")
+    await io.setup()
+    self.addAsyncCleanup(io.stop)
+    self.assertEqual(library.opened, ["SERIALA"])
+
+  async def test_unresolvable_channels_refuse_setup(self):
+    for channels, interface_select, usb_address, message in (
+      ([], 2, None, "restore FTDI's driver"),
+      ([("", FT2232H_ID, 1)], 2, None, "close the vendor software"),
+      (TWO_CHANNEL_CHIP + [("OTHERA", FT2232H_ID, 0)], 1, None, "Multiple FTDI channels"),
+      (TWO_CHANNEL_CHIP, 2, "3-2", "usb_address is not supported"),
+    ):
+      with self.subTest(message=message):
+        self.use_library(channels=channels)
+        io = FTDI(
+          human_readable_device_name="test",
+          interface_select=interface_select,
+          usb_address=usb_address,
+          ftdi_library="d2xx",
+        )
+        with self.assertRaisesRegex((RuntimeError, ValueError), message):
+          await io.setup()
+
+  async def test_settings_take_libftdi_values(self):
+    io, library = await self.set_up_interface_b()
+    await io.set_flowctrl(flowctrl=0x100)
+    await io.set_rts(level=True)
+    await io.set_latency_timer(latency=2)
+    self.assertEqual(
+      library.settings,
+      [
+        ("timeouts", ftdi_module._D2XX_READ_TIMEOUT_MS, ftdi_module._D2XX_WRITE_TIMEOUT_MS),
+        ("flow", 0x100, 0x11, 0x13),
+        ("rts", True),
+        ("latency", 2),
+      ],
+    )
+    with self.assertRaisesRegex(ValueError, "1.5 stop bits"):
+      await io.set_line_property(bits=8, stopbits=1, parity=0)
+
+  async def test_read_returns_what_has_arrived_without_waiting(self):
+    io, library = await self.set_up_interface_b()
+    self.assertEqual(await io.read(num_bytes=16), b"")
+    library.queued.extend(b"\x01\x02\x03")
+    self.assertEqual(await io.read(num_bytes=2), b"\x01\x02")
+    self.assertEqual(await io.read(num_bytes=16), b"\x03")
+
+  async def test_a_short_write_raises(self):
+    io, library = await self.set_up_interface_b()
+    self.assertEqual(await io.write(data=b"\x01\x02"), 2)
+    library.write_limit = 1
+    with self.assertRaisesRegex(ftdi_module.D2XXError, "wrote 1 of 2 bytes"):
+      await io.write(data=b"\x01\x02")
+
+  async def test_d2xx_setup_is_recorded_and_replays_with_or_without_the_record(self):
+    self.use_library(channels=TWO_CHANNEL_CHIP)
+    io = FTDI(human_readable_device_name="test", interface_select=2, ftdi_library="d2xx")
+    with tempfile.TemporaryDirectory() as directory:
+      path = Path(directory) / "capture.json"
+      capture_module.start_capture(path)
+      try:
+        await io.setup()
+        await io.stop()
+      finally:
+        capture_module.stop_capture()
+      reader = CaptureReader(path=str(path))
+    self.assertEqual([(c["action"], c["data"]) for c in reader.commands], [("setup", "d2xx")])
+    recorded = list(reader.commands)
+    with (
+      mock.patch.object(ftdi_module, "HAS_PYLIBFTDI", True),
+      mock.patch.object(ftdi_module, "HAS_PYUSB", True),
+    ):
+      for commands in (recorded, []):
+        with self.subTest(recorded=bool(commands)):
+          validator = FTDIValidator(
+            cr=reader, human_readable_device_name="test", device_id="SERIAL"
+          )
+          reader.commands = commands
+          reader.start()
+          try:
+            await validator.setup()
+          finally:
+            reader.done()
 
 
 if __name__ == "__main__":

@@ -960,14 +960,17 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
   async def test_a_bare_channel_z_probes_on_its_stop_disc_when_allowed(self):
     self._carry_tips(False)
     self.pipettes.move_to_safe_z = self.moves  # type: ignore[method-assign]
-    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
+    c = self.pipettes.configuration
+    self._answer_the_heights_with({"rh": c.z_drive_mm_to_increments(234.74)})
     z = await self.pipettes.probe_z_using_clld(1, allow_without_tip=True)
-    # No overhang: the window is the drive's own, floor to top.
-    floor, top = self.pipettes.configuration.z_range_increments
+    # No overhang: the window is the drive's own, floor to top, and the height the stop disc's,
+    # from the channel: the master's `C0 RL` can still subtract a tool put back since.
+    floor, top = c.z_range_increments
     self.assertEqual(
-      self.sent, [f"P2ZLzh{floor:05}zc{top:05}zl00932zr075gt0010gl0002zj1zi0186", "C0RL"]
+      self.sent, [f"P2ZLzh{floor:05}zc{top:05}zl00932zr075gt0010gl0002zj1zi0186", "P2RH"]
     )
-    self.assertEqual(z, 123.4)
+    assert z is not None
+    self.assertAlmostEqual(z, 234.74, delta=0.01)
 
   async def test_plld_firmware(self):
     self._answer_the_heights_with({"if": [22964, 0]})
