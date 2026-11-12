@@ -86,11 +86,13 @@ class MantisSimulationDriver(MantisDriver):
       oem_config_directory=oem_config_directory,
     )
 
-  def _build_io(self, *, device_id: Optional[str]) -> FTDI:
+  def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
     """Build no link."""
     return None  # type: ignore[return-value]  # no link: nothing reaches a wire
 
-  def _build_rfid_io(self, *, device_id: Optional[str]) -> Optional[FTDI]:
+  def _build_rfid_io(
+    self, *, device_id: Optional[str], ftdi_library: Optional[str]
+  ) -> Optional[FTDI]:
     """Build no link."""
     return None
 

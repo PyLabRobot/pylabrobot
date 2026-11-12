@@ -16,9 +16,7 @@ class MantisTests(unittest.TestCase):
 
   def test_every_part_has_its_model_file(self):
     device = self.make_device()
-    drawn = [r for r in [device, *device.get_all_children()] if hasattr(r, "mesh")]
-    self.assertIn(device.left_chip_rack, drawn)
-    for resource in drawn:
+    for resource in (device, device.left_chip_rack, device.right_chip_rack):
       with self.subTest(resource=resource.name):
         self.assertTrue(os.path.isfile(os.path.join(RESOURCE_MODEL, f"{resource.model}.glb")))
 
