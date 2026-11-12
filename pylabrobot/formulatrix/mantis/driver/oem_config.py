@@ -6,9 +6,13 @@ Only the values set per unit are read: a block is loaded only where its source a
 import os
 import re
 import xml.etree.ElementTree as ElementTree
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from .errors import MantisConfigurationError
+
+# Where a v4 install keeps each arm motor's absolute encoder correction, from its ``Data`` folder.
+ENCODER_CORRECTION_DIRECTORY = os.path.join("System", "Encoder Correction", "Sampling File")
+ENCODER_CORRECTION_FILE = "OneRevolutionSamplingData_Motor{motor}.csv"
 
 
 def _parse_config_entries(*, path: str) -> Dict[str, str]:
@@ -31,6 +35,27 @@ def _parse_config_entries(*, path: str) -> Dict[str, str]:
   }
 
 
+def _parse_correction_table(*, path: str) -> List[List[float]]:
+  """The (ideal, measured) rows of one encoder correction file, its third column dropped.
+
+  Raises:
+    MantisConfigurationError: if a row is not numbers, or the measured column does not ascend.
+  """
+  rows: List[List[float]] = []
+  with open(path, encoding="utf-8-sig") as f:
+    for line in f:
+      fields = [field for field in line.strip().split(",") if field]
+      if not fields:
+        continue
+      try:
+        rows.append([float(fields[0]), float(fields[1])])
+      except (IndexError, ValueError) as error:
+        raise MantisConfigurationError(f"{path}: not an (ideal, measured) row: {line!r}") from error
+  if len(rows) < 2 or any(later[1] <= earlier[1] for earlier, later in zip(rows, rows[1:])):
+    raise MantisConfigurationError(f"{path}: two rows or more, the measured column ascending")
+  return rows
+
+
 def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   """The unit's blocks, as declared configurations hold them, from its vendor ``.config`` files.
 
@@ -39,13 +64,16 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   ``rfid``: each input slot's antenna, from every ``RFIDAntennaId.ACC<n>`` of ``RFID.config``, only
   when it exists; with ``Device.config``'s ``RfidMultiplexerDelay`` as written.
   ``led_bar``: the LED count, from ``Device.config``'s ``NumberOfLed``, only where it is set.
+  ``arm``: each arm motor's ``Offset`` and ``HomingPositionA`` from ``RobotArm.config`` and its
+  encoder correction file from the ``Data`` folder two levels up, only where ``HomingPositionA``
+  is set (a v4). Motor 0 is ``Motor.1`` there.
 
   Args:
     oem_config_directory: the unit's ``Data/Device/Configs`` folder.
 
   Raises:
-    MantisConfigurationError: if ``Device.config`` is missing, or a block's key is missing or not a
-      number.
+    MantisConfigurationError: if ``Device.config`` is missing, a block's key is missing or not a
+      number, or an arm motor's encoder correction file is missing or malformed.
   """
   device_config = os.path.join(oem_config_directory, "Device.config")
   if not os.path.isfile(device_config):
@@ -112,4 +140,32 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
         text=setting(path=device_config, settings=values, key="RfidMultiplexerDelay"),
       ),
     }
+
+  robot_arm_config = os.path.join(oem_config_directory, "RobotArm.config")
+  arm_values = (
+    _parse_config_entries(path=robot_arm_config) if os.path.isfile(robot_arm_config) else {}
+  )
+  # The arm motors are 0 and 1 here, Motor.1 and Motor.2 in the file.
+  if any(f"Motor.{motor + 1}.HomingPositionA" in arm_values for motor in (0, 1)):
+    data_directory = os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory)))
+    correction: Dict[str, List[List[float]]] = {}
+    for motor in (0, 1):
+      path = os.path.join(
+        data_directory, ENCODER_CORRECTION_DIRECTORY, ENCODER_CORRECTION_FILE.format(motor=motor)
+      )
+      if not os.path.isfile(path):
+        raise MantisConfigurationError(f"motor {motor}'s encoder correction is missing: {path}")
+      correction[str(motor)] = _parse_correction_table(path=path)
+    blocks["arm"] = {
+      field: {
+        str(motor): number(
+          path=robot_arm_config,
+          key=f"Motor.{motor + 1}.{key}",
+          text=setting(path=robot_arm_config, settings=arm_values, key=f"Motor.{motor + 1}.{key}"),
+        )
+        for motor in (0, 1)
+      }
+      for field, key in (("offsets", "Offset"), ("homing_position_a", "HomingPositionA"))
+    }
+    blocks["arm"]["encoder_correction"] = correction
   return blocks

@@ -7,9 +7,20 @@ import unittest
 
 from pylabrobot.formulatrix.mantis import Mantis
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
-from pylabrobot.formulatrix.mantis.driver.errors import MantisTimeoutError
+from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
+  compute_device_position,
+  compute_joint_angles,
+)
+from pylabrobot.formulatrix.mantis.driver.errors import (
+  MantisMotionError,
+  MantisTimeoutError,
+)
+from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
-from pylabrobot.formulatrix.mantis.driver.simulator import MantisSimulationLedBar
+from pylabrobot.formulatrix.mantis.driver.simulator import (
+  MantisSimulationArm,
+  MantisSimulationLedBar,
+)
 
 
 class SimulationTests(unittest.IsolatedAsyncioTestCase):
@@ -65,17 +76,71 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(NotImplementedError, "name is not simulated"):
       await self.mantis.driver.request_name()
 
-  async def test_motors_read_idle_at_0(self):
+  async def test_setup_brings_the_arm_to_idle_and_homes_z(self):
     driver = self.mantis.driver
-    for motor in (0, 1, 2):
+    # Without offsets, the arm motors' idle targets are the links' angles for the head at idle.
+    idle = [
+      compute_device_position(motor=motor, position=angle)
+      for motor, angle in enumerate(compute_joint_angles(x=15.0, y=31.177))
+    ]
+    for motor, status, position in ((0, 0, idle[0]), (1, 0, idle[1]), (2, 4, 0.0)):
       with self.subTest(motor=motor):
-        self.assertEqual(await driver.request_motor_status(motor=motor), 0)
-        self.assertEqual(await driver.request_motor_position(motor=motor), 0.0)
-        self.assertEqual(await driver.request_encoder_position(motor=motor), 0.0)
+        self.assertEqual(await driver.request_motor_status(motor=motor), status)
+        self.assertEqual(await driver.request_motor_position(motor=motor), position)
+        self.assertEqual(await driver.request_encoder_position(motor=motor), position)
     with self.assertRaisesRegex(NotImplementedError, "absolute encoders are not simulated"):
       await driver.request_absolute_encoder_position(motor=0)
     with self.assertRaises(ValueError):
       await driver.request_motor_status(motor=3)
+
+  async def test_the_head_stands_at_idle_without_offsets(self):
+    arm = self.mantis.arm
+    assert arm is not None
+    head = await arm.request_head_position()
+    self.assertAlmostEqual(head.x, 15.0, places=9)
+    self.assertAlmostEqual(head.y, 31.177, places=9)
+    joint_position = await arm.request_joint_position()
+    self.assertEqual(
+      await arm.request_absolute_joint_position(), {0: joint_position[0], 1: joint_position[1]}
+    )
+
+  async def test_stop_parks_and_lowers_z(self):
+    arm = self.mantis.driver.arm
+    assert isinstance(arm, MantisSimulationArm)
+    await self.mantis.stop()
+    self.assertAlmostEqual(arm._positions[2], compute_device_position(motor=2, position=SHUTDOWN_Z))
+    await self.mantis.setup()
+    self.assertEqual(arm._positions[2], 0.0)
+
+  async def test_an_arm_away_from_idle_is_refused(self):
+    mantis = Mantis(simulation=True)
+    await mantis.setup(skip_arm=True)
+    self.addAsyncCleanup(mantis.stop)
+    arm = mantis.driver.arm
+    assert isinstance(arm, MantisSimulationArm)
+    theta_1, theta_2 = compute_joint_angles(x=-57.0, y=0.0)
+    arm._absolute_positions = {
+      0: compute_device_position(motor=0, position=theta_1),
+      1: compute_device_position(motor=1, position=theta_2),
+    }
+    with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
+      await arm.initialize()
+
+  async def test_the_long_links_meet_at_the_head(self):
+    assert self.mantis.arm is not None
+    head = await self.mantis.arm.request_head_position()
+    for name in ("right_long_arm", "left_long_arm"):
+      with self.subTest(name=name):
+        link = self.mantis.arm_links[name]
+        assert link.distal_joint is not None
+        matrix = link.get_absolute_rotation().get_rotation_matrix()
+        corner = link.get_absolute_location()
+        joint = (link.distal_joint.x, link.distal_joint.y, link.distal_joint.z)
+        end_x = corner.x + sum(matrix[0][k] * joint[k] for k in range(3))
+        end_y = corner.y + sum(matrix[1][k] * joint[k] for k in range(3))
+        # The arm frame is the device frame moved to the right motor's axis and mirrored in y.
+        self.assertAlmostEqual(end_x, 72.549 + head.x, places=2)
+        self.assertAlmostEqual(end_y, 142.594 - head.y, places=2)
 
   async def test_pump_reads_off_with_the_recorded_calibration(self):
     pump = self.mantis.pump

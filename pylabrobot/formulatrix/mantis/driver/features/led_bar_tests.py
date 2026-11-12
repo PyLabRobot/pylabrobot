@@ -22,6 +22,7 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar import (
   _compute_rgb565,
 )
 from pylabrobot.formulatrix.mantis.driver.features.plate_clamp_tests import (
+  HALT,
   LED_BAR_COMMANDS,
   STATES_AFTER_LOCK_AT_LEVEL_2,
   STATES_AFTER_RELEASE_WHILE_LOCKED,
@@ -243,10 +244,12 @@ class SetupAndStopTests(LedBarTestCase):
     self.assertEqual(led_bar_frames(written=link.written), [START_IDLE_ANIMATION])
     self.led_bar_sleep.assert_not_awaited()
 
-  async def test_stop_releases_the_clamp_then_turns_off(self):
+  async def test_stop_halts_then_releases_the_clamp_then_turns_off(self):
     driver = await self.set_up_bar()
     await driver.stop()
-    self.assertEqual(self.sent(), [STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)])
+    self.assertEqual(
+      self.sent(), [*HALT, STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)]
+    )
 
   async def test_stop_without_show_actions_turns_off_only(self):
     driver = await self.set_up_bar(show_actions=False)
@@ -262,7 +265,7 @@ class SetupAndStopTests(LedBarTestCase):
     with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING"):
       await driver.stop()
     self.sent_before = len(self.link.written)
-    await driver.setup()
+    await driver.setup(skip_arm=True)
     self.assertEqual(self.states(), [BLUE, GREEN, "idle"])
 
   async def test_clamp_lock_and_unlock_show_nothing(self):

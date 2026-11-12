@@ -23,6 +23,7 @@ from .errors import (
   MantisTimeoutError,
   PlateClampError,
 )
+from .features.arm import Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
 from .features.pump import (
@@ -34,6 +35,7 @@ from .features.pump import (
 from .features.rfid import Rfid
 from .master import MantisDriver
 from .simulator import (
+  MantisSimulationArm,
   MantisSimulationDriver,
   MantisSimulationLedBar,
   MantisSimulationPlateClamp,

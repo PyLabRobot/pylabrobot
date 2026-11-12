@@ -1,34 +1,67 @@
 """Formulatrix Mantis liquid dispenser as a PyLabRobot resource."""
 
+import math
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Deck, Resource
+from pylabrobot.resources.manipulator import LinkBody
 from pylabrobot.resources.resource_holder import ResourceHolder
 
+from .driver.arm_kinematics import (
+  LEFT_BASE,
+  RIGHT_BASE,
+  compute_elbow_positions,
+  compute_head_position,
+)
 from .driver.configuration import RECORDING_MANTIS_V4
+from .driver.features.arm import Arm
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
 from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
 from .driver.simulator import MantisSimulationDriver
-from .resource_model import MANIFEST, chip_rack
+from .resource_model import MANIFEST, arm_link, chip_rack, z_column
 
 # The main box's size, in mm, from the manufacturer's model: up to the top plate's surface.
 SIZE_X, SIZE_Y, SIZE_Z = MANIFEST["size"]
 # The plate holder on the deck: an SBS footprint pushed into the back-left of the pin nest, in mm.
 PLATE_HOLDER_LOCATION = Coordinate(23.62, 15.02, 0.0)
 PLATE_HOLDER_SIZE_X, PLATE_HOLDER_SIZE_Y = 127.76, 85.48
+# Where the right motor turns, x and y in the device frame, and the arm's height, in mm; the arm
+# frame is the device frame moved there and mirrored in y.
+ARM_BASE_X, ARM_BASE_Y = MANIFEST["joints"]["base_right"]
+ARM_Z = MANIFEST["joints"]["arm_z"]
 
 
 class MantisDevice(Resource):
   """A Formulatrix Mantis, v3 or v4: its main box, the parts on it and the driver that runs it.
 
-  The main box carries the deck with its plate holder and the two chip racks. The generation is
-  read at setup (``driver.configuration.generation``).
+  The main box carries the deck with its plate holder, the two chip racks and the Z column with the
+  arm. The generation is read at setup (``driver.configuration.generation``).
   """
+
+  def _update_arm_model(self, *, theta_1: float, theta_2: float) -> None:
+    """Turn the arm's links to two link angles, the geometry's own, in degrees.
+
+    Args:
+      theta_1: motor 0's link angle; with its offset, the angle the motor reads.
+      theta_2: motor 1's link angle; with its offset, the angle the motor reads.
+    """
+    right_elbow, left_elbow = compute_elbow_positions(theta_1=theta_1, theta_2=theta_2)
+    head = compute_head_position(theta_1=theta_1, theta_2=theta_2)
+    for side, base, elbow in (
+      ("right", RIGHT_BASE, right_elbow),
+      ("left", LEFT_BASE, left_elbow),
+    ):
+      # The device frame mirrors the arm frame in y, so an angle there turns the other way.
+      short_angle = -math.degrees(math.atan2(elbow[1] - base[1], elbow[0] - base[0]))
+      long_angle = -math.degrees(math.atan2(head[1] - elbow[1], head[0] - elbow[0]))
+      short, long = self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"]
+      short.rotate_to(z=short_angle, pivot_coordinate=short.proximal_joint)
+      long.rotate_to(z=long_angle - short_angle, pivot_coordinate=long.proximal_joint)
 
   def __init__(
     self,
@@ -130,6 +163,29 @@ class MantisDevice(Resource):
     self.right_chip_rack = chip_rack(name=f"{name}_right_chip_rack", side="right")
     self.assign_child_resource(self.right_chip_rack, location=measured_at["right_chip_rack"])
 
+    # The Z column and the arm it carries, drawn at idle until setup reads where the arm is. The
+    # column is drawn where it stands with Z at 0: how far it travels with Z is not measured.
+    self.z_column = z_column(name=f"{name}_z_column")
+    self.assign_child_resource(self.z_column, location=measured_at["z_column"])
+    self.arm_links: Dict[str, LinkBody] = {}
+    for side, base in (("right", RIGHT_BASE), ("left", LEFT_BASE)):
+      short = arm_link(name=f"{name}_{side}_short_arm", link=f"{side}_short_arm")
+      long = arm_link(name=f"{name}_{side}_long_arm", link=f"{side}_long_arm")
+      assert short.distal_joint is not None
+      self.z_column.assign_child_resource(
+        short,
+        location=Coordinate(ARM_BASE_X + base[0], ARM_BASE_Y - base[1], ARM_Z)
+        - measured_at["z_column"]
+        - short.proximal_joint,
+      )
+      above = MANIFEST["arm_links"][f"{side}_long_arm"]["above"]
+      short.assign_child_resource(
+        long,
+        location=short.distal_joint - long.proximal_joint + Coordinate(0.0, 0.0, above),
+      )
+      self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"] = short, long
+    self._update_arm_model(theta_1=0.0, theta_2=0.0)
+
   @property
   def plate_clamp(self) -> Optional[PlateClamp]:
     """The plate clamp, once setup found the LC3 board; None before or without it."""
@@ -150,12 +206,25 @@ class MantisDevice(Resource):
     """The LED bar, once setup found board 12 on a v4; None before, without it, or on a v3."""
     return self.driver.led_bar
 
-  async def setup(self) -> None:
-    """Connect, read the device's configuration and check it. Nothing moves."""
-    await self.driver.setup()
+  @property
+  def arm(self) -> Optional[Arm]:
+    """The arm and Z, once setup found board 11 (a v4); None before or without it."""
+    return self.driver.arm
+
+  async def setup(self, *, skip_arm: bool = False) -> None:
+    """Connect, read the device's configuration and check it, then bring the arm and Z up.
+
+    Args:
+      skip_arm: do not bring the arm up; nothing moves.
+    """
+    await self.driver.setup(skip_arm=skip_arm)
+    arm = self.driver.arm
+    if arm is not None and arm.is_initialized:
+      theta_1, theta_2 = await arm.request_link_angles()
+      self._update_arm_model(theta_1=theta_1, theta_2=theta_2)
 
   async def stop(self) -> None:
-    """Disconnect."""
+    """Stop the motors, park an arm brought up, release the clamp and disconnect."""
     await self.driver.stop()
 
 
