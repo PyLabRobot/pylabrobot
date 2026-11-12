@@ -604,86 +604,120 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="contributing-new-resources">
 <h1>Contributing New Resources<a class="headerlink" href="#contributing-new-resources" title="Link to this heading">#</a></h1>
-<p>PyLabRobot ships with a growing library of resource definitions for common labware.
-If you define a new resource it helps the community when you contribute it back.
-This page describes the information to include and how to format it.</p>
-<div class="admonition attention">
-<p class="admonition-title">Attention</p>
-<p>PLEASE TEST YOUR RESOURCE DEFINITION BEFORE CONTRIBUTING!</p>
-</div>
-<section id="update-the-resource-library">
-<span id="1-update-the-resource-library"></span><h2>1. Update the resource library<a class="headerlink" href="#update-the-resource-library" title="Link to this heading">#</a></h2>
-<p>Add an entry for your resource under the appropriate manufacturer page in
-<a class="reference internal" href="../resources/index.html"><span class="doc">the resource library</span></a>.
-List the part number, name, a picture and a link to the manufacturer’s website.
-Existing entries use a table format like this:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>| Description | Image | PLR definition |
-|-------------|-------|----------------|
-| 'VWRReagentReservoirs25mL'&lt;br&gt;Part no.: 89094&lt;br&gt;[manufacturer website](https://us.vwr.com/store/product/4694822/vwr-disposable-pipetting-reservoirs)&lt;br&gt;Polystyrene Reservoirs | ![](img/vwr/VWRReagentReservoirs25mL.jpg) | `VWRReagentReservoirs25mL` |
-</pre></div>
-</div>
-<p>Use the same style and folder structure for images.</p>
-<p>If a section for your resource type (e.g. “Plates”/”Troughs”/etc.) already exists, add your resource to it. Add no new line between the rows.
-If a section does not exist, create a new section (see other files for examples).</p>
-<p>Please add an image of the resource to the <code class="docutils literal notranslate"><span class="pre">resources/library/img/&lt;manufacturer&gt;</span></code> folder.
-The image should have the same name as the resource definition you will create.
-The file type can be anything. Please compress and scale down the image to reduce its size (ideally below 100kB).</p>
+<p>How to add a resource definition and its library entry, for humans and agents. This guide covers
+resource-specific requirements; follow the <a class="reference internal" href="contributing.html"><span class="std std-doc">general contribution guide</span></a> for
+shared code style and contribution conventions. Contributing definitions back to PyLabRobot
+helps other labs use the same resources.</p>
+<section id="identify-the-resource">
+<span id="1-identify-the-resource"></span><h2>1. Identify the resource<a class="headerlink" href="#identify-the-resource" title="Link to this heading">#</a></h2>
+<p>Search <code class="docutils literal notranslate"><span class="pre">pylabrobot/resources/</span></code> and <a class="reference internal" href="../resources/index.html"><span class="doc">the resource library</span></a> for the
+manufacturer, part number, and equivalent definitions before adding one. Use a nearby definition
+of the same resource type as a reference for naming and file layout.</p>
+<p>Collect the manufacturer’s name, product name, part number, product link, and technical drawings.
+Confirm which variant you have: capacity, bottom shape, lid, and other physical differences can
+require different definitions.</p>
+</section>
+<section id="write-the-definition">
+<span id="2-write-the-definition"></span><h2>2. Write the definition<a class="headerlink" href="#write-the-definition" title="Link to this heading">#</a></h2>
+<p>A resource definition normally creates an instance of an existing class with particular dimensions
+and other parameters. Use a small, typed factory function that accepts <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">str</span></code> and returns the
+appropriate class, such as <code class="docutils literal notranslate"><span class="pre">Plate</span></code>, <code class="docutils literal notranslate"><span class="pre">Tube</span></code>, <code class="docutils literal notranslate"><span class="pre">TipRack</span></code>, <code class="docutils literal notranslate"><span class="pre">Trough</span></code>, or <code class="docutils literal notranslate"><span class="pre">Carrier</span></code>. Set <code class="docutils literal notranslate"><span class="pre">model</span></code> to identify
+the product independently of the instance’s name. Create a subclass only when the resource needs
+behavior that existing classes cannot express.</p>
+<ul class="simple">
+<li><p><strong>Location:</strong> add the factory to <code class="docutils literal notranslate"><span class="pre">pylabrobot/resources/&lt;manufacturer&gt;/&lt;resource_type&gt;.py</span></code>, such
+as <code class="docutils literal notranslate"><span class="pre">plates.py</span></code> or <code class="docutils literal notranslate"><span class="pre">tubes.py</span></code>. Extend an existing module when it fits.</p></li>
+<li><p><strong>Units and geometry:</strong> use millimeters for lengths and microliters for volumes. Follow the
+<a class="reference internal" href="../resources/introduction.html"><span class="doc">resource coordinate conventions</span></a> and the relevant class’s
+parameter definitions. Distinguish outer dimensions, cavity dimensions, and bottom material
+thickness; a nominal capacity does not determine the geometry.</p></li>
+<li><p><strong>Children:</strong> define wells, tip spots, or holders relative to their parent. Reuse layout helpers
+such as <code class="docutils literal notranslate"><span class="pre">create_ordered_items_2d</span></code> for regular grids. Record item counts, offsets, and pitch from
+drawings or measurements instead of copying them from a similar-looking product.</p></li>
+<li><p><strong>Shared behavior:</strong> reuse existing geometry and height/volume helpers when they describe the
+resource. Keep reusable logic in the implementation of the class or helper, so definitions only
+supply the resource-specific parameters.</p></li>
+<li><p><strong>Optional features:</strong> include lids and stacking dimensions when supported by evidence.
+<code class="docutils literal notranslate"><span class="pre">stacking_z_height</span></code> is the vertical pitch one plate adds to a stack of identical plates
+(<code class="docutils literal notranslate"><span class="pre">size_z</span></code> minus how far the plates nest). Leave it unset when it is not needed or known.</p></li>
+</ul>
+<p>For examples, see <code class="docutils literal notranslate"><span class="pre">pylabrobot/resources/agenbio/plates.py</span></code> for plates with regularly spaced wells
+and <code class="docutils literal notranslate"><span class="pre">pylabrobot/resources/eppendorf/tubes.py</span></code> for individual containers.</p>
 </section>
 <section id="document-attribute-sources">
-<span id="2-document-attribute-sources"></span><h2>2. Document attribute sources<a class="headerlink" href="#document-attribute-sources" title="Link to this heading">#</a></h2>
-<p>When writing a resource definition annotate each attribute with its origin.
-Link any technical drawings you consulted using an archived copy for
-permanence and mark those values with <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">from</span> <span class="pre">spec</span></code>.
-If you measured a value yourself append <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">measured</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># example</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">AGenBio_96_wellplate_Ub_2200ul</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">lid</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Lid</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Plate</span><span class="p">:</span>
-<span class="w"> </span><span class="sd">"""</span>
-<span class="sd">  AGenBio Catalog No. P-2.2-SQG-96</span>
-<span class="sd">  - Material: Polypropylene</span>
-<span class="sd">  - Max. volume: 2200 uL</span>
-<span class="sd">  """</span>
-  <span class="n">INNER_WELL_WIDTH</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># measured</span>
-  <span class="n">INNER_WELL_LENGTH</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># measured</span>
-
-  <span class="n">well_kwargs</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"size_x"</span><span class="p">:</span> <span class="n">INNER_WELL_WIDTH</span><span class="p">,</span>  <span class="c1"># measured</span>
-    <span class="o">...</span>
-  <span class="p">}</span>
-
-  <span class="k">return</span> <span class="n">Plate</span><span class="p">(</span>
-    <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
-    <span class="n">size_x</span><span class="o">=</span><span class="mf">127.76</span><span class="p">,</span>  <span class="c1"># from spec</span>
-    <span class="n">size_y</span><span class="o">=</span><span class="mf">85.48</span><span class="p">,</span>  <span class="c1"># from spec</span>
-    <span class="n">size_z</span><span class="o">=</span><span class="mf">42.5</span><span class="p">,</span>   <span class="c1"># from spec</span>
-    <span class="c1"># Optional: the vertical pitch one plate adds to a stack of identical plates</span>
-    <span class="c1"># (size_z minus how far two identical plates nest). Only needed by plate</span>
-    <span class="c1"># stackers (e.g. the Agilent BenchCel); leave unset (None) otherwise.</span>
-    <span class="n">stacking_z_height</span><span class="o">=</span><span class="mf">39.0</span><span class="p">,</span>  <span class="c1"># measured</span>
-    <span class="o">...</span>
-  <span class="p">)</span>
+<span id="3-document-attribute-sources"></span><h2>3. Document attribute sources<a class="headerlink" href="#document-attribute-sources" title="Link to this heading">#</a></h2>
+<p>Annotate each physical attribute with its origin. Link technical drawings in the factory’s
+docstring, using an archived copy for permanence, and mark values from them with <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">from</span> <span class="pre">spec</span></code>.
+Append <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">measured</span></code> to values you measured yourself. For derived values, show the calculation and
+identify the sources of its inputs. Document approximations and unknowns rather than presenting
+them as measured facts.</p>
+<p>For example, the AGenBio plate definitions distinguish measured inner well dimensions from the
+manufacturer’s outer dimensions:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">INNER_WELL_WIDTH</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># measured</span>
+<span class="n">INNER_WELL_LENGTH</span> <span class="o">=</span> <span class="mi">8</span>  <span class="c1"># measured</span>
 </pre></div>
 </div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plate_dimensions</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">"size_x"</span><span class="p">:</span> <span class="mf">127.76</span><span class="p">,</span>  <span class="c1"># from spec</span>
+  <span class="s2">"size_y"</span><span class="p">:</span> <span class="mf">85.48</span><span class="p">,</span>  <span class="c1"># from spec</span>
+  <span class="s2">"size_z"</span><span class="p">:</span> <span class="mf">42.5</span><span class="p">,</span>  <span class="c1"># from spec</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>Include the product name, part number, material, and relevant capacity or shape information in the
+factory’s docstring. Explain how measurements were taken when their interpretation is not obvious.</p>
 </section>
-<section id="add-imports">
-<span id="3-add-imports"></span><h2>3. Add imports<a class="headerlink" href="#add-imports" title="Link to this heading">#</a></h2>
-<p>If you place your resource in a new module, remember to import it from the
-package’s <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code> so users can load it directly.</p>
-<p>Thank you for helping expand the resource library!</p>
+<section id="export-and-document-the-resource">
+<span id="4-export-and-document-the-resource"></span><h2>4. Export and document the resource<a class="headerlink" href="#export-and-document-the-resource" title="Link to this heading">#</a></h2>
+<p>Import a new module from the manufacturer’s <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code>. For a new manufacturer package, also
+import it from <code class="docutils literal notranslate"><span class="pre">pylabrobot/resources/__init__.py</span></code>, so users can load the definition directly from
+<code class="docutils literal notranslate"><span class="pre">pylabrobot.resources</span></code>.</p>
+<p>Add an entry under the appropriate manufacturer page in <code class="docutils literal notranslate"><span class="pre">docs/resources/library/</span></code>.
+List the part number, name, a picture, and a link to the manufacturer’s website. Existing entries
+use a table format like this:</p>
+<div class="highlight-markdown notranslate"><div class="highlight"><pre><span></span>| Description | Image | PLR definition |
+|-------------|-------|----------------|
+| 'VWRReagentReservoirs25mL'&lt;br&gt;Part no.: 89094&lt;br&gt;[manufacturer website](https://us.vwr.com/store/product/4694822/vwr-disposable-pipetting-reservoirs)&lt;br&gt;Polystyrene Reservoirs | ![](img/vwr/VWRReagentReservoirs25mL.jpg) | <span class="sb">`VWRReagentReservoirs25mL`</span> |
+</pre></div>
+</div>
+<p>Add the entry to an existing section for its type (such as Plates or Troughs), without blank lines
+between table rows. Create a section if needed. For a new manufacturer page, add it to the Resource
+Library toctree in <code class="docutils literal notranslate"><span class="pre">docs/resources/index.md</span></code>.</p>
+<p>Place the image in <code class="docutils literal notranslate"><span class="pre">docs/resources/library/img/&lt;manufacturer&gt;/</span></code>, using the definition’s name as
+the filename stem. Follow the existing image layout, and compress and scale the image to keep it
+small (ideally below 100 kB).</p>
+</section>
+<section id="verify-the-definition-and-understand-testing">
+<span id="5-verify-the-definition-and-understand-testing"></span><h2>5. Verify the definition and understand testing<a class="headerlink" href="#verify-the-definition-and-understand-testing" title="Link to this heading">#</a></h2>
+<p><strong>No tests are needed for a definition that only instantiates existing resource classes with
+particular numbers or other parameters.</strong> This applies to all resource types: a plate, tube,
+tip rack, trough, or carrier definition is an ordinary instance of its underlying class.
+We test the implementation of resource classes and shared helpers independently of any particular
+definition. Do not add tests that merely repeat a definition’s constants or exercise unchanged
+class behavior for another product.</p>
+<p>If the contribution introduces or changes behavior in a class or helper, test that implementation
+where the behavior lives. A new geometry algorithm, for example, needs tests for its calculations;
+another definition using that algorithm with different dimensions does not.</p>
+<p>The definition’s physical data still needs verification. Compare dimensions, capacities, child
+positions, and fit against the source drawings and the actual resource. State what you verified
+and any remaining uncertainty in the pull request. Unit tests that repeat the supplied numbers
+cannot establish whether they match the physical resource.</p>
+<p>Check that the factory is importable through <code class="docutils literal notranslate"><span class="pre">pylabrobot.resources</span></code> and that its documentation
+renders correctly. Follow the general contribution guide for formatting and documentation checks.</p>
 </section>
 <section id="submit-a-pull-request">
-<span id="4-submit-a-pull-request"></span><h2>4. Submit a pull request<a class="headerlink" href="#submit-a-pull-request" title="Link to this heading">#</a></h2>
-<p>Once you have:</p>
+<span id="6-submit-a-pull-request"></span><h2>6. Submit a pull request<a class="headerlink" href="#submit-a-pull-request" title="Link to this heading">#</a></h2>
+<p>Before submitting, confirm that you have:</p>
 <ul class="simple">
-<li><p>[ ] added your resource to the library</p></li>
-<li><p>[ ] documented the sources of your attributes (measured, from spec, etc.)</p></li>
-<li><p>[ ] added the name, part number, link and image to the docs</p></li>
-<li><p>[ ] added the imports</p></li>
-<li><p>[ ] verified that your resource works as expected</p></li>
+<li><p>[ ] added the resource definition using the appropriate existing classes and helpers</p></li>
+<li><p>[ ] documented the sources of physical attributes (measured, from spec, or derived)</p></li>
+<li><p>[ ] exported the definition through the package imports</p></li>
+<li><p>[ ] added the name, part number, link, and image to the resource library</p></li>
+<li><p>[ ] verified the physical data and documented any uncertainty</p></li>
+<li><p>[ ] tested any new or changed implementation behavior, if applicable</p></li>
 </ul>
-<p>You are ready to submit a pull request.</p>
-<p>Please create a separate new pull request for each resource you add.
-This makes it easier to review and faster to merge.</p>
+<p>Please create a separate pull request for each resource you add. This makes it easier to review
+and faster to merge.</p>
 </section>
 </section>
 
@@ -734,10 +768,12 @@ This makes it easier to review and faster to merge.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#update-the-resource-library">1. Update the resource library</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#document-attribute-sources">2. Document attribute sources</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#add-imports">3. Add imports</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submit-a-pull-request">4. Submit a pull request</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#identify-the-resource">1. Identify the resource</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#write-the-definition">2. Write the definition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#document-attribute-sources">3. Document attribute sources</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#export-and-document-the-resource">4. Export and document the resource</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verify-the-definition-and-understand-testing">5. Verify the definition and understand testing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#submit-a-pull-request">6. Submit a pull request</a></li>
 </ul>
   </nav></div>
 
