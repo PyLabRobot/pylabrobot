@@ -1597,7 +1597,7 @@ class Fluorescence(Measurement):
     """The first and last well's centres the reader found, from its PLATE_MAP_XY (`05 04`) reply.
 
     X1, Y1, Xn, Yn at bytes 8-15, u16 BE in 0.01 mm, Y from the back edge of a plate `size_y` mm
-    deep; returned from the front edge. All zero: the reader found none.
+    deep; returned from the front edge. A well's X and Y both zero: the reader found no centre.
 
     Raises:
       ValueError: if the reply is cut short.
@@ -1605,9 +1605,9 @@ class Fluorescence(Measurement):
     if len(reply) < 16:
       raise ValueError(f"PLATE_MAP_XY reply too short, got {len(reply)} bytes")
     x1, y1, x2, y2 = (int.from_bytes(reply[i : i + 2], "big") / 100 for i in range(8, 16, 2))
-    if not any((x1, y1, x2, y2)):
-      return None, None
-    return Coordinate(x1, size_y - y1, 0), Coordinate(x2, size_y - y2, 0)
+    first = Coordinate(x1, size_y - y1, 0) if x1 or y1 else None
+    last = Coordinate(x2, size_y - y2, 0) if x2 or y2 else None
+    return first, last
 
   # -- measuring -----------------------------------------------------------------------------------
 

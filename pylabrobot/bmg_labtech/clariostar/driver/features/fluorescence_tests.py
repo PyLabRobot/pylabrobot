@@ -2046,6 +2046,23 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual([result.well for result in results], ["D6", "A12", "H6"])
 
+  async def test_a_centre_the_reader_did_not_find_is_none(self):
+    # PLATE_MAP_XY replies of a reader: A1's centre found and A12's not, then C1's not and C4's
+    first, last = Fluorescence._decode_grid_centers(
+      bytes.fromhex("04054626000002020588046400000000"), 85.48
+    )
+    assert first is not None
+    self.assertAlmostEqual(first.x, 14.16)
+    self.assertAlmostEqual(first.y, 85.48 - 11.24)
+    self.assertIsNone(last)
+    first, last = Fluorescence._decode_grid_centers(
+      bytes.fromhex("04054626000002020000000010190b74"), 85.48
+    )
+    self.assertIsNone(first)
+    assert last is not None
+    self.assertAlmostEqual(last.x, 41.21)
+    self.assertAlmostEqual(last.y, 85.48 - 29.32)
+
   async def test_a_sub_plate_scan_is_sent_and_decoded_as_its_recording(self):
     ground_truth = load_grid_ground_truth()["sub_plate_scan_96_top"]
     io = FakeFTDI(chunk=4096)
