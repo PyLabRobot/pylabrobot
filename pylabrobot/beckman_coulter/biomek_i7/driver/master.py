@@ -17,6 +17,7 @@ Controller's logs show it doing.
 import asyncio
 import logging
 from typing import (
+  TYPE_CHECKING,
   Awaitable,
   Callable,
   Dict,
@@ -47,6 +48,9 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
 from pylabrobot.io.usb import USB
+
+if TYPE_CHECKING:
+  from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +157,9 @@ class BiomekI7Driver:
     # The pods, named as STAR names its X-arms: each fills an X-arm's slot (design.md, The pods).
     self.left_x_arm: Optional[Pod] = None
     self.right_x_arm: Optional[Pod] = None
+    # The deck the operations work on (STAR's `driver.deck`), set by `BiomekI7`; None without one.
+    # Moves, homing and the rail guard never need it.
+    self.deck: Optional["BiomekI7Deck"] = None
 
   # -- lifecycle -------------------------------------------------------------
 

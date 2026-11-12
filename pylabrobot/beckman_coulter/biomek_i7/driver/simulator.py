@@ -41,7 +41,8 @@ from pylabrobot.io.usb import USB
 
 # Names the recording the simulator answers from (identity and sensor reads, recorded at an
 # instrument's cold start) when no path is given. A generic one ships in `defaults/`
-# (`biomek_i7_generic_coldstart.json`).
+# (`biomek_i7_generic_coldstart.json`), which `BiomekI7(simulation=True)` uses when neither is
+# given.
 RECORDING_ENV = "BIOMEK_I7_SIMULATOR_RECORDING"
 
 
