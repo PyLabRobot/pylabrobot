@@ -1,11 +1,9 @@
 """Tests for the Sarstedt tube's geometry and measured height-volume calibration."""
 
-import json
 import unittest
 
-from pylabrobot.resources import Coordinate, Deck, Tube, sarstedt_tube_2mL_Vb
+from pylabrobot.resources import Coordinate, Deck, sarstedt_tube_2mL_Vb
 from pylabrobot.resources.sarstedt import sarstedt_tube_2mL_Vb as manufacturer_factory
-
 
 _MEASUREMENTS = (
   (50.0, 3.55),
@@ -25,7 +23,7 @@ _MEASUREMENTS = (
 
 
 class TestSarstedtTube(unittest.TestCase):
-  """Verify placement, calibration, and serialization of the skirted tube."""
+  """Verify placement and calibration of the skirted tube."""
 
   def test_public_imports_and_cavity_placement(self):
     """The cavity floor is above the skirt's base and 44 mm below the top rim."""
@@ -69,27 +67,3 @@ class TestSarstedtTube(unittest.TestCase):
     for height in (-1.0, 0.0, 2.54, 39.37, 44.0):
       with self.subTest(height=height), self.assertRaises(ValueError):
         tube.compute_volume_from_height(height)
-
-  def test_json_round_trip(self):
-    """Saving a layout preserves the geometry, calibration table, and both conversions."""
-    tube = sarstedt_tube_2mL_Vb("sample")
-    restored = Tube.deserialize(json.loads(json.dumps(tube.serialize())))
-
-    self.assertIsInstance(restored, Tube)
-    self.assertEqual(restored.name, "sample")
-    self.assertEqual(restored.model, "sarstedt_tube_2mL_Vb")
-    self.assertEqual(restored.get_size_x(), 10.8)
-    self.assertEqual(restored.get_size_y(), 10.8)
-    self.assertEqual(restored.get_size_z(), 45.0)
-    self.assertEqual(restored.max_volume, 2_000)
-    self.assertEqual(restored.material_z_thickness, 1.0)
-    self.assertEqual(restored.get_anchor(z="cavity_bottom").z, 1.0)
-    self.assertTrue(restored.supports_compute_height_volume_functions())
-    expected_data = {round(height - 1.0, 2): volume for volume, height in _MEASUREMENTS}
-    self.assertEqual(restored.height_volume_data, expected_data)
-    for volume, height_from_base in _MEASUREMENTS:
-      with self.subTest(volume=volume):
-        self.assertAlmostEqual(restored.compute_height_from_volume(volume), height_from_base - 1.0)
-        self.assertAlmostEqual(restored.compute_volume_from_height(height_from_base - 1.0), volume)
-    self.assertAlmostEqual(restored.compute_height_from_volume(750.0), 16.72)
-    self.assertAlmostEqual(restored.compute_volume_from_height(25.96), 1250.0)

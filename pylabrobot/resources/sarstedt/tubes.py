@@ -2,7 +2,6 @@
 
 from pylabrobot.resources.tube import Tube, TubeBottomType
 
-
 # Liquid heights measured from the outside base with micrometers, minus the 1 mm
 # cavity-floor offset. Keys are heights above the cavity floor (mm); values are uL.
 _sarstedt_tube_2mL_Vb_height_volume_data = {
