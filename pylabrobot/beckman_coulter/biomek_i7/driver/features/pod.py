@@ -43,6 +43,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   HOME_RECIPES,
   Homer,
 )
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
 
 if TYPE_CHECKING:

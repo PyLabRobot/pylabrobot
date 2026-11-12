@@ -9,6 +9,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import InterlockTrippedError
 from pylabrobot.beckman_coulter.biomek_i7.driver.head96_tests import LOGGED
 from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
+from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad
 
