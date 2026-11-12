@@ -79,7 +79,7 @@ class GridScanError(RuntimeError):
     """
     Args:
       message: what failed.
-      grids: the grids read before the failure, in the order the wells were given.
+      grids: the grids read before the failure, in the order the wells or points were given.
     """
     self.grids = grids
     super().__init__(message)

@@ -1428,8 +1428,8 @@ class Fluorescence(Measurement):
     """A made-up plate's 14 bytes from the first of two points to the second, as
     `_encode_plate_geometry`.
 
-    Its columns and rows are the points' distance apart in `_GRID_PITCH` steps, plus one, so the
-    reader steps its grid as on a 96-well plate; Y measured from the back edge.
+    Its columns and rows are the points' distance apart in `_GRID_PITCH` steps, rounded, plus one,
+    so the reader steps its grid about as on a 96-well plate; Y measured from the back edge.
     """
     first, last = points
     values = (size[0], size[1], first.x, size[1] - first.y, last.x, size[1] - last.y)
@@ -1722,7 +1722,7 @@ class Fluorescence(Measurement):
     """Measure the signal over a grid of points around each of one or two `positions`.
 
     - The reader reads a 31 x 31 grid around each point, at one focal height and gain, and finds
-      the signal's centre (about 50-80 s a point), stepping it as on a 96-well plate (`_GRID_PITCH`).
+      the signal's centre (about 50-80 s a point), stepping it about as on a 96-well plate.
     - A scan runs from back-left to front-right: two points are scanned in that order (swapped if
       needed); a point on its own, or two less than half a pitch apart in x, with a neighbouring
       point one pitch away whose grid is not kept.
@@ -1782,9 +1782,11 @@ class Fluorescence(Measurement):
       else:
         scans.append(([Coordinate(point.x - pitch, point.y, point.z), point], [None, i]))
     geometries = [
-      self._encode_grid_geometry(self._PLATE_HOLDER_SIZE, points) for points, _ in scans
+      self._encode_grid_geometry(size=self._PLATE_HOLDER_SIZE, points=points) for points, _ in scans
     ]
-    errors = [error for geometry in geometries for error in self._check_grid_geometry(geometry)]
+    errors = [
+      error for geometry in geometries for error in self._check_grid_geometry(geometry=geometry)
+    ]
     if errors:
       raise ValueError("; ".join(errors))
     self._warn_untested("a grid at given positions")
@@ -1794,9 +1796,17 @@ class Fluorescence(Measurement):
       logger.info("grid: %s at %s", self._describe_fluorescence_channel(filled), points)
       try:
         scanned = await self._get_grids(
-          parameters, points, [None, None], size_y, focal_height, gain, timeout
+          parameters=parameters,
+          positions=points,
+          wells=[None, None],
+          size_y=size_y,
+          focal_height=focal_height,
+          gain=gain,
+          timeout=timeout,
         )
       except Exception as error:
+        if not grids:
+          raise
         read = [grids[i] for i in sorted(grids)]
         raise GridScanError(f"the grid scan at {points} failed: {error}", read) from error
       for index, grid in zip(kept, scanned):
@@ -1866,9 +1876,14 @@ class Fluorescence(Measurement):
     )
     items = plate.get_all_items()
     targets = [items[0], items[-1]] if wells is None else list(wells)
-    pairs = self._get_well_pairs(plate, targets)
-    geometries = [self._encode_sub_plate_geometry(plate, first, last) for first, last, _ in pairs]
-    errors = [error for geometry in geometries for error in self._check_grid_geometry(geometry)]
+    pairs = self._get_well_pairs(plate=plate, wells=targets)
+    geometries = [
+      self._encode_sub_plate_geometry(plate=plate, first=first, last=last)
+      for first, last, _ in pairs
+    ]
+    errors = [
+      error for geometry in geometries for error in self._check_grid_geometry(geometry=geometry)
+    ]
     if errors:
       raise ValueError("; ".join(errors))
     if focal_height is None:
@@ -1900,9 +1915,17 @@ class Fluorescence(Measurement):
       )
       try:
         scanned = await self._get_grids(
-          parameters, centres, identifiers, plate.get_size_y(), focal_height, gain, timeout
+          parameters=parameters,
+          positions=centres,
+          wells=identifiers,
+          size_y=plate.get_size_y(),
+          focal_height=focal_height,
+          gain=gain,
+          timeout=timeout,
         )
       except Exception as error:
+        if not grids:
+          raise
         read = [grids[identifier] for identifier in requested if identifier in grids]
         raise GridScanError(
           f"the grid scan of {identifiers[0]} and {identifiers[1]} failed: {error}", read

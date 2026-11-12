@@ -1891,18 +1891,22 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
   async def test_given_points_make_up_a_plate_at_a_96_well_plates_pitch(self):
     feature = make_fluorescence(FakeFTDI())
     geometry = feature._encode_grid_geometry(
-      (127.76, 85.48), [Coordinate(20, 60, 0), Coordinate(50, 30, 0)]
+      size=(127.76, 85.48), points=[Coordinate(20, 60, 0), Coordinate(50, 30, 0)]
     )
     # 30 mm apart in x and y: 4 columns and 4 rows of about 9 mm
     self.assertEqual(geometry.hex(), "31e8216407d009f4138815ac0404")
-    self.assertEqual(feature._check_grid_geometry(geometry), [])
+    self.assertEqual(feature._check_grid_geometry(geometry=geometry), [])
 
   async def test_a_sub_plate_is_the_part_of_the_plate_between_its_wells(self):
     plate = cor_96_wellplate_360uL_Fb("plate")
     feature = make_fluorescence(FakeFTDI(), plate)
-    c4_f9 = feature._encode_sub_plate_geometry(plate, plate.get_well("C4"), plate.get_well("F9"))
+    c4_f9 = feature._encode_sub_plate_geometry(
+      plate=plate, first=plate.get_well("C4"), last=plate.get_well("F9")
+    )
     self.assertEqual(c4_f9.hex(), "31e8216410220b7021b615fc0604")
-    a1_h12 = feature._encode_sub_plate_geometry(plate, plate.get_well("A1"), plate.get_well("H12"))
+    a1_h12 = feature._encode_sub_plate_geometry(
+      plate=plate, first=plate.get_well("A1"), last=plate.get_well("H12")
+    )
     self.assertEqual(a1_h12, feature._encode_plate_geometry(plate))
 
   async def test_the_scans_the_reader_refuses_or_misreads_are_found(self):
@@ -1916,7 +1920,7 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       ("31e82164172a0ef4172a0ef40101", "at least 2 columns"),  # D6 alone
     ):
       with self.subTest(geometry=geometry):
-        errors = feature._check_grid_geometry(bytes.fromhex(geometry))
+        errors = feature._check_grid_geometry(geometry=bytes.fromhex(geometry))
         self.assertEqual(len(errors), 1)
         self.assertIn(reason, errors[0])
     # geometries it scanned at 330 um: C4 to F9, H1 to H4, A1 to A12 as one row, the whole plate
@@ -1927,7 +1931,7 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       "31e82164059604682c421d040c08",
     ):
       with self.subTest(geometry=geometry):
-        self.assertEqual(feature._check_grid_geometry(bytes.fromhex(geometry)), [])
+        self.assertEqual(feature._check_grid_geometry(geometry=bytes.fromhex(geometry)), [])
     self.assertEqual(QUIT_CODE_DESCRIPTIONS[29], "the scan's last well lies left of its first")
     self.assertEqual(QUIT_CODE_DESCRIPTIONS[30], "the scan's last well lies behind its first")
 
@@ -1945,7 +1949,9 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       )
     self.assertIn("has not been tested on hardware", logs.output[0])
     # a point on its own is scanned with a neighbour one pitch to its right, whose grid is dropped
-    self.assertEqual(scan.call_args.args[1], [Coordinate(20, 30, 0), Coordinate(29, 30, 0)])
+    self.assertEqual(
+      scan.call_args.kwargs["positions"], [Coordinate(20, 30, 0), Coordinate(29, 30, 0)]
+    )
     self.assertEqual([result.position for result in results], [Coordinate(20, 30, 0)])
 
   async def test_two_given_points_are_scanned_in_the_order_the_reader_allows(self):
@@ -1959,7 +1965,7 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
         GRID_CHANNEL, positions=[front_right, back_left], gain=2239, focal_height=15.0
       )
     # scanned from back-left to front-right, returned in the order given
-    self.assertEqual(scan.call_args.args[1], [back_left, front_right])
+    self.assertEqual(scan.call_args.kwargs["positions"], [back_left, front_right])
     self.assertEqual([result.position for result in results], [front_right, back_left])
     # front-left and back-right: a scan runs behind in either order, so nothing is sent
     io = FakeFTDI()
@@ -1995,13 +2001,19 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       await feature.measure_well_centers(GRID_CHANNEL)
       self.assertIs(z_scan.call_args.kwargs["well"], plate.get_well("A1"))
       self.assertEqual(z_scan.call_args.kwargs["gain_target_percent"], 50.0)
-      self.assertEqual(scan.call_args.args[4:6], (14.9, 2239))
+      self.assertEqual(
+        (scan.call_args.kwargs["focal_height"], scan.call_args.kwargs["gain"]), (14.9, 2239)
+      )
       await feature.measure_well_centers(GRID_CHANNEL, gain=1000)
       self.assertIsNone(z_scan.call_args.kwargs["gain_target_percent"])
-      self.assertEqual(scan.call_args.args[4:6], (14.9, 1000))
+      self.assertEqual(
+        (scan.call_args.kwargs["focal_height"], scan.call_args.kwargs["gain"]), (14.9, 1000)
+      )
       await feature.measure_well_centers(GRID_CHANNEL, focal_height=10.0, gain=1000)
       self.assertEqual(z_scan.call_count, 2)
-      self.assertEqual(scan.call_args.args[4:6], (10.0, 1000))
+      self.assertEqual(
+        (scan.call_args.kwargs["focal_height"], scan.call_args.kwargs["gain"]), (10.0, 1000)
+      )
 
   async def test_wells_are_paired_from_back_left_to_front_right(self):
     plate = cor_96_wellplate_360uL_Fb("plate")
@@ -2016,13 +2028,15 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
         gain=1127,
       )
     self.assertEqual(
-      [call.args[2] for call in scan.call_args_list],
+      [call.kwargs["wells"] for call in scan.call_args_list],
       [["A1", "A12"], ["C1", "C4"], ["C9", "E12"], ["D4", "F8"], ["F4", "F9"], ["H1", "H12"]],
     )
     # each scan the part of the plate between its wells
     self.assertEqual(
-      scan.call_args_list[0].args[0][1:15],
-      feature._encode_sub_plate_geometry(plate, plate.get_well("A1"), plate.get_well("A12")),
+      scan.call_args_list[0].kwargs["parameters"][1:15],
+      feature._encode_sub_plate_geometry(
+        plate=plate, first=plate.get_well("A1"), last=plate.get_well("A12")
+      ),
     )
     self.assertEqual([result.well for result in results], names)
 
@@ -2041,7 +2055,7 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       )
     # D6 and H6 share a column, so each with the next; A12 in the last, with the one before
     self.assertEqual(
-      [call.args[2] for call in scan.call_args_list],
+      [call.kwargs["wells"] for call in scan.call_args_list],
       [["A11", "A12"], ["D6", "D7"], ["H6", "H7"]],
     )
     self.assertEqual([result.well for result in results], ["D6", "A12", "H6"])
@@ -2049,14 +2063,14 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
   async def test_a_centre_the_reader_did_not_find_is_none(self):
     # PLATE_MAP_XY replies of a reader: A1's centre found and A12's not, then C1's not and C4's
     first, last = Fluorescence._decode_grid_centers(
-      bytes.fromhex("04054626000002020588046400000000"), 85.48
+      reply=bytes.fromhex("04054626000002020588046400000000"), size_y=85.48
     )
     assert first is not None
     self.assertAlmostEqual(first.x, 14.16)
     self.assertAlmostEqual(first.y, 85.48 - 11.24)
     self.assertIsNone(last)
     first, last = Fluorescence._decode_grid_centers(
-      bytes.fromhex("04054626000002020000000010190b74"), 85.48
+      reply=bytes.fromhex("04054626000002020000000010190b74"), size_y=85.48
     )
     self.assertIsNone(first)
     assert last is not None
@@ -2098,7 +2112,15 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
         "_get_grids",
         AsyncMock(
           side_effect=[
-            scanned_grids(b"", [Coordinate(0, 0, 0)] * 2, ["A1", "A12"], 85.48, 7.6, 1127, None),
+            scanned_grids(
+              parameters=b"",
+              positions=[Coordinate(0, 0, 0)] * 2,
+              wells=["A1", "A12"],
+              size_y=85.48,
+              focal_height=7.6,
+              gain=1127,
+              timeout=None,
+            ),
             failure,
           ]
         ),
@@ -2113,6 +2135,15 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
       )
     self.assertEqual([grid.well for grid in caught.exception.grids], ["A1", "A12"])
     self.assertIs(caught.exception.__cause__, failure)
+    # a failure before any grid is read keeps its own type
+    with (
+      patch.object(feature, "_get_grids", AsyncMock(side_effect=failure)),
+      self.assertRaises(RuntimeError) as caught_first,
+    ):
+      await feature.measure_well_centers(
+        SUB_PLATE_CHANNEL, wells=[plate.get_well("A1")], focal_height=7.6, gain=1127
+      )
+    self.assertIs(caught_first.exception, failure)
 
   async def test_invalid_arguments_send_nothing(self):
     io = FakeFTDI()
