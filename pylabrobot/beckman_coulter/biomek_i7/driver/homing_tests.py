@@ -85,6 +85,13 @@ FORCED_HM_MULTICHANNEL = [
   ("Set Move Parameters", "X", 35840),
   ("Move", "X", 30000),
 ]
+# Then the head's plunger (`HD`), as the same log shows it: D is homed after the pod.
+FORCED_HD_MULTICHANNEL = [
+  ("Set State", "D", None),
+  ("Set Move Parameters", "D", 43176),
+  ("Move", "D", 30000),
+  ("Home", "D", None),
+]
 
 
 def zero_sequence(message: bytes) -> str:
@@ -206,9 +213,10 @@ class InitializeTests(SimulatedRunTest):
       elif name in ("Move", "Move All"):
         value = struct.unpack_from("<I", m, 5)[0]
       decoded.append((name, names.get((m[0], m[1]), ""), value))
-    # After the re-arm's enables and reads: the recipe's requests.
-    start = len(decoded) - len(FORCED_HM_MULTICHANNEL)
-    self.assertEqual(decoded[start:], FORCED_HM_MULTICHANNEL)
+    # After the re-arm's enables and reads: the recipes' requests, `HM` then `HD`.
+    recipes = FORCED_HM_MULTICHANNEL + FORCED_HD_MULTICHANNEL
+    start = len(decoded) - len(recipes)
+    self.assertEqual(decoded[start:], recipes)
     self.assertNotIn("Home", [d[0] for d in decoded[:start]])
 
   async def test_a_homed_instrument_is_not_homed_again_by_default(self) -> None:

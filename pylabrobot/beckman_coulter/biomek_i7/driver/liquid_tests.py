@@ -1,11 +1,13 @@
-"""Aspirate and dispense on the Span-8 on the simulator, on the deck of a method Biomek's logs ran
+"""Aspirate and dispense on both heads on the simulator, on the deck of a method Biomek's logs ran
 (2026-10-20, a dilution): the logged method's technique values given as arguments, the moves sent
 compared with the Master Controller's own log of that run."""
 
+import math
 from typing import Dict, List, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7 import units
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import ROWS, COLUMNS, mandrel_name
+from pylabrobot.beckman_coulter.biomek_i7 import units
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid
 from pylabrobot.beckman_coulter.biomek_i7.driver.liquid import (
   ContainerShape,
@@ -15,16 +17,38 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.liquid import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import (
   biomek_labware,
   biomek_tip,
   biomek_touch_distance,
 )
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
-from pylabrobot.beckman_coulter.biomek_i7.techniques import MixHeights, TipTouch
+from pylabrobot.beckman_coulter.biomek_i7.techniques import Conditioning, MixHeights, TipTouch
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb, set_volume_tracking
 
+MC_NAMES = ["X", "Y", "Z", "D", "GY", "GG", "GZ", "GR"]
+MC_BITS = {"X": 0, "Y": 1, "Z": 3, "D": 11, "GY": 19, "GG": 20, "GZ": 21, "GR": 22}
+
+# The 96-head's 200 uL from the reservoir at P8 (the "MC Pipetting Reservoir with Asp Offset"
+# template: 0.2 cm in -X), then into the plate at P6; the Master Controller's log.
+LOGGED_96_ASPIRATE = [
+  "AM 154400 58897 -24888 43176 -31385 -109660 -60398 -141581 1000 11",  # approach, X offset
+  "AM -26929 -36982 -34206 43176 -31385 -109660 -60398 -141581 500 8",  # 2 mm above the bottom
+  "AM -26929 -36982 -102049 91462 -31385 -109660 -60398 -141581 117 2048",  # 210 uL
+  "AM -26929 -36982 -102049 89162 -31385 -109660 -60398 -141581 117 2048",  # 10 back
+  "AM -26929 -36982 -24888 89162 -31385 -109660 -60398 -141581 500 8",  # 1 mm above the top
+]
+LOGGED_96_DISPENSE = [
+  "AM -26929 -36982 -30991 43176 -31385 -109660 -60398 -141581 1000 8",
+  "AM -26929 -36982 -33679 43176 -31385 -109660 -60398 -141581 250 8",  # 1 mm above the bottom
+  "AM -26929 -36982 -32228 43176 -31385 -109660 -60398 -141581 146 2056",  # following up
+  "AM -26929 -36982 -31972 43176 -31385 -109660 -60398 -141581 250 8",  # 2 mm above the liquid
+  "AM -26929 -36982 -32996 43176 -31385 -109660 -60398 -141581 1000 8",  # touch: liquid - 2 mm
+  "AM 117597 84845 -102049 43176 -31385 -109660 -60398 -141581 1000 3",
+  "AM 117597 85550 -102049 43176 -31385 -109660 -60398 -141581 1000 3",
+  "AM -26929 -36982 -30991 43176 -31385 -109660 -60398 -141581 250 8",
+]
 # The Span-8's eight probes from the reservoir (the "S8 Pipetting Reservoir Offset Aspirate"
 # template: 10 mm approach), then probe 1 into A1 of the plate the 96-head filled.
 LOGGED_SPAN8_ASPIRATE = [
@@ -72,6 +96,11 @@ def parse_span8(command: str) -> Tuple[Dict[str, int], int]:
   return {n: next(values) for i, n in enumerate(SPAN8_SLOTS) if mask & (1 << i)}, speed
 
 
+def parse_mc(command: str) -> Tuple[Dict[str, int], int]:
+  *pos, speed, mask = [int(x) for x in command.split()[1:]]
+  return {n: v for n, v in zip(MC_NAMES, pos) if mask & (1 << MC_BITS[n])}, speed
+
+
 class LiquidTests(PodMoveTest):
   async def setup_deck(self):  # type: ignore[no-untyped-def]
     set_volume_tracking(True)
@@ -110,6 +139,37 @@ class LiquidTests(PodMoveTest):
     """The moves after the X/Y travel (`_move_over` lifts first, then moves X/Y alone)."""
     travel = max(i for i, (t, _) in enumerate(moves) if "X" in t and not any("Z" in k for k in t))
     return [m for m in moves[travel + 1 :] if not set(m[0]) <= {"Z", "GZ"} or m[1] != 1000][:99]
+
+  async def test_the_96_heads_logged_transfer(self) -> None:
+    driver, lh = await self.setup_deck()
+    head = lh.head96
+    head._set_tips(
+      {
+        mandrel_name(r, c): biomek_tip("T1025F", f"t_{r}_{c}")
+        for r in range(ROWS)
+        for c in range(COLUMNS)
+      }
+    )
+    moves = self.record(driver, "left")
+    await head.aspirate(
+      lh.deck.get_resource("Reservoir"), 200, offset=Coordinate(-2, 0, 0), liquid_height=2.0,
+      z_speed=47.5, flow_rate=100, settling_time=0.1, minimum_height=0.2,
+      conditioning=Conditioning(sections=1, section_volume=10, flow_rate=100),
+    )  # fmt: skip
+    aspirated = [m for m in moves if m[1] != 1000 or "X" in m[0] and "Z" in m[0]]
+    self.assertEqual(aspirated[:5], [parse_mc(c) for c in LOGGED_96_ASPIRATE])
+    moves.clear()
+    plate = lh.deck.get_resource("Plate")
+    await head.dispense(
+      plate, 200, liquid_height=1.0, follow_liquid=True, minimum_height=0.2, z_speed=23.75,
+      flow_rate=125,
+      # Biomek's touch-off distance for this well and tip (`biomek_touch_distance`): 2.753 mm.
+      tip_touch=TipTouch(height=-2.0, height_from="liquid", theta=90, speed_fraction=1.0, distance=2.7532),
+    )  # fmt: skip
+    first = next(i for i, (t, s) in enumerate(moves) if t == parse_mc(LOGGED_96_DISPENSE[0])[0])
+    self.assertEqual(moves[first : first + 8], [parse_mc(c) for c in LOGGED_96_DISPENSE])
+    # The wells now hold what the head pushed out; the reservoir lost 96 x 210 - 96 x 10.
+    self.assertAlmostEqual(plate.get_well("H12").tracker.get_used_volume(), 200)
 
   async def test_the_span8s_logged_transfer(self) -> None:
     driver, lh = await self.setup_deck()
@@ -183,6 +243,11 @@ class LiquidTests(PodMoveTest):
         height_from="liquid",
       )  # fmt: skip
 
+  async def test_the_96_head_has_no_lld(self) -> None:
+    driver, lh = await self.setup_deck()
+    with self.assertRaises(NotImplementedError):
+      await lh.head96.aspirate(lh.deck.get_resource("Plate"), 10, lld_mode="CAPACITIVE")
+
   def test_biomeks_touch_off_distance(self) -> None:
     # Biomek's distance: the wall at the touch height less the tip's cone where it crosses the rim.
     well = biomek_labware("Thermo96VB_PP", "p").get_well("A1")
@@ -209,6 +274,44 @@ class LiquidTests(PodMoveTest):
     self.assertGreater(mixed_shape.wall_distance(0.5, 0.0), 0.0)
     self.assertLessEqual(mixed_shape.wall_distance(0.4, 0.0), 0.85 + 1e-6)
     self.assertAlmostEqual(mixed_shape.wall_distance(2.0, 0.0), 0.85, delta=0.001)
+
+  async def test_pylabrobots_own_labware(self) -> None:
+    # A plate defined by PyLabRobot: heights from its cavity bottom, the level from its own
+    # height <-> volume function, the touch-off to its outline less the tip's radius.
+    driver, lh = await self.setup_deck()
+    head = lh.head96
+    tip = biomek_tip("T1025F", "t")
+    head._set_tips(
+      {
+        mandrel_name(r, c): biomek_tip("T1025F", f"t_{r}_{c}")
+        for r in range(ROWS)
+        for c in range(COLUMNS)
+      }
+    )
+    plate = cor_96_wellplate_360uL_Fb("Native")
+    lh.deck.get_position("P6").assign_child_resource(plate)
+    reservoir = lh.deck.get_resource("Reservoir")
+    await head.aspirate(reservoir, 100)
+    settings = head._settings(
+      liquid_height=1.0, follow_liquid=True, tip_touch=TipTouch(height=-1.0)
+    )
+    plan = head.plan_liquid("dispense", plate, 100, settings, 100)
+    well = plate.get_well("A1")
+    rise = well.compute_height_from_volume(100) / 10
+    dispense = next(s for s in plan.steps if isinstance(s, PlungerMove))
+    start = plan.steps[1].z["A1"]  # type: ignore[union-attr]
+    self.assertAlmostEqual(dispense.z["A1"] - start, rise, places=6)
+    touch = next(s for s in plan.steps if isinstance(s, Touch))
+    # The wall where the tip touches: the tapered well's area there (its volume function's slope).
+    h = touch.above_bottom * 10
+    area = (
+      well.compute_volume_from_height(h + 0.05) - well.compute_volume_from_height(h - 0.05)
+    ) / 0.1
+    wall = math.sqrt(area / math.pi) / 10
+    self.assertLess(wall, well.get_size_x() / 20)
+    self.assertAlmostEqual(-touch.dy, wall - tip.get_size_x() / 20, places=6)
+    await head.dispense(plate, 100, liquid_height=1.0, follow_liquid=True)
+    self.assertAlmostEqual(well.tracker.get_used_volume(), 100)
 
   async def test_the_span8s_logged_mix(self) -> None:
     driver, lh = await self.setup_deck()
@@ -330,3 +433,26 @@ class LiquidTests(PodMoveTest):
     await pipettes.dispense(wells, [30, 30], post_mixes=[mix] * 2)
     self.assertAlmostEqual(wells[0].tracker.get_used_volume(), 30)
     self.assertAlmostEqual(tips[1].tracker.get_used_volume(), 0)
+
+  async def test_the_96_heads_mix(self) -> None:
+    # The same template on the 96-head (no logged method mixes on it): after the dispense the
+    # plunger draws and pushes the mix volume back, at the dispense height, at the mix's rate.
+    driver, lh = await self.setup_deck()
+    head = lh.head96
+    tips = {
+      mandrel_name(r, c): biomek_tip("T1025F", "t") for r in range(ROWS) for c in range(COLUMNS)
+    }
+    head._set_tips(tips)
+    head._tips.update(tips)
+    await head.aspirate(lh.deck.get_resource("Reservoir"), 100, liquid_height=2.0)
+    plate = lh.deck.get_resource("Plate")
+    moves = self.record(driver, "left")
+    await head.dispense(plate, 100, liquid_height=1.0, post_mix=Mix(50, 2, 100))
+    d = [t["D"] for t, _ in moves if "D" in t]
+    ul = [lh.head96._pod.declared.to_value("D", c) for c in d]  # type: ignore[union-attr]
+    steps = [b - a for a, b in zip(ul, ul[1:])]
+    self.assertEqual(len(steps), 4)  # after the dispense: draw, push, draw, push
+    for step, want in zip(steps, [50, -50, 50, -50]):
+      self.assertAlmostEqual(step, want, delta=0.01)  # to a count
+    self.assertAlmostEqual(plate.get_well("A1").tracker.get_used_volume(), 100)
+    self.assertAlmostEqual(tips["A1"].tracker.get_used_volume(), 0)

@@ -1,5 +1,6 @@
 """One pod: an arm on the shared X rail, its ACE module, and the axes that module drives."""
 
+import asyncio
 import logging
 import math
 from dataclasses import dataclass, field
@@ -41,6 +42,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   HOME_RECIPES,
   Homer,
 )
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
 
 if TYPE_CHECKING:
@@ -57,6 +59,7 @@ COMPONENT_PREFIXES = {"multichannel": "MC", "span8": "SPAN8"}
 # module type is what the board reports (Get Module ID, `protocol.MODULE_TYPES`); a new pod type is
 # a new entry here and in the motor tables.
 MODULE_FEATURES: Dict[str, Tuple[str, ...]] = {
+  "multichannel": ("head96",),
   "span8": ("pipettes",),
 }
 # The axes that change what a pod takes up along the X rail.
@@ -114,9 +117,9 @@ class Pod:
 
   Holds what every pod has: one board and its axes, moved together (`move_axes`, the Master
   Controller's `AM`), the position record the Master Controller keeps, homing, and the pod's pose
-  on the shared X rail. `module_type` is what the board reports itself to be: `multichannel` (a
-  96-channel head) or `span8` (eight independent channels). What else the pod carries is its
-  features (`MODULE_FEATURES`): on a `span8`, its channels (`pipettes`).
+  on the shared X rail. `module_type` says what else the pod carries, as features
+  (`MODULE_FEATURES`): `multichannel` a 96-channel head (`head96`), `span8` eight independent
+  channels (`pipettes`).
   """
 
   def __init__(
@@ -155,6 +158,9 @@ class Pod:
     # clamped to each pump's range when used.
     self._valves: Dict[str, Optional[p.Valve]] = {a.name: None for a in self.axes if a.is_pump}
     self._cutoff_velocity = 0
+    # Set while the interlock is tripped, shared by the driver (`BiomekI7Driver.interlock_tripped`);
+    # None for a pod used without one. Waits that the Master Controller abandons on a trip watch it.
+    self.interlock_tripped: Optional[asyncio.Event] = None
     # The height the channels rise to before traveling over the deck, mm of the channels' bottom
     # above the deck: STAR's `default_minimum_traverse_height`. Seeded from Biomek's "Safe Height"
     # (`GlobalMinSafeHeight`) when it is set; None, as on an instrument where it is not (-100000),
@@ -169,6 +175,7 @@ class Pod:
     self._listeners: List[Callable[["Pod"], None]] = []
     # What the pod carries (STAR's arm features): what its module type has (`MODULE_FEATURES`).
     features = MODULE_FEATURES.get(module_type, ())
+    self.head96: Optional[Head96] = Head96(self) if "head96" in features else None
     self.pipettes: Optional[Pipettes] = Pipettes(self) if "pipettes" in features else None
 
   @property
@@ -906,7 +913,8 @@ class Pod:
     Raises:
       RuntimeError: for a carried tip whose length is not known.
     """
-    return {} if self.pipettes is None else self.pipettes._carried_tip_lengths()
+    feature = self.head96 if self.head96 is not None else self.pipettes
+    return {} if feature is None else feature._carried_tip_lengths()
 
   def _traverse_targets(
     self, minimum_traverse_height: Optional[float], tip_lengths: Mapping[str, float]

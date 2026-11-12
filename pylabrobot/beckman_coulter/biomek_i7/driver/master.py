@@ -45,6 +45,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import INTERLOCK_TRIPPED_CODE, ace_error
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
@@ -147,7 +148,8 @@ class BiomekI7Driver:
     # While paused (`pause`): each pod's positions when the pause began, by side.
     self._paused: Optional[Dict[str, Dict[str, int]]] = None
     # Set while the interlock is tripped as far as this driver knows: from the start, when the
-    # chassis reports a trip, or when this driver trips it; cleared when it arms it.
+    # chassis reports a trip, or when this driver trips it; cleared when it arms it. A pod's
+    # waits (the `LT` settle) end early when it is set, as the Master Controller's do.
     self.interlock_tripped = asyncio.Event()
     self.interlock_tripped.set()
     self._unwatch: List[Callable[[], None]] = []
@@ -169,6 +171,7 @@ class BiomekI7Driver:
     skip_device_initialization: bool = False,
     skip_pipettes: bool = False,
     *,
+    skip_head96: bool = False,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
     force_initialize: bool = False,
@@ -185,6 +188,7 @@ class BiomekI7Driver:
         A pod with an axis not configured is then left as it is, and cannot move.
       skip_pipettes: leave the pod carrying the Span-8 as it is (STAR's per-feature skip). A pod's
         axes come up together, so this skips the whole pod, its gripper included.
+      skip_head96: leave the pod carrying the 96-head as it is; as `skip_pipettes`.
       skip_left_x_arm: leave the left pod as it is: not configured, enabled or moved.
       skip_right_x_arm: leave the right pod as it is.
       force_initialize: home again axes that are already homed, as Biomek's Home All does.
@@ -194,8 +198,8 @@ class BiomekI7Driver:
         fault, or a pod would move on the X rail beside a skipped pod whose X is not homed.
     """
     logger.warning(
-      "The Biomek i7 driver has run on one instrument (Home All, moves, prime, the Span-8's tips "
-      "and transfers, park); its commands were compared with Biomek's logs where Biomek ran the "
+      "The Biomek i7 driver has run on one instrument (Home All, prime, tips and transfers on "
+      "both heads, park); its commands were compared with Biomek's logs where Biomek ran the "
       "same operation; it is untested on other instruments. Please report what works and what "
       "does not."
     )
@@ -206,6 +210,7 @@ class BiomekI7Driver:
       await self.initialize(
         skip_device_initialization=skip_device_initialization,
         skip_pipettes=skip_pipettes,
+        skip_head96=skip_head96,
         skip_left_x_arm=skip_left_x_arm,
         skip_right_x_arm=skip_right_x_arm,
         force_initialize=force_initialize,
@@ -299,6 +304,7 @@ class BiomekI7Driver:
     for pod in self.arms:
       pod.driver = self
       pod.rail = self.rail
+      pod.interlock_tripped = self.interlock_tripped
       self.rail.readers[pod.side] = pod.request_rail_pose
     modules: List[Tuple[str, ModuleConfiguration]] = [("chassis", await self.chassis.discover())]
     for pod in self.arms:
@@ -507,6 +513,12 @@ class BiomekI7Driver:
     return None if self.chassis is None else self.chassis.front_cover
 
   @property
+  def head96(self) -> Optional[Head96]:
+    """The 96-channel head, on an instrument where one pod has it."""
+    pod = self._one_with("head96")
+    return pod.head96 if pod is not None else None
+
+  @property
   def pipettes(self) -> Optional[Pipettes]:
     """The Span-8 channels, on an instrument where one pod has them."""
     pod = self._one_with("pipettes")
@@ -529,6 +541,7 @@ class BiomekI7Driver:
     self,
     *,
     skip_pipettes: bool = False,
+    skip_head96: bool = False,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
   ) -> Set[str]:
@@ -537,7 +550,7 @@ class BiomekI7Driver:
     instrument does not have skips nothing). Known after discovery."""
     sides = {s for s, skip in (("left", skip_left_x_arm), ("right", skip_right_x_arm)) if skip}
     for pod in self.arms:
-      if skip_pipettes and pod.pipettes is not None:
+      if (skip_pipettes and pod.pipettes is not None) or (skip_head96 and pod.head96 is not None):
         sides.add(pod.side)
     return sides
 
@@ -546,6 +559,7 @@ class BiomekI7Driver:
     skip_device_initialization: bool = False,
     skip_pipettes: bool = False,
     *,
+    skip_head96: bool = False,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
     force_initialize: bool = False,
@@ -571,10 +585,9 @@ class BiomekI7Driver:
         tripped and ERROR shown.
     """
     skipped = self.skipped_sides(
-      skip_pipettes=skip_pipettes,
-      skip_left_x_arm=skip_left_x_arm,
-      skip_right_x_arm=skip_right_x_arm,
-    )
+      skip_pipettes=skip_pipettes, skip_head96=skip_head96,
+      skip_left_x_arm=skip_left_x_arm, skip_right_x_arm=skip_right_x_arm,
+    )  # fmt: skip
     pods = [pod for pod in self.arms if pod.side not in skipped]
     if skip_device_initialization and not pods:
       return
@@ -696,8 +709,9 @@ class BiomekI7Driver:
     """Home pods (every pod by default) at once, the Master Controller's Home All without its
     Span-8 priming.
 
-    Arms the interlock, then homes the pods together, as Biomek does: each runs its `HM` recipe.
-    Needs the motor tables loaded (`initialize` sees to it).
+    Arms the interlock, then homes the pods together, as Biomek does: each runs its `HM` recipe,
+    and a Multichannel pod then homes its plunger (`HD`). The Span-8's syringe pumps are left for
+    priming. Needs the motor tables loaded (`initialize` sees to it).
 
     If anything fails once the interlock is armed, ERROR is shown and the interlock tripped, which
     cuts the drives' power, before the error is raised; nothing is retried. Biomek instead leaves
@@ -711,9 +725,14 @@ class BiomekI7Driver:
     """
     targets = self.arms if pods is None else list(pods)
 
+    async def home_pod(pod: Pod) -> None:
+      await pod.home(force=force)
+      if pod.head96 is not None:
+        await pod.head96.home_plunger(force=force)
+
     try:
       await self.arm_interlock(targets)
-      await _together(pod.home(force=force) for pod in targets)
+      await _together(home_pod(pod) for pod in targets)
     except BaseException:
       await self._return_to_rest(error=True)
       raise

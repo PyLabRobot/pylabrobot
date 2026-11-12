@@ -34,6 +34,10 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import (
+  DEFAULT_TRASH as HEAD96_TRASH,
+)
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import (
   DEFAULT_TRASH as SPAN8_TRASH,
 )
@@ -94,9 +98,9 @@ class BiomekI7Device(Resource):
   the driver moves it, placed as Biomek's collision model places it, so the resource tree takes up
   the X the rail guard counts. The rest follows the pod's other axes (`_show_pod`): the
   Multichannel's carriage its Y and its head (an `NChannelPipette`) its Z, each Span-8 probe's
-  channel its own Y and Z, and the gripper (a `MechanicalGripper`) GY, GZ, GR and GG. The Span-8's
-  probes are its feature's resources, so the tips they carry hang from their shafts, as the STAR's
-  do. Each bridge marks the point its pod's X names (`resource_model.pods.pod_model`).
+  channel its own Y and Z, and the gripper (a `MechanicalGripper`) GY, GZ, GR and GG. The heads
+  are the features' resources, so the tips they carry hang from their shafts, as the STAR's do.
+  Each bridge marks the point its pod's X names (`resource_model.pods.pod_model`).
   `update_bridge_location`, `update_pod_location` and `update_probe_location` place the models by
   hand; nothing moves.
   """
@@ -182,6 +186,11 @@ class BiomekI7Device(Resource):
     return self.driver.front_cover
 
   @property
+  def head96(self) -> Optional[Head96]:
+    """The 96-channel head, on an instrument where one pod has it."""
+    return self.driver.head96
+
+  @property
   def pipettes(self) -> Optional[Pipettes]:
     """The Span-8 channels, on an instrument where one pod has them."""
     return self.driver.pipettes
@@ -191,10 +200,12 @@ class BiomekI7Device(Resource):
     skip_device_initialization: bool = False,
     skip_pipettes: bool = False,
     *,
+    skip_head96: bool = False,
     skip_left_x_arm: bool = False,
     skip_right_x_arm: bool = False,
     force_initialize: bool = False,
     discard_tips: bool = True,
+    precautionary_discard: bool = True,
     park: bool = True,
   ) -> None:
     """Bring the instrument up. This homes the arms, then, as the STAR does, takes off any tips
@@ -203,36 +214,45 @@ class BiomekI7Device(Resource):
     Args:
       skip_device_initialization: as `BiomekI7Driver.setup` takes it.
       skip_pipettes: as `BiomekI7Driver.setup` takes it.
+      skip_head96: as `BiomekI7Driver.setup` takes it.
       skip_left_x_arm: as `BiomekI7Driver.setup` takes it.
       skip_right_x_arm: as `BiomekI7Driver.setup` takes it.
       force_initialize: as `BiomekI7Driver.setup` takes it.
-      discard_tips: shuck tips found on a Span-8 that was brought up into its trash: the probes
-        the tip sensor finds a tip on. Needs the trash position on the deck.
+      discard_tips: shuck tips found on a pod that was brought up into its trash: on a Span-8 the
+        probes the tip sensor finds a tip on, on the 96-head the tips it records (it has no tip
+        sensor). Needs the trash position on the deck.
+      precautionary_discard: with `discard_tips`, eject into the 96-head's trash even when no
+        tips are recorded, as if the longest tip were on (`head96.discard_any_tips`),
+        as the STAR's 96-head initialization ejects into its waste: the head cannot sense tips,
+        and a lost state would leave them on unseen. False skips it, for an operator who has
+        checked the head is empty. A path to the trash that is not clear for the longest tip
+        refuses the move: clear it, or pass False.
       park: park every pod that was brought up (`park`).
     """
     await self.driver.setup(
       skip_device_initialization=skip_device_initialization,
       skip_pipettes=skip_pipettes,
+      skip_head96=skip_head96,
       skip_left_x_arm=skip_left_x_arm,
       skip_right_x_arm=skip_right_x_arm,
       force_initialize=force_initialize,
     )
     self._follow_driver()
     skipped = self.driver.skipped_sides(
-      skip_pipettes=skip_pipettes,
-      skip_left_x_arm=skip_left_x_arm,
-      skip_right_x_arm=skip_right_x_arm,
-    )
+      skip_pipettes=skip_pipettes, skip_head96=skip_head96,
+      skip_left_x_arm=skip_left_x_arm, skip_right_x_arm=skip_right_x_arm,
+    )  # fmt: skip
     if discard_tips:
-      await self._discard_found_tips(skipped)
+      await self._discard_found_tips(skipped, precautionary_discard)
     if park:
       await self.park(skip=skipped)
 
-  async def _discard_found_tips(self, skipped: Set[str]) -> None:
+  async def _discard_found_tips(self, skipped: Set[str], precautionary: bool = True) -> None:
     """Shuck the tips found on the pods not `skipped` (`setup`'s `discard_tips`). A Span-8 probe
     the sensor finds a tip on that the session did not record is taken to carry the longest
     Biomek tip, so its travel to the trash clears the deck; a recorded tip the sensor does not
-    find is forgotten."""
+    find is forgotten. The 96-head, which has no sensor, discards whatever it may carry when
+    `precautionary`, else only the tips recorded."""
     names = set(self.deck.position_names)
     for pod in self.arms:
       if pod.side in skipped:
@@ -249,6 +269,12 @@ class BiomekI7Device(Resource):
           pipettes._set_tips({n: pipettes._carried_tip(n) or assumed for n in found})
           logger.warning("%s: tips found on probes %s; discarding them", pod, found)
           await pipettes.discard_tips(use_channels=[n - 1 for n in found])
+      if pod.head96 is not None and HEAD96_TRASH in names:
+        if any(pod.head96.tips):
+          logger.warning("%s: the 96-head carries tips, as recorded; discarding them", pod)
+          await pod.head96.discard_tips()
+        elif precautionary:
+          await pod.head96.discard_any_tips()
 
   async def park(self, skip: Iterable[str] = ()) -> None:
     """Park the pods as Biomek does (`Pod.park`; a Span-8 over its wash station,
@@ -329,8 +355,12 @@ class BiomekI7Device(Resource):
         self._show_pod(pod)
 
   def _give_heads(self, pod: Pod) -> None:
-    """Hand a Span-8's probes to its feature, as the STAR's driver hands each feature its
+    """Hand a pod's head or probes to its feature, as the STAR's driver hands each feature its
     resources; the feature takes the tips their shafts carry as its own."""
+    model = self.pod_models[pod.side]
+    if pod.head96 is not None:
+      pod.head96.resource = model.get_resource(f"{model.name}_head")  # type: ignore[assignment]
+      pod.head96._adopt_tips()
     if pod.pipettes is not None:
       pod.pipettes.resources = span8_channels(self.bridges[pod.side])
       pod.pipettes._adopt_tips()

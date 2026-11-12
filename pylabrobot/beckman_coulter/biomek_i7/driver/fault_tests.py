@@ -1,11 +1,15 @@
 """Faults the boards report unasked, as the Master Controller handles them, and the positions: a
 motor that fails on its own trips the interlock and every position is forgotten; after an interlock
-trip, re-arming reads every position again."""
+trip, re-arming reads every position again; a trip ends the `LT` settle."""
 
 import asyncio
+import dataclasses
 
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
+from pylabrobot.beckman_coulter.biomek_i7.driver.errors import InterlockTrippedError
+from pylabrobot.beckman_coulter.biomek_i7.driver.head96_tests import LOGGED
 from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
+from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 
 
@@ -52,6 +56,19 @@ class FaultTests(PodMoveTest):
     await driver.arm_interlock()
     self.assertFalse(driver.interlock_tripped.is_set())
     self.assertIsNotNone(pod.cpositions["Z1"][0])
+
+  async def test_a_trip_ends_the_tip_load_settle(self) -> None:
+    driver = await self.homed()
+    head96 = self.pod(driver, "left").head96
+    assert head96 is not None
+    load = dataclasses.replace(TipLoad.parse(LOGGED), settling_time=30.0)
+    task = asyncio.create_task(head96.load_tips(load))
+    await self.settle()
+    self.assertFalse(task.done())  # pressed, settling
+    with self.assertLogs("pylabrobot.beckman_coulter.biomek_i7.driver.master", "ERROR"):
+      self.unasked(driver, "chassis", bytes([p.Device.INTERLOCK, 1, 0, 0, 0x10, 0x03, 0x00, 0x01]))
+      with self.assertRaises(InterlockTrippedError):
+        await asyncio.wait_for(task, 1.0)
 
 
 if __name__ == "__main__":
