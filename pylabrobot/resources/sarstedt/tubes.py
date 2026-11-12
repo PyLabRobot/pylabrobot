@@ -2,24 +2,6 @@
 
 from pylabrobot.resources.tube import Tube, TubeBottomType
 
-# Liquid heights measured from the outside base with micrometers, minus the 1 mm
-# cavity-floor offset. Keys are heights above the cavity floor (mm); values are uL.
-_sarstedt_tube_2mL_Vb_height_volume_data = {
-  2.55: 50.0,
-  3.12: 100.0,
-  6.20: 200.0,
-  8.61: 300.0,
-  10.29: 400.0,
-  12.35: 500.0,
-  14.10: 600.0,
-  15.81: 700.0,
-  17.63: 800.0,
-  19.62: 900.0,
-  21.37: 1000.0,
-  30.55: 1500.0,
-  39.36: 2000.0,
-}
-
 
 def sarstedt_tube_2mL_Vb(name: str) -> Tube:
   """Sarstedt screw-cap micro tube, part no. 72.609.300, without cap.
@@ -50,5 +32,21 @@ def sarstedt_tube_2mL_Vb(name: str) -> Tube:
     material_z_thickness=1.0,  # cavity floor above the outside base
     model=sarstedt_tube_2mL_Vb.__name__,
     bottom_type=TubeBottomType.V,  # from spec: conical cavity within a standing skirt
-    height_volume_data=_sarstedt_tube_2mL_Vb_height_volume_data,
+    # Liquid heights measured from the outside base with micrometers, minus the 1 mm
+    # cavity-floor offset. Keys are heights above the cavity floor (mm); values are uL.
+    height_volume_data={
+      2.55: 50.0,
+      3.12: 100.0,
+      6.20: 200.0,
+      8.61: 300.0,
+      10.29: 400.0,
+      12.35: 500.0,
+      14.10: 600.0,
+      15.81: 700.0,
+      17.63: 800.0,
+      19.62: 900.0,
+      21.37: 1000.0,
+      30.55: 1500.0,
+      39.36: 2000.0,
+    },
   )
