@@ -88,6 +88,7 @@ class LedBar:
   _pick_up_chip_color: Color = "#00FFFF"
   _drop_chip_color: Color = "#8000FF"
   _prime_chip_color: Color = "magenta"
+  _dispense_color: Color = "white"
 
   def __init__(self, *, driver: "MantisDriver", number_of_leds: int, show_actions: bool):
     """
@@ -173,6 +174,16 @@ class LedBar:
   def prime_chip_color(self, value: Color) -> None:
     _compute_rgb565(color=value)
     self._prime_chip_color = value
+
+  @property
+  def dispense_color(self) -> Color:
+    """The colour shown while a dispense runs."""
+    return self._dispense_color
+
+  @dispense_color.setter
+  def dispense_color(self, value: Color) -> None:
+    _compute_rgb565(color=value)
+    self._dispense_color = value
 
   async def _unchecked_fw_stop_animator(self) -> None:
     """StopAnimator (board 12, command 16) on strip 0, sent once."""
@@ -295,7 +306,7 @@ class LedBar:
     """Show an action's colour, or the idle animation for "idle"; a fault only warns.
 
     Args:
-      key: "setup", "setup_done", "error", "pick_up_chip", "drop_chip", "prime_chip" or "idle".
+      key: "setup", "setup_done", "error", "pick_up_chip", "drop_chip", "prime_chip", "dispense" or "idle".
     """
     colors: Dict[str, Color] = {
       "setup": self.setup_color,
@@ -304,6 +315,7 @@ class LedBar:
       "pick_up_chip": self.pick_up_chip_color,
       "drop_chip": self.drop_chip_color,
       "prime_chip": self.prime_chip_color,
+      "dispense": self.dispense_color,
     }
     try:
       if key == "idle":

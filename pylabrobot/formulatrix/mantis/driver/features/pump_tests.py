@@ -36,6 +36,7 @@ from pylabrobot.formulatrix.mantis.driver.features.pump import (
   PressureController,
   Pump,
   _apply_liquid_class_delays,
+  compute_dispense_drops,
   compute_pump_cycle,
 )
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
@@ -768,6 +769,7 @@ LOW_VOLUME_HI_FI_SEQUENCES: Dict[str, List[List[int]]] = {
   "prime_pump": [[18, 77], [19, 14], [17, 15], [29, 21], [31, 13]],
   "pre_detach": [[16, 100], [18, 100], [30, 100], [31, 100]],
   "post_prime": [],
+  "safe_state": [[17, 700]],
 }
 # The queue writes a Mantis v4 was sent for them in a dispense, by request, and its replies: the
 # pre-attach as item 1, a 100 nl drop as items 31 to 36, the pre-detach as items 38 to 41.
@@ -833,9 +835,9 @@ class ValveSequenceTests(PumpTestCase):
         "the install holds no pre_attach valve sequence for high_volume",
       ),
       (
-        {"chip_type": "low_volume_hi_fi", "name": "safe_state"},
+        {"chip_type": "low_volume_hi_fi", "name": "reverse_pump"},
         MantisConfigurationError,
-        "no safe_state valve sequence",
+        "no reverse_pump valve sequence",
       ),
     ]
     for kwargs, error, message in cases:
@@ -925,8 +927,8 @@ class PlayValveSequenceTests(PumpTestCase):
   async def test_a_sequence_refused_or_with_no_state_sends_nothing(self):
     _, pump = await self.set_up_sequences(events={})
     await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="post_prime")
-    with self.assertRaisesRegex(MantisConfigurationError, "no safe_state valve sequence"):
-      await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="safe_state")
+    with self.assertRaisesRegex(MantisConfigurationError, "no reverse_pump valve sequence"):
+      await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="reverse_pump")
     self.assertEqual(self.sent(), [])
 
 
@@ -1023,6 +1025,59 @@ class PumpCycleTests(unittest.TestCase):
     )
 
 
+class DispenseDropTests(unittest.TestCase):
+  def test_the_drops_of_a_well(self):
+    # (volume, minimum small drops) on a low volume chip (0.5 and 0.1 uL) or a high volume chip
+    # (5 and 1 uL): (large, small).
+    cases = [
+      ((1.0, 0, 0.5, 0.1), (2, 0)),
+      ((1.0, 5, 0.5, 0.1), (1, 5)),  # the recorded v4 one-well 1 uL: 5 small, 1 large
+      ((2.5, 5, 0.5, 0.1), (4, 5)),
+      ((0.5, 5, 0.5, 0.1), (0, 5)),
+      ((0.65, 0, 0.5, 0.1), (1, 2)),
+      ((0.65, 5, 0.5, 0.1), (0, 7)),
+      ((0.75, 0, 0.5, 0.1), (1, 3)),  # the split rounded down wins a tie
+      ((0.47, 0, 0.5, 0.1), (1, 0)),  # within half a small drop of a large one
+      ((0.3, 5, 0.5, 0.1), (0, 3)),  # the minimum, at most as many as fit
+      ((7.5, 0, 5.0, 1.0), (1, 3)),
+      ((4.6, 0, 5.0, 1.0), (1, 0)),
+      ((2.0, 0, 0.5, 0.1), (4, 0)),
+    ]
+    for (volume, minimum, large, small), drops in cases:
+      with self.subTest(volume=volume, minimum=minimum):
+        self.assertEqual(
+          compute_dispense_drops(
+            volume=volume,
+            large_diaphragm_volume=large,
+            small_diaphragm_volume=small,
+            minimum_small_drops=minimum,
+          ),
+          drops,
+        )
+
+  def test_below_half_a_small_drop_dispenses_none(self):
+    # The volume is rounded to 0.001 then to 0.1, a half to even: 0.05 is 0.
+    cases = [
+      ((0.04, 0.5, 0.1), (0, 0)),
+      ((0.05, 0.5, 0.1), (0, 0)),
+      ((0.06, 0.5, 0.1), (0, 1)),
+      ((0.0, 0.5, 0.1), (0, 0)),
+      ((0.45, 5.0, 1.0), (0, 0)),
+      ((0.55, 5.0, 1.0), (0, 1)),
+    ]
+    for (volume, large, small), drops in cases:
+      with self.subTest(volume=volume):
+        self.assertEqual(
+          compute_dispense_drops(
+            volume=volume,
+            large_diaphragm_volume=large,
+            small_diaphragm_volume=small,
+            minimum_small_drops=0,
+          ),
+          drops,
+        )
+
+
 class LiquidClassDelayTests(unittest.TestCase):
   def test_the_prime_pump_cycle_takes_the_large_drops_delays(self):
     # The low volume Hi-Fi chip's prime pump cycle, as a v4 was sent it with the 1 cP class.
@@ -1048,6 +1103,80 @@ class LiquidClassDelayTests(unittest.TestCase):
           ),
           states,
         )
+
+  def test_the_safe_state_takes_the_large_drops_fill_delay(self):
+    # A v4 was sent the safe state for 104 steps with a low volume Hi-Fi chip, 136 with a high
+    # volume Hi-Fi chip: each class's large fill delay, not the install's 700.
+    for chip_type, delay in (("low_volume_hi_fi", 104), ("high_volume_hi_fi", 136)):
+      with self.subTest(chip_type=chip_type):
+        self.assertEqual(
+          _apply_liquid_class_delays(
+            states=[(17, 700)],
+            liquid_class=mantis_mapping[("1 cP", chip_type)],
+            drop="safe_state",
+          ),
+          [(17, delay)],
+        )
+    self.assertEqual(
+      _apply_liquid_class_delays(
+        states=[(31, 100)],
+        liquid_class=mantis_mapping[("1 cP", "low_volume_hi_fi")],
+        drop="safe_state",
+      ),
+      [(31, 100)],
+    )
+
+
+# A dispense on a v4 with a low volume Hi-Fi chip, 1 cP: a large drop queued as items 5641 to 5645
+# and the safe state after the last well as item 8592, each write and its reply.
+RECORDED_DISPENSE_QUEUE_REPLIES = {
+  "large": {
+    "09166800280001001a00": "bf000000",
+    "0a160100280001001b00": "be000000",
+    "0b160c00280001001900": "bd000000",
+    "0c161300280001001d00": "bc000000",
+    "0d160a00280001001f00": "bb000000",
+  },
+  "safe_state": {"90216800280001001100": "00000000"},
+}
+
+
+class DispenseValveStateTests(PumpTestCase):
+  async def asyncSetUp(self):
+    answers = make_answers()
+    for replies in RECORDED_DISPENSE_QUEUE_REPLIES.values():
+      for request, reply in replies.items():
+        answers[(0, 65, bytes.fromhex(request))] = [bytes.fromhex(reply)]
+    self.directory = tempfile.TemporaryDirectory()
+    self.addCleanup(self.directory.cleanup)
+    path = os.path.join(self.directory.name, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(
+        {**RECORDING, "chip_sequences": {"low_volume_hi_fi": LOW_VOLUME_HI_FI_SEQUENCES}}, f
+      )
+    self.driver, self.pump = await self.set_up_pump(
+      link=FakeLink(answers=answers), declared_configuration_json=path
+    )
+
+  async def test_a_large_drop_and_the_safe_state_as_a_v4_was_sent_them(self):
+    liquid_class = mantis_mapping[("1 cP", "low_volume_hi_fi")]
+    for name, drop, first_item in (
+      ("dispense_500nl", "large", 0x1609),
+      ("safe_state", "safe_state", 0x2190),
+    ):
+      with self.subTest(name=name):
+        self.driver._next_item = first_item  # the item the recorded write was queued under
+        self.sent_before = len(self.link.written)
+        states = self.pump._get_drop_states(
+          chip_type="low_volume_hi_fi",
+          name=name,
+          liquid_class=liquid_class,
+          drop=drop,  # type: ignore[arg-type]
+        )
+        item = await self.pump._queue_valve_states(states=states)
+        requests = list(RECORDED_DISPENSE_QUEUE_REPLIES[drop])
+        self.assertEqual(self.sent(), [(0, 65, bytes.fromhex(request)) for request in requests])
+        self.assertEqual(item, first_item + len(requests) - 1)
 
 
 # A prime on a v4, low volume Hi-Fi chip, 1 cP: the vacuum at -12.5 inHg read until settled, the

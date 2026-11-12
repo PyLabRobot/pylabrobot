@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
 from pylabrobot.formulatrix.mantis.driver.valve_sequences import (
   compute_valve_bank_state,
+  is_recovery_fill_state,
   parse_valve_sequence,
 )
 
@@ -55,6 +56,13 @@ class ValveBankStateTests(unittest.TestCase):
 
   def test_one_output_open_is_outputs_open(self):
     self.assertEqual(compute_valve_bank_state(valves="0" * 17, outputs="0" * 95 + "1"), 29)
+
+  def test_a_fill_from_the_outputs(self):
+    # The safe state (17) opens the outputs, the small and large valves; a fill (26) and a drop's
+    # empty (29) do not fill from the outputs, nor does every valve closed (31).
+    for state, fills in ((17, True), (26, False), (29, False), (31, False), (16, False)):
+      with self.subTest(state=state):
+        self.assertEqual(is_recovery_fill_state(state=state), fills)
 
 
 class ParseValveSequenceTests(unittest.TestCase):

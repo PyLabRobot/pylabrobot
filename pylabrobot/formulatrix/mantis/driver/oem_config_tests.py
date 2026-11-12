@@ -663,7 +663,7 @@ PUMP_SEQUENCE_VOLUMES_BLOCK = {
   "low_volume_3pfe": {"dispense": {"dispense_100nl": 0.1}},
 }
 # An install's Default.config for one chip type: every tube volume; the pipette tip lacks its
-# prime volume, so it gives none.
+# prime volume, so it gives its pre-dispense volume only.
 INPUT_VOLUME_USES = {
   "Prime": 100.4,
   "Wash1": 250.0,
@@ -683,7 +683,12 @@ DEFAULT_CONFIG = (
   + '    <add key="Low Volume Hi-Fi.Tube.AutoPrime.Value" value="5" />\r\n'
   + TAIL
 )
-INPUT_VOLUMES_BLOCK = {"low_volume_hi_fi": {"tube": {"prime": 100.4}}}
+INPUT_VOLUMES_BLOCK = {
+  "low_volume_hi_fi": {
+    "tube": {"prime": 100.4, "pre_dispense": 0.6},
+    "pipette_tip": {"pre_dispense": 0.6},
+  }
+}
 
 
 class VolumeBlockTests(unittest.TestCase):

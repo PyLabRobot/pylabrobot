@@ -6,7 +6,8 @@ its order matches the recorded v4 startup.
 
 The head goes to idle along the unit's routes: the zone it stands in names a route to a safe XY
 and one to idle. Without them, only from near idle. A wellplate in the plate holder is reached
-through the unit's stage transform, and a chip in its slot along the slot's routes.
+through the unit's stage transform, its wells one after another as in the recorded v4 dispense,
+and a chip in its slot along the slot's routes.
 """
 
 import asyncio
@@ -94,6 +95,8 @@ ROUTE_Z_ACCELERATION = 200.0
 # How far below a height Z's encoder may read after rising to it, mm: twice the largest gap read
 # between Z's encoder and its demand position (2 device units, 0.05 mm), rounded up.
 Z_TRAVERSE_TOLERANCE = 0.1
+# Heights within 0.1 µm are one height, mm: a move from one to the other is not queued.
+HEIGHT_TOLERANCE = 0.0001
 # PyLabRobot design choices: poll a moving motor every 20 ms; a move or a home ends within 30 s.
 MOTOR_STATUS_POLL_INTERVAL = 0.02
 MOVE_TIMEOUT = 30.0
@@ -790,6 +793,14 @@ class Arm:
       await self._log_where_it_stopped()
       raise
 
+  async def _queue_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> int:
+    """Queue moves on the started sequencer, without waiting; return the last one's item, 0 for
+    none. The caller waits for it, and aborts the sequencer if the wait fails."""
+    item = 0
+    for targets in moves:
+      item = await self._driver._queue_move_item(targets=targets)
+    return item
+
   async def _play_queued_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> None:
     """Clear and start the sequencer, queue each move, then wait until the last is played, as
     ``_play_queued_move_groups`` with one group.
@@ -1275,6 +1286,26 @@ class Arm:
     return wellplate
 
   @staticmethod
+  def _get_wellplate_position(
+    *, wellplate: Plate, resource: Resource, offset: Coordinate
+  ) -> Tuple[float, float]:
+    """Where a resource's centre plus ``offset`` is in the wellplate frame: x right of and y in
+    front of the wellplate's back-left corner, mm.
+
+    Args:
+      wellplate: the wellplate the resource is, or is on.
+      resource: the wellplate, or a resource on it.
+      offset: added in the wellplate's frame (x right, y back), mm.
+    """
+    if resource is wellplate:
+      center_x, center_y = wellplate.get_size_x() / 2, wellplate.get_size_y() / 2
+    else:
+      center = resource.get_location_wrt(wellplate, x="c", y="c")
+      center_x, center_y = center.x, center.y
+    # The wellplate frame has y to the front, from the back edge: PyLabRobot's has it to the back.
+    return center_x + offset.x, wellplate.get_size_y() - (center_y + offset.y)
+
+  @staticmethod
   def _get_wellplate_top(*, wellplate: Plate) -> float:
     """The wellplate's tallest point above its base, mm: its frame, a well or its lid."""
     return max(
@@ -1326,13 +1357,7 @@ class Arm:
         f"tallest point, {top} mm above its base"
       )
     offset = offset or Coordinate.zero()
-    if resource is wellplate:
-      center_x, center_y = wellplate.get_size_x() / 2, wellplate.get_size_y() / 2
-    else:
-      center = resource.get_location_wrt(wellplate, x="c", y="c")
-      center_x, center_y = center.x, center.y
-    # The wellplate frame has y to the front, from the back edge: PyLabRobot's has it to the back.
-    x, y = center_x + offset.x, wellplate.get_size_y() - (center_y + offset.y)
+    x, y = self._get_wellplate_position(wellplate=wellplate, resource=resource, offset=offset)
     location = self._get_arm_frame_location(x=x, y=y, height=top + PITCH_HEIGHT + offset.z)
     traverse = self._get_arm_frame_location(x=x, y=y, height=minimum_traverse_height)
     await self.move_to_location(location, minimum_traverse_height=traverse.z)
@@ -1483,6 +1508,105 @@ class Arm:
       [self._get_queued_move(targets=targets, profiles=profiles) for targets in steps]
       for steps in (back + idle_position, to_idle)
     ]
+
+  def _get_dispense_moves(
+    self,
+    *,
+    locations: List[Coordinate],
+    travel_heights: List[float],
+    start_height: Optional[float],
+  ) -> List[List[List[Tuple[float, float, float]]]]:
+    """Each well's queued moves, from idle, as in the recorded v4 dispense; every target is
+    checked, nothing moves.
+
+    To the first well: the hold and the arms to the idle position with Z held (the unit's
+    idle position route's first two moves, at the route profile), Z alone to the well's height or
+    first up to ``start_height``, the arms over the well with Z held, then Z down. To a later well
+    at or above its travel height, one move of all three motors; else Z up to the travel height, the
+    arms with Z held, then Z down. The wells' moves are at the default profile.
+
+    Args:
+      locations: each well's location: x and y in the arm frame, mm; z in mm above Z's home flag.
+      travel_heights: each well's travel height from the one before, in mm above Z's home flag; the
+        first well's is not used.
+      start_height: the height Z reaches at the idle position before the first well, in mm above
+        Z's home flag, only if above that well; None goes to the well's height.
+
+    Raises:
+      MantisMotionError: if the arm is not brought up.
+      MantisConfigurationError: without the unit's ``arm`` block or idle position route.
+      MantisKinematicsError: if a well is out of the arm's reach.
+      ValueError: if a target is outside its motor's limits, or the default speeds out of range.
+    """
+    self._check_initialized()
+    profiles = self._get_profiles()
+    route_profiles = self._get_route_profiles()
+    ready = [
+      self._get_queued_move(targets=targets, profiles=route_profiles)
+      for targets in self._get_route_targets(route=self._get_idle_position_route()[:2])
+    ]
+
+    def get_z_targets(z: float) -> Dict[int, float]:
+      targets = {Z_MOTOR: self._get_z_device_position(z=z)}
+      self._check_reachable(motor=Z_MOTOR, position=targets[Z_MOTOR])
+      return targets
+
+    moves: List[List[List[Tuple[float, float, float]]]] = []
+    previous: Optional[Coordinate] = None
+    for location, travel_height in zip(locations, travel_heights):
+      arms = self._get_arm_targets(x=location.x, y=location.y)
+      for motor, target in arms.items():
+        self._check_reachable(motor=motor, position=target)
+      if previous is None:
+        travel = location.z if start_height is None else max(start_height, location.z)
+        steps = [get_z_targets(z=travel), arms]
+      elif location.z >= travel_height - HEIGHT_TOLERANCE:
+        travel = location.z
+        steps = [{**arms, **get_z_targets(z=location.z)}]
+      else:
+        travel = max(travel_height, previous.z, location.z)
+        rise = [] if abs(travel - previous.z) <= HEIGHT_TOLERANCE else [get_z_targets(z=travel)]
+        steps = [*rise, arms]
+      if abs(travel - location.z) > HEIGHT_TOLERANCE:
+        steps.append(get_z_targets(z=location.z))
+      well_moves = [self._get_queued_move(targets=targets, profiles=profiles) for targets in steps]
+      moves.append([*ready, *well_moves] if previous is None else well_moves)
+      previous = location
+    return moves
+
+  def _get_dispense_end_moves(
+    self, *, last: Coordinate, end_height: Optional[float]
+  ) -> Tuple[List[List[Tuple[float, float, float]]], List[List[Tuple[float, float, float]]]]:
+    """The queued moves after a dispense's last well, as two groups waited for in turn; every
+    target is checked, nothing moves.
+
+    First Z alone up to ``end_height`` if above the last well, then the move to the idle position
+    (``_get_idle_position_route``), as the recorded v4 dispense ends; then to idle Z first
+    (``CHIP_CHANGER_IDLE_ROUTE``), as its next chip move opens.
+
+    Args:
+      last: the last well's location: x and y in the arm frame, mm; z in mm above Z's home flag.
+      end_height: in mm above Z's home flag; None rises no more than the idle position route.
+
+    Raises:
+      MantisMotionError: if the arm is not brought up.
+      MantisConfigurationError: without the unit's ``arm`` block or idle position route.
+      ValueError: if a target is outside its motor's limits.
+    """
+    self._check_initialized()
+    profiles = self._get_route_profiles()
+    rise: List[Dict[int, float]] = []
+    if end_height is not None and end_height > last.z + HEIGHT_TOLERANCE:
+      target = self._get_z_device_position(z=end_height)
+      self._check_reachable(motor=Z_MOTOR, position=target)
+      rise = [{Z_MOTOR: target}]
+    idle_position = self._get_route_targets(route=self._get_idle_position_route())
+    to_idle = self._get_route_targets(route=CHIP_CHANGER_IDLE_ROUTE)
+    first, second = (
+      [self._get_queued_move(targets=targets, profiles=profiles) for targets in steps]
+      for steps in (rise + idle_position, to_idle)
+    )
+    return first, second
 
   async def move_to_wash_station(self, *, station: int) -> None:
     """Move the head from idle into a wash station along the unit's route.

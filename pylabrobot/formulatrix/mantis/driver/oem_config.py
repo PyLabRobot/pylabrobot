@@ -70,7 +70,7 @@ PUMP_TYPES = {"dispense": "Dispense", "prime": "Prime", "recovery": "Recovery"}
 # source, each use's ``<chip name>.<source>.<use>.Volume`` key; the uses read here.
 INPUT_VOLUME_FILE = os.path.join("System", "Inputs", "Default.config")
 INPUT_SOURCE_KEYS = {"tube": "Tube", "pipette_tip": "PipetteTip"}
-INPUT_VOLUME_KEYS = {"prime": "Prime"}
+INPUT_VOLUME_KEYS = {"prime": "Prime", "pre_dispense": "PreDispense"}
 
 
 def _parse_config_entries(*, path: str) -> Dict[str, str]:

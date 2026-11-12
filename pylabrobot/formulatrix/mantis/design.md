@@ -9,7 +9,8 @@ last section lists what is open and where the code does not follow a rule yet.
 ```
 device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
                              the driver, the parts; places the arm's links from a pose read; picks
-                             up, drops and primes a chip, and keeps which one is on the head.
+                             up, drops and primes a chip, keeps which one is on the head and
+                             whether it is primed, and dispenses with it into wells.
 driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
                              the sequencer, discovery and the saved configuration; reads the
                              motors; halts the device at stop; shows setup and stop on the LED
@@ -103,8 +104,8 @@ arm type and the plate holder's origin from the `Data` folder; `chip_changer` wh
 declares a chip changer, each chip rack position's routes from `System/Sequences/ChipChanger`;
 `chip_sequences` where `System/Chips` holds a chip type's folder, its valve sequences
 (`VALVE_SEQUENCE_FILES`); `pump_sequence_volumes`, the uL each sequence plays, where the unit
-declares them; `input_volumes`, each chip type's default prime volume by input source, where the
-configuration folder declares them.
+declares them; `input_volumes`, each chip type's default prime and pre-dispense volumes by input
+source, where the configuration folder declares them.
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
 (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`, `stage`, `chip_changer`) comes from the
@@ -269,6 +270,30 @@ v4 prime: the route's lines last first, each as written, then the move to the id
 (`_get_idle_position_route`); then to idle Z first (`CHIP_CHANGER_IDLE_ROUTE`), as the recorded v4's
 next chip move opens (`_get_waste_station_return_moves`).
 
+`dispense` is the device's too, as STAR's head96 dispenses on the device: the chip on the head,
+from idle, the wells in the caller's order. Every argument, drop, sequence and target is checked
+first; then, as a v4 was sent a dispense: the sequencer cleared and started, the clamp locked, the
+pump started; a chip not primed since it was picked up is primed (`_get_prime`, `prime_chip`'s
+checks and run); the vacuum and the chip take the liquid class's dispense pressures
+(`_prepare_pressures`), unless a prime just set the same; the pre-dispense plays at the waste
+station, large drops first (`_pre_dispense`: the station's route, `_play_drops`, the way back).
+The wells are then queued on the started sequencer as one stream (`_play_wells`), each well's
+moves (`Arm._get_dispense_moves`) then its drops, small then large (`compute_dispense_drops`: a
+volume below half a small drop plays none; `minimum_small_diaphragm_pumps` small first, then the
+closest split); after the last well the chip's safe state, its fill from the outputs held for the
+large drop's fill delay; then Z up to the end height if asked and the move to the idle position,
+the last waited for; then to idle Z first, so the head ends at idle. To the first well the head
+goes as in the recorded v4 dispense: the hold and the idle position with Z held, Z alone to the
+dispense height, the arms over the well; to the next well in one move when it is at or above the
+travel height (the default, `default_nozzle_clearance_above_wellplate` and
+`default_dispense_height_above_well` both `PITCH_HEIGHT`), else up, across and down. Precise, the
+wells are visited twice: their small drops, the move back to idle,
+`PRECISE_PRE_DISPENSE_LARGE_DROPS` large drops at the waste station, then their large drops; the
+first pre-dispense is `PRECISE_PRE_DISPENSE_VOLUMES`'s. The clamp is released and the pump stopped
+on every path (`_end_dispense`). The LED bar shows `dispense_color` meanwhile; while the wells play
+it fills (`show_progress`) as the sequencer reports each well's last item played
+(`LedBar._follow_fill`), and after the last well it blinks full (`_show_dispense_done`).
+
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
 | what it touches | prefix | here |
@@ -304,9 +329,12 @@ parking first; one it cannot drop is left there with a warning, and the rest of 
 A pick-up or a drop that fails once the head moves leaves its chip possibly on the head: every
 chip move is refused until `confirm_chip_attached`. A prime stops the pump on every path, a failed
 stop logged after a failed prime; one that fails leaves the head over the waste station with its
-chip, which `stop` parks along its zone's route. Queued moves not reported played abort the
-sequencer, so nothing more plays, and log where the motors stopped; a chip's valve sequence or
-drops not reported played abort it too. Failure behaviour is designed before coverage.
+chip, which `stop` parks along its zone's route. A dispense releases the clamp, then stops the pump
+it started, on every path, and raises a release or a stop that fails only when nothing failed
+before it; a dispense that fails leaves the head where it stopped, for `stop` to park, and the chip
+primed unless its prime failed. Queued moves not reported played abort the sequencer, so nothing
+more plays, and log where the motors stopped; a chip's valve sequence or drops not reported played
+abort it too. Failure behaviour is designed before coverage.
 
 **M11. Firmware is confirmed, never gated.** A version set outside `CONFIRMED_FIRMWARE_VERSIONS`
 warns once at setup; nothing refuses. A set goes in once it has been seen on a device.
@@ -316,7 +344,8 @@ class with a type, in PyLabRobot units, round, slightly below the firmware's own
 one device by assigning on the instance, or every device by assigning on the class; a command
 checks the value it takes before anything is sent. `plate_clamp.default_lock_level` is the first;
 `pump.default_settle_timeout`, `pump.default_vent_duration` and the device's
-`default_consecutive_drops` are checked when assigned.
+`default_consecutive_drops`, `default_dispense_height_above_well` and
+`default_nozzle_clearance_above_wellplate` are checked when assigned.
 
 **M13. Tests assert the wire, against real replies.** (STAR P15.) A test pins the bytes we send. A
 reply in a test is one a device sent, held as a named constant in the test, never rebuilt or
@@ -633,3 +662,27 @@ unlock, where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 78. **A prime ends with every chip valve closed, not in the chip's safe state.** The recorded v4
     prime ends in the chip's safe state; ours ends after the post-prime, as a v4 has also primed.
     Playing it needs its duration there confirmed: the install's file and the wire differ.
+79. **Dispensing has not run through this driver.** Its drops, their order and the safe state
+    follow what a v4 was sent in its dispenses: one well, 96 wells, and a precise run of 0.5 and
+    2.5 uL; a large drop and the safe state match item for item. No volume has been weighed. The
+    moves are checked in simulation, on a synthetic stage and synthetic routes only.
+80. **The waste station's visits wait.** A v4 was sent a dispense's pre-dispense, the way back and
+    the first well as one stream; here the station's route, the drops and the way back are each
+    waited for, the way back ends at idle, and the sequencer is cleared and started before each
+    queued route, as a prime does. Between precise rounds likewise, from idle: in the recorded v4
+    dispense the head goes to the station from the idle position.
+81. **The pre-dispense is the install's tube volume.** Its pipette tip volume differs on the XL
+    chip only (50 against 150 uL); `pre_dispense_volume` gives another. A precise dispense's first
+    pre-dispense, 0.8 uL (1 large and 3 small drops), was seen on a low volume Hi-Fi chip only,
+    played at the waste station with the prime before it; other chip types refuse without a
+    `pre_dispense_volume`.
+82. **The safe state's duration is the large drop's fill delay.** A v4 was sent it for 104 steps
+    with a low volume Hi-Fi chip and 136 with a high volume Hi-Fi chip, each class's large fill
+    delay; the install's 700 is not sent. Other classes take theirs by the same rule, not seen.
+83. **Whether a chip is primed is held in memory only,** from a prime's end until the chip is
+    dropped. A chip primed outside this process, or emptied since, is not known; `dispense` primes
+    one not primed here.
+84. **The wells' moves are at the arm's defaults,** the route profile unless changed; the recorded
+    v4 dispense moved at the route profile. A traverse height is checked against the wellplate's
+    tallest point and Z's limits, the recorded v4 approach lowers Z at the idle position, and
+    nothing models the chip racks: the path from the idle position to the wellplate must be clear.

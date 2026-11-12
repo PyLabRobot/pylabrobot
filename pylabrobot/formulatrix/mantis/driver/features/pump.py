@@ -5,7 +5,7 @@ and chip lines each have their own exhaust valves. The pump runs only while some
 it (``start_pump``); stop turns it off and vents both positive lines. On a v4, setup zeroes the
 bottle and chip sensors and runs the connect self-test, as in the recorded v4 startup, and a
 chip type's valve sequences from the configuration folder are queued on the chip valve bank, its
-drops too: a prime plays them at the waste station.
+drops too: a prime plays them at the waste station, a dispense over the wells.
 """
 
 import asyncio
@@ -19,7 +19,12 @@ from ...liquid_classes.base import MantisLiquidClass
 from ...resource_model.chip import MANTIS_CHIP_FACTORIES
 from ..errors import MantisConfigurationError, MantisPressureError, MantisPrimeError
 from ..framing import PRESSURE_BOARD
-from ..valve_sequences import VALVE_SEQUENCE_FILES, is_empty_state, is_fill_state
+from ..valve_sequences import (
+  VALVE_SEQUENCE_FILES,
+  is_empty_state,
+  is_fill_state,
+  is_recovery_fill_state,
+)
 
 if TYPE_CHECKING:
   from ..master import MantisDriver
@@ -101,9 +106,17 @@ VALVE_STATE_SHORT, VALVE_STATE_HOLD = 10, 500
 # Seconds to wait for queued valve states to be reported played; for a full queue of drops.
 VALVE_STATE_TIMEOUT = 10.0
 DROP_QUEUE_TIMEOUT = 60.0
-# Where a chip's input is filled from: each takes its own default volumes.
+# Where a chip's input is filled from: each takes its own default volumes, for each use.
 InputSource = Literal["tube", "pipette_tip"]
 INPUT_SOURCES: Tuple[InputSource, ...] = ("tube", "pipette_tip")
+InputVolumeUse = Literal["prime", "pre_dispense"]
+# Whose delays a valve sequence's states take: a large or a small drop's, or the safe state's that
+# closes a dispense.
+DropDelays = Literal["large", "small", "safe_state"]
+# A precise dispense's first pre-dispense, uL, by chip type, as in the recorded v4 low volume Hi-Fi
+# chip (1 large and 3 small drops); and the large drops it pre-dispenses before its large drops.
+PRECISE_PRE_DISPENSE_VOLUMES: Dict[str, float] = {"low_volume_hi_fi": 0.8}
+PRECISE_PRE_DISPENSE_LARGE_DROPS = 2
 # Seconds a prime waits for the vacuum and the chip to settle, where a chip type's install waits
 # other than the pump's default_settle_timeout (2 s).
 PREPARING_PRESSURE_SETTLE_TIMEOUTS: Dict[str, float] = {"xl_volume_pfe": 4.0}
@@ -129,6 +142,12 @@ def _round_half_away_from_zero(*, value: float, digits: int) -> float:
   if abs(fraction) >= 0.5:
     whole += math.copysign(1.0, fraction)
   return whole / scale
+
+
+def _round_half_to_even(*, value: float, digits: int) -> float:
+  """``value`` rounded to ``digits`` decimals, a half to even, after scaling: 0.05 rounds to 0."""
+  scale = 10.0**digits
+  return round(value * scale) / scale
 
 
 def compute_pump_cycle(
@@ -172,22 +191,61 @@ def compute_pump_cycle(
   return large, small
 
 
+def compute_dispense_drops(
+  *,
+  volume: float,
+  large_diaphragm_volume: float,
+  small_diaphragm_volume: float,
+  minimum_small_drops: int,
+) -> Tuple[int, int]:
+  """The (large, small) drops a v4 dispenses for one well's volume.
+
+  None when the volume, rounded to 0.001 a half away from zero then to 0.1 a half to even, is below
+  half a small drop. Else ``minimum_small_drops`` small drops, at most as many as fit in the volume,
+  then the closest split of the rest (``compute_pump_cycle``).
+
+  Args:
+    volume: uL.
+    large_diaphragm_volume: one large drop, uL.
+    small_diaphragm_volume: one small drop, uL.
+    minimum_small_drops: the small drops dispensed first.
+  """
+  rounded = _round_half_to_even(value=_round_half_away_from_zero(value=volume, digits=3), digits=1)
+  if rounded < small_diaphragm_volume / 2:
+    return 0, 0
+  first_small = min(minimum_small_drops, math.floor(volume / small_diaphragm_volume))
+  large, small = compute_pump_cycle(
+    target_volume=volume - first_small * small_diaphragm_volume,
+    large_diaphragm_volume=large_diaphragm_volume,
+    small_diaphragm_volume=small_diaphragm_volume,
+    allow_all_zero=True,
+  )
+  return large, small + first_small
+
+
 def _apply_liquid_class_delays(
   *,
   states: List[Tuple[int, int]],
   liquid_class: MantisLiquidClass,
-  drop: Literal["large", "small"],
+  drop: DropDelays,
 ) -> List[Tuple[int, int]]:
   """A drop's valve states with their diaphragm's fill and empty steps held for the liquid class's
   delays, in the sequencer's time steps; every other state as the install's file writes it.
 
-  The files hold the 1 cP class's delays, so the 1 cP class changes nothing.
+  The files hold the 1 cP class's delays, so the 1 cP class changes no drop. The safe state that
+  closes a dispense holds its fill from the outputs for the large drop's fill delay, as in the
+  recorded v4 dispense, not its file's duration.
 
   Args:
-    states: the drop's (state, duration) pairs.
+    states: the (state, duration) pairs.
     liquid_class: whose delays to take.
-    drop: whose diaphragm: "large" or "small".
+    drop: whose: "large" or "small" drop, or "safe_state".
   """
+  if drop == "safe_state":
+    return [
+      (state, liquid_class.large_fill_delay if is_recovery_fill_state(state=state) else duration)
+      for state, duration in states
+    ]
   if drop == "large":
     fill, empty = liquid_class.large_fill_delay, liquid_class.large_empty_delay
   else:
@@ -232,8 +290,8 @@ class Pump:
         install; None when there are none, and then none is queued.
       pump_sequence_volumes: each chip type's uL per play of its valve sequences, by pump type
         ("dispense", "prime", "recovery") and name, from the install; None when there are none.
-      input_volumes: each chip type's default volumes, uL, by input source and use ("prime"), from
-        the install; None when there are none.
+      input_volumes: each chip type's default volumes, uL, by input source and use ("prime",
+        "pre_dispense"), from the install; None when there are none.
     """
     self._driver = driver
     self.reservoir_release_controller = reservoir_release_controller
@@ -982,8 +1040,16 @@ class Pump:
     small, large = sorted(volumes.items(), key=lambda item: item[1])
     return small, large
 
-  def _get_prime_volume(self, *, chip_type: str, input_source: InputSource) -> float:
-    """A chip type's default prime volume for an input source, uL, from the install.
+  def _get_input_volume(
+    self, *, chip_type: str, input_source: InputSource, use: InputVolumeUse, argument: str
+  ) -> float:
+    """A chip type's default volume for an input source and a use, uL, from the install.
+
+    Args:
+      chip_type: a key of ``MANTIS_CHIP_FACTORIES``.
+      input_source: one of ``INPUT_SOURCES``.
+      use: "prime" or "pre_dispense".
+      argument: the argument that gives the volume instead, for the error.
 
     Raises:
       ValueError: if ``input_source`` is not one of ``INPUT_SOURCES``.
@@ -991,13 +1057,23 @@ class Pump:
     """
     if input_source not in INPUT_SOURCES:
       raise ValueError(f"input_source must be one of {INPUT_SOURCES}, got {input_source!r}")
-    volume = (self.input_volumes or {}).get(chip_type, {}).get(input_source, {}).get("prime")
+    volume = (self.input_volumes or {}).get(chip_type, {}).get(input_source, {}).get(use)
     if volume is None:
       raise MantisConfigurationError(
-        f"{self._driver.name}: the install names no {input_source} prime volume for {chip_type}; "
-        "pass a volume, or give its configuration folder (oem_config_directory)"
+        f"{self._driver.name}: the install names no {input_source} {use} volume for {chip_type}; "
+        f"pass {argument}, or give its configuration folder (oem_config_directory)"
       )
     return volume
+
+  def _get_prime_volume(self, *, chip_type: str, input_source: InputSource) -> float:
+    """A chip type's default prime volume for an input source, uL, from the install.
+
+    Raises:
+      ValueError, MantisConfigurationError: as ``_get_input_volume``.
+    """
+    return self._get_input_volume(
+      chip_type=chip_type, input_source=input_source, use="prime", argument="volume"
+    )
 
   def _get_drop_states(
     self,
@@ -1005,9 +1081,9 @@ class Pump:
     chip_type: str,
     name: str,
     liquid_class: MantisLiquidClass,
-    drop: Literal["large", "small"],
+    drop: DropDelays,
   ) -> List[Tuple[int, int]]:
-    """A drop's valve sequence with the liquid class's delays (``_apply_liquid_class_delays``).
+    """A valve sequence with the liquid class's delays (``_apply_liquid_class_delays``).
 
     Raises:
       ValueError, MantisConfigurationError: as ``_get_valve_sequence``.
