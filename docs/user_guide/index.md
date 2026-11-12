@@ -37,6 +37,7 @@ brooks/index
 byonoy/index
 cole_parmer/index
 curiox/index
+formulatrix/index
 hamilton/index
 high_res/index
 inheco/index
