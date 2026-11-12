@@ -127,7 +127,7 @@ class CLARIOstarZProfileResult:
 
 @dataclass(frozen=True)
 class CLARIOstarFluorescenceGridResult:
-  """One grid: the counts over a square grid of points around `position`.
+  """One grid: the values read over a square grid of points around `position`.
 
   Attributes:
     position: the grid's centre, x and y in mm (z 0): on the plate for a well, on the plate holder
@@ -136,7 +136,7 @@ class CLARIOstarFluorescenceGridResult:
     center: where the reader found the signal's centre, in the frame of `position`; None if it
       found none.
     spacing: mm between neighbouring points of the grid.
-    counts: the grid's counts, rows of points in the order the reader sends them; which way the
+    data: the grid's values, rows of points in the order the reader sends them; which way the
       rows and columns run is not verified.
     focal_height: the focal height the grid was read at, mm.
     gain: the detector gain it was read at.
@@ -148,7 +148,7 @@ class CLARIOstarFluorescenceGridResult:
   well: Optional[str]
   center: Optional[Coordinate]
   spacing: float
-  counts: List[List[int]]
+  data: List[List[int]]
   focal_height: float
   gain: int
   start_timestamp: datetime
@@ -1700,7 +1700,7 @@ class Fluorescence(Measurement):
         well=well,
         center=center,
         spacing=spacing,
-        counts=counts,
+        data=counts,
         focal_height=focal_height,
         gain=gain,
         start_timestamp=start_timestamp,

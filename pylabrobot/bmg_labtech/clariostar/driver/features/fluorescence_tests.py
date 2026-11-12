@@ -1841,7 +1841,7 @@ def scanned_grids(
       well=well,
       center=None,
       spacing=0.33,
-      counts=[],
+      data=[],
       focal_height=focal_height,
       gain=gain,
       start_timestamp=datetime.now(),
@@ -1882,11 +1882,11 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(last.center.y, 85.48 - 74.00)
     self.assertEqual((first.spacing, first.focal_height, first.gain), (0.33, 15.0, 2239))
     for result in results:
-      self.assertEqual([len(row) for row in result.counts], [31] * 31)
+      self.assertEqual([len(row) for row in result.data], [31] * 31)
       # Read from byte 34, every count is within the detector's 260,000.
-      self.assertLessEqual(max(max(row) for row in result.counts), 260_000)
+      self.assertLessEqual(max(max(row) for row in result.data), 260_000)
     grid = bytes.fromhex(ground_truth["replies"][5])
-    self.assertEqual(first.counts[0][0], int.from_bytes(ftdi_extract_payload(grid)[34:38], "big"))
+    self.assertEqual(first.data[0][0], int.from_bytes(ftdi_extract_payload(grid)[34:38], "big"))
 
   async def test_given_points_make_up_a_plate_at_a_96_well_plates_pitch(self):
     feature = make_fluorescence(FakeFTDI())
@@ -2086,7 +2086,7 @@ class GridTests(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(f9.center.y, 29.14)
     for result in results:
       self.assertEqual(result.spacing, 0.33)
-      self.assertEqual([len(row) for row in result.counts], [31] * 31)
+      self.assertEqual([len(row) for row in result.data], [31] * 31)
 
   async def test_a_failed_scan_keeps_the_grids_read_before_it(self):
     plate = cor_96_wellplate_360uL_Fb("plate")
