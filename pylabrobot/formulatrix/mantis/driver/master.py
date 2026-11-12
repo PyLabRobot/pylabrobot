@@ -2,8 +2,8 @@
 and the sequencer.
 
 The features in ``features/`` send the commands that act; the sequencer here plays what they
-queue, and the LED bar shows setup and stop. Reads return the device's units. The motor reads are
-here until the arm feature takes them; the pressure reads are on the pump.
+queue, and the LED bar shows setup and stop. Reads return the device's units; the arm converts
+its motors' reads, the pump holds the pressure reads.
 """
 
 import asyncio
@@ -12,12 +12,13 @@ import json
 import logging
 import struct
 import time
-from typing import Any, AsyncContextManager, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, AsyncContextManager, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
 from .configuration import (
   FITTED_FIELDS,
+  MOTION_CALIBRATION_BLOCKS,
   RECORDING_MANTIS_V3,
   RECORDING_MANTIS_V4,
   UNIT_BLOCKS,
@@ -48,6 +49,7 @@ from .events import (
   decode_sequence_progress,
   describe_event,
 )
+from .features.arm import Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
 from .features.pump import Pump
@@ -142,7 +144,8 @@ class MantisDriver:
     The unit's own values (``UNIT_BLOCKS``) come from ``oem_config_directory`` and the declared
     file; where both have a block, they must agree. A unit block or non-fitted device field the
     declared file lacks comes from the folder, else the generation's recording (another unit's
-    values, less accurate on this one), with one warning naming each and where it came from.
+    values, less accurate on this one), with one warning naming each and where it came from; a
+    motion calibration (``MOTION_CALIBRATION_BLOCKS``) never comes from a recording.
     """
     self.io: FTDI = (
       io if io is not None else self._build_io(device_id=device_id, ftdi_library=ftdi_library)
@@ -172,6 +175,7 @@ class MantisDriver:
     )
     self.plate_clamp: Optional[PlateClamp] = None
     self.pump: Optional[Pump] = None
+    self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
     self.led_bar: Optional[LedBar] = None
     self._show_actions = show_actions
@@ -668,12 +672,68 @@ class MantisDriver:
     self._next_item = item % LAST_QUEUE_ITEM + 1
     return item
 
-  async def _queue_ppi_write(self, *, duration: int, start_address: int, values: List[int]) -> int:
-    """Queue a PPI write on the sequencer and return its item.
+  async def _unchecked_fw_queue_move_item(
+    self, *, item: int, relative: bool, wait: bool, targets: List[Tuple[float, float, float]]
+  ) -> Tuple[int, int]:
+    """Queue a move of all three motors on the sequencer (board 0, command 68), sent once.
 
-    An item the device answers -1 free slots to was not queued: the write is sent again under the
-    next item until one is, for at most ``default_queue_full_timeout``. No item is sent twice: a
-    v4 queues a write resent with its packet number as a second item, so a lost reply raises.
+    Returns the reply's free slots, -1 when the queue was full and the item not queued, and its
+    error word.
+
+    Args:
+      item: the item's number, 1 to ``LAST_QUEUE_ITEM``.
+      relative: whether the positions are from where the motors are.
+      wait: whether the sequencer waits for the move to end before the next item.
+      targets: each motor's (position, speed, acceleration), in device units; a motor sent all
+        zeros does not move.
+
+    Raises:
+      FrameError: if the reply is shorter than 4 bytes.
+    """
+    payload = struct.pack("<hHH", item, relative, wait) + b"".join(
+      struct.pack("<ddd", *target) for target in targets
+    )
+    reply = await self._send_command(board=MOTION_BOARD, command=68, payload=payload, attempts=1)
+    if len(reply) < 4:
+      raise FrameError(f"{self.name}: a queued move's reply is 4 bytes, got {reply.hex()}")
+    free, error = struct.unpack_from("<hh", reply)
+    return int(free), int(error)
+
+  async def _queue_item(
+    self, *, command: int, queue: Callable[[int], Awaitable[Tuple[int, int]]]
+  ) -> int:
+    """Queue one item under the next number and return it.
+
+    An item the device answers -1 free slots to was not queued: it is sent again under the next
+    item until one is, for at most ``default_queue_full_timeout``. No item is sent twice: a v4
+    queues a write resent with its packet number as a second item, so a lost reply raises.
+
+    Args:
+      command: the queue command, for an error message.
+      queue: sends the item under the number it is given; returns its free slots and error word.
+
+    Raises:
+      InvalidQueueItemError: if a reply's error word is not 0.
+      MantisTimeoutError: if the queue stays full for ``default_queue_full_timeout``.
+    """
+    deadline = time.monotonic() + self.default_queue_full_timeout
+    while True:
+      item = self._get_next_item()
+      free, error = await queue(item)
+      if error != 0:
+        raise InvalidQueueItemError(
+          f"{self.name}: queue item {item} answered error {error}", command=command, error=error
+        )
+      if free >= 0:
+        return item
+      if time.monotonic() >= deadline:
+        raise MantisTimeoutError(
+          f"{self.name}: the sequencer's queue stayed full for {self.default_queue_full_timeout} s"
+        )
+      logger.debug("[%s] queue full, item %d not queued; sending it again", self.name, item)
+
+  async def _queue_ppi_write(self, *, duration: int, start_address: int, values: List[int]) -> int:
+    """Queue a PPI write on the sequencer and return its item, as ``_queue_item``.
 
     Args:
       duration: how long the sequencer holds the write, in its time steps of 1 ms, 1 to 0x7FFF.
@@ -690,23 +750,32 @@ class MantisDriver:
       raise ValueError(f"duration must be 1 to 0x7FFF, an int16, got {duration}")
     if len(values) == 0 or any(not 0 <= value <= 0xFFFF for value in values):
       raise ValueError(f"values must be one or more uint16, got {values}")
-    deadline = time.monotonic() + self.default_queue_full_timeout
-    while True:
-      item = self._get_next_item()
-      free, error = await self._unchecked_fw_queue_write_ppi(
+    return await self._queue_item(
+      command=65,
+      queue=lambda item: self._unchecked_fw_queue_write_ppi(
         item=item, duration=duration, start_address=start_address, values=values
-      )
-      if error != 0:
-        raise InvalidQueueItemError(
-          f"{self.name}: queue item {item} answered error {error}", command=65, error=error
-        )
-      if free >= 0:
-        return item
-      if time.monotonic() >= deadline:
-        raise MantisTimeoutError(
-          f"{self.name}: the sequencer's queue stayed full for {self.default_queue_full_timeout} s"
-        )
-      logger.debug("[%s] queue full, item %d not queued; sending it again", self.name, item)
+      ),
+    )
+
+  async def _queue_move_item(self, *, targets: List[Tuple[float, float, float]]) -> int:
+    """Queue a move of all three motors, waited for, to absolute targets; as ``_queue_item``.
+
+    Args:
+      targets: each motor's (position, speed, acceleration), in device units, motors 0 to 2.
+
+    Raises:
+      ValueError: unless there is one target per motor; nothing is sent.
+      InvalidQueueItemError: if a reply's error word is not 0.
+      MantisTimeoutError: if the queue stays full for ``default_queue_full_timeout``.
+    """
+    if len(targets) != len(MOTORS):
+      raise ValueError(f"a queued move has one target per motor {MOTORS}, got {targets}")
+    return await self._queue_item(
+      command=68,
+      queue=lambda item: self._unchecked_fw_queue_move_item(
+        item=item, relative=False, wait=True, targets=targets
+      ),
+    )
 
   async def _wait_for_queue_item(self, *, item: int, timeout: float) -> None:
     """Wait until the sequencer reports ``item`` played with no item left queued.
@@ -762,13 +831,46 @@ class MantisDriver:
       motor_limits={motor: await self.request_motor_limits(motor=motor) for motor in MOTORS},
     )
 
+  def _get_arm_calibration(self) -> Dict[str, Any]:
+    """The ``arm`` block as the arm takes it, by argument; each None without the block.
+
+    Raises:
+      MantisConfigurationError: if the block is malformed, or a correction table does not have
+        two rows or more, measured ascending.
+    """
+    block = self._unit_blocks.get("arm")
+    if block is None:
+      return {"offsets": None, "homing_position_a": None, "encoder_correction": None}
+    try:
+      calibration: Dict[str, Any] = {
+        field: {int(motor): float(value) for motor, value in block[field].items()}
+        for field in ("offsets", "homing_position_a")
+      }
+      calibration["encoder_correction"] = {
+        int(motor): [(float(ideal), float(measured)) for ideal, measured in rows]
+        for motor, rows in block["encoder_correction"].items()
+      }
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+      raise MantisConfigurationError(f"malformed arm block: {error!r}") from error
+    for field, values in calibration.items():
+      if set(values) != set(ABSOLUTE_ENCODER_MOTORS):
+        raise MantisConfigurationError(
+          f"arm block: {field} is for motors {ABSOLUTE_ENCODER_MOTORS}"
+        )
+    for motor, rows in calibration["encoder_correction"].items():
+      if len(rows) < 2 or any(later[1] <= earlier[1] for earlier, later in zip(rows, rows[1:])):
+        raise MantisConfigurationError(
+          f"arm block: motor {motor}'s correction needs two rows or more, measured ascending"
+        )
+    return calibration
+
   def _discover_features(self) -> None:
     """Build the features the configuration says are fitted, with the unit's values.
 
     A feature already built is kept.
 
     Raises:
-      MantisConfigurationError: if the ``plate_clamp`` or ``led_bar`` block is malformed.
+      MantisConfigurationError: if the ``plate_clamp``, ``led_bar`` or ``arm`` block is malformed.
     """
     if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
@@ -802,6 +904,9 @@ class MantisDriver:
       self.led_bar = LedBar(
         driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
       )
+    sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
+    if sensor_board is not None and self.arm is None:
+      self.arm = Arm(driver=self, **self._get_arm_calibration())
 
   def _show_action(
     self, *, action: str, show_inner_actions: bool = True, only_when_idle: bool = False
@@ -852,7 +957,8 @@ class MantisDriver:
     self, *, generation: Optional[str]
   ) -> Tuple[Dict[str, Any], Dict[str, str]]:
     """The declared file, or without one the folder's blocks, with each value it lacks taken from
-    the folder, else the generation's recording; and where each taken one came from, by key.
+    the folder, else the generation's recording (never a motion calibration); and where each taken
+    one came from, by key.
 
     Args:
       generation: picks the recording.
@@ -866,7 +972,11 @@ class MantisDriver:
       else {}
     )
     recording_path = RECORDING_MANTIS_V4 if generation == "v4" else RECORDING_MANTIS_V3
-    recording = read_configuration(path=recording_path)
+    recording = {
+      block: value
+      for block, value in read_configuration(path=recording_path).items()
+      if block not in MOTION_CALIBRATION_BLOCKS
+    }
     if self.declared_configuration_json is None:
       return _fill_declared_configuration(declared=folder, sources=[(recording_path, recording)])
     declared = read_configuration(path=self.declared_configuration_json)
@@ -1023,9 +1133,23 @@ class MantisDriver:
         except Exception:
           logger.warning("[%s] the RFID reader's link did not close", self.name, exc_info=True)
 
+  async def _halt(self) -> None:
+    """Abort the sequencer, then stop the motors and park an arm brought up (``Arm._halt``).
+
+    The arm halts whether or not the abort succeeded; a failed abort is logged.
+    """
+    if self.arm is None:
+      return
+    try:
+      await self._unchecked_fw_abort_sequencer()
+    except Exception:
+      logger.warning("[%s] could not abort the sequencer", self.name, exc_info=True)
+    await self.arm._halt()
+
   async def stop(self) -> None:
-    """Fail the command in flight and every event waiter, release the plate clamp, turn the LED
-    bar off, stop reading the link and close it.
+    """Fail the command in flight and every event waiter; on a v4, abort the sequencer, stop the
+    motors and park an arm brought up; release the plate clamp, turn the LED bar off, stop reading
+    the link and close it.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
     nothing is sent: the link is closed.
@@ -1043,6 +1167,8 @@ class MantisDriver:
     for _, _, _, waiter in waiting:
       if not waiter.done():
         waiter.set_exception(MantisNotConnectedError(stopped))
+    if self._connected:
+      await self._halt()
     if self.plate_clamp is not None and self._connected:
       try:
         if await self.plate_clamp.request_state(attempts=1) != UNCLAMPING_DONE:
@@ -1057,13 +1183,20 @@ class MantisDriver:
     self._connected = False
     await self._close()
 
-  async def setup(self) -> None:
-    """Open the link if it is not open, read the device's configuration and check it.
+  async def setup(self, *, skip_arm: bool = False) -> None:
+    """Open the link if it is not open, read the device's configuration and check it, then bring
+    the arm and Z up on a v4 (``Arm.initialize``). This moves the device.
 
-    On a v4 the LED bar shows the setup, then "setup_done" for ``SETUP_DONE_HOLD``, then idle.
+    On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
+    ``SETUP_DONE_HOLD``, then idle.
+
+    Args:
+      skip_arm: do not bring the arm up; nothing moves.
 
     Raises:
-      MantisConfigurationError: if the device does not match the declared configuration.
+      MantisConfigurationError: if the device does not match the declared configuration, or the arm
+        is brought up without the unit's ``arm`` block.
+      MantisMotionError: if the arm is not where it is moved straight to idle from, or faults.
     """
     if self._reader is not None and self._reader.done():
       await self.stop()  # reading the link failed: close it before opening it again
@@ -1075,6 +1208,8 @@ class MantisDriver:
       if self.led_bar is not None and not self.led_bar.show_actions:
         await self.led_bar._show(key="idle")  # the idle animation from setup on
       async with self._show_action(action="setup", show_inner_actions=False):
+        if self.arm is not None and not skip_arm:
+          await self.arm.initialize()
         if self.led_bar is not None and self.led_bar.show_actions:
           await self.led_bar._show_setup_done()
     except BaseException:

@@ -103,6 +103,11 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (12, 16, "0000"): "",
   (12, 17, "0000000056000100"): "0100",
   **{(12, 13, "00001400" + color * 20): "0100" for color in ("1f00", "e007", "0000")},
+  # The sequencer aborted, and each motor stopped at its default deceleration.
+  (0, 64, ""): "0000",
+  (0, 24, "0000814e1be8b40a8a40"): "0000",
+  (0, 24, "0100814e1be8b40a8a40"): "0000",
+  (0, 24, "0200bb34be4f05c2be40"): "0000",
 }
 # The sensor calibration the recorded replies carry, by controller.
 RECORDED_CALIBRATION: Dict[PressureController, Tuple[float, float]] = {
@@ -259,9 +264,9 @@ class DriverTestCase(unittest.IsolatedAsyncioTestCase):
     driver.default_read_timeout = 0.25
     return driver
 
-  async def set_up_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
+  async def set_up_driver(self, *, link: FakeLink, skip_arm: bool = True, **kwargs) -> MantisDriver:
     driver = self.make_driver(link=link, **kwargs)
-    await driver.setup()
+    await driver.setup(skip_arm=skip_arm)
     self.addAsyncCleanup(driver.stop)
     return driver
 
@@ -335,7 +340,7 @@ class SetupTests(DriverTestCase):
     link = FakeLink(answers=make_answers())
     driver = await self.set_up_driver(link=link)
     reader = driver._reader
-    await driver.setup()
+    await driver.setup(skip_arm=True)
     link.io.setup.assert_awaited_once()
     link.io.set_baudrate.assert_awaited_once()
     self.assertIs(driver._reader, reader)
@@ -351,7 +356,7 @@ class SetupTests(DriverTestCase):
     link.io.read.side_effect = read
     sent_before = len(link.written)
     with self.assertLogs("pylabrobot.formulatrix.mantis", level="INFO") as logs:
-      await driver.setup()
+      await driver.setup(skip_arm=True)
     warnings = [record for record in logs.records if record.levelname != "INFO"]
     self.assertEqual(len(warnings), 1)
     self.assertIn("the link was lost", warnings[0].getMessage())
@@ -647,7 +652,7 @@ class SequencerTests(DriverTestCase):
       self.assertEqual(driver._sequence_progress, item)
     self.assertEqual(driver._last_drained_item, 5)
     await driver.stop()
-    await driver.setup()
+    await driver.setup(skip_arm=True)
     self.assertIsNone(driver._sequence_progress)
 
   async def test_full_queue_is_sent_again_under_the_next_item(self):

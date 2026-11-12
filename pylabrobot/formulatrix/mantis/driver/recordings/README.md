@@ -23,6 +23,7 @@ needed.
 | `plate_clamp` | `Device.config`: `PlateClampInisiatePWM`, `PlateClampTimer`; only for a clamp driven as a DC motor | takes its lock levels from it | takes its lock levels from it |
 | `rfid` | `RFID.config`: every `RFIDAntennaId.ACC<n>`; `Device.config`: `RfidMultiplexerDelay`, as written (`multiplexer_delay_raw`) | takes its slots from it; every slot reads empty | takes each slot's antenna; a delay other than 0 refuses the reads, as its unit is unconfirmed |
 | `led_bar` | `Device.config`: `NumberOfLed`; set on a v4 only | takes its LED count from it | takes its LED count from it: each colour write sets that many LEDs |
+| `arm` | `RobotArm.config`: `Motor.1/2.Offset` and `HomingPositionA`; the `Data` folder's `System/Encoder Correction/Sampling File/OneRevolutionSamplingData_Motor0/1.csv`; only where `HomingPositionA` is set (a v4) | takes its offsets from it, else 0 | needs it to bring the arm up; never taken from a recording |
 
 For each unit block, setup takes:
 
@@ -31,6 +32,8 @@ For each unit block, setup takes:
 2. the one source's, when only one has it;
 3. the generation's recording's, when neither has it, with a warning: another unit's values,
    less accurate on this one. `save_configuration` does not save a block taken from a recording.
+   A block that calibrates motion (`MOTION_CALIBRATION_BLOCKS`: `arm`) is never taken from a
+   recording, and no recording holds one: without it, the motion it calibrates refuses.
 
 A declared file saved before a block or a non-fitted `device` field existed still loads: each
 value it lacks comes from the folder, else the recording, on a device and in simulation, with one
