@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 import unittest
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
@@ -14,6 +14,7 @@ from pylabrobot.formulatrix.mantis.driver.oem_config import (
   COMMON_SEQUENCE_DIRECTORY,
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
+  SBS_ADAPTER_FILE,
   UNKNOWN_ZONE,
   WASTE_STATION_ADAPTER_FILE,
   WASTE_STATION_FILE,
@@ -67,6 +68,28 @@ V3_DEVICE_CONFIG = (
   )
   + TAIL
 )
+
+
+# A synthetic stage: the plate holder's origin, a projective matrix and a tilt.
+SYNTHETIC_STAGE_BLOCK: Dict[str, Any] = {
+  "origin": [-50.0, 40.0, 51.0],
+  "transformation_matrix": [[1.001, 0.001, -0.08], [-0.004, 0.9995, 0.09], [-2e-05, -3e-05, 1.004]],
+  "offset_x": [0.0, 0.0, -0.0015],
+  "offset_y": [0.0, 0.0, 0.0025],
+  "arm_type_rotation_degree": 0.0,
+  "arm_type_translation": [0.0, 0.0, 0.0],
+}
+# The synthetic stage in the layout of a v4 install's Device.config and SBS Adapter.ad.txt.
+SYNTHETIC_STAGE_DEVICE_CONFIG_LINES = (
+  '    <add key="ArmType" value="Standard" />\r\n'
+  '    <add key="ArmTypeTranslation" value="X 0.000 Y 0.000 Z 0.000" />\r\n'
+  '    <add key="ArmTypeRotationDegree" value="0" />\r\n'
+  '    <add key="MicroplateOffsetX" value="X 0.000 Y 0.000 Z -0.0015" />\r\n'
+  '    <add key="MicroplateOffsetY" value="X 0.000 Y 0.000 Z 0.0025" />\r\n'
+  '    <add key="MicroplateTransformationMatrix" '
+  'value="[[1.001,0.001,-0.08],[-0.004,0.9995,0.09],[-2E-05,-3E-05,1.004]]" />\r\n'
+)
+SYNTHETIC_SBS_ADAPTER = "[ Version: 1 ]\r\nX -50.000 Y 40.000 Z 51.000\r\n"
 
 
 # RobotArm.config lines in a v4 install's layout, with synthetic offsets and references.
@@ -397,6 +420,72 @@ class RouteBlockTests(unittest.TestCase):
     del rectangles["LeftFront"]
     with self.assertRaisesRegex(MantisConfigurationError, "has no LeftFrontZoneMinimumX"):
       self.load(zones={**SYNTHETIC_ZONES_BLOCK, "rectangles": rectangles})
+
+
+def write_stage_install(*, directory: str, device_lines: str, adapter: Optional[str]) -> str:
+  """Lay out an install's Device.config and SBS Adapter.ad.txt; return its Device/Configs."""
+  configs_directory = write_install(
+    directory=directory,
+    configs={"Device.config": V4_DEVICE_CONFIG.replace(TAIL, device_lines + TAIL)},
+    corrections={},
+  )
+  if adapter is not None:
+    adapter_path = os.path.join(os.path.dirname(configs_directory), SBS_ADAPTER_FILE)
+    os.makedirs(os.path.dirname(adapter_path))
+    with open(adapter_path, "w", encoding="utf-8", newline="") as f:
+      f.write(adapter)
+  return configs_directory
+
+
+class StageBlockTests(unittest.TestCase):
+  def load(
+    self, *, device_lines=SYNTHETIC_STAGE_DEVICE_CONFIG_LINES, adapter=SYNTHETIC_SBS_ADAPTER
+  ):
+    with tempfile.TemporaryDirectory() as directory:
+      return _load_unit_configuration(
+        oem_config_directory=write_stage_install(
+          directory=directory, device_lines=device_lines, adapter=adapter
+        )
+      )
+
+  def test_an_install_gives_the_holders_origin_and_the_stage_transform(self):
+    self.assertEqual(self.load()["stage"], SYNTHETIC_STAGE_BLOCK)
+
+  def test_without_the_matrix_there_is_no_stage(self):
+    lines = SYNTHETIC_STAGE_DEVICE_CONFIG_LINES.split("\r\n")
+    self.assertNotIn("stage", self.load(device_lines="\r\n".join(lines[:5]) + "\r\n"))
+
+  def test_a_missing_or_malformed_part_refuses(self):
+    cases: List[Tuple[Dict[str, Any], str]] = [
+      ({"adapter": None}, "the plate holder's origin is missing"),
+      ({"adapter": SYNTHETIC_SBS_ADAPTER + "X 1 Y 2 Z 3\r\n"}, "one origin expected, found 2"),
+      ({"adapter": "[ Version: 2 ]\r\nX 1 Y 2 Z 3\r\n"}, "version 2; only version 1 is known"),
+      ({"adapter": "Origin 1 2 3\r\n"}, "is not 'X <x> Y <y> Z <z>'"),
+      (
+        {"device_lines": SYNTHETIC_STAGE_DEVICE_CONFIG_LINES.replace("Standard", "Other")},
+        "ArmType 'Other'; only 'Standard'",
+      ),
+      (
+        {"device_lines": SYNTHETIC_STAGE_DEVICE_CONFIG_LINES.replace(",1.004]", "]")},
+        "is not 3 by 3",
+      ),
+      (
+        {"device_lines": SYNTHETIC_STAGE_DEVICE_CONFIG_LINES.replace("Z -0.0015", "-0.0015")},
+        "MicroplateOffsetX is not 'X <x> Y <y> Z <z>'",
+      ),
+      (
+        {
+          "device_lines": SYNTHETIC_STAGE_DEVICE_CONFIG_LINES.replace(
+            '    <add key="ArmTypeRotationDegree" value="0" />\r\n', ""
+          )
+        },
+        "has no ArmTypeRotationDegree",
+      ),
+    ]
+    for kwargs, message in cases:
+      with self.subTest(message=message):
+        with self.assertRaisesRegex(MantisConfigurationError, message):
+          self.load(**kwargs)
 
 
 class UnitBlockSourceTests(DriverTestCase):

@@ -15,6 +15,8 @@ driver/master.py             MantisDriver. Owns the link, the reader, reply matc
                              bar.
 driver/arm_kinematics.py     The arm's geometry and units: device units, inverse and forward
                              kinematics, the absolute encoder's correction. Pure maths.
+driver/stage_transform.py    The stage transform: where a point on the wellplate is in the arm
+                             frame. Pure maths.
 driver/events.py             The events the device sends unasked: their codes, what each carries
                              and how it is logged.
 driver/simulator.py          MantisSimulationDriver, MantisSimulationArm,
@@ -87,13 +89,16 @@ folder the saved file alone carries them. A block is loaded only where its sourc
 exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`, `arm` where the unit
 declares the arms' absolute encoder references (a v4), its encoder correction from the `Data`
 folder; `zones` where the unit declares its zones (a v4), with each zone's routes, and `stations`,
-the routes to the waste and wash stations, from `System/Sequences/Common`.
+the routes to the waste and wash stations, from `System/Sequences/Common`; `stage` where the unit
+declares its stage transform, with its tilt and arm type and the plate holder's origin from the
+`Data` folder.
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
-(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`) comes from the unit's folder or its
-declared file only; no recording holds one. Without it, nothing that needs it is sent: without `arm`
-`Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`; without `zones` the head is
-moved to idle from near idle only; without `stations` a move to a station refuses. A route file is
+(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`, `stage`) comes from the unit's folder or
+its declared file only; no recording holds one. Without it, nothing that needs it is sent: without
+`arm` `Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`; without `zones` the head
+is moved to idle from near idle only; without `stations` a move to a station refuses; without
+`stage` a move to a wellplate refuses. An arm type other than `Standard` is refused. A route file is
 read whole and refused on any line it does not understand, never skipped. Factory files (encoder
 corrections, taught sequences) are never committed; tests use synthetic tables.
 
@@ -164,7 +169,10 @@ suffix on names in default units. The arm converts in `arm_kinematics`: 200 devi
 revolution, degrees on the arms and mm on Z (down from its flag), each rate rounded up half a step
 as on the wire. A joint position keeps the motor's sign (Z down from its flag); a Cartesian height,
 a location's `z` or a traverse height, is mm above Z's home flag, up positive, converted inside. The
-routes keep the frame their files write: the arm frame, Z down from its flag.
+routes keep the frame their files write: the arm frame, Z down from its flag. A point on a
+wellplate goes through the stage transform (`stage_transform`) in full: y flipped to run from the
+wellplate's back edge, the height taken below `REFERENCE_HEIGHT`, the arm type, the holder's origin,
+the projective matrix on x and y and the tilt on z; never a fitted homography.
 
 **M7. A range is checked before anything is sent.** (STAR P5.) A read accepts only the indices
 seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CONTROLLERS`);
@@ -199,6 +207,13 @@ the arms with Z held (queued), then lowers Z (command 22). `park` rises and read
 way, then follows the zone's route to idle. Neither models the chip racks: the arms' move is one
 joint move. A station's route is queued line for line, as in the recorded move to the waste station,
 and starts only from idle (`request_is_parked`, Z read by its encoder).
+
+`move_to_resource_location` takes a wellplate or a resource on one: the head goes over the
+resource's centre `PITCH_HEIGHT` above the wellplate's tallest point (its frame, a well or its lid),
+the dispense clearance, plus `offset`, in the wellplate's frame, and moves as
+`move_to_location`. Its traverse height is mm above the wellplate's base, not Z's home flag, by
+default the same `PITCH_HEIGHT` above that point; a traverse below it, a wellplate turned on its
+holder or a resource on no wellplate is refused before anything is sent.
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
@@ -254,12 +269,12 @@ above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clampi
 unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` reads off,
 every line at 0, with the recorded calibration; `MantisSimulationLedBar` takes every command and
 waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
-needs no encoder correction; its offsets are the declared ones, else 0, and its zones and stations
-the declared ones, else none. Each command moves it at once, and the motor reads answer from it;
-without it the motors read idle at 0, as after power-on. A motor read the configuration does not
-hold is not simulated. The sequencer, on the driver, holds
-`SEQUENCER_QUEUE_SIZE` items, stopped and empty after setup, and once started plays each item at
-once, a queued move moving the simulated arm; stop and abort keep what is queued.
+needs no encoder correction; its offsets are the declared ones, else 0, and its zones, stations and
+stage the declared ones, else none. Each command moves it at once, and the motor reads answer from
+it; without it the motors read idle at 0, as after power-on. A motor read the configuration does
+not hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items,
+stopped and empty after setup, and once started plays each item at once, a queued move moving the
+simulated arm; stop and abort keep what is queued.
 
 **M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
 add commands that the device runs together, each subsystem gets its own lock, taken in declaration
@@ -376,8 +391,8 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 31. **Unpowering the arm (command 19, open loop) is unrecorded.** A failed bring-up sends it; its
     reply has not been seen.
 32. **The encoder correction files and the sequences are found two levels above
-    `oem_config_directory`.** That argument still names `Data/Device/Configs`; they sit in
-    `Data/System`.
+    `oem_config_directory`, the plate holder's origin one level above.** That argument still names
+    `Data/Device/Configs`; they sit in `Data/System` and `Data/Device/Adapters`.
 33. **Zones that share an edge are tried in `ZONES` order.** A head on an edge goes to the first
     zone listed that holds it, in the order the unit lists its zones; the tie-break is not
     known.
@@ -408,3 +423,20 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 42. **The read-back after a rise is Z's encoder (command 84), not the demand position.** It
     catches a rise the device refused, dropped or stalled, within `Z_TRAVERSE_TOLERANCE`; Z's
     encoder has been read at rest only, never right after a move.
+43. **The stage transform has not commanded a move through this driver.** The same chain
+    reproduces, to 1 µm, the recorded head positions over the 96 wells of recorded dispenses on a
+    v4; that check needs the unit's own matrix and origin, so it is kept outside this repository
+    and the tests here are synthetic. Whether the nozzle stands over each well is for a device run
+    to show.
+44. **The wellplate's back-left corner is taken as the holder's datum,** as the clamp pushes it
+    there, with A1 at the back left: y runs from the wellplate's own back edge. Where the resource
+    model places the wellplate is not used; one turned on its holder is refused.
+45. **A height is in the wellplate frame.** Its z starts `REFERENCE_HEIGHT` above the wellplate's
+    base, at the stage origin's z; how far a chip's nozzle, or the head without one, then stands
+    above the wellplate is not measured. Hence the default clearance of `PITCH_HEIGHT`, never 0.
+46. **The traverse height is converted at the target's x and y.** The tilt makes it differ by up
+    to about 0.25 mm across a wellplate; the head rises only if below it, as `move_to_location`.
+47. **The stage's x and y offsets keep their x and y, unused.** Only their z tilts the stage;
+    the recorded x and y were reproduced without them.
+48. **The arm moves to a wellplate in one joint move,** as `move_to_location`: nothing models the
+    chip racks, so it runs only with the path between the head and the wellplate clear.

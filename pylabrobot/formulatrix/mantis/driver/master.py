@@ -917,14 +917,53 @@ class MantisDriver:
       raise MantisConfigurationError(f"stations block: the wash stations are {WASH_STATIONS}")
     return routes
 
+  def _get_stage_calibration(self) -> Dict[str, Any]:
+    """The ``stage`` block as the arm takes it, by argument; each None without the block.
+
+    Raises:
+      MantisConfigurationError: if the block is malformed: a vector not three numbers or the
+        matrix not three rows of three.
+    """
+    block = self._unit_blocks.get("stage")
+    if block is None:
+      return dict.fromkeys(
+        (
+          "stage_origin",
+          "stage_transformation_matrix",
+          "stage_offset_x",
+          "stage_offset_y",
+          "arm_type_rotation_degree",
+          "arm_type_translation",
+        )
+      )
+    vector_fields = ("origin", "offset_x", "offset_y", "arm_type_translation")
+    try:
+      vectors = {field: tuple(float(value) for value in block[field]) for field in vector_fields}
+      matrix = tuple(tuple(float(value) for value in row) for row in block["transformation_matrix"])
+      rotation = float(block["arm_type_rotation_degree"])
+    except (KeyError, TypeError, ValueError) as error:
+      raise MantisConfigurationError(f"malformed stage block: {error!r}") from error
+    if any(len(vector) != 3 for vector in vectors.values()):
+      raise MantisConfigurationError(f"stage block: {', '.join(vector_fields)} are x, y and z")
+    if len(matrix) != 3 or any(len(row) != 3 for row in matrix):
+      raise MantisConfigurationError("stage block: the transformation matrix is 3 by 3")
+    return {
+      "stage_origin": vectors["origin"],
+      "stage_transformation_matrix": matrix,
+      "stage_offset_x": vectors["offset_x"],
+      "stage_offset_y": vectors["offset_y"],
+      "arm_type_rotation_degree": rotation,
+      "arm_type_translation": vectors["arm_type_translation"],
+    }
+
   def _discover_features(self) -> None:
     """Build the features the configuration says are fitted, with the unit's values.
 
     A feature already built is kept.
 
     Raises:
-      MantisConfigurationError: if the ``plate_clamp``, ``led_bar``, ``arm``, ``zones`` or
-        ``stations`` block is malformed.
+      MantisConfigurationError: if the ``plate_clamp``, ``led_bar``, ``arm``, ``zones``,
+        ``stations`` or ``stage`` block is malformed.
     """
     if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
@@ -960,7 +999,12 @@ class MantisDriver:
       )
     sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
     if sensor_board is not None and self.arm is None:
-      self.arm = Arm(driver=self, **self._get_arm_calibration(), **self._get_route_blocks())
+      self.arm = Arm(
+        driver=self,
+        **self._get_arm_calibration(),
+        **self._get_route_blocks(),
+        **self._get_stage_calibration(),
+      )
 
   def _show_action(
     self, *, action: str, show_inner_actions: bool = True, only_when_idle: bool = False

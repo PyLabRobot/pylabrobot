@@ -3,6 +3,7 @@
 Only the values set per unit are read: a block is loaded only where its source applies to the unit.
 """
 
+import json
 import os
 import re
 import xml.etree.ElementTree as ElementTree
@@ -24,6 +25,10 @@ WASTE_STATION_FILE = "MoveToWasteStation.seq.txt"
 WASTE_STATION_ADAPTER_FILE = "MoveToWasteStation_Adapter.seq.txt"
 WASH_STATION_FILE = "MoveToWashStation{station}.seq.txt"
 WASH_STATIONS = (1, 2)
+# Where an install keeps the plate holder's origin, from its ``Data/Device`` folder.
+SBS_ADAPTER_FILE = os.path.join("Adapters", "SBS Adapter.ad.txt")
+# The only arm type on every unit seen; how the stage is framed for another is unknown.
+STANDARD_ARM_TYPE = "Standard"
 
 
 def _parse_config_entries(*, path: str) -> Dict[str, str]:
@@ -67,6 +72,103 @@ def _get_setting(*, path: str, settings: Dict[str, str], key: str) -> str:
   if key not in settings:
     raise MantisConfigurationError(f"{path} has no {key}")
   return settings[key]
+
+
+def _parse_vector(*, path: str, key: str, text: str) -> List[float]:
+  """A vector written ``X <x> Y <y> Z <z>``, as the unit's files write one.
+
+  Raises:
+    MantisConfigurationError: if the text is not one, or a value is not a number.
+  """
+  match = re.fullmatch(r"\s*X\s+(\S+)\s+Y\s+(\S+)\s+Z\s+(\S+)\s*", text)
+  if match is None:
+    raise MantisConfigurationError(f"{path}: {key} is not 'X <x> Y <y> Z <z>': {text!r}")
+  return [_get_number(path=path, key=key, text=value) for value in match.groups()]
+
+
+def _parse_adapter_origin(*, path: str) -> List[float]:
+  """The plate holder's origin, (x, y, z) in mm, from an adapter file read whole.
+
+  Raises:
+    MantisConfigurationError: if the file is missing, of a version other than 1, a line is not
+      understood, or it does not hold one origin.
+  """
+  if not os.path.isfile(path):
+    raise MantisConfigurationError(f"the plate holder's origin is missing: {path}")
+  origins = []
+  with open(path, encoding="utf-8-sig") as f:
+    for number, line in enumerate(f, start=1):
+      text = line.strip()
+      if not text:
+        continue
+      version = re.fullmatch(r"\[\s*Version:\s*(\S+)\s*\]", text)
+      if version is not None:
+        if version.group(1) != "1":
+          raise MantisConfigurationError(
+            f"{path}: adapter file version {version.group(1)}; only version 1 is known"
+          )
+        continue
+      origins.append(_parse_vector(path=path, key=f"line {number}", text=text))
+  if len(origins) != 1:
+    raise MantisConfigurationError(f"{path}: one origin expected, found {len(origins)}")
+  return origins[0]
+
+
+def _parse_transformation_matrix(*, path: str, text: str) -> List[List[float]]:
+  """``MicroplateTransformationMatrix``: three rows of three numbers, written as JSON.
+
+  Raises:
+    MantisConfigurationError: if the text is not one.
+  """
+  try:
+    matrix = json.loads(text)
+  except ValueError as error:
+    raise MantisConfigurationError(f"{path}: MicroplateTransformationMatrix is not JSON") from error
+  if (
+    not isinstance(matrix, list)
+    or len(matrix) != 3
+    or any(not isinstance(row, list) or len(row) != 3 for row in matrix)
+    or any(
+      isinstance(value, bool) or not isinstance(value, (int, float))
+      for row in matrix
+      for value in row
+    )
+  ):
+    raise MantisConfigurationError(f"{path}: MicroplateTransformationMatrix is not 3 by 3: {text}")
+  return [[float(value) for value in row] for row in matrix]
+
+
+def _load_stage(*, path: str, values: Dict[str, str], adapter_path: str) -> Dict[str, Any]:
+  """The ``stage`` block: the plate holder's origin and ``Device.config``'s stage transform.
+
+  Raises:
+    MantisConfigurationError: if a key or the adapter file is missing or malformed, or the arm
+      type is not ``STANDARD_ARM_TYPE``.
+  """
+  arm_type = _get_setting(path=path, settings=values, key="ArmType")
+  if arm_type != STANDARD_ARM_TYPE:
+    raise MantisConfigurationError(
+      f"{path}: ArmType {arm_type!r}; only {STANDARD_ARM_TYPE!r} is supported"
+    )
+
+  def get_vector(key: str) -> List[float]:
+    return _parse_vector(path=path, key=key, text=_get_setting(path=path, settings=values, key=key))
+
+  return {
+    "origin": _parse_adapter_origin(path=adapter_path),
+    "transformation_matrix": _parse_transformation_matrix(
+      path=path,
+      text=_get_setting(path=path, settings=values, key="MicroplateTransformationMatrix"),
+    ),
+    "offset_x": get_vector(key="MicroplateOffsetX"),
+    "offset_y": get_vector(key="MicroplateOffsetY"),
+    "arm_type_rotation_degree": _get_number(
+      path=path,
+      key="ArmTypeRotationDegree",
+      text=_get_setting(path=path, settings=values, key="ArmTypeRotationDegree"),
+    ),
+    "arm_type_translation": get_vector(key="ArmTypeTranslation"),
+  }
 
 
 def _parse_correction_table(*, path: str) -> List[List[float]]:
@@ -184,13 +286,17 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   ``stations``: the routes from idle to the waste station and to wash stations 1 and 2, from the
   same folder, those that exist; the waste station's ``WASTE_STATION_FILE`` where
   ``DeviceZone.config`` exists (a v4), else ``WASTE_STATION_ADAPTER_FILE`` (a v3).
+  ``stage``: ``Device.config``'s ``MicroplateTransformationMatrix``, ``MicroplateOffsetX/Y`` and
+  ``ArmType*``, and the plate holder's origin from ``Data/Device/Adapters/SBS Adapter.ad.txt``,
+  only where ``Device.config`` sets the matrix.
 
   Args:
     oem_config_directory: the unit's ``Data/Device/Configs`` folder.
 
   Raises:
     MantisConfigurationError: if ``Device.config`` is missing, a block's key is missing or not a
-      number, or an arm motor's encoder correction file or a route is missing or malformed.
+      number, or an arm motor's encoder correction file, a route or the adapter file is missing
+      or malformed.
   """
   device_config = os.path.join(oem_config_directory, "Device.config")
   if not os.path.isfile(device_config):
@@ -250,6 +356,15 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
         text=_get_setting(path=device_config, settings=values, key="RfidMultiplexerDelay"),
       ),
     }
+
+  if "MicroplateTransformationMatrix" in values:
+    blocks["stage"] = _load_stage(
+      path=device_config,
+      values=values,
+      adapter_path=os.path.join(
+        os.path.dirname(os.path.normpath(oem_config_directory)), SBS_ADAPTER_FILE
+      ),
+    )
 
   robot_arm_config = os.path.join(oem_config_directory, "RobotArm.config")
   arm_values = (

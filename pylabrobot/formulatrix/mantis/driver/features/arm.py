@@ -5,15 +5,16 @@ power-on: the arms are declared there, never homed. Z homes on its flag. Every b
 its order matches the recorded v4 startup.
 
 The head goes to idle along the unit's routes: the zone it stands in names a route to a safe XY
-and one to idle. Without them, only from near idle.
+and one to idle. Without them, only from near idle. A wellplate in the plate holder is reached
+through the unit's stage transform.
 """
 
 import asyncio
 import logging
 import struct
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Plate, Resource
 
 from ..arm_kinematics import (
   compute_absolute_device_position,
@@ -28,6 +29,7 @@ from ..errors import (
   MOTOR_STATUS_ERROR_BITS,
   FrameError,
   MantisConfigurationError,
+  MantisCoordinateError,
   MantisKinematicsError,
   MantisMotionError,
   MantisTimeoutError,
@@ -36,6 +38,7 @@ from ..events import HOME_DONE_EVENT, decode_home_done
 from ..framing import MOTION_BOARD
 from ..oem_config import UNKNOWN_ZONE, WASH_STATIONS, ZONES
 from ..sequence_files import Waypoint
+from ..stage_transform import PITCH_HEIGHT, REFERENCE_HEIGHT, compute_arm_frame_position
 
 if TYPE_CHECKING:
   from ..master import MantisDriver
@@ -100,8 +103,9 @@ class Arm:
   Bringing it up needs the unit's ``arm`` block: each arm motor's offset, encoder reference and
   encoder correction. Without it nothing is sent and ``initialize`` refuses; it never falls back to
   another unit's values. The ``zones`` and ``stations`` blocks give the routes; without them the
-  head is moved to idle only from near it, and the stations refuse. Routes (bring-up, park, the
-  stations, stop) move at the ``ROUTE_*`` profile; the ``default_*`` speeds are for the other moves.
+  head is moved to idle only from near it, and the stations refuse. Without the ``stage`` block a
+  move to a wellplate refuses. Routes (bring-up, park, the stations, stop) move at the ``ROUTE_*``
+  profile; the ``default_*`` speeds are for the other moves.
 
   Cartesian heights (``z`` of a location, a traverse height) are mm above Z's home flag, up
   positive; a joint position holds Z as the motor does, mm down from its flag.
@@ -127,6 +131,12 @@ class Arm:
     idle_routes: Optional[Dict[str, List[Waypoint]]] = None,
     waste_station_route: Optional[List[Waypoint]] = None,
     wash_station_routes: Optional[Dict[int, List[Waypoint]]] = None,
+    stage_origin: Optional[Tuple[float, float, float]] = None,
+    stage_transformation_matrix: Optional[Sequence[Sequence[float]]] = None,
+    stage_offset_x: Optional[Tuple[float, float, float]] = None,
+    stage_offset_y: Optional[Tuple[float, float, float]] = None,
+    arm_type_rotation_degree: Optional[float] = None,
+    arm_type_translation: Optional[Tuple[float, float, float]] = None,
   ):
     """
     Args:
@@ -139,6 +149,12 @@ class Arm:
       idle_routes: each zone's route to idle, by name; Unknown included.
       waste_station_route: the route from idle to the waste station.
       wash_station_routes: the route from idle to each wash station, by number.
+      stage_origin: the plate holder's origin, (x, y, z), mm.
+      stage_transformation_matrix: the stage's projective matrix, 3 by 3.
+      stage_offset_x: the stage's x offset, (x, y, z); its z tilts the stage.
+      stage_offset_y: the stage's y offset, (x, y, z); its z tilts the stage.
+      arm_type_rotation_degree: the arm type's rotation, degrees.
+      arm_type_translation: the arm type's translation, (x, y, z), mm.
     """
     self._driver = driver
     self.offsets = offsets
@@ -149,6 +165,12 @@ class Arm:
     self.idle_routes = idle_routes
     self.waste_station_route = waste_station_route
     self.wash_station_routes = wash_station_routes
+    self.stage_origin = stage_origin
+    self.stage_transformation_matrix = stage_transformation_matrix
+    self.stage_offset_x = stage_offset_x
+    self.stage_offset_y = stage_offset_y
+    self.arm_type_rotation_degree = arm_type_rotation_degree
+    self.arm_type_translation = arm_type_translation
     self._initialized = False
 
   @property
@@ -1080,6 +1102,133 @@ class Arm:
     )
     await self._play_queued_moves(moves=[self._get_queued_move(targets=arms, profiles=profiles)])
     await self._move_motors(targets={Z_MOTOR: z_target}, profiles=profiles)
+
+  def _check_stage(self) -> None:
+    """Raise ``MantisConfigurationError`` unless the unit's ``stage`` block was given."""
+    if any(
+      value is None
+      for value in (
+        self.stage_origin,
+        self.stage_transformation_matrix,
+        self.stage_offset_x,
+        self.stage_offset_y,
+        self.arm_type_rotation_degree,
+        self.arm_type_translation,
+      )
+    ):
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no stage transform for this unit; give its configuration folder "
+        "(oem_config_directory) or a configuration saved with it"
+      )
+
+  def _get_arm_frame_location(self, *, x: float, y: float, height: float) -> Coordinate:
+    """Where the head goes for a point on the wellplate: x and y in the arm frame, z above Z's flag.
+
+    Args:
+      x: right of the wellplate's back-left corner, mm.
+      y: in front of the wellplate's back-left corner, mm.
+      height: above the wellplate's base, mm.
+
+    Raises:
+      MantisConfigurationError: without the unit's ``stage`` block.
+      MantisKinematicsError: if the stage transform maps the point to infinity.
+    """
+    self._check_stage()
+    assert self.stage_origin is not None and self.stage_transformation_matrix is not None
+    assert self.stage_offset_x is not None and self.stage_offset_y is not None
+    assert self.arm_type_rotation_degree is not None and self.arm_type_translation is not None
+    arm_x, arm_y, z = compute_arm_frame_position(
+      position=(x, y, REFERENCE_HEIGHT - height),
+      origin=self.stage_origin,
+      transformation_matrix=self.stage_transformation_matrix,
+      offset_x=self.stage_offset_x,
+      offset_y=self.stage_offset_y,
+      arm_type_rotation_degree=self.arm_type_rotation_degree,
+      arm_type_translation=self.arm_type_translation,
+    )
+    return Coordinate(x=arm_x, y=arm_y, z=0.0 - z)  # 0.0, never -0.0
+
+  @staticmethod
+  def _get_wellplate(*, resource: Resource) -> Plate:
+    """The wellplate a resource is, or is on.
+
+    Raises:
+      MantisCoordinateError: if it is neither, or the wellplate is turned on its holder.
+    """
+    wellplate: Optional[Resource] = resource
+    while wellplate is not None and not isinstance(wellplate, Plate):
+      wellplate = wellplate.parent
+    if wellplate is None:
+      raise MantisCoordinateError(f"{resource.name} is not a wellplate or on one")
+    rotation = wellplate.rotation
+    if (rotation.x, rotation.y, rotation.z) != (0, 0, 0):
+      raise MantisCoordinateError(
+        f"{wellplate.name} is turned on its holder; the stage transform takes A1 at the back left"
+      )
+    return wellplate
+
+  @staticmethod
+  def _get_wellplate_top(*, wellplate: Plate) -> float:
+    """The wellplate's tallest point above its base, mm: its frame, a well or its lid."""
+    return max(
+      [
+        wellplate.get_size_z(),
+        *(child.get_location_wrt(wellplate, z="t").z for child in wellplate.children),
+      ]
+    )
+
+  async def move_to_resource_location(
+    self,
+    resource: Resource,
+    *,
+    offset: Optional[Coordinate] = None,
+    minimum_traverse_height: Optional[float] = None,
+  ) -> None:
+    """Move the head over a resource on the wellplate in the plate holder, through the unit's
+    stage transform, as ``move_to_location`` moves; heights are mm above the wellplate's base.
+
+    The head goes over the resource's centre ``PITCH_HEIGHT`` above the wellplate's tallest point,
+    plus ``offset``. The wellplate is taken to be clamped in the holder, A1 at the back left,
+    wherever the resource model places it.
+
+    Args:
+      resource: a wellplate, or a resource on one, such as a well.
+      offset: added in the wellplate's frame (x right, y back, z up), mm; None adds nothing.
+      minimum_traverse_height: the height to travel at or above, mm above the wellplate's base (not
+        Z's home flag), not below its tallest point; None takes its tallest point plus
+        ``PITCH_HEIGHT``.
+
+    Raises:
+      MantisConfigurationError: without the unit's ``stage`` block; nothing is sent.
+      MantisCoordinateError: if ``resource`` is not a wellplate or on one, or it is turned.
+      MantisMotionError: if the arm is not brought up, a motor faults, or Z does not read at the
+        traverse height after rising to it.
+      MantisKinematicsError: if the target is out of the arm's reach.
+      ValueError: if ``minimum_traverse_height`` is below the wellplate's tallest point, or a
+        target is outside its motor's limits.
+    """
+    self._check_initialized()
+    self._check_stage()
+    wellplate = self._get_wellplate(resource=resource)
+    top = self._get_wellplate_top(wellplate=wellplate)
+    if minimum_traverse_height is None:
+      minimum_traverse_height = top + PITCH_HEIGHT
+    elif minimum_traverse_height < top:
+      raise ValueError(
+        f"minimum_traverse_height {minimum_traverse_height} mm is below {wellplate.name}'s "
+        f"tallest point, {top} mm above its base"
+      )
+    offset = offset or Coordinate.zero()
+    if resource is wellplate:
+      center_x, center_y = wellplate.get_size_x() / 2, wellplate.get_size_y() / 2
+    else:
+      center = resource.get_location_wrt(wellplate, x="c", y="c")
+      center_x, center_y = center.x, center.y
+    # The wellplate frame has y to the front, from the back edge: PyLabRobot's has it to the back.
+    x, y = center_x + offset.x, wellplate.get_size_y() - (center_y + offset.y)
+    location = self._get_arm_frame_location(x=x, y=y, height=top + PITCH_HEIGHT + offset.z)
+    traverse = self._get_arm_frame_location(x=x, y=y, height=minimum_traverse_height)
+    await self.move_to_location(location, minimum_traverse_height=traverse.z)
 
   async def move_through_waypoints(
     self,

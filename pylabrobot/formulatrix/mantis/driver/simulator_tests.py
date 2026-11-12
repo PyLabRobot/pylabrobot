@@ -18,6 +18,7 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
+  SYNTHETIC_STAGE_BLOCK,
   SYNTHETIC_STATIONS_BLOCK,
   SYNTHETIC_WASTE_ROUTE,
   SYNTHETIC_ZONES_BLOCK,
@@ -26,7 +27,12 @@ from pylabrobot.formulatrix.mantis.driver.simulator import (
   MantisSimulationArm,
   MantisSimulationLedBar,
 )
+from pylabrobot.formulatrix.mantis.driver.stage_transform import (
+  REFERENCE_HEIGHT,
+  compute_arm_frame_position,
+)
 from pylabrobot.resources import Coordinate
+from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 
 
 class SimulationTests(unittest.IsolatedAsyncioTestCase):
@@ -313,6 +319,49 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     await self.arm.recover_from_fault()
     self.assertTrue(self.arm.is_initialized)
     await self.assert_head_at(x=15.0, y=31.177, z=0.0)
+
+
+class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):
+  """A simulated Mantis declaring synthetic zones and stage, a wellplate in its plate holder."""
+
+  async def asyncSetUp(self):
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recording = json.load(f)
+    directory = tempfile.TemporaryDirectory()
+    self.addCleanup(directory.cleanup)
+    path = os.path.join(directory.name, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump({**recording, "zones": SYNTHETIC_ZONES_BLOCK, "stage": SYNTHETIC_STAGE_BLOCK}, f)
+    self.mantis = Mantis(simulation=True, declared_configuration_json=path)
+    await self.mantis.setup()
+    self.addAsyncCleanup(self.mantis.stop)
+    self.wellplate = cor_96_wellplate_360uL_Fb(name="wellplate")
+    self.mantis.plate_holder.assign_child_resource(self.wellplate)
+
+  async def test_the_head_goes_over_each_corner_well(self):
+    arm = self.mantis.arm
+    assert arm is not None
+    # Each well's centre from the wellplate's back-left corner, mm; 12.5 mm above its 14.2 mm frame.
+    for name, x, y in (("A1", 14.3, 11.28), ("A12", 113.3, 11.28), ("H1", 14.3, 74.28)):
+      with self.subTest(well=name):
+        await arm.move_to_resource_location(
+          self.wellplate.get_item(name), offset=Coordinate(z=10.0)
+        )
+        arm_x, arm_y, z = compute_arm_frame_position(
+          position=(x, y, REFERENCE_HEIGHT - 26.7),
+          origin=(-50.0, 40.0, 51.0),
+          transformation_matrix=SYNTHETIC_STAGE_BLOCK["transformation_matrix"],
+          offset_x=(0.0, 0.0, -0.0015),
+          offset_y=(0.0, 0.0, 0.0025),
+          arm_type_rotation_degree=0.0,
+          arm_type_translation=(0.0, 0.0, 0.0),
+        )
+        head = await arm.request_head_position()
+        self.assertAlmostEqual(head.x, arm_x, places=3)
+        self.assertAlmostEqual(head.y, arm_y, places=3)
+        self.assertAlmostEqual(head.z, -z, places=3)
+    await arm.park()
+    self.assertTrue(await arm.request_is_parked())
 
 
 if __name__ == "__main__":

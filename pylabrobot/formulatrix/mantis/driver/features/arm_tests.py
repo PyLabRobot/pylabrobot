@@ -23,6 +23,7 @@ from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
 )
 from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisConfigurationError,
+  MantisCoordinateError,
   MantisKinematicsError,
   MantisMotionError,
   MantisTimeoutError,
@@ -52,11 +53,13 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import (
 from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
   SYNTHETIC_IDLE_ROUTES,
   SYNTHETIC_SAFE_XY,
+  SYNTHETIC_STAGE_BLOCK,
   SYNTHETIC_STATIONS_BLOCK,
   SYNTHETIC_WASTE_ROUTE,
   SYNTHETIC_ZONES_BLOCK,
 )
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Resource, Rotation
+from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 
 with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
   RECORDING = json.load(f)
@@ -1214,6 +1217,99 @@ class StationTests(ArmTestCase):
     with self.assertRaisesRegex(ValueError, "station must be one of"):
       await driver.arm.move_to_wash_station(station=3)
     self.assertEqual(self.sent(link), [])
+
+
+# A stage that only moves the wellplate frame by its origin, so where a well is is worked by hand.
+TRANSLATED_STAGE_BLOCK = {
+  **SYNTHETIC_STAGE_BLOCK,
+  "transformation_matrix": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+  "offset_x": [0.0, 0.0, 0.0],
+  "offset_y": [0.0, 0.0, 0.0],
+}
+
+
+class WellplateTests(ArmTestCase):
+  async def set_up_wellplate(self, *, link: FakeLink, **blocks):
+    driver = await self.set_up_arm(link=link, **blocks)
+    driver.arm._initialized = True
+    return driver, cor_96_wellplate_360uL_Fb(name="wellplate")
+
+  async def test_a_well_is_reached_pitch_height_above_the_wellplate_by_default(self):
+    # A1's centre is 14.3 mm right of and 11.28 mm in front of the wellplate's back-left corner;
+    # its frame, 14.2 mm, is its tallest point: 2.5 mm above it is Z 51 + 9.665 - 16.7 mm down.
+    arms = get_arm_positions(x=14.3 - 50.0, y=11.28 + 40.0)
+    queued = get_queued_move(item=15, targets=arms)
+    link = RouteLink(
+      answers=make_answers(),
+      events={(0, 68, queued): [bytes.fromhex(CLOSE_ITEM_PLAYED[15])]},
+      encoders={2: Z_UP_ENCODER_REPLY},
+    )
+    driver, wellplate = await self.set_up_wellplate(link=link, stage=TRANSLATED_STAGE_BLOCK)
+    driver._next_item = 15
+    await driver.arm.move_to_resource_location(wellplate.get_item("A1"))
+    z = get_expected_move(motor=2, position=compute_device_position(motor=2, position=43.965))
+    self.assertEqual(
+      tokens(self.sent(link)),
+      ["0:84:0200", "0:61:", "0:62:", f"0:68:{queued.hex()}", f"0:22:{z.hex()}"],
+    )
+
+  async def test_nothing_is_sent_for_a_move_refused(self):
+    link = RouteLink(answers=make_answers())
+    driver, wellplate = await self.set_up_wellplate(link=link, stage=TRANSLATED_STAGE_BLOCK)
+    arm = driver.arm
+    well = wellplate.get_item("A1")
+    with self.assertRaisesRegex(MantisCoordinateError, "is not a wellplate or on one"):
+      await arm.move_to_resource_location(Resource(name="box", size_x=1, size_y=1, size_z=1))
+    with self.assertRaisesRegex(ValueError, "below wellplate's tallest point, 14.2 mm"):
+      await arm.move_to_resource_location(well, minimum_traverse_height=10.0)
+    with self.assertRaisesRegex(ValueError, "outside its limits"):
+      await arm.move_to_resource_location(well, offset=Coordinate(z=-22.5))
+    turned = cor_96_wellplate_360uL_Fb(name="turned")
+    turned.rotation = Rotation(z=180)
+    with self.assertRaisesRegex(MantisCoordinateError, "is turned on its holder"):
+      await arm.move_to_resource_location(turned.get_item("A1"))
+    self.assertEqual(self.sent(link), [])
+
+  async def test_without_the_stage_block_nothing_is_sent(self):
+    link = RouteLink(answers=make_answers())
+    driver, wellplate = await self.set_up_wellplate(link=link)
+    with self.assertRaisesRegex(MantisConfigurationError, "no stage transform"):
+      await driver.arm.move_to_resource_location(wellplate)
+    self.assertEqual(self.sent(link), [])
+
+  async def test_the_stage_block_is_never_taken_from_a_recording(self):
+    path = os.path.join(self.directory, "recording.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump({**RECORDING, "stage": SYNTHETIC_STAGE_BLOCK}, f)
+    with mock.patch.object(master_module, "RECORDING_MANTIS_V4", path):
+      driver = await self.set_up_driver(link=FakeLink(answers=make_answers()))
+    assert driver.arm is not None
+    self.assertIsNone(driver.arm.stage_origin)
+
+  async def test_a_declared_stage_block_is_read_and_saved(self):
+    driver = await self.set_up_arm(
+      link=FakeLink(answers=make_answers()), stage=SYNTHETIC_STAGE_BLOCK
+    )
+    self.assertEqual(driver.arm.stage_origin, (-50.0, 40.0, 51.0))
+    self.assertEqual(driver.arm.stage_transformation_matrix[2], (-2e-05, -3e-05, 1.004))
+    path = os.path.join(self.directory, "saved.json")
+    driver.save_configuration(path=path)
+    with open(path, encoding="utf-8") as f:
+      self.assertEqual(json.load(f)["stage"], SYNTHETIC_STAGE_BLOCK)
+
+  async def test_a_malformed_stage_block_refuses_setup(self):
+    for block in (
+      {**SYNTHETIC_STAGE_BLOCK, "origin": [1.0, 2.0]},
+      {**SYNTHETIC_STAGE_BLOCK, "transformation_matrix": [[1.0, 0.0, 0.0]]},
+      {key: value for key, value in SYNTHETIC_STAGE_BLOCK.items() if key != "offset_y"},
+    ):
+      with self.subTest(block=sorted(block)):
+        driver = self.make_driver(
+          link=FakeLink(answers=make_answers()),
+          declared_configuration_json=self.declare(arm_block=SYNTHETIC_ARM_BLOCK, stage=block),
+        )
+        with self.assertRaises(MantisConfigurationError):
+          await driver.setup(skip_arm=True)
 
 
 class RouteDiscoveryTests(ArmTestCase):

@@ -1,7 +1,7 @@
 """A simulated Mantis: the driver with no device behind it, answering from its configuration."""
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -152,6 +152,12 @@ class MantisSimulationArm(Arm):
     idle_routes: Optional[Dict[str, List[Waypoint]]] = None,
     waste_station_route: Optional[List[Waypoint]] = None,
     wash_station_routes: Optional[Dict[int, List[Waypoint]]] = None,
+    stage_origin: Optional[Tuple[float, float, float]] = None,
+    stage_transformation_matrix: Optional[Sequence[Sequence[float]]] = None,
+    stage_offset_x: Optional[Tuple[float, float, float]] = None,
+    stage_offset_y: Optional[Tuple[float, float, float]] = None,
+    arm_type_rotation_degree: Optional[float] = None,
+    arm_type_translation: Optional[Tuple[float, float, float]] = None,
   ):
     """
     Args:
@@ -164,6 +170,12 @@ class MantisSimulationArm(Arm):
       idle_routes: as for ``Arm``.
       waste_station_route: as for ``Arm``.
       wash_station_routes: as for ``Arm``.
+      stage_origin: as for ``Arm``.
+      stage_transformation_matrix: as for ``Arm``.
+      stage_offset_x: as for ``Arm``.
+      stage_offset_y: as for ``Arm``.
+      arm_type_rotation_degree: as for ``Arm``.
+      arm_type_translation: as for ``Arm``.
     """
     super().__init__(
       driver=driver,
@@ -175,6 +187,12 @@ class MantisSimulationArm(Arm):
       idle_routes=idle_routes,
       waste_station_route=waste_station_route,
       wash_station_routes=wash_station_routes,
+      stage_origin=stage_origin,
+      stage_transformation_matrix=stage_transformation_matrix,
+      stage_offset_x=stage_offset_x,
+      stage_offset_y=stage_offset_y,
+      arm_type_rotation_degree=arm_type_rotation_degree,
+      arm_type_translation=arm_type_translation,
     )
     self._positions: Dict[int, float] = {0: 0.0, 1: 0.0, Z_MOTOR: 0.0}
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
@@ -488,6 +506,12 @@ class MantisSimulationDriver(MantisDriver):
         idle_routes=self.arm.idle_routes,
         waste_station_route=self.arm.waste_station_route,
         wash_station_routes=self.arm.wash_station_routes,
+        stage_origin=self.arm.stage_origin,
+        stage_transformation_matrix=self.arm.stage_transformation_matrix,
+        stage_offset_x=self.arm.stage_offset_x,
+        stage_offset_y=self.arm.stage_offset_y,
+        arm_type_rotation_degree=self.arm.arm_type_rotation_degree,
+        arm_type_translation=self.arm.arm_type_translation,
       )
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")
