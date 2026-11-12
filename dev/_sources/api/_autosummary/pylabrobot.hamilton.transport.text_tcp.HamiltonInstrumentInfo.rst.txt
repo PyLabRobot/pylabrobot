@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.text\_tcp.HamiltonInstrumentInfo
+==============================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.text_tcp
+
+.. autoclass:: HamiltonInstrumentInfo

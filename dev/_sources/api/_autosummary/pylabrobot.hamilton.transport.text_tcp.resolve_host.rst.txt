@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.text\_tcp.resolve\_host
+=====================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.text_tcp
+
+.. autofunction:: resolve_host

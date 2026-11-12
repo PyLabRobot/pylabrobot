@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.text\_tcp.discover\_instruments
+=============================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.text_tcp
+
+.. autofunction:: discover_instruments

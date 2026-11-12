@@ -1,0 +1,6 @@
+pylabrobot.hamilton.transport.text\_tcp.HamiltonTextTCP
+=======================================================
+
+.. currentmodule:: pylabrobot.hamilton.transport.text_tcp
+
+.. autoclass:: HamiltonTextTCP
