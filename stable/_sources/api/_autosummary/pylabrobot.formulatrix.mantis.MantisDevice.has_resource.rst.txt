@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.has\_resource
+========================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.has_resource

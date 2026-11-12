@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.centers
+==================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.centers

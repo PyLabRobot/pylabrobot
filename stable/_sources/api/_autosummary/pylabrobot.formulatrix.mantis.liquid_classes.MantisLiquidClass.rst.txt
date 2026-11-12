@@ -1,0 +1,25 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.liquid\_classes.MantisLiquidClass
+===============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.liquid_classes
+
+.. autoclass:: MantisLiquidClass
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisLiquidClass.__init__
+      ~MantisLiquidClass.serialize
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.rfid.Rfid.request\_tags
+=====================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.rfid
+
+.. automethod:: Rfid.request_tags

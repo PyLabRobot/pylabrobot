@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.serialize\_all\_state
+================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.serialize_all_state

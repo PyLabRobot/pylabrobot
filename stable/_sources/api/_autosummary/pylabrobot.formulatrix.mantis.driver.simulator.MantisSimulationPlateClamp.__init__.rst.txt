@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp.\_\_init\_\_
+======================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. automethod:: MantisSimulationPlateClamp.__init__

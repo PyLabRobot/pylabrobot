@@ -1,0 +1,26 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.rfid.Rfid
+=======================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.rfid
+
+.. autoclass:: Rfid
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Rfid.__init__
+      ~Rfid.request_tag
+      ~Rfid.request_tags
+   
+   

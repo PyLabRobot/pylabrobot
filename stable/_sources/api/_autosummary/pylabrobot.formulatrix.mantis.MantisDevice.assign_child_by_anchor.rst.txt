@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.assign\_child\_by\_anchor
+====================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.assign_child_by_anchor

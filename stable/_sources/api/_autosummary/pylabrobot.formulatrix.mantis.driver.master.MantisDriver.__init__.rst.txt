@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.master.MantisDriver.\_\_init\_\_
+=====================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.master
+
+.. automethod:: MantisDriver.__init__

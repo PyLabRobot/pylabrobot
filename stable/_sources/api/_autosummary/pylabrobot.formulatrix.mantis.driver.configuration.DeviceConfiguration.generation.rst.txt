@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.generation
+=================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.configuration
+
+.. autoattribute:: DeviceConfiguration.generation

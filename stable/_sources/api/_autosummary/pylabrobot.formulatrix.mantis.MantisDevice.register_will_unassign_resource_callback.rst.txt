@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.register\_will\_unassign\_resource\_callback
+=======================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.register_will_unassign_resource_callback

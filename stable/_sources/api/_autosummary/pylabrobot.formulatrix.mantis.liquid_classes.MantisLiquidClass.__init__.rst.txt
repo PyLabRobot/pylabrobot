@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.liquid\_classes.MantisLiquidClass.\_\_init\_\_
+============================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.liquid_classes
+
+.. automethod:: MantisLiquidClass.__init__

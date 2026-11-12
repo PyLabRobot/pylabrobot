@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.master.MantisDriver.save\_configuration
+============================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.master
+
+.. automethod:: MantisDriver.save_configuration
