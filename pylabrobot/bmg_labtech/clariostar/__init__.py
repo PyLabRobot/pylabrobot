@@ -21,6 +21,7 @@ from .driver import (
   Fluorescence,
   FluorescenceConfiguration,
   FrameError,
+  GridScanError,
   Luminescence,
   LuminescenceConfiguration,
   MeasurementSettings,
