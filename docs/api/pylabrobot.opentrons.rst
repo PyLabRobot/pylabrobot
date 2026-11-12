@@ -16,6 +16,7 @@ pylabrobot.opentrons package
     RobotInfo
     MountedPipette
     ModuleInfo
+    DoorStatus
     InstrumentInfo
     find_ot2_ip
     OpentronsError
