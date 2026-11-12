@@ -2905,7 +2905,8 @@ class Pipettes:
         instead of resting where the search left it.
 
     Returns:
-      The height the channel detected at, in mm, or None if the search found nothing.
+      The tip bottom height the channel detected at, in mm, its stop disc's without a tip; None if
+      the search found nothing.
 
     Raises:
       RuntimeError: If the channel carries no tip and `allow_without_tip` is False.
@@ -2952,7 +2953,12 @@ class Pipettes:
       return None
     if move_to_safe_z_position_after:
       await self.move_to_safe_z()
-    return (await self.request_last_lld_z_positions())[channel]
+    # The channel's own stop disc height at detection (`Px RH`): the master's (`C0 RL`) can still
+    # subtract a CoRe gripper tool put back in its holder since.
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="RH", fmt="rh#####"
+    )
+    return round(c.z_drive_increments_to_mm(cast(int, resp["rh"])) - overhang, 2)
 
   async def _unchecked_fw_probe_z_using_plld(
     self,
