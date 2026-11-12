@@ -34,6 +34,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import Gripper
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import (
   DEFAULT_TRASH as HEAD96_TRASH,
 )
@@ -47,6 +48,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
 from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import (
   RECORDING_ENV,
   sense_recorded_tips,
+  simulate_grips,
   simulated_boards,
 )
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import cm, pod_model
@@ -61,6 +63,7 @@ from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
 from pylabrobot.resources.beckman_coulter.tips import beckman_coulter_biomek_tip_1070uL
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.rotation import Rotation
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +77,8 @@ PLATES = 3
 POST_SECTION = cm(8.0)
 POST_HEIGHT = cm(46.355 + 20.0 - 8.0)
 RAIL_SECTION = cm(8.0)
+# How near the grip's GR the gripper is taken to be at it, degrees: GR is read back from counts.
+GRIP_ANGLE_TOLERANCE = 0.5
 
 DECK_Z = CABINET_HEIGHT + PLATES * PLATE_THICKNESS
 # The height the bridges ride at. The posts and rails are not drawn, so the device's own extent ends
@@ -140,7 +145,7 @@ class BiomekI7Device(Resource):
 
     self.bridges: Dict[str, Resource] = {}
     self.pod_models: Dict[str, Resource] = {}
-    # Each pod's gripper (from its declared model), posed from its axes.
+    # Each pod's gripper (from its declared model), posed from its axes; what it holds hangs from it.
     self.gripper_models: Dict[str, GripperModel] = {}
     self._unfollow: List[Callable[[], None]] = []
     self._build_declared_models(driver.declared)
@@ -194,6 +199,12 @@ class BiomekI7Device(Resource):
   def pipettes(self) -> Optional[Pipettes]:
     """The Span-8 channels, on an instrument where one pod has them."""
     return self.driver.pipettes
+
+  @property
+  def gripper(self) -> Optional[Gripper]:
+    """The gripper, on an instrument with one pod; with two, reach it as `left_x_arm.gripper` or
+    `right_x_arm.gripper`."""
+    return self.driver.gripper
 
   async def setup(
     self,
@@ -407,9 +418,14 @@ class BiomekI7Device(Resource):
     return declared.probe_spacing()
 
   def _build_gripper_model(self, side: str, declared: Optional[PodConfiguration]) -> None:
-    """(Re)build a side's gripper on its bridge, posed as parked until the driver says otherwise."""
+    """(Re)build a side's gripper on its bridge, posed as parked until the driver says otherwise.
+    What the old one held is let go, to be hung on the new one when the pod is next shown."""
     old = self.gripper_models.pop(side, None)
     if old is not None:
+      parts = {old.gripper.body.name, *(f.name for f in old.gripper.fingers)}
+      for child in list(old.gripper.children):
+        if child.name not in parts:
+          child.unassign()
       for part in (old.upper_hand, old.gripper):
         if part.parent is not None:
           part.unassign()
@@ -463,7 +479,8 @@ class BiomekI7Device(Resource):
     return None if d is None or counts is None else d.to_value(axis, counts)
 
   def _show_gripper(self, pod: Pod) -> None:
-    """Pose a pod's gripper model from its axes (the rotation centre: `pod_geometry`)."""
+    """Pose a pod's gripper model from its axes (the rotation centre: `pod_geometry`), and hang
+    what it holds from it, its grip point at the pads."""
     d, model = pod.declared, self.gripper_models.get(pod.side)
     if d is None or model is None:
       return
@@ -471,7 +488,30 @@ class BiomekI7Device(Resource):
     if any(value is None for value in v.values()):
       return
     gy, gz, gr, gg = (float(v[a]) for a in ("GY", "GZ", "GR", "GG"))  # type: ignore[arg-type]
+    gripper, plan = pod.gripper, None
+    held = gripper.held_resource if gripper is not None else None
+    if gripper is not None:
+      plan = gripper.held_plan
+    # At the grip's angle, to the counts' resolution, the gripper is at that angle: what it holds
+    # then stands as it did on the deck, as placing it reckons from.
+    if plan is not None and abs((gr - plan.gr + 180) % 360 - 180) < GRIP_ANGLE_TOLERANCE:
+      gr = plan.gr
     model.pose(self._gripper_centre(pod.side, d, gy, gz), gr, gg)
+    if held is None or plan is None or held.parent is model.gripper:
+      return
+    # Its rotation in the gripper's frame: on the deck it is `plan.rotation`, with the gripper
+    # turned -GR at the grip; it turns with the gripper from there.
+    turn = (plan.rotation + plan.gr) % 360
+    held.rotation = Rotation(z=turn)
+    point = held.preferred_pickup_location
+    xy = (
+      Coordinate(held.get_size_x() / 2, held.get_size_y() / 2, 0)
+      if point is None
+      else Coordinate(point.x, point.y, 0)
+    ).rotated(Rotation(z=turn))
+    pads = model.pads()
+    location = Coordinate(pads.x - xy.x, pads.y - xy.y, pads.z - plan.held.grip_offset * 10)
+    model.gripper.assign_child_resource(held, location=location)
 
   def _show_pod(self, pod: Pod) -> None:
     """Put a pod's model where the pod's axes are (an unknown one: where it was).
@@ -644,6 +684,7 @@ def BiomekI7(
     )
     driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json, boards=boards)
     sense_recorded_tips(driver, boards)  # the simulator does not model tips
+    simulate_grips(driver, boards)  # nor labware between the fingers
   elif driver is None:
     driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json)
   return BiomekI7Device(driver=driver, deck=deck, name=name, state_json=state_json)

@@ -1,8 +1,9 @@
 """A run's log in a file of its own, to compare a live run with Biomek's logs of the same work.
 
 `start_session_log(directory)` writes every line of this package's loggers to
-`<directory>/biomek_i7_<YYYYMMDD_HHMMSS>.log`: the driver's commands, warnings and errors, and with
-`usb_frames` every message to and from the boards, unframed and in
+`<directory>/biomek_i7_<YYYYMMDD_HHMMSS>.log`: the driver's commands (each move's axis targets in
+counts, speed, force limits and Move All timeout; homes, valve and tip commands, grip checks),
+warnings and errors, and with `usb_frames` every message to and from the boards, unframed and in
 hex, which is what Biomek's Master Controller keeps in its `ace_io` table. Each line starts with
 the time in milliseconds since the epoch, as the Master Controller's tables stamp theirs.
 

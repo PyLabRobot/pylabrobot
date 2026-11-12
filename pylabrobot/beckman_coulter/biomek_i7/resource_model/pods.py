@@ -18,7 +18,7 @@ A pod is its carriage: its frame is the carriage's front left bottom corner, and
 pod's Y along its bridge. A Multichannel's head (`heads.head96`) hangs below it and follows Z in
 it (`place_head96`). The parts with axes of their own are the bridge's: a Span-8's probes
 (`heads.span8_channel`, each following its own Y and Z) and the gripper (`gripper_model`, a
-`MechanicalGripper` posed from GY, GZ, GR and GG).
+`MechanicalGripper` posed from GY, GZ, GR and GG), from which what it holds hangs.
 """
 
 from dataclasses import dataclass
@@ -118,12 +118,18 @@ def pad_block(outline: Outline) -> Tuple[float, float, float, float]:
 class GripperModel:
   """A pod's gripper in the resource tree, from the instrument file's `GripperModel` (cm), posed by
   `pose`: the upper hand, which does not turn, and the gripper (`MechanicalGripper`), which turns
-  about the rotation centre with the lower hand (its body) and the fingers, its pads its tool centre
-  point. Both are children of what the gripper is posed in (the pod's bridge)."""
+  about the rotation centre with the lower hand (its body) and the fingers, and holds what the
+  gripper holds at the pads (its tool centre point). Both are children of what the gripper is posed
+  in (the pod's bridge)."""
 
   upper_hand: Resource
   gripper: MechanicalGripper
   model: Dict[str, Any]
+
+  @property
+  def hand(self) -> MechanicalGripper:
+    """What turns and what the held labware hangs from: the gripper."""
+    return self.gripper
 
   @property
   def fingers(self) -> Tuple[Resource, Resource]:

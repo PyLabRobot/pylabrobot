@@ -12,6 +12,7 @@ from pylabrobot.beckman_coulter.biomek_i7.device import (
   BiomekI7Device,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import held_labware_of
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import MM_PER_CM
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import gripper_model
@@ -22,6 +23,7 @@ from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
 )
 from pylabrobot.resources import Resource
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 
 
 def biomek_x_range(lh: BiomekI7Device, resource: Resource) -> g.Range:
@@ -205,6 +207,21 @@ class GripperModelTests(unittest.TestCase):
 
 
 class HeldStackTests(unittest.TestCase):
+  def test_a_lid_is_a_layer_of_the_held_stack(self) -> None:
+    plate = cor_96_wellplate_360uL_Fb("plate", with_lid=True)
+    held = held_labware_of(plate)
+    self.assertAlmostEqual(held.length, plate.get_size_x() / MM_PER_CM)
+    self.assertAlmostEqual(held.width, plate.get_size_y() / MM_PER_CM)
+    (layer,) = held.layers
+    lid = plate.lid
+    assert lid is not None and lid.location is not None
+    self.assertAlmostEqual(layer.dx, lid.location.x / MM_PER_CM)
+    self.assertAlmostEqual(layer.length, lid.get_size_x() / MM_PER_CM)
+    bare = held_labware_of(cor_96_wellplate_360uL_Fb("bare"))
+    self.assertEqual(bare.layers, ())
+    across_x = held_labware_of(plate, across="x")
+    self.assertAlmostEqual(across_x.width, plate.get_size_x() / MM_PER_CM)
+
   def test_a_layer_wider_than_the_one_below_widens_the_footprint(self) -> None:
     pod = generic_configuration().pod("left")
     model, geometry = g.GripperModel.from_bif(pod.gripper_model), pod.geometry

@@ -30,6 +30,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
   PodConfiguration,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import AceError, NotHomedError, english
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import Gripper
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.module import (
@@ -57,7 +58,8 @@ POD_NUMBERS = {"left": 1, "right": 2}
 COMPONENT_PREFIXES = {"multichannel": "MC", "span8": "SPAN8"}
 # What each module type carries besides the pod's own axes, by the feature's name on `Pod`. The
 # module type is what the board reports (Get Module ID, `protocol.MODULE_TYPES`); a new pod type is
-# a new entry here and in the motor tables.
+# a new entry here and in the motor tables. The gripper is not here: it is fitted where the declared
+# configuration describes one.
 MODULE_FEATURES: Dict[str, Tuple[str, ...]] = {
   "multichannel": ("head96",),
   "span8": ("pipettes",),
@@ -119,7 +121,7 @@ class Pod:
   Controller's `AM`), the position record the Master Controller keeps, homing, and the pod's pose
   on the shared X rail. `module_type` says what else the pod carries, as features
   (`MODULE_FEATURES`): `multichannel` a 96-channel head (`head96`), `span8` eight independent
-  channels (`pipettes`).
+  channels (`pipettes`); either a `gripper` where the declared configuration describes one.
   """
 
   def __init__(
@@ -147,7 +149,8 @@ class Pod:
     # The pod's model in the resource tree, its bridge (STAR's `x_arm.resource`): set by the device
     # that draws it (`BiomekI7`), which keeps it in step with the pod's axes; None without one.
     self.resource: Optional["Resource"] = None
-    # What the gripper holds, as the rail counts it; the pod cannot sense it.
+    # What the gripper holds, as the rail counts it: set through `gripper.set_held_labware`; the
+    # pod cannot sense it.
     self._held_labware: Optional[g.HeldLabware] = None
     # Where this driver last put each axis, as the Master Controller keeps it (`cpositions`):
     # (position, adjusted); position None until read. Starts as after homing.
@@ -173,10 +176,14 @@ class Pod:
         self.default_minimum_traverse_height = units.to_mm(float(safe))
     # Who follows the position record (`add_position_listener`).
     self._listeners: List[Callable[["Pod"], None]] = []
-    # What the pod carries (STAR's arm features): what its module type has (`MODULE_FEATURES`).
+    # What the pod carries (STAR's arm features): what its module type has (`MODULE_FEATURES`), and
+    # a gripper where the declared configuration describes one, as the rail counts one only then.
     features = MODULE_FEATURES.get(module_type, ())
     self.head96: Optional[Head96] = Head96(self) if "head96" in features else None
     self.pipettes: Optional[Pipettes] = Pipettes(self) if "pipettes" in features else None
+    self.gripper: Optional[Gripper] = (
+      Gripper(self) if declared is not None and declared.gripper_model else None
+    )
 
   @property
   def pod_number(self) -> int:

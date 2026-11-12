@@ -26,7 +26,7 @@ Where this differs from Biomek, it says so:
   follows its coordinated path (`swept_x_range`), so a gripper turning through the other pod's
   side between those poses is caught. This is never looser.
 - **Held labware.** Biomek reads its size, and the stack on it, from its labware library. Here the
-  caller gives it, from the resource the gripper holds (`HeldLabware`).
+  caller gives it, from the resource the gripper holds (`HeldLabware`, `gripper.held_labware_of`).
 """
 
 import math
