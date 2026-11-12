@@ -160,6 +160,10 @@ HOME_RECIPES: Dict[str, Tuple[Step, ...]] = {
   ),
 }
 
+# The Master Controller's `HD` on a Multichannel pod: the head's plunger. The Span-8's syringe
+# pumps are homed as part of priming, not here.
+PLUNGER_RECIPES: Dict[str, Tuple[Step, ...]] = {"multichannel": (Home("D", AtValue(0.0)),)}
+
 # Whether the board's sequence enables an axis again right before homing it.
 ENABLE_BEFORE_HOME = {"multichannel": False, "span8": True}
 

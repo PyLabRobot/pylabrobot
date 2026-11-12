@@ -1,11 +1,13 @@
-"""Aspirate and dispense on the Span-8 on the simulator, on the deck of a method Biomek's logs ran
+"""Aspirate and dispense on both heads on the simulator, on the deck of a method Biomek's logs ran
 (2026-10-20, a dilution): the logged method's technique values given as arguments, the moves sent
 compared with the Master Controller's own log of that run."""
 
+import math
 from typing import Dict, List, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import COLUMNS, ROWS, mandrel_name
 from pylabrobot.beckman_coulter.biomek_i7.driver.liquid import (
   ContainerShape,
   PlungerMove,
@@ -21,7 +23,7 @@ from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import (
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.beckman_coulter.biomek_i7.techniques import MixHeights, TipTouch
 from pylabrobot.lib.liquid_handling.mix import Mix
-from pylabrobot.resources import set_volume_tracking
+from pylabrobot.resources import cor_96_wellplate_360uL_Fb, set_volume_tracking
 from pylabrobot.resources.errors import TooLittleLiquidError
 
 
@@ -103,6 +105,11 @@ class LiquidTests(PodMoveTest):
         height_from="liquid",
       )  # fmt: skip
 
+  async def test_the_96_head_has_no_lld(self) -> None:
+    driver, lh = await self.setup_deck()
+    with self.assertRaises(NotImplementedError):
+      await lh.head96.aspirate(lh.deck.get_resource("Plate"), 10, lld_mode="CAPACITIVE")
+
   def test_wall_from_the_volume_function(self) -> None:
     # The wall at a height is the volume function's slope (an area) in the top outline's shape.
     # BCFlat96 (all-round): matches the Biomek section, its radius 0.3175 cm at the bottom to
@@ -118,6 +125,44 @@ class LiquidTests(PodMoveTest):
     self.assertGreater(mixed_shape.wall_distance(0.5, 0.0), 0.0)
     self.assertLessEqual(mixed_shape.wall_distance(0.4, 0.0), 0.85 + 1e-6)
     self.assertAlmostEqual(mixed_shape.wall_distance(2.0, 0.0), 0.85, delta=0.001)
+
+  async def test_pylabrobots_own_labware(self) -> None:
+    # A plate defined by PyLabRobot: heights from its cavity bottom, the level from its own
+    # height <-> volume function, the touch-off to its outline less the tip's radius.
+    driver, lh = await self.setup_deck()
+    head = lh.head96
+    tip = biomek_tip("T1025F", "t")
+    head._set_tips(
+      {
+        mandrel_name(r, c): biomek_tip("T1025F", f"t_{r}_{c}")
+        for r in range(ROWS)
+        for c in range(COLUMNS)
+      }
+    )
+    plate = cor_96_wellplate_360uL_Fb("Native")
+    lh.deck.get_position("P6").assign_child_resource(plate)
+    reservoir = lh.deck.get_resource("Reservoir")
+    await head.aspirate(reservoir, 100)
+    settings = head._settings(
+      liquid_height=1.0, follow_liquid=True, tip_touch=TipTouch(height=-1.0)
+    )
+    plan = head.plan_liquid("dispense", plate, 100, settings, 100)
+    well = plate.get_well("A1")
+    rise = well.compute_height_from_volume(100) / 10
+    dispense = next(s for s in plan.steps if isinstance(s, PlungerMove))
+    start = plan.steps[1].z["A1"]  # type: ignore[union-attr]
+    self.assertAlmostEqual(dispense.z["A1"] - start, rise, places=6)
+    touch = next(s for s in plan.steps if isinstance(s, Touch))
+    # The wall where the tip touches: the tapered well's area there (its volume function's slope).
+    h = touch.above_bottom * 10
+    area = (
+      well.compute_volume_from_height(h + 0.05) - well.compute_volume_from_height(h - 0.05)
+    ) / 0.1
+    wall = math.sqrt(area / math.pi) / 10
+    self.assertLess(wall, well.get_size_x() / 20)
+    self.assertAlmostEqual(-touch.dy, wall - tip.get_size_x() / 20, places=6)
+    await head.dispense(plate, 100, liquid_height=1.0, follow_liquid=True)
+    self.assertAlmostEqual(well.tracker.get_used_volume(), 100)
 
   async def test_a_mix_in_the_aspirate_template(self) -> None:
     # The aspirate's mix comes after the blowout air and before the descent, at its own heights;
@@ -229,3 +274,45 @@ class LiquidTests(PodMoveTest):
     await pipettes.dispense(wells, [30, 30], post_mixes=[mix] * 2)
     self.assertAlmostEqual(wells[0].tracker.get_used_volume(), 30)
     self.assertAlmostEqual(tips[1].tracker.get_used_volume(), 0)
+
+  async def test_the_96_heads_mix(self) -> None:
+    # The same template on the 96-head (no logged method mixes on it): after the dispense the
+    # plunger draws and pushes the mix volume back, at the dispense height, at the mix's rate.
+    driver, lh = await self.setup_deck()
+    head = lh.head96
+    tips = {
+      mandrel_name(r, c): biomek_tip("T1025F", "t") for r in range(ROWS) for c in range(COLUMNS)
+    }
+    head._set_tips(tips)
+    head._tips.update(tips)
+    await head.aspirate(lh.deck.get_resource("Reservoir"), 100, liquid_height=2.0)
+    plate = lh.deck.get_resource("Plate")
+    moves = self.record(driver, "left")
+    await head.dispense(plate, 100, liquid_height=1.0, post_mix=Mix(50, 2, 100))
+    d = [t["D"] for t, _ in moves if "D" in t]
+    ul = [lh.head96._pod.declared.to_value("D", c) for c in d]  # type: ignore[union-attr]
+    steps = [b - a for a, b in zip(ul, ul[1:])]
+    self.assertEqual(len(steps), 4)  # after the dispense: draw, push, draw, push
+    for step, want in zip(steps, [50, -50, 50, -50]):
+      self.assertAlmostEqual(step, want, delta=0.01)  # to a count
+    self.assertAlmostEqual(plate.get_well("A1").tracker.get_used_volume(), 100)
+    self.assertAlmostEqual(tips["A1"].tracker.get_used_volume(), 0)
+
+  async def test_the_96_head_refuses_more_than_the_wells_hold_before_moving(self) -> None:
+    driver, lh = await self.setup_deck()
+    head = lh.head96
+    tips = {
+      mandrel_name(r, c): biomek_tip("T1025F", "t") for r in range(ROWS) for c in range(COLUMNS)
+    }
+    head._set_tips(tips)
+    head._tips.update(tips)
+    plate = lh.deck.get_resource("Plate")
+    for well in plate.get_all_items():
+      well.tracker.set_volume(50)
+    plate.get_well("H12").tracker.set_volume(5)
+    moves = self.record(driver, "left")
+    with self.assertRaises(TooLittleLiquidError):
+      await head.aspirate(plate, 20, liquid_height=1.0)
+    self.assertEqual(moves, [])
+    self.assertAlmostEqual(plate.get_well("A1").tracker.get_used_volume(), 50)
+    self.assertAlmostEqual(tips["A1"].tracker.get_used_volume(), 0)

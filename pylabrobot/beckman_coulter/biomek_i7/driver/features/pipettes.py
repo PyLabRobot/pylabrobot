@@ -1226,24 +1226,13 @@ class Pipettes:
       liquid_heights: mm from `height_from`, one per channel or one for all.
       lld_mode: liquid-level sensing: None or OFF only, until it is built.
       flow_rates: uL/s; the pumps move together, so one rate for all.
-      height_from: "bottom" (default), "top" or "liquid" (needs volume tracking).
-      follow_liquid: the tips follow the liquid down as it is drawn.
-      minimum_height: mm above the bottom no height goes below (Biomek's Minimum Height).
-      z_speed: mm/s of Z for the moves in the well (`default_z_speed`); above Z's maximum is
-        refused.
-      approach_height: mm above the top the probes come down to first.
-      settling_times: s after drawing (Biomek's aspirate delay), STAR's per-channel list.
-      blow_out_air_volumes: uL of air drawn above the well first, for a blowout; per channel.
-      transport_air_volumes: uL of air drawn after leaving the well (the trailing air gap); per
-        channel. The template applies one value to every probe, so the per-channel values must
-        agree.
-      pre_mixes: STAR's per-channel `Mix`es, one mix for every probe or None for all, mixed before
-        drawing (Biomek's Mix): `repetitions` times, draw and push back `volume` uL at `flow_rate`
-        uL/s, at `z_speed`; `auto_surface_following` follows the liquid while drawing and pushing
-        (Biomek's Follow Liquid). The tips must hold no liquid.
-      mix_heights: where the mix draws and pushes; the operation's own height when None.
-      conditioning: extra drawn and pushed back before leaving (Biomek's conditioning).
-      tip_touch: a touch-off before leaving.
+      settling_times, blow_out_air_volumes, transport_air_volumes: STAR's per-channel lists, as
+        `Head96.aspirate`'s `settling_time`, `blow_out_air_volume`, `transport_air_volume`; the
+        template applies one value to every probe, so the values must agree.
+      pre_mixes: STAR's per-channel `Mix`es, as `Head96.aspirate`'s `pre_mix`: one mix for every
+        probe, or None for all.
+      height_from, follow_liquid, minimum_height, z_speed, approach_height, conditioning,
+        tip_touch, mix_heights: as `Head96.aspirate`.
       cutoff_velocity: the pumps' cutoff velocity, uL/s (Biomek's technique; `CV`).
       lls_sensitivity: the liquid-level sensors' sensitivity, set before each move measured from
         the liquid (Biomek's conductivity; `SS`).
@@ -1297,16 +1286,8 @@ class Pipettes:
     minimum_traverse_height_end: Optional[float] = None,
   ) -> None:
     """Push `volumes` (uL, one per channel) into `containers`, as Biomek's "S8 Pipetting" template
-    does; arguments as `aspirate`. The pumps stop at `SystemTrailingAirgap`.
-
-    Args:
-      follow_liquid: the tips follow the liquid up as it fills.
-      post_mixes, mix_heights: mixed after dispensing, one `Mix` for every probe, as `aspirate`'s
-        `pre_mixes`; the tips must be left holding no liquid (Biomek: "The mix operation cannot
-        begin until tips are empty").
-      blow_out_air_volumes: uL of air pushed out after the liquid (Biomek's blowout), then
-        `blow_out_delay` s.
-      empty: push out everything the tips hold, at the starting height (Biomek's Empty Tips).
+    does; arguments as `aspirate` and `Head96.dispense` (`post_mixes` one `Mix` for every probe,
+    as `pre_mixes`). The pumps stop at `SystemTrailingAirgap`.
 
     Raises:
       NotImplementedError: for liquid-level sensing.

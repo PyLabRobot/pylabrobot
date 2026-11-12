@@ -111,3 +111,8 @@ bottom, top or liquid), following the liquid, mixes, conditioning, blowout, trai
 touch-off, for any PyLabRobot container from its height <-> volume function. A setting the driver
 does not build yet is refused, never run without it. The Span-8's tips are checked by its tip
 sensor; it cannot drop tips into a rack, only discard them.
+
+`head96` is the Multichannel pod's. Its tips are loaded force-limited by the MC's `LT`
+(`driver/recipes/tip_load.py`, its arguments from the configuration) and ejected by the plunger's
+shuck. It has no tip sensor, so `setup` ejects over its trash even with no tips recorded
+(`precautionary_discard`).
