@@ -85,6 +85,8 @@ class LedBar:
   _setup_done_color: Color = "green"
   _error_color: Color = "red"
   _dispense_progress_color: Color = "green"
+  _pick_up_chip_color: Color = "#00FFFF"
+  _drop_chip_color: Color = "#8000FF"
 
   def __init__(self, *, driver: "MantisDriver", number_of_leds: int, show_actions: bool):
     """
@@ -140,6 +142,26 @@ class LedBar:
   def dispense_progress_color(self, value: Color) -> None:
     _compute_rgb565(color=value)
     self._dispense_progress_color = value
+
+  @property
+  def pick_up_chip_color(self) -> Color:
+    """The colour shown while a chip is picked up."""
+    return self._pick_up_chip_color
+
+  @pick_up_chip_color.setter
+  def pick_up_chip_color(self, value: Color) -> None:
+    _compute_rgb565(color=value)
+    self._pick_up_chip_color = value
+
+  @property
+  def drop_chip_color(self) -> Color:
+    """The colour shown while a chip is dropped."""
+    return self._drop_chip_color
+
+  @drop_chip_color.setter
+  def drop_chip_color(self, value: Color) -> None:
+    _compute_rgb565(color=value)
+    self._drop_chip_color = value
 
   async def _unchecked_fw_stop_animator(self) -> None:
     """StopAnimator (board 12, command 16) on strip 0, sent once."""
@@ -262,12 +284,14 @@ class LedBar:
     """Show an action's colour, or the idle animation for "idle"; a fault only warns.
 
     Args:
-      key: "setup", "setup_done", "error" or "idle".
+      key: "setup", "setup_done", "error", "pick_up_chip", "drop_chip" or "idle".
     """
     colors: Dict[str, Color] = {
       "setup": self.setup_color,
       "setup_done": self.setup_done_color,
       "error": self.error_color,
+      "pick_up_chip": self.pick_up_chip_color,
+      "drop_chip": self.drop_chip_color,
     }
     try:
       if key == "idle":

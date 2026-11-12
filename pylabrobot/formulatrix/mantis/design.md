@@ -8,7 +8,8 @@ last section lists what is open and where the code does not follow a rule yet.
 
 ```
 device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
-                             the driver, the parts; places the arm's links from a pose read.
+                             the driver, the parts; places the arm's links from a pose read; picks
+                             up and drops a chip, and keeps which one is on the head.
 driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
                              the sequencer, discovery and the saved configuration; reads the
                              motors; halts the device at stop; shows setup and stop on the LED
@@ -95,19 +96,20 @@ folder the saved file alone carries them. A block is loaded only where its sourc
 exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`, `arm` where the unit
 declares the arms' absolute encoder references (a v4), its encoder correction from the `Data`
 folder; `zones` where the unit declares its zones (a v4), with each zone's routes, and `stations`,
-the routes to the waste and wash stations, from `System/Sequences/Common`; `stage` where the unit
-declares its stage transform, with its tilt and arm type and the plate holder's origin from the
-`Data` folder; `chip_changer` where the unit declares a chip changer, each chip rack position's
-routes from `System/Sequences/ChipChanger`; `chip_sequences` where `System/Chips` holds a chip
-type's folder, its valve sequences (`VALVE_SEQUENCE_FILES`).
+the routes to the waste and wash stations and to the idle position, from
+`System/Sequences/Common`; `stage` where the unit declares its stage transform, with its tilt and
+arm type and the plate holder's origin from the `Data` folder; `chip_changer` where the unit
+declares a chip changer, each chip rack position's routes from `System/Sequences/ChipChanger`;
+`chip_sequences` where `System/Chips` holds a chip type's folder, its valve sequences
+(`VALVE_SEQUENCE_FILES`).
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
 (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `stations`, `stage`, `chip_changer`) comes from the
 unit's folder or its declared file only; no recording holds one. Without it, nothing that needs it
 is sent: without `arm` `Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`;
 without `zones` the head is moved to idle from near idle only; without `stations` a move to a
-station refuses; without `stage` a move to a wellplate refuses; without `chip_changer` a chip
-position's path refuses (`Arm._get_chip_changer_targets`). An arm type other than `Standard` is
+station or a chip refuses; without `stage` a move to a wellplate refuses; without `chip_changer` a
+chip position's path refuses (`Arm._get_chip_changer_targets`). An arm type other than `Standard` is
 refused, and so is an LC3's chip changer position. A route file is read whole and refused on any
 line it does not understand, never skipped; a valve sequence file holding any line but valve states
 is not a valve sequence and is not read. Factory files (encoder corrections, taught sequences) are
@@ -233,6 +235,20 @@ each positive line and writes its offset less the vented reading. `Pump.initiali
 runs the connect self-test write for write as in the recorded v4 startup, each block running the
 pump only while its controllers are enabled.
 
+`pick_up_chip` and `drop_chip` are the device's, as STAR's tips are picked up on the device: the
+arm moves, the pump plays the chip's valves. Before anything moves, a pick-up reads the slot's tag,
+which must be of the chip type placed in its chip spot (no tag, another type or, on a device, no
+reader refuses); a drop reads its slot empty. Both start from idle only (`request_is_parked`).
+The chip's `pre_attach` or `pre_detach` valve sequence then plays (`Pump._play_valve_sequence`:
+clear, start, queue, wait), and the arm plays the slot's routes (`Arm._get_chip_changer_moves`) as
+in the recorded v4 pick-up and drop, five groups of queued moves, each waited for before the next
+is queued (`_play_queued_move_groups`, the sequencer cleared and started once): to idle Z
+first (`CHIP_CHANGER_IDLE_ROUTE`), to the ready position at the travel height
+(`_get_idle_position_route`), along `SafeStart`, `MoveAttach` and `Origin` onto the chip, along
+`Shift` and `SafeStop` and back to the ready position, then to idle again; the ready position is
+the unit's (`IDLE_POSITION_FILE`). A drop plays the routes in reverse order, each reversed.
+A chip is dropped only into the slot it was picked up from.
+
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
 | what it touches | prefix | here |
@@ -263,8 +279,12 @@ logs a fault and goes on. A failed start, and a failed pump setup, turn the pump
 raising, and opened valves are closed on every path. A `lock` that does not report clamping done
 releases the clamp before raising, and `stop` releases a clamp that does not read released. A
 failed `Arm.initialize` or `recover_from_fault` unpowers the arm motors again, and a failed setup's
-`stop` does not park them. Queued moves not reported played abort the sequencer, so nothing more
-plays, and log where the motors stopped. Failure behaviour is designed before coverage.
+`stop` does not park them. `MantisDevice.stop` first drops a chip on the head into its slot,
+parking first; one it cannot drop is left there with a warning, and the rest of stop still runs.
+A pick-up or a drop that fails once the head moves leaves its chip possibly on the head: every
+chip move is refused until `confirm_chip_attached`. Queued moves not reported played abort the
+sequencer, so nothing more plays, and log where the motors stopped; a chip's valve sequence not
+reported played aborts it too. Failure behaviour is designed before coverage.
 
 **M11. Firmware is confirmed, never gated.** A version set outside `CONFIRMED_FIRMWARE_VERSIONS`
 warns once at setup; nothing refuses. A set goes in once it has been seen on a device.
@@ -291,10 +311,11 @@ answer from it; a board it leaves `None` does not answer, and the device name is
 feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
 above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
 unclamping done; `MantisSimulationRfid` reads the chip types it is given (`chip_types`, the chips
-placed in the chip spots at setup), every other slot empty; `MantisSimulationPump` holds the pump
-and each controller as last commanded, off after setup: a regulated line reads its target and
-settled, any other 0; its holds pass at once, its tare writes nothing and the calibration is the
-recorded one. `MantisSimulationLedBar` takes every command and waits no hold.
+in the chip spots at setup and after each pick-up and drop), every other slot empty, so a chip on
+the head leaves its slot reading empty; `MantisSimulationPump` holds the pump and each controller
+as last commanded, off after setup: a regulated line reads its target and settled, any other 0;
+its holds pass at once, its tare writes nothing and the calibration is the recorded one.
+`MantisSimulationLedBar` takes every command and waits no hold.
 `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it needs no
 encoder correction; its offsets are the declared ones, else 0, and its zones, stations and stage
 the declared ones, else none. Each command moves it at once, and the motor reads answer from it;
@@ -317,7 +338,11 @@ keep them in step. A driver with no resource tree still drives. The Z column car
 four links (`LinkBody`), turned to the joint angles setup reads after the bring-up. Each chip rack
 holds a chip spot per input slot (`chip_spots`, placed from the manufacturer's model); a chip
 placed in one is a `MantisChip` of its type, and setup checks it against the tag the RFID reader
-reads in that slot, refusing a slot that reads no chip or another type.
+reads in that slot, refusing a slot that reads another type. A chip picked up moves onto the head,
+a child of the right long link below where the long links meet (`attached_chip`), and back into its
+chip spot when dropped. Which chip is on the head is held in memory only, never in a file: after a
+restart, one chip placed whose slot reads no tag may be on the head, and chip moves are refused
+until `confirm_chip_attached` says whether it is; more than one such slot refuses setup.
 
 **M19. The LED bar shows what the device does, never at the cost of it.** An action runs inside
 `_show_action`: the bar shows its colour, the enclosing action's when it ends, the idle animation
@@ -328,12 +353,13 @@ nothing when that many are already lit: each frame holds the link about 62 ms on
 shows at most `number_of_leds` frames. Setup shows blue, the arm's bring-up and the pump's setup
 with it, the connect self-test's progress one step per test point, then green for
 `SETUP_DONE_HOLD`, then idle; `stop` turns the bar off and shows no colour first: one sent there was
-replaced within milliseconds, too briefly to see. The arm's moves and the pump's start, stop,
-pressure and vent show no colour of their own. An LED bar fault only warns: it never fails or masks
-the action. `show_actions=False` shows no action, only the idle animation from setup on, and no
-progress. A colour change costs about 0.1 s of link time (two commands), so an action that is
-quick on its own shows none: the plate clamp's lock and unlock, where a colour took a release from
-0.21 s to 0.34 s on the recorded v4.
+replaced within milliseconds, too briefly to see. `pick_up_chip` and `drop_chip` show theirs
+(`pick_up_chip_color`, `drop_chip_color`) once their checks pass, the valve sequence and the moves
+inside. The arm's moves and the pump's start, stop, pressure and vent show no colour of their own.
+An LED bar fault only warns: it never fails or masks the action. `show_actions=False` shows no
+action, only the idle animation from setup on, and no progress. A colour change costs about 0.1 s
+of link time (two commands), so an action that is quick on its own shows none: the plate clamp's
+lock and unlock, where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 
 ## Open, and where this is not consistent yet
 
@@ -507,16 +533,18 @@ quick on its own shows none: the plate clamp's lock and unlock, where a colour t
     flow chips' dispense and prime) are left out of `chip_sequences`; playing one refuses.
     Recovering a chip left on the head needs `DetachRecovery`, so a reader of mixed files.
 61. **`Pump._queue_valve_sequence` queues; it does not wait.** A chip's valve states run back to
-    back with moves, so the caller waits for the last item. Nothing has queued a chip's sequence
-    through this driver; its writes match the pre-attach, a 100 nl drop and the pre-detach of a
-    recorded v4 dispense, item for item.
+    back with moves, so the caller waits for the last item; `_play_valve_sequence` waits for it,
+    for the pre-attach and the pre-detach. Nothing has queued a chip's sequence through this
+    driver; its writes match the pre-attach, a 100 nl drop and the pre-detach of a recorded v4
+    dispense, item for item.
 62. **A chip's size is measured on a chip,** not taken from the manufacturer's model; it draws the
     chip only. The chip spots' shape and places are the model's.
 63. **Only RFID codes 0x07 and 0x08 have been read off a tag.** The other chip types' codes are not
     confirmed.
 64. **Chips are checked after the bring-up.** Setup reads the tags once the arm is up and the
-    pump set up; a chip that does not match stops the device then. Without an RFID reader or its
-    antennas (a v3) the chips placed are not checked, with a warning.
+    pump set up; a chip that does not match stops the device then, and so do two chips placed in
+    slots that read no tag. Without an RFID reader or its antennas (a v3) the chips placed are not
+    checked, with a warning.
 65. **A chip position's path is read as its five routes, nothing more.** `SafeStart`,
     `MoveAttach`, `Origin`, `Shift` and `SafeStop` are the routes of a recorded v4 chip pick-up and
     drop; `OriginToSafe` and `PostSafeStop` move relative to where the head is and are not in the
@@ -524,5 +552,30 @@ quick on its own shows none: the plate clamp's lock and unlock, where a colour t
     is what the recorded v4 exchanges send. The paths derived from a v4's configuration folder
     match the joint angles in the recordings for slots 1, 2 and 6 to under 0.001 degrees; slots 3
     to 5 are not in the recordings, and none has moved through this driver. Where `Origin` starts
-    at `MoveAttach`'s last waypoint the target is kept twice; whether a pick-up queues or collapses
-    it is not decided here.
+    at `MoveAttach`'s last waypoint the target is kept twice, and a pick-up queues it twice, as in
+    the recorded v4 pick-up.
+66. **Picking up and dropping a chip have not run through this driver.** Their queued moves follow
+    the recorded v4 pick-up from slot 1 and drop back, group for group and item for item in number;
+    the moves of Z alone, the line naming no axis and the arms to idle are its bytes. The drop's
+    targets are the pick-up's slot targets line by line in reverse, the line holding Z kept, and
+    each group of moves back ends with the four to the ready position. Those four (no axis, the
+    arms, Z, both) are the recording's; their place is the last line of the unit's
+    `IDLE_POSITION_FILE`, Z -1.570 mm on both v4 units seen and 0 on the v3, so read per unit. Two
+    differences: the recorded second move to idle also sends Z to -0.003 mm, which this driver holds
+    at its flag; and the recorded pick-up cleared and started the sequencer once, where this driver
+    also does so before the valve sequence. Slots 3 to 5 are not in the recordings.
+67. **The pre-attach is in no recorded pick-up.** Its one state closes every valve for 100 steps;
+    it is played as the unit's chip folder names it. The pre-detach was played, and waited for,
+    before the recorded drop.
+68. **A chip may be on the head after a restart or a failed move, and only a person can say.** The
+    reader reads the slots, not the head (`request_chip_attached`): a chip taken out of its slot by
+    hand reads the same as one on the head. A chip on the head whose chip spot holds no chip at the
+    next setup is not noticed.
+69. **Pick-up and drop start from idle only, and a drop reads its slot first.** Both are this
+    driver's guards: the recorded pick-ups and drops all started at idle, and each switched through
+    every slot's antenna, as a scan does, before the drop and after the pick-up; no read follows a
+    pick-up here. `stop` parks a chip on the head along its zone's route before the drop; no
+    recording shows a zone route with a chip on the head, so the first runs drop it from idle. The
+    chip changer's stage homing is not read: no recording shows a home around a pick-up or a drop.
+70. **The chip on the head is drawn below the right long link's far joint.** How far it hangs below
+    the head, and whether it turns with it, is not measured.

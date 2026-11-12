@@ -894,6 +894,7 @@ class MantisDriver:
       "idle_routes": None,
       "waste_station_route": None,
       "wash_station_routes": None,
+      "idle_position_route": None,
       "chip_changer_routes": None,
     }
     zones = self._unit_blocks.get("zones")
@@ -914,6 +915,8 @@ class MantisDriver:
         routes["wash_station_routes"] = {
           int(station): to_route(lines) for station, lines in stations.get("wash", {}).items()
         }
+        if "idle_position" in stations:
+          routes["idle_position_route"] = to_route(stations["idle_position"])
       if chip_changer is not None:
         routes["chip_changer_routes"] = {
           int(position): {field: to_route(position_routes[field]) for field in CHIP_CHANGER_ROUTES}

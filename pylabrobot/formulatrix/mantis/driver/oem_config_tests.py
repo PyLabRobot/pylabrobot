@@ -16,6 +16,7 @@ from pylabrobot.formulatrix.mantis.driver.oem_config import (
   COMMON_SEQUENCE_DIRECTORY,
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
+  IDLE_POSITION_FILE,
   SBS_ADAPTER_FILE,
   UNKNOWN_ZONE,
   WASTE_STATION_ADAPTER_FILE,
@@ -185,7 +186,16 @@ SYNTHETIC_WASH_ROUTE: List[List[Optional[float]]] = [
   [None, None, 40.0],
   [75.0, -50.0, 45.0],
 ]
-SYNTHETIC_STATIONS_BLOCK = {"waste": SYNTHETIC_WASTE_ROUTE, "wash": {"1": SYNTHETIC_WASH_ROUTE}}
+# A synthetic route to the idle position, in the shape of a v4 unit's: Z, then X, Y and Z.
+SYNTHETIC_IDLE_POSITION_ROUTE: List[List[Optional[float]]] = [
+  [None, None, -1.57],
+  [15.0, 30.0, -1.57],
+]
+SYNTHETIC_STATIONS_BLOCK = {
+  "waste": SYNTHETIC_WASTE_ROUTE,
+  "wash": {"1": SYNTHETIC_WASH_ROUTE},
+  "idle_position": SYNTHETIC_IDLE_POSITION_ROUTE,
+}
 
 
 def get_route_text(*, route: List[List[Optional[float]]]) -> str:
@@ -231,6 +241,8 @@ def get_route_files(*, zones: Dict[str, Any], stations: Dict[str, Any]) -> Dict[
     )
   for station, route in stations.get("wash", {}).items():
     files[f"MoveToWashStation{station}.seq.txt"] = get_route_text(route=route)
+  if "idle_position" in stations:
+    files[IDLE_POSITION_FILE] = get_route_text(route=stations["idle_position"])
   return files
 
 
@@ -377,7 +389,10 @@ class RouteBlockTests(unittest.TestCase):
     blocks = self.load(zone_config=False)
     self.assertNotIn("zones", blocks)
     # A v3 does not read the v4's waste station route.
-    self.assertEqual(blocks["stations"], {"wash": SYNTHETIC_STATIONS_BLOCK["wash"]})
+    self.assertEqual(
+      blocks["stations"],
+      {key: SYNTHETIC_STATIONS_BLOCK[key] for key in ("wash", "idle_position")},
+    )
 
   def test_each_generation_reads_its_own_waste_station_route(self):
     # Every unit seen has both files: a v4 (with DeviceZone.config) reads one, a v3 the other.

@@ -282,6 +282,7 @@ class MantisSimulationArm(Arm):
     idle_routes: Optional[Dict[str, List[Waypoint]]] = None,
     waste_station_route: Optional[List[Waypoint]] = None,
     wash_station_routes: Optional[Dict[int, List[Waypoint]]] = None,
+    idle_position_route: Optional[List[Waypoint]] = None,
     stage_origin: Optional[Tuple[float, float, float]] = None,
     stage_transformation_matrix: Optional[Sequence[Sequence[float]]] = None,
     stage_offset_x: Optional[Tuple[float, float, float]] = None,
@@ -301,6 +302,7 @@ class MantisSimulationArm(Arm):
       idle_routes: as for ``Arm``.
       waste_station_route: as for ``Arm``.
       wash_station_routes: as for ``Arm``.
+      idle_position_route: as for ``Arm``.
       stage_origin: as for ``Arm``.
       stage_transformation_matrix: as for ``Arm``.
       stage_offset_x: as for ``Arm``.
@@ -319,6 +321,7 @@ class MantisSimulationArm(Arm):
       idle_routes=idle_routes,
       waste_station_route=waste_station_route,
       wash_station_routes=wash_station_routes,
+      idle_position_route=idle_position_route,
       stage_origin=stage_origin,
       stage_transformation_matrix=stage_transformation_matrix,
       stage_offset_x=stage_offset_x,
@@ -646,6 +649,7 @@ class MantisSimulationDriver(MantisDriver):
         idle_routes=self.arm.idle_routes,
         waste_station_route=self.arm.waste_station_route,
         wash_station_routes=self.arm.wash_station_routes,
+        idle_position_route=self.arm.idle_position_route,
         stage_origin=self.arm.stage_origin,
         stage_transformation_matrix=self.arm.stage_transformation_matrix,
         stage_offset_x=self.arm.stage_offset_x,

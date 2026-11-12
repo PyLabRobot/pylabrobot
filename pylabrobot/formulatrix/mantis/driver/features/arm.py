@@ -6,7 +6,7 @@ its order matches the recorded v4 startup.
 
 The head goes to idle along the unit's routes: the zone it stands in names a route to a safe XY
 and one to idle. Without them, only from near idle. A wellplate in the plate holder is reached
-through the unit's stage transform.
+through the unit's stage transform, and a chip in its slot along the slot's routes.
 """
 
 import asyncio
@@ -65,6 +65,9 @@ FRONT_IDLE_ROUTE: List[Waypoint] = [
   (*POST_HOMING_POSITION, None),
   (*POST_HOMING_POSITION, 0.0),
 ]
+# The queued move to idle that opens and closes the recorded v4 pick-up and drop: Z to its flag
+# with the arms held, then the arms to idle with Z held.
+CHIP_CHANGER_IDLE_ROUTE: List[Waypoint] = [(None, None, 0.0), (*POST_HOMING_POSITION, None)]
 # The arms' largest following error, in device units, set at bring-up.
 ARM_MAXIMUM_FOLLOWING_ERROR = 4.0
 # How often each declaration of the arms' absolute position reads and writes them, as recorded.
@@ -131,6 +134,7 @@ class Arm:
     idle_routes: Optional[Dict[str, List[Waypoint]]] = None,
     waste_station_route: Optional[List[Waypoint]] = None,
     wash_station_routes: Optional[Dict[int, List[Waypoint]]] = None,
+    idle_position_route: Optional[List[Waypoint]] = None,
     stage_origin: Optional[Tuple[float, float, float]] = None,
     stage_transformation_matrix: Optional[Sequence[Sequence[float]]] = None,
     stage_offset_x: Optional[Tuple[float, float, float]] = None,
@@ -150,6 +154,7 @@ class Arm:
       idle_routes: each zone's route to idle, by name; Unknown included.
       waste_station_route: the route from idle to the waste station.
       wash_station_routes: the route from idle to each wash station, by number.
+      idle_position_route: the route to the idle position at the travel height.
       stage_origin: the plate holder's origin, (x, y, z), mm.
       stage_transformation_matrix: the stage's projective matrix, 3 by 3.
       stage_offset_x: the stage's x offset, (x, y, z); its z tilts the stage.
@@ -167,6 +172,7 @@ class Arm:
     self.idle_routes = idle_routes
     self.waste_station_route = waste_station_route
     self.wash_station_routes = wash_station_routes
+    self.idle_position_route = idle_position_route
     self.stage_origin = stage_origin
     self.stage_transformation_matrix = stage_transformation_matrix
     self.stage_offset_x = stage_offset_x
@@ -752,24 +758,30 @@ class Arm:
       for motor in (*ARM_MOTORS, Z_MOTOR)
     ]
 
-  async def _play_queued_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> None:
-    """Clear and start the sequencer, queue each move, then wait until the last is played.
+  async def _play_queued_move_groups(
+    self, *, groups: List[List[List[Tuple[float, float, float]]]]
+  ) -> None:
+    """Clear and start the sequencer, then queue each group's moves and wait until its last is
+    played before the next group is queued; an empty group is skipped.
 
-    If the wait fails, the sequencer is aborted so nothing more plays, and where the motors
+    If a wait fails, the sequencer is aborted so nothing more plays, and where the motors
     stopped is logged.
 
     Raises:
       MantisMotionError: if a motor reports an error first.
-      MantisTimeoutError: if the last move is not reported played within ``MOVE_TIMEOUT`` each.
+      MantisTimeoutError: if a group's last move is not reported played within ``MOVE_TIMEOUT``
+        each.
     """
-    if not moves:
+    groups = [moves for moves in groups if moves]
+    if not groups:
       return
     await self._driver._unchecked_fw_clear_sequencer()
     await self._driver._unchecked_fw_start_sequencer()
     try:
-      for targets in moves:
-        item = await self._driver._queue_move_item(targets=targets)
-      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(moves))
+      for moves in groups:
+        for targets in moves:
+          item = await self._driver._queue_move_item(targets=targets)
+        await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(moves))
     except BaseException:
       try:
         await self._driver._unchecked_fw_abort_sequencer()
@@ -777,6 +789,72 @@ class Arm:
         logger.warning("[%s] could not abort the sequencer", self._driver.name, exc_info=True)
       await self._log_where_it_stopped()
       raise
+
+  async def _play_queued_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> None:
+    """Clear and start the sequencer, queue each move, then wait until the last is played, as
+    ``_play_queued_move_groups`` with one group.
+
+    Raises:
+      MantisMotionError, MantisTimeoutError: as ``_play_queued_move_groups``.
+    """
+    await self._play_queued_move_groups(groups=[moves])
+
+  def _get_idle_position_route(self) -> List[Waypoint]:
+    """The move to the idle position as a pick-up and a drop queue it: no axis, the arms, Z, then
+    both, to where the last line of the unit's idle position route goes.
+
+    Raises:
+      MantisConfigurationError: without the unit's idle position route, or if its last line does
+        not name X, Y and Z.
+    """
+    if not self.idle_position_route:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no idle position route for this unit; give its configuration "
+        "folder (oem_config_directory) or a configuration saved with it"
+      )
+    x, y, z = self.idle_position_route[-1]
+    if x is None or y is None or z is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: the idle position route's last line does not name X, Y and Z: "
+        f"{(x, y, z)}"
+      )
+    return [(None, None, None), (x, y, None), (None, None, z), (x, y, z)]
+
+  def _get_chip_changer_moves(
+    self, *, slot: int, drop: bool
+  ) -> List[List[List[Tuple[float, float, float]]]]:
+    """A pick-up's queued moves, or a drop's, in the groups the recorded v4 pick-up waits for in
+    turn, at the route profile; every target is checked, nothing moves.
+
+    From idle: to idle Z first (``CHIP_CHANGER_IDLE_ROUTE``); to the idle position
+    (``_get_idle_position_route``); along the slot's routes to its origin; along the others and
+    back to the idle position; to idle Z first. A drop plays the slot's routes in reverse order,
+    each reversed, so it ends where a pick-up starts.
+
+    Args:
+      slot: a chip rack position of the unit's ``chip_changer`` block.
+      drop: a drop's moves, not a pick-up's.
+
+    Raises:
+      MantisMotionError: if the arm is not brought up.
+      MantisConfigurationError, ValueError, MantisKinematicsError: as
+        ``_get_chip_changer_targets`` and ``_get_idle_position_route``.
+    """
+    self._check_initialized()
+    routes = self._get_chip_changer_targets(slot=slot)
+    to_idle = self._get_route_targets(route=CHIP_CHANGER_IDLE_ROUTE)
+    idle_position = self._get_route_targets(route=self._get_idle_position_route())
+    if drop:
+      onto = [*routes["safe_stop"][::-1], *routes["shift"][::-1], *routes["origin"][::-1]]
+      away = [*routes["move_attach"][::-1], *routes["safe_start"][::-1]]
+    else:
+      onto = [*routes["safe_start"], *routes["move_attach"], *routes["origin"]]
+      away = [*routes["shift"], *routes["safe_stop"]]
+    profiles = self._get_route_profiles()
+    return [
+      [self._get_queued_move(targets=targets, profiles=profiles) for targets in steps]
+      for steps in (to_idle, idle_position, onto, away + idle_position, to_idle)
+    ]
 
   async def _declare_absolute_joint_position(self) -> None:
     """Declare each arm motor where its absolute encoder reads, ``DECLARE_PASSES`` times.

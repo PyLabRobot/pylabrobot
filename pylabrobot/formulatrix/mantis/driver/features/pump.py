@@ -587,17 +587,16 @@ class Pump:
     item = await self._queue_valve_states(states=states)
     await self._driver._wait_for_queue_item(item=item, timeout=VALVE_STATE_TIMEOUT)
 
-  async def _queue_valve_sequence(self, *, chip_type: str, name: str) -> Optional[int]:
-    """Queue a chip type's valve sequence on the sequencer, state by state, as the install's file
-    writes it; return its last item, None for a sequence with no state. The caller waits for it.
+  def _get_valve_sequence(self, *, chip_type: str, name: str) -> List[Tuple[int, int]]:
+    """A chip type's valve sequence, (state, duration) pairs, as the install's file writes it.
 
     Args:
       chip_type: a key of ``MANTIS_CHIP_FACTORIES``.
       name: a key of ``VALVE_SEQUENCE_FILES``.
 
     Raises:
-      ValueError: if ``chip_type`` or ``name`` is not one; nothing is sent.
-      MantisConfigurationError: without the install's sequence; nothing is sent.
+      ValueError: if ``chip_type`` or ``name`` is not one.
+      MantisConfigurationError: without the install's sequence.
     """
     if chip_type not in MANTIS_CHIP_FACTORIES:
       raise ValueError(
@@ -615,9 +614,50 @@ class Pump:
       raise MantisConfigurationError(
         f"{self._driver.name}: the install holds no {name} valve sequence for {chip_type}"
       )
+    return sequence
+
+  async def _queue_valve_sequence(self, *, chip_type: str, name: str) -> Optional[int]:
+    """Queue a chip type's valve sequence on the sequencer, state by state, as the install's file
+    writes it; return its last item, None for a sequence with no state. The caller waits for it.
+
+    Args:
+      chip_type: a key of ``MANTIS_CHIP_FACTORIES``.
+      name: a key of ``VALVE_SEQUENCE_FILES``.
+
+    Raises:
+      ValueError, MantisConfigurationError: as ``_get_valve_sequence``; nothing is sent.
+    """
+    sequence = self._get_valve_sequence(chip_type=chip_type, name=name)
     if not sequence:
       return None
     return await self._queue_valve_states(states=sequence)
+
+  async def _play_valve_sequence(self, *, chip_type: str, name: str) -> None:
+    """Clear and start the sequencer, queue a chip type's valve sequence, and wait until its last
+    state is played. If the wait fails, the sequencer is aborted so nothing more plays.
+
+    Args:
+      chip_type: a key of ``MANTIS_CHIP_FACTORIES``.
+      name: a key of ``VALVE_SEQUENCE_FILES``.
+
+    Raises:
+      ValueError, MantisConfigurationError: as ``_get_valve_sequence``; nothing is sent.
+      MantisTimeoutError: if the last state is not reported played within ``VALVE_STATE_TIMEOUT``.
+    """
+    sequence = self._get_valve_sequence(chip_type=chip_type, name=name)
+    if not sequence:
+      return
+    await self._driver._unchecked_fw_clear_sequencer()
+    await self._driver._unchecked_fw_start_sequencer()
+    try:
+      item = await self._queue_valve_states(states=sequence)
+      await self._driver._wait_for_queue_item(item=item, timeout=VALVE_STATE_TIMEOUT)
+    except BaseException:
+      try:
+        await self._driver._unchecked_fw_abort_sequencer()
+      except Exception:
+        logger.warning("[%s] could not abort the sequencer", self._driver.name, exc_info=True)
+      raise
 
   async def _end_pump_block(self, *, release_reservoir: bool) -> None:
     """Disable every controller and turn the pump off, as each self-test block ends; then release

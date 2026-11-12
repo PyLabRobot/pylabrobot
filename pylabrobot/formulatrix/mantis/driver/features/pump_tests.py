@@ -36,6 +36,8 @@ from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   PUMP_HALT,
   RECORDED_CALIBRATION,
+  RECORDED_ITEM_1_PLAYED,
+  RECORDED_SEQUENCER_REPLIES,
   RECORDING,
   DriverTestCase,
   FakeLink,
@@ -842,6 +844,79 @@ class ValveSequenceTests(PumpTestCase):
     driver = await self.set_up_driver(link=link, declared_configuration_json=path)
     assert driver.pump is not None
     self.assertIsNone(driver.pump.chip_sequences)
+
+
+# The recorded v4 pre-detach, played before its drop, items 2023 to 2026: each queue write and its
+# reply, then the last item reported played with none left queued.
+RECORDED_PRE_DETACH_QUEUE_REPLIES = {
+  "e7076400280001001000": "c7000000",
+  "e8076400280001001200": "c7000000",
+  "e9076400280001001e00": "c6000000",
+  "ea076400280001001f00": "c5000000",
+}
+RECORDED_PRE_DETACH_PLAYED = "12000000514f000000001003ea070000c800714b"
+
+
+class PlayValveSequenceTests(PumpTestCase):
+  async def set_up_sequences(self, *, events) -> Tuple[MantisDriver, Pump]:
+    answers = make_answers()
+    for (board, command, request), reply in RECORDED_SEQUENCER_REPLIES.items():
+      answers[(board, command, bytes.fromhex(request))] = [bytes.fromhex(reply)]
+    for replies in (
+      RECORDED_VALVE_SEQUENCE_QUEUE_REPLIES["pre_attach"],
+      RECORDED_PRE_DETACH_QUEUE_REPLIES,
+    ):
+      for request, reply in replies.items():
+        answers[(0, 65, bytes.fromhex(request))] = [bytes.fromhex(reply)]
+    directory = tempfile.TemporaryDirectory()
+    self.addCleanup(directory.cleanup)
+    path = os.path.join(directory.name, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(
+        {**RECORDING, "chip_sequences": {"low_volume_hi_fi": LOW_VOLUME_HI_FI_SEQUENCES}}, f
+      )
+    return await self.set_up_pump(
+      link=FakeLink(answers=answers, events=events), declared_configuration_json=path
+    )
+
+  async def test_cleared_started_queued_and_waited_for_as_recorded(self):
+    driver, pump = await self.set_up_sequences(
+      events={
+        (0, 65, bytes.fromhex("ea076400280001001f00")): [bytes.fromhex(RECORDED_PRE_DETACH_PLAYED)]
+      }
+    )
+    driver._next_item = 2023  # numbered as the recorded pre-detach
+    await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="pre_detach")
+    self.assertEqual(
+      self.sent(),
+      [(0, 61, b""), (0, 62, b"")]
+      + [(0, 65, bytes.fromhex(request)) for request in RECORDED_PRE_DETACH_QUEUE_REPLIES],
+    )
+
+  async def test_a_report_that_came_with_the_reply_is_not_missed(self):
+    driver, pump = await self.set_up_sequences(
+      events={
+        (0, 65, bytes.fromhex("01006400280001001f00")): [bytes.fromhex(RECORDED_ITEM_1_PLAYED)]
+      }
+    )
+    await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="pre_attach")
+    self.assertEqual(
+      self.sent(), [(0, 61, b""), (0, 62, b""), (0, 65, bytes.fromhex("01006400280001001f00"))]
+    )
+
+  async def test_a_state_not_played_in_time_aborts_the_sequencer(self):
+    driver, pump = await self.set_up_sequences(events={})
+    with mock.patch.object(pump_module, "VALVE_STATE_TIMEOUT", 0.05):
+      with self.assertRaises(MantisTimeoutError):
+        await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="pre_attach")
+    self.assertEqual([command for _, command, _ in self.sent()], [61, 62, 65, 64])
+
+  async def test_a_sequence_refused_or_with_no_state_sends_nothing(self):
+    _, pump = await self.set_up_sequences(events={})
+    await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="post_prime")
+    with self.assertRaisesRegex(MantisConfigurationError, "no safe_state valve sequence"):
+      await pump._play_valve_sequence(chip_type="low_volume_hi_fi", name="safe_state")
+    self.assertEqual(self.sent(), [])
 
 
 class PumpDiscoveryTests(DriverTestCase):

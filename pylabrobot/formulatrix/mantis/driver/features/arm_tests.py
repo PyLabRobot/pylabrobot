@@ -10,7 +10,7 @@ import os
 import struct
 import tempfile
 import unittest
-from typing import Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
@@ -53,6 +53,7 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import (
 )
 from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
   SYNTHETIC_CHIP_CHANGER_BLOCK,
+  SYNTHETIC_IDLE_POSITION_ROUTE,
   SYNTHETIC_IDLE_ROUTES,
   SYNTHETIC_SAFE_XY,
   SYNTHETIC_STAGE_BLOCK,
@@ -1418,6 +1419,212 @@ class ChipChangerTests(ArmTestCase):
     )
     with self.assertRaisesRegex(MantisConfigurationError, "malformed zones, stations or chip"):
       await driver.setup(skip_arm=True)
+
+
+# A chip rack position at synthetic places with as many lines in each route as the recorded v4
+# pick-up from slot 1 and drop back, so that its queued moves are numbered as recorded.
+SLOT_1_SHAPED_CHIP_CHANGER_BLOCK: Dict[str, Dict[str, List[List[Optional[float]]]]] = {
+  "1": {
+    "safe_start": [[70.0, 60.0, -1.57]],
+    "move_attach": [
+      [80.0, 12.0, -1.57],
+      [94.0, -8.0, -1.57],
+      [118.0, 2.0, -1.57],
+      [120.0, 10.0, -1.57],
+      [120.0, 10.0, 11.0],
+    ],
+    "origin": [[120.0, 10.0, 11.0]],
+    "shift": [[118.0, 11.0, 10.5]],
+    "safe_stop": [[118.0, 11.0, None], [118.0, 11.0, -1.57], [90.0, 10.0, -1.57]],
+  }
+}
+# That pick-up's first queued moves, items 67 to 72 (the drop's 90 to 95 alike): Z to its flag, the
+# arms to idle (Z to -0.003 mm), no axis, the arms to the ready position, Z to travel height, both.
+RECORDED_PICK_UP_FIRST_MOVES = [
+  "43000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  "000000000000000000000000000000004cd431fab7eaa040bb34be4f05c2be40",
+  "440000000100742631100e96943fb4a291808fb3b540814e1be8b40a8a40c67d71e5c1efd63fb4a291808fb3b540"
+  "814e1be8b40a8a408fc7e3f1783cbebf4cd431fab7eaa040bb34be4f05c2be40",
+  "45000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "460000000100f7ad61abb2dae2bfb4a291808fb3b540814e1be8b40a8a408ff05452040fd0bfb4a291808fb3b540"
+  "814e1be8b40a8a40000000000000000000000000000000000000000000000000",
+  "47000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  "0000000000000000fa7c3e9fcfe74ec04cd431fab7eaa040bb34be4f05c2be40",
+  "480000000100f7ad61abb2dae2bfb4a291808fb3b540814e1be8b40a8a408ff05452040fd0bfb4a291808fb3b540"
+  "814e1be8b40a8a40fa7c3e9fcfe74ec04cd431fab7eaa040bb34be4f05c2be40",
+]
+# Its reports, by item, of the last item of each group it queued played with none left queued:
+# the pick-up waited for items 68, 72, 79, 87 and 89, the drop for 91, 95, 100, 110 and 112.
+RECORDED_CHIP_CHANGER_GROUPS_PLAYED = {
+  68: "120000007a1500000000100344000000c800f416",
+  72: "120000008c1500000000100348000000c8000e16",
+  79: "120000000f160000000010034f000000c8008a15",
+  87: "120000006b1600000000100357000000c800f615",
+  89: "120000007c1600000000100359000000c800ef15",
+  91: "12000000a6160000000010035b000000c8003715",
+  95: "12000000b9160000000010035f000000c8002c15",
+  100: "12000000121700000000100364000000c800bc14",
+  110: "1200000097170000000010036e000000c8003314",
+  112: "12000000a81700000000100370000000c8001214",
+}
+
+
+# The moves to idle Z first and to the ready position at the travel height that open and close the
+# recorded v4 pick-up and drop, as route lines; the latter from ``SYNTHETIC_IDLE_POSITION_ROUTE``.
+CHIP_CHANGER_IDLE_LINES: List[List[Optional[float]]] = [[None, None, 0.0], [15.0, 31.177, None]]
+IDLE_POSITION_LINES: List[List[Optional[float]]] = [
+  [None, None, None],
+  [15.0, 30.0, None],
+  [None, None, -1.57],
+  [15.0, 30.0, -1.57],
+]
+
+
+def get_expected_chip_changer_moves(*, drop: bool, first_item: int) -> List[List[bytes]]:
+  """The queued moves of a pick-up or a drop of ``SLOT_1_SHAPED_CHIP_CHANGER_BLOCK``'s position, in
+  the groups waited for, numbered from ``first_item``, with the synthetic offsets."""
+  routes = SLOT_1_SHAPED_CHIP_CHANGER_BLOCK["1"]
+  if drop:
+    onto = routes["safe_stop"][::-1] + routes["shift"][::-1] + routes["origin"][::-1]
+    away = routes["move_attach"][::-1] + routes["safe_start"][::-1]
+  else:
+    onto = routes["safe_start"] + routes["move_attach"] + routes["origin"]
+    away = routes["shift"] + routes["safe_stop"]
+  groups = []
+  item = first_item
+  for lines in (
+    CHIP_CHANGER_IDLE_LINES,
+    IDLE_POSITION_LINES,
+    onto,
+    away + IDLE_POSITION_LINES,
+    CHIP_CHANGER_IDLE_LINES,
+  ):
+    group = []
+    for x, y, z in lines:
+      targets = get_arm_positions(x=x, y=y) if x is not None and y is not None else {}
+      if z is not None:
+        targets[2] = compute_device_position(motor=2, position=z)
+      group.append(get_queued_move(item=item, targets=targets))
+      item += 1
+    groups.append(group)
+  return groups
+
+
+class ChipChangerMoveTests(ArmTestCase):
+  async def set_up_chip_changer(
+    self, *, groups: List[List[bytes]], stations: Optional[Dict[str, Any]] = None
+  ):
+    """An arm at idle with ``SLOT_1_SHAPED_CHIP_CHANGER_BLOCK`` and ``stations``, by default the
+    synthetic idle position route; each group's last queued move is answered with the recorded
+    report of its item played."""
+    if stations is None:
+      stations = {"idle_position": SYNTHETIC_IDLE_POSITION_ROUTE}
+    played = {}
+    for group in groups:
+      item = struct.unpack_from("<h", group[-1])[0]
+      played[(0, 68, group[-1])] = [bytes.fromhex(RECORDED_CHIP_CHANGER_GROUPS_PLAYED[item])]
+    link = RouteLink(answers=make_answers(), events=played)
+    link.set_absolute_readings(index=-1)
+    link.answers[(0, 84, b"\x02\x00")] = [bytes.fromhex(Z_UP_ENCODER_REPLY)]
+    driver = await self.set_up_arm(
+      link=link,
+      arm_block=get_arm_block_at(x=15.0, y=31.177),
+      chip_changer=SLOT_1_SHAPED_CHIP_CHANGER_BLOCK,
+      stations=stations,
+    )
+    driver.arm._initialized = True
+    driver._next_item = struct.unpack_from("<h", groups[0][0])[0]
+    return driver, link
+
+  def test_the_opening_moves_are_the_recorded_ones(self):
+    groups = get_expected_chip_changer_moves(drop=False, first_item=67)
+    queued = groups[0] + groups[1]
+    recorded = [bytes.fromhex(move) for move in RECORDED_PICK_UP_FIRST_MOVES]
+    for index in (0, 2, 4):  # Z alone or no axis: the same on every unit
+      self.assertEqual(queued[index], recorded[index])
+    # The arms to idle as recorded; Z held, where the recording sends it to -0.003 mm.
+    self.assertEqual(queued[1][:54], recorded[1][:54])
+    self.assertEqual(queued[1][54:], bytes(24))
+    # The ready position, within what the synthetic offsets give; Z as recorded.
+    for index in (3, 5):
+      sent = struct.unpack("<hHH9d", queued[index])
+      expected = struct.unpack("<hHH9d", recorded[index])
+      self.assertEqual(sent[:3] + sent[4:6] + sent[7:], expected[:3] + expected[4:6] + expected[7:])
+      for field in (3, 6):
+        self.assertAlmostEqual(sent[field], expected[field], places=9)
+
+  async def test_a_pick_up_queues_the_recorded_groups_each_waited_for(self):
+    for drop, first_item in ((False, 67), (True, 90)):
+      with self.subTest(drop=drop):
+        groups = get_expected_chip_changer_moves(drop=drop, first_item=first_item)
+        driver, link = await self.set_up_chip_changer(groups=groups)
+        moves = driver.arm._get_chip_changer_moves(slot=1, drop=drop)
+        self.assertEqual(self.sent(link), [])  # nothing is sent to compute them
+        await driver.arm._play_queued_move_groups(groups=moves)
+        self.assertEqual(
+          tokens(self.sent(link)),
+          ["0:61:", "0:62:"] + [f"0:68:{move.hex()}" for group in groups for move in group],
+        )
+        self.assertEqual(
+          [len(group) for group in groups], [2, 4, 7, 8, 2] if not drop else [2, 4, 5, 10, 2]
+        )
+
+  async def test_a_drop_plays_the_pick_ups_slot_moves_reversed(self):
+    groups = get_expected_chip_changer_moves(drop=False, first_item=67)
+    driver, _ = await self.set_up_chip_changer(groups=groups)
+    pick_up, drop = (
+      driver.arm._get_chip_changer_moves(slot=1, drop=drop) for drop in (False, True)
+    )
+    # The slot's moves, between the moves to the idle position, line by line in reverse.
+    self.assertEqual(drop[2] + drop[3][:-4], (pick_up[2] + pick_up[3][:-4])[::-1])
+    self.assertEqual(drop[3][-4:], pick_up[3][-4:])
+    # The drop's first slot move is SafeStop's last line; its third holds Z, as that line does.
+    arms = get_arm_positions(x=90.0, y=10.0)
+    z = compute_device_position(motor=2, position=-1.57)
+    self.assertEqual([motor[0] for motor in drop[2][0]], [arms[0], arms[1], z])
+    self.assertEqual(drop[2][2][2], (0.0, 0.0, 0.0))
+
+  async def test_the_idle_position_is_the_units(self):
+    groups = get_expected_chip_changer_moves(drop=False, first_item=67)
+    driver, _ = await self.set_up_chip_changer(
+      groups=groups, stations={"idle_position": [[None, None, -2.0], [16.0, 29.0, -2.0]]}
+    )
+    moves = driver.arm._get_chip_changer_moves(slot=1, drop=False)
+    arms = get_arm_positions(x=16.0, y=29.0)
+    z = compute_device_position(motor=2, position=-2.0)
+    expected = [[0.0, 0.0, 0.0], [arms[0], arms[1], 0.0], [0.0, 0.0, z], [arms[0], arms[1], z]]
+    for group in (moves[1], moves[3][-4:]):
+      self.assertEqual([[motor[0] for motor in move] for move in group], expected)
+
+  async def test_a_group_not_played_in_time_aborts_and_queues_no_more(self):
+    groups = get_expected_chip_changer_moves(drop=False, first_item=67)
+    driver, link = await self.set_up_chip_changer(groups=groups[:1])
+    del link.events[(0, 68, groups[0][-1])]
+    with mock.patch.object(arm_module, "MOVE_TIMEOUT", 0.05):
+      with self.assertRaises(MantisTimeoutError):
+        await driver.arm._play_queued_move_groups(
+          groups=driver.arm._get_chip_changer_moves(slot=1, drop=False)
+        )
+    commands = [command for _, command, _ in self.sent(link) if command != 20]
+    self.assertEqual(commands[:5], [61, 62, 68, 68, 64])
+    self.assertNotIn(68, commands[5:])
+
+  async def test_refused_before_anything_is_sent(self):
+    groups = get_expected_chip_changer_moves(drop=False, first_item=67)
+    driver, link = await self.set_up_chip_changer(groups=groups)
+    with self.assertRaisesRegex(ValueError, "an LC3's positions are not supported"):
+      driver.arm._get_chip_changer_moves(slot=7, drop=False)
+    driver.arm.idle_position_route = [(None, None, -1.57)]
+    with self.assertRaisesRegex(MantisConfigurationError, "does not name X, Y and Z"):
+      driver.arm._get_chip_changer_moves(slot=1, drop=False)
+    driver.arm.idle_position_route = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no idle position route"):
+      driver.arm._get_chip_changer_moves(slot=1, drop=False)
+    driver.arm._initialized = False
+    with self.assertRaisesRegex(MantisMotionError, "the arm is not brought up"):
+      driver.arm._get_chip_changer_moves(slot=1, drop=False)
+    self.assertEqual(self.sent(link), [])
 
 
 if __name__ == "__main__":

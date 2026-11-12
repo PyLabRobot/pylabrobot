@@ -3,7 +3,7 @@
 import logging
 import math
 import os
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Deck, Resource
@@ -17,7 +17,7 @@ from .driver.arm_kinematics import (
   compute_head_position,
 )
 from .driver.configuration import RECORDING_MANTIS_V4
-from .driver.errors import MantisConfigurationError
+from .driver.errors import MantisConfigurationError, MantisMotionError
 from .driver.features.arm import Arm
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
@@ -46,7 +46,9 @@ class MantisDevice(Resource):
   The main box carries the deck with its plate holder, the two chip racks with a chip spot per input
   slot (``chip_spots``), and the Z column with the arm. The generation is read at setup
   (``driver.configuration.generation``). A chip placed in a chip spot is checked at setup against
-  the tag the RFID reader reads in its slot.
+  the tag the RFID reader reads in its slot. On a v4 a chip is picked up from its slot and dropped
+  back into it (``pick_up_chip``, ``drop_chip``); on the head it is a child of the right long link,
+  where the long links meet (``attached_chip``).
   """
 
   def _update_arm_model(self, *, theta_1: float, theta_2: float) -> None:
@@ -198,6 +200,11 @@ class MantisDevice(Resource):
       )
       self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"] = short, long
     self._update_arm_model(theta_1=0.0, theta_2=0.0)
+    # The chip on the head and the slot it came from; and a chip that may be on the head, by slot,
+    # until ``confirm_chip_attached``. Held in memory only.
+    self._attached_chip: Optional[MantisChip] = None
+    self._attached_chip_slot: Optional[int] = None
+    self._possibly_attached_chip_slot: Optional[int] = None
 
   @property
   def plate_clamp(self) -> Optional[PlateClamp]:
@@ -232,16 +239,36 @@ class MantisDevice(Resource):
       if isinstance(spot.resource, MantisChip)
     }
 
+  def _update_simulated_tags(self) -> None:
+    """Give a simulated RFID reader the chips placed in the chip spots: the tags it reads."""
+    rfid = self.driver.rfid
+    if isinstance(rfid, MantisSimulationRfid):
+      rfid.chip_types = {slot: chip.chip_type for slot, chip in self._get_placed_chips().items()}
+
+  def _check_tag(self, *, slot: int, chip: MantisChip, tag: Dict[str, Any]) -> None:
+    """Raise ``MantisConfigurationError`` unless a tag read in a slot is of the chip type placed
+    there; log it."""
+    if tag["chip_type"] != chip.chip_type:
+      raise MantisConfigurationError(
+        f"{self.name}: slot {slot} holds chip {tag['serial']} of type {tag['chip_type']!r} "
+        f"(RFID code {tag['chip_type_code']}), but {chip.name} of type {chip.chip_type!r} is "
+        "placed there"
+      )
+    logger.info("[%s] slot %d: chip %s, %s (RFID)", self.name, slot, tag["serial"], chip.chip_type)
+
   async def _check_chips(self) -> None:
     """Check each chip placed in a chip spot against the tag the RFID reader reads in its slot.
 
     Nothing is read when no chip is placed; without a reader or its antennas the chips are not
-    checked, with a warning. A simulated reader reads the chips placed.
+    checked, with a warning. A simulated reader reads the chips placed. One chip placed whose slot
+    reads no tag may be on the head, left there by a process that ended: it is taken as possibly
+    attached, with a warning, and chip moves are refused until ``confirm_chip_attached``.
 
     Raises:
-      MantisConfigurationError: if a slot with a chip placed has no antenna, reads no tag, or reads
-        a tag of another chip type or none known.
+      MantisConfigurationError: if a slot with a chip placed has no antenna or reads a tag of
+        another chip type or none known, or more slots read no tag than a chip can be on the head.
     """
+    self._possibly_attached_chip_slot = None
     placed = self._get_placed_chips()
     if not placed:
       return
@@ -249,8 +276,7 @@ class MantisDevice(Resource):
     if rfid is None or rfid.slot_to_antenna is None:
       logger.warning("[%s] no RFID reader or antennas: the chips placed are not checked", self.name)
       return
-    if isinstance(rfid, MantisSimulationRfid):
-      rfid.chip_types = {slot: chip.chip_type for slot, chip in placed.items()}
+    self._update_simulated_tags()
     missing = sorted(set(placed) - set(rfid.slot_to_antenna))
     if missing:
       raise MantisConfigurationError(
@@ -258,22 +284,25 @@ class MantisDevice(Resource):
       )
     tags = await rfid.request_tags()
     found = sorted(slot for slot, tag in tags.items() if tag is not None)
+    empty = sorted(slot for slot in placed if tags[slot] is None)
+    if len(empty) > (0 if self._attached_chip is not None else 1):
+      raise MantisConfigurationError(
+        f"{self.name}: chips are placed in slots {empty}, which hold no chip (RFID); chips were "
+        f"read in slots {found}"
+      )
     for slot, chip in placed.items():
       tag = tags[slot]
       if tag is None:
-        raise MantisConfigurationError(
-          f"{self.name}: {chip.name} is placed in slot {slot}, which holds no chip (RFID); chips "
-          f"were read in slots {found}"
+        logger.warning(
+          "[%s] %s is placed in slot %d, which holds no chip (RFID): it may be on the head. Chips "
+          "are not moved until confirm_chip_attached()",
+          self.name,
+          chip.name,
+          slot,
         )
-      if tag["chip_type"] != chip.chip_type:
-        raise MantisConfigurationError(
-          f"{self.name}: slot {slot} holds chip {tag['serial']} of type {tag['chip_type']!r} "
-          f"(RFID code {tag['chip_type_code']}), but {chip.name} of type {chip.chip_type!r} is "
-          "placed there"
-        )
-      logger.info(
-        "[%s] slot %d: chip %s, %s (RFID)", self.name, slot, tag["serial"], chip.chip_type
-      )
+        self._possibly_attached_chip_slot = slot
+        continue
+      self._check_tag(slot=slot, chip=chip, tag=tag)
 
   async def setup(self, *, skip_arm: bool = False, skip_self_test: bool = False) -> None:
     """Connect, read the device's configuration and check it, then bring the arm and Z up, zero
@@ -301,9 +330,257 @@ class MantisDevice(Resource):
       theta_1, theta_2 = await arm.request_link_angles()
       self._update_arm_model(theta_1=theta_1, theta_2=theta_2)
 
+  @property
+  def attached_chip(self) -> Optional[MantisChip]:
+    """The chip on the head, picked up by ``pick_up_chip``; None when there is none."""
+    return self._attached_chip
+
+  def _update_chip_location(self, *, chip: MantisChip, slot: Optional[int]) -> None:
+    """Move a chip in the resource model: into a slot's chip spot, or with None onto the head,
+    centred below where the long links meet."""
+    if chip.parent is not None:
+      chip.unassign()
+    if slot is not None:
+      self.chip_spots[slot].assign_child_resource(chip)
+      return
+    link = self.arm_links["right_long_arm"]
+    assert link.distal_joint is not None
+    link.assign_child_resource(
+      chip,
+      location=link.distal_joint
+      - Coordinate(chip.get_size_x() / 2, chip.get_size_y() / 2, chip.get_size_z()),
+    )
+
+  def _get_arm_and_pump(self) -> Tuple[Arm, Pump]:
+    """The arm and the pump a chip is moved with.
+
+    Raises:
+      MantisMotionError: if a chip may be on the head, until ``confirm_chip_attached``.
+      MantisConfigurationError: without the arm or the pump: before setup, or on a v3, whose chip
+        changer is not supported.
+    """
+    if self._possibly_attached_chip_slot is not None:
+      raise MantisMotionError(
+        f"{self.name}: the chip of slot {self._possibly_attached_chip_slot} may be on the head; "
+        "look, then call confirm_chip_attached()"
+      )
+    arm, pump = self.driver.arm, self.driver.pump
+    if arm is None or pump is None:
+      raise MantisConfigurationError(
+        f"{self.name}: chips are moved with the arm and the pump, built at setup on a v4; a v3's "
+        "chip changer is not supported"
+      )
+    return arm, pump
+
+  async def _check_chip_in_slot(self, *, slot: int, chip: MantisChip) -> None:
+    """Read a slot's tag and raise unless it is of the chip type placed there. A simulated Mantis
+    without a reader or its antennas is not checked, with a warning.
+
+    Raises:
+      MantisConfigurationError: without a reader or its antennas on a device, or if the slot
+        reads no tag, or a tag of another chip type or none known.
+    """
+    rfid = self.driver.rfid
+    if rfid is None or rfid.slot_to_antenna is None:
+      if isinstance(self.driver, MantisSimulationDriver):
+        logger.warning("[%s] no RFID reader or antennas: slot %d is not checked", self.name, slot)
+        return
+      raise MantisConfigurationError(
+        f"{self.name}: no RFID reader or antennas, so the chip in slot {slot} cannot be checked; "
+        "it is not picked up"
+      )
+    tag = await rfid.request_tag(slot=slot)
+    if tag is None:
+      raise MantisConfigurationError(
+        f"{self.name}: slot {slot} holds no chip (RFID); {chip.name} is placed there"
+      )
+    self._check_tag(slot=slot, chip=chip, tag=tag)
+
+  async def _check_slot_empty(self, *, slot: int) -> None:
+    """Read a slot's tag, if there is a reader with antennas, and raise if it holds a chip.
+
+    Raises:
+      MantisConfigurationError: if the slot reads a tag.
+    """
+    rfid = self.driver.rfid
+    if rfid is None or rfid.slot_to_antenna is None:
+      logger.warning("[%s] no RFID reader or antennas: slot %d is not checked", self.name, slot)
+      return
+    tag = await rfid.request_tag(slot=slot)
+    if tag is not None:
+      raise MantisConfigurationError(
+        f"{self.name}: slot {slot} holds chip {tag['serial']} (RFID); a chip is not dropped there"
+      )
+
+  async def _check_parked(self, *, arm: Arm) -> None:
+    """Raise ``MantisMotionError`` unless the head is at idle (``Arm.request_is_parked``)."""
+    if not await arm.request_is_parked():
+      raise MantisMotionError(f"{self.name}: a chip is moved from idle only; park() first")
+
+  async def pick_up_chip(self, *, slot: int) -> None:
+    """Pick up the chip placed in a slot's chip spot, from idle (v4).
+
+    Before anything moves, the slot's tag must read the chip type placed there. Then the chip's
+    pre-attach valve sequence plays and the head goes along the slot's routes onto the chip and back
+    to idle (``Arm._get_chip_changer_moves``); the chip then moves onto the head in the resource
+    model. The LED bar shows "pick_up_chip" meanwhile. A failure once the head moves leaves the chip
+    possibly on the head: chip moves are refused until ``confirm_chip_attached``.
+
+    Args:
+      slot: the input slot, a key of ``chip_spots``.
+
+    Raises:
+      ValueError: if ``slot`` is not a key of ``chip_spots``, or a target is outside its limits.
+      MantisMotionError: if a chip is or may be on the head, the arm is not brought up, the head
+        is not at idle, or a motor faults.
+      MantisConfigurationError: before setup or on a v3; without the unit's chip changer routes or
+        the chip's valve sequences; with no chip placed in the slot; without an RFID reader on a
+        device; or if the slot reads no tag or another chip type.
+    """
+    arm, pump = self._get_arm_and_pump()
+    if self._attached_chip is not None:
+      raise MantisMotionError(
+        f"{self.name}: {self._attached_chip.name} from slot {self._attached_chip_slot} is on the "
+        "head; drop_chip() first"
+      )
+    if slot not in self.chip_spots:
+      raise ValueError(f"slot must be one of {tuple(self.chip_spots)}, got {slot}")
+    chip = self.chip_spots[slot].resource
+    if not isinstance(chip, MantisChip):
+      raise MantisConfigurationError(
+        f"{self.name}: no chip is placed in slot {slot}; place one in chip_spots[{slot}]"
+      )
+    groups = arm._get_chip_changer_moves(slot=slot, drop=False)
+    pump._get_valve_sequence(chip_type=chip.chip_type, name="pre_attach")
+    await self._check_chip_in_slot(slot=slot, chip=chip)
+    await self._check_parked(arm=arm)
+    async with self.driver._show_action(action="pick_up_chip"):
+      await pump._play_valve_sequence(chip_type=chip.chip_type, name="pre_attach")
+      try:
+        await arm._play_queued_move_groups(groups=groups)
+      except BaseException:
+        self._possibly_attached_chip_slot = slot
+        logger.warning(
+          "[%s] the pick-up failed: the chip of slot %d may be on the head", self.name, slot
+        )
+        raise
+      self._update_chip_location(chip=chip, slot=None)
+      self._attached_chip, self._attached_chip_slot = chip, slot
+      self._update_simulated_tags()
+
+  async def drop_chip(self, *, slot: int) -> None:
+    """Drop the chip on the head back into the slot it was picked up from, from idle (v4): the
+    chip's pre-detach valve sequence, then the pick-up's moves reversed.
+
+    Before anything moves, a slot that reads a tag refuses: a chip is there. The LED bar shows
+    "drop_chip" meanwhile. A failure once the head moves leaves the chip possibly on the head, in
+    its chip spot in the resource model: chip moves are refused until ``confirm_chip_attached``.
+
+    Args:
+      slot: the slot the chip on the head was picked up from.
+
+    Raises:
+      MantisMotionError: if no chip is on the head, it came from another slot, a chip may be on the
+        head, the arm is not brought up, the head is not at idle, or a motor faults.
+      MantisConfigurationError: before setup or on a v3; without the chip's valve sequences; or if
+        the slot reads a tag.
+    """
+    arm, pump = self._get_arm_and_pump()
+    chip = self._attached_chip
+    if chip is None:
+      raise MantisMotionError(f"{self.name}: no chip is on the head")
+    if slot != self._attached_chip_slot:
+      raise MantisMotionError(
+        f"{self.name}: {chip.name} was picked up from slot {self._attached_chip_slot}; it is "
+        f"dropped only there, not into slot {slot}"
+      )
+    groups = arm._get_chip_changer_moves(slot=slot, drop=True)
+    pump._get_valve_sequence(chip_type=chip.chip_type, name="pre_detach")
+    await self._check_slot_empty(slot=slot)
+    await self._check_parked(arm=arm)
+    async with self.driver._show_action(action="drop_chip"):
+      await pump._play_valve_sequence(chip_type=chip.chip_type, name="pre_detach")
+      try:
+        await arm._play_queued_move_groups(groups=groups)
+      except BaseException:
+        self._possibly_attached_chip_slot = slot
+        logger.warning(
+          "[%s] the drop failed: the chip of slot %d may be on the head", self.name, slot
+        )
+        raise
+      finally:
+        self._update_chip_location(chip=chip, slot=slot)
+        self._attached_chip, self._attached_chip_slot = None, None
+      self._update_simulated_tags()
+
+  async def request_chip_attached(self) -> bool:
+    """Whether a chip is on the head, by RFID: whether the slot of the chip on the head, or of the
+    one that may be, reads no tag. False, with nothing read, when there is neither.
+
+    The reader reads the slots, not the head: a chip taken out of its slot by hand reads the same.
+
+    Raises:
+      MantisConfigurationError: without an RFID reader or its antennas.
+    """
+    slot = (
+      self._attached_chip_slot
+      if self._attached_chip_slot is not None
+      else self._possibly_attached_chip_slot
+    )
+    if slot is None:
+      return False
+    rfid = self.driver.rfid
+    if rfid is None or rfid.slot_to_antenna is None:
+      raise MantisConfigurationError(f"{self.name}: no RFID reader or antennas")
+    return await rfid.request_tag(slot=slot) is None
+
+  def confirm_chip_attached(self, *, attached: bool) -> None:
+    """Say whether the chip that may be on the head is there, as seen on the device; chip moves are
+    refused until then.
+
+    Attached, it moves onto the head in the resource model and ``drop_chip`` returns it to its
+    slot. Not attached, it stays in its slot's chip spot, and a pick-up reads its slot again.
+
+    Args:
+      attached: whether the chip is on the head.
+
+    Raises:
+      ValueError: if no chip may be on the head.
+      MantisConfigurationError: if attached, but no chip is placed in its slot's chip spot.
+    """
+    slot = self._possibly_attached_chip_slot
+    if slot is None:
+      raise ValueError(f"{self.name}: no chip may be on the head")
+    if not attached:
+      self._possibly_attached_chip_slot = None
+      return
+    chip = self.chip_spots[slot].resource
+    if not isinstance(chip, MantisChip):
+      raise MantisConfigurationError(
+        f"{self.name}: no chip is placed in slot {slot}; place the chip on the head in "
+        f"chip_spots[{slot}], then confirm"
+      )
+    self._possibly_attached_chip_slot = None
+    self._update_chip_location(chip=chip, slot=None)
+    self._attached_chip, self._attached_chip_slot = chip, slot
+    self._update_simulated_tags()
+
   async def stop(self) -> None:
-    """Stop the motors, park an arm brought up, turn the pump off and vent, release the clamp and
-    disconnect."""
+    """Drop a chip on the head back into its slot, parking first; then stop the motors, park an
+    arm brought up, turn the pump off and vent, release the clamp and disconnect.
+
+    A chip that cannot be dropped is left on the head, with a warning; the rest still runs.
+    """
+    arm, slot = self.driver.arm, self._attached_chip_slot
+    if slot is not None and arm is not None and arm.is_initialized:
+      try:
+        if not await arm.request_is_parked():
+          await arm.park()
+        await self.drop_chip(slot=slot)
+      except Exception:
+        logger.warning(
+          "[%s] the chip from slot %d is left on the head", self.name, slot, exc_info=True
+        )
     await self.driver.stop()
 
 

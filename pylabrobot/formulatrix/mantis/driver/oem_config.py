@@ -27,6 +27,8 @@ WASTE_STATION_FILE = "MoveToWasteStation.seq.txt"
 WASTE_STATION_ADAPTER_FILE = "MoveToWasteStation_Adapter.seq.txt"
 WASH_STATION_FILE = "MoveToWashStation{station}.seq.txt"
 WASH_STATIONS = (1, 2)
+# The route to the idle position at the travel height; its Z differs by generation.
+IDLE_POSITION_FILE = "MoveToIdlePosition.seq.txt"
 # Where an install keeps the plate holder's origin, from its ``Data/Device`` folder.
 SBS_ADAPTER_FILE = os.path.join("Adapters", "SBS Adapter.ad.txt")
 # The only arm type on every unit seen; how the stage is framed for another is unknown.
@@ -263,8 +265,8 @@ def _load_zones(*, path: str, sequence_directory: str) -> Dict[str, Any]:
 
 
 def _load_stations(*, sequence_directory: str, waste_station_file: str) -> Dict[str, Any]:
-  """The ``stations`` block: the routes to the waste station and to each wash station, from idle;
-  only those whose file exists.
+  """The ``stations`` block: the routes to the waste station and to each wash station, from idle,
+  and to the idle position; only those whose file exists.
 
   Args:
     sequence_directory: the unit's ``System/Sequences/Common``.
@@ -284,6 +286,9 @@ def _load_stations(*, sequence_directory: str, waste_station_file: str) -> Dict[
       wash[str(station)] = _parse_route(path=path)
   if wash:
     stations["wash"] = wash
+  path = os.path.join(sequence_directory, IDLE_POSITION_FILE)
+  if os.path.isfile(path):
+    stations["idle_position"] = _parse_route(path=path)
   return stations
 
 
@@ -362,9 +367,10 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   is set (a v4). Motor 0 is ``Motor.1`` there.
   ``zones``: ``DeviceZone.config``'s rectangles and each zone's routes to safe XY and to idle,
   from the unit's ``System/Sequences/Common``, only where that file exists (a v4).
-  ``stations``: the routes from idle to the waste station and to wash stations 1 and 2, from the
-  same folder, those that exist; the waste station's ``WASTE_STATION_FILE`` where
-  ``DeviceZone.config`` exists (a v4), else ``WASTE_STATION_ADAPTER_FILE`` (a v3).
+  ``stations``: the routes from idle to the waste station and to wash stations 1 and 2, and the
+  route to the idle position (``IDLE_POSITION_FILE``), from the same folder, those that exist; the
+  waste station's ``WASTE_STATION_FILE`` where ``DeviceZone.config`` exists (a v4), else
+  ``WASTE_STATION_ADAPTER_FILE`` (a v3).
   ``stage``: ``Device.config``'s ``MicroplateTransformationMatrix``, ``MicroplateOffsetX/Y`` and
   ``ArmType*``, and the plate holder's origin from ``Data/Device/Adapters/SBS Adapter.ad.txt``,
   only where ``Device.config`` sets the matrix.
