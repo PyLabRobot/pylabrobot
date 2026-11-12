@@ -18,6 +18,55 @@ class TestTipMountingShaft(unittest.TestCase):
       TipMountingShaft(name="shaft", tip_pickup_mode="core", cross_section_type="rectangle")
 
 
+class ShaftSavesItsTip(unittest.TestCase):
+  """A shaft's state is the tool it carries, so a device that cannot sense its tips reads them back."""
+
+  def setUp(self):
+    self.shaft = TipMountingShaft(name="shaft", tip_pickup_mode="core")
+
+  def test_a_carried_tip_is_saved_and_read_back(self):
+    tip = hamilton_tip_300uL(name="tip")
+    self.shaft.mount_tip(tip)
+    tip.tracker.set_volume(120)
+    state = self.shaft.serialize_all_state()
+    self.assertEqual(state["shaft"]["tip"], tip.serialize())
+
+    other = TipMountingShaft(name="shaft", tip_pickup_mode="core")
+    other.load_all_state(state)
+    self.assertTrue(other.has_tip())
+    assert other.tip is not None
+    self.assertEqual(other.tip.serialize(), tip.serialize())
+    self.assertEqual(other.tip.location, tip.location)
+    self.assertEqual(other.tip.tracker.get_used_volume(), 120)  # the tip's own state, after it
+
+  def test_none_saved_takes_the_tip_off(self):
+    empty = self.shaft.serialize_all_state()
+    self.assertIsNone(empty["shaft"]["tip"])
+    self.shaft.mount_tip(hamilton_tip_300uL(name="tip"))
+    self.shaft.load_all_state(empty)
+    self.assertFalse(self.shaft.has_tip())
+
+  def test_the_same_tip_stays_and_older_state_leaves_it(self):
+    tip = hamilton_tip_300uL(name="tip")
+    self.shaft.mount_tip(tip)
+    self.shaft.load_state(self.shaft.serialize_state())
+    self.assertIs(self.shaft.tip, tip)
+    self.shaft.load_state({})
+    self.assertIs(self.shaft.tip, tip)
+
+  def test_a_tip_of_that_name_held_elsewhere_gives_way(self):
+    root = Resource("root", size_x=100, size_y=100, size_z=10)
+    first = TipMountingShaft(name="first", tip_pickup_mode="core")
+    second = TipMountingShaft(name="second", tip_pickup_mode="core")
+    root.assign_child_resource(first, location=Coordinate.zero())
+    root.assign_child_resource(second, location=Coordinate(20, 0, 0))
+    first.mount_tip(hamilton_tip_300uL(name="tip"))
+    saved = first.serialize_state()
+    second.load_state(saved)
+    self.assertTrue(second.has_tip())
+    self.assertFalse(first.has_tip())
+
+
 class ShaftHoldsItsTip(unittest.TestCase):
   """A mounting shaft carries its tip as a child, gripping it by the fitting depth."""
 
