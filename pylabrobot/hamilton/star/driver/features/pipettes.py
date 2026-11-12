@@ -2804,6 +2804,22 @@ class Pipettes:
     resp = await self._driver.send_command(module="C0", command="RL", fmt="lh#### (n)")
     return [round(increments / 10, 1) for increments in cast(List[int], resp["lh"])]
 
+  async def _unchecked_fw_request_last_lld_stop_disc_z_position(self, channel: int) -> float:
+    """Read where one channel's stop disc stood when it last detected liquid (`Px RH`).
+
+    The channel's own reading: it does not depend on what the master thinks is mounted.
+
+    Args:
+      channel: which channel, 0-indexed from the back.
+
+    Returns:
+      The stop disc height in mm.
+    """
+    resp = await self._driver.send_command(
+      module=self.channel_id(channel), command="RH", fmt="rh#####"
+    )
+    return self.configuration.z_drive_increments_to_mm(cast(int, resp["rh"]))
+
   async def _clld_search(
     self,
     channel: int,
@@ -2955,12 +2971,9 @@ class Pipettes:
       await self.move_to_safe_z()
     if has_tip:
       return (await self.request_last_lld_z_positions())[channel]
-    # Bare, the stop disc's own height at detection (`Px RH`): the master's (`C0 RL`) can still
-    # subtract a CoRe gripper tool put back in its holder since.
-    resp = await self._driver.send_command(
-      module=self.channel_id(channel), command="RH", fmt="rh#####"
-    )
-    return c.z_drive_increments_to_mm(cast(int, resp["rh"]))
+    # Bare, the stop disc's own height at detection: the master's (`C0 RL`) can still subtract a
+    # CoRe gripper tool put back in its holder since.
+    return await self._unchecked_fw_request_last_lld_stop_disc_z_position(channel=channel)
 
   async def _unchecked_fw_probe_z_using_plld(
     self,
