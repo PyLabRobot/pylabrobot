@@ -767,7 +767,8 @@ class Head96:
   ) -> None:
     """Draw `volume` uL into every carried tip, from a 96-well plate (mandrel A1 over well A1) or
     one container (the head centred over it), as Biomek's "MC Pipetting" template does (see
-    `driver/liquid.py`).
+    `driver/liquid.py`). `techniques.aspirate_arguments` gives the keywords a Biomek technique
+    stands for.
 
     Args:
       resource: a plate of 96 wells, or a container (a reservoir's well, a 1-well plate).
