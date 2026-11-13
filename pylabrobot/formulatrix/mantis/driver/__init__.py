@@ -23,7 +23,20 @@ from .errors import (
   MantisTimeoutError,
   PlateClampError,
 )
+from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
+from .features.pump import (
+  PRESSURE_CONTROLLER_STATUS_DESCRIPTIONS,
+  PRESSURE_CONTROLLERS,
+  PressureController,
+  Pump,
+)
 from .features.rfid import Rfid
 from .master import MantisDriver
-from .simulator import MantisSimulationDriver, MantisSimulationPlateClamp, MantisSimulationRfid
+from .simulator import (
+  MantisSimulationDriver,
+  MantisSimulationLedBar,
+  MantisSimulationPlateClamp,
+  MantisSimulationPump,
+  MantisSimulationRfid,
+)

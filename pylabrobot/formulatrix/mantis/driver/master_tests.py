@@ -17,13 +17,15 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisNotConnectedError,
   MantisTimeoutError,
 )
+from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
+from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
 from pylabrobot.formulatrix.mantis.driver.features.rfid import (
   RFID_PING_DEVICE_COMMAND,
   RFID_READ_TAG_COMMAND,
 )
 from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
-from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
-from pylabrobot.io.ftdi import FTDI
+from pylabrobot.formulatrix.mantis.driver.master import ABSOLUTE_ENCODER_READS, MantisDriver
+from pylabrobot.io.ftdi import FTDI, D2XXError
 
 with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
   RECORDING = json.load(f)
@@ -43,6 +45,44 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (0, 10, "0000"): "000000000040afc0000000000040af40",
   (0, 10, "0100"): "000000000040afc0000000000040af40",
   (0, 10, "0200"): "00000000000064c00000000000f8a140",
+  # The motor reads: currents, configuration, status, position, following error, encoder.
+  (0, 12, "0000"): "000000000000f83f000000000000f03f000000403333e33f",
+  (0, 12, "0200"): "000000000000f03f000000000000f03f000000606666e63f",
+  (0, 14, "0100"): "01000000000000409f400000000000006940000000000000000064000100",
+  (0, 14, "0200"): "00000000000000409f400000000000005940000000000000000064000100",
+  (0, 20, "0000"): "0000",
+  (0, 20, "0100"): "8000",
+  (0, 20, "0200"): "0600",
+  (
+    0,
+    27,
+    "0000",
+  ): "00000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  "0000000000407f40",
+  (
+    0,
+    27,
+    "0200",
+  ): "00000000fc0c7840000000a076d385c00000004005c2bec000000000d0e74ec000000000b8eaa040"
+  "0000004005c2be40",
+  (0, 82, "0000"): "01000000000000001040",
+  (0, 82, "0200"): "01000000000000005940",
+  (0, 84, "0000"): "00000000b42350bf",
+  (0, 84, "0100"): "0000000090b8d73f",
+  # The absolute encoders, valid.
+  (11, 30, "0000"): "010000000000f43f6740",
+  (11, 30, "0100"): "010000000000a0d73940",
+  # The pressure board: each controller's sensor calibration, its reading and its status, and
+  # whether a controller is enabled and the pump on, with the pump off.
+  (10, 20, "0000"): "0000004049d0853f000000e06f292bc0",
+  (10, 20, "0100"): "00000080d1d5853f00000000b4572bc0",
+  (10, 20, "0200"): "000000001723853f00000020486343c0",
+  (10, 30, "0000"): "000000003abcf23f",
+  (10, 30, "0100"): "000000004f60f23f",
+  (10, 30, "0200"): "00000000c0d7e1bf",
+  (10, 16, "0000"): "0000",
+  (10, 12, "0000"): "0000",
+  (10, 14, ""): "0000",
   # The release and the lock at levels 1, 2 and 3.
   (12, 31, "000000000000e83f000000000000000088130000"): "",
   (12, 30, "0000000000000000105839b4c876be3fd0070000"): "",
@@ -51,7 +91,22 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (12, 33, ""): "0600",
   # The RFID antenna switch to each of the six antennas.
   **{(0, 41, f"78000100{antenna:02x}00"): "" for antenna in (0, 1, 4, 5, 6, 7)},
+  # The LED bar: the animation stopped, the idle animation, and setup's blue and green and stop's
+  # off on all 20 LEDs.
+  (12, 16, "0000"): "",
+  (12, 17, "0000000056000100"): "0100",
+  **{(12, 13, "00001400" + color * 20): "0100" for color in ("1f00", "e007", "0000")},
 }
+# The sensor calibration the recorded replies carry, by controller.
+RECORDED_CALIBRATION: Dict[PressureController, Tuple[float, float]] = {
+  "bottle": (0.010651180520653725, -13.580931663513184),
+  "chip": (0.010661732405424118, -13.671295166015625),
+  "vacuum": (0.010320834815502167, -38.775638580322266),
+}
+# Motor 0's absolute encoder after connecting: its first read not valid, the next valid.
+ABSOLUTE_ENCODER_REPLIES_AFTER_POWER_ON = ["00000000000000000000", "010000000000f43f6740"]
+# The link reader's failure when the USB cable was pulled from a Mantis v4, through D2XX.
+RECORDED_LINK_FAILURE = D2XXError("FT_GetQueueStatus returned FT_IO_ERROR (4)", status=4)
 # Interface A: what the RFID reader on a Mantis v4 sent, chunked as it arrived.
 READER_PING_REPLY = [b"TRF7970A EVM \r\n\r\n"]
 READER_EMPTY_SLOT_REPLY = [b"Request mode.\r\n", b"[]\r\n"]
@@ -138,9 +193,16 @@ class FakeLink:
 
 
 class DriverTestCase(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    # The LED bar's holds are taken, not waited: setup holds "setup_done" for a second.
+    patcher = mock.patch.object(LedBar, "_sleep", autospec=True)
+    self.led_bar_sleep = patcher.start()
+    self.addCleanup(patcher.stop)
+
   def make_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
     driver = MantisDriver(io=link.io, rfid_io=link.reader.io, **kwargs)
-    driver.default_read_timeout = 0.05
+    # short, as a board that never answers waits it out; long enough for a slow test runner
+    driver.default_read_timeout = 0.25
     return driver
 
   async def set_up_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
@@ -171,6 +233,7 @@ class SetupTests(DriverTestCase):
         generation="v4",
         firmware_versions={0: "4.20.6.2", 10: "1.0.8", 11: "0.1.7 DBG", 12: "0.1.8 DBG"},
         motor_limits={0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
+        feedback_sensor_parameters=RECORDED_CALIBRATION,
       ),
     )
 
@@ -223,6 +286,44 @@ class SetupTests(DriverTestCase):
     link.io.set_baudrate.assert_awaited_once()
     self.assertIs(driver._reader, reader)
 
+  async def test_setup_after_a_lost_link_closes_it_quietly_and_reopens_it(self):
+    link = FakeLink(answers=make_answers())
+    driver = await self.set_up_driver(link=link, declared_configuration_json=RECORDING_MANTIS_V4)
+    read = link.io.read.side_effect
+    link.io.read.side_effect = RECORDED_LINK_FAILURE
+    with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="ERROR"):
+      while driver._reader is not None and not driver._reader.done():
+        await asyncio.sleep(0.01)
+    link.io.read.side_effect = read
+    sent_before = len(link.written)
+    with self.assertLogs("pylabrobot.formulatrix.mantis", level="INFO") as logs:
+      await driver.setup()
+    warnings = [record for record in logs.records if record.levelname != "INFO"]
+    self.assertEqual(len(warnings), 1)
+    self.assertIn("the link was lost", warnings[0].getMessage())
+    self.assertTrue(all(record.exc_info is None for record in logs.records))
+    link.io.stop.assert_awaited_once()
+    self.assertEqual(link.io.setup.await_count, 2)
+    # The first frame after the failure is setup's own firmware read: nothing went to the dead link.
+    self.assertEqual(parse_frame(frame=link.written[sent_before])[1:], (0, 1, b""))
+    assert driver._reader is not None
+    self.assertFalse(driver._reader.done())
+
+  async def test_an_older_declared_file_takes_what_it_lacks_from_the_recording(self):
+    older = {block: values for block, values in RECORDING.items() if block != "led_bar"}
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "older.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump(older, f)
+      link = FakeLink(answers=make_answers())
+      with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING") as logs:
+        driver = await self.set_up_driver(link=link, declared_configuration_json=path)
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn(f"led_bar from {RECORDING_MANTIS_V4}", logs.output[0])
+    assert driver.led_bar is not None
+    self.assertEqual(driver.led_bar.number_of_leds, 20)
+    self.assertEqual(driver.configuration.feedback_sensor_parameters, RECORDED_CALIBRATION)
+
   async def test_saved_configuration_declares_the_same_device(self):
     link = FakeLink(answers=make_answers())
     driver = await self.set_up_driver(link=link, declared_configuration_json=RECORDING_MANTIS_V4)
@@ -231,7 +332,9 @@ class SetupTests(DriverTestCase):
       driver.save_configuration(path=path)
       await driver.stop()
       with open(path, encoding="utf-8") as f:
-        self.assertEqual(json.load(f)["plate_clamp"], RECORDING["plate_clamp"])
+        saved = json.load(f)
+      for block in ("plate_clamp", "led_bar"):
+        self.assertEqual(saved[block], RECORDING[block])
       link = FakeLink(answers=make_answers())
       await self.set_up_driver(link=link, declared_configuration_json=path)
 
@@ -316,6 +419,81 @@ class ReadTests(DriverTestCase):
       await self.driver.request_motor_limits(motor=1)
     self.assertEqual(len(set(self.link.written[-3:])), 1)
     self.assertNotEqual(self.link.written[-4][4:6], self.link.written[-1][4:6])
+
+
+class MotorReadTests(DriverTestCase):
+  async def asyncSetUp(self):
+    self.link = FakeLink(answers=make_answers())
+    self.driver = await self.set_up_driver(link=self.link)
+
+  async def test_reads(self):
+    driver = self.driver
+    cases = [
+      (
+        0,
+        12,
+        "0000",
+        lambda: driver.request_motor_currents(motor=0),
+        (1.5, 1.0, 0.6000000238418579),
+      ),
+      (
+        0,
+        14,
+        "0100",
+        lambda: driver.request_motor_configuration(motor=1),
+        (1, 2000.0, 200.0, 0.0, 100, 1),
+      ),
+      (0, 20, "0100", lambda: driver.request_motor_status(motor=1), 0x80),
+      (0, 20, "0200", lambda: driver.request_motor_status(motor=2), 6),
+      (0, 27, "0000", lambda: driver.request_motor_position(motor=0), 0.0),
+      (0, 27, "0200", lambda: driver.request_motor_position(motor=2), 384.8115234375),
+      (0, 82, "0000", lambda: driver.request_following_error_configuration(motor=0), (True, 4.0)),
+      (0, 82, "0200", lambda: driver.request_following_error_configuration(motor=2), (True, 100.0)),
+      (0, 84, "0100", lambda: driver.request_encoder_position(motor=1), 0.3706398010253906),
+      (11, 30, "0000", lambda: driver.request_absolute_encoder_position(motor=0), 185.99853515625),
+    ]
+    for board, command, request, read, expected in cases:
+      with self.subTest(board=board, command=command, request=request):
+        result = await read()
+        self.assertEqual(
+          parse_frame(frame=self.link.written[-1])[1:], (board, command, bytes.fromhex(request))
+        )
+        self.assertEqual(result, expected)
+
+  async def test_reads_refuse_unseen_motors(self):
+    driver = self.driver
+    reads = [
+      lambda: driver.request_motor_currents(motor=3),
+      lambda: driver.request_motor_configuration(motor=3),
+      lambda: driver.request_motor_status(motor=3),
+      lambda: driver.request_motor_position(motor=3),
+      lambda: driver.request_following_error_configuration(motor=3),
+      lambda: driver.request_encoder_position(motor=3),
+      lambda: driver.request_absolute_encoder_position(motor=2),
+    ]
+    sent_before = len(self.link.written)
+    for read in reads:
+      with self.assertRaises(ValueError):
+        await read()
+    self.assertEqual(len(self.link.written), sent_before)
+
+  async def test_absolute_encoder_read_again_until_valid(self):
+    self.link.answers[(11, 30, b"\x00\x00")] = [
+      bytes.fromhex(reply) for reply in ABSOLUTE_ENCODER_REPLIES_AFTER_POWER_ON
+    ]
+    sent_before = len(self.link.written)
+    self.assertEqual(await self.driver.request_absolute_encoder_position(motor=0), 185.99853515625)
+    sent = [parse_frame(frame=frame)[1:] for frame in self.link.written[sent_before:]]
+    self.assertEqual(sent, [(11, 30, b"\x00\x00")] * 2)
+
+  async def test_absolute_encoder_never_valid_raises(self):
+    self.link.answers[(11, 30, b"\x01\x00")] = [
+      bytes.fromhex(ABSOLUTE_ENCODER_REPLIES_AFTER_POWER_ON[0])
+    ]
+    sent_before = len(self.link.written)
+    with self.assertRaisesRegex(MantisTimeoutError, "no valid position in 5 reads"):
+      await self.driver.request_absolute_encoder_position(motor=1)
+    self.assertEqual(len(self.link.written) - sent_before, ABSOLUTE_ENCODER_READS)
 
 
 if __name__ == "__main__":

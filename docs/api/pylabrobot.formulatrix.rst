@@ -16,9 +16,13 @@ Mantis
    driver.master.MantisDriver
    driver.simulator.MantisSimulationDriver
    driver.simulator.MantisSimulationPlateClamp
+   driver.simulator.MantisSimulationPump
    driver.simulator.MantisSimulationRfid
+   driver.simulator.MantisSimulationLedBar
    driver.features.plate_clamp.PlateClamp
+   driver.features.pump.Pump
    driver.features.rfid.Rfid
+   driver.features.led_bar.LedBar
    driver.configuration.DeviceConfiguration
    driver.errors.MantisError
    driver.errors.FrameError

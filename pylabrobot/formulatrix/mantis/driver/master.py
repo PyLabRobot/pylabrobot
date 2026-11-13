@@ -1,15 +1,16 @@
 """The Mantis driver: the link on the FTDI's interface B, discovery and the device reads.
 
 Every command sent here reads the device; the features in ``features/`` send the commands that
-act. Reads return the device's units. The motor and pressure reads arrive with the arm and pump
-features.
+act, and the LED bar shows setup and stop. Reads return the device's units. The motor reads are
+here until the arm feature takes them; the pressure reads are on the pump.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import struct
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, AsyncContextManager, Dict, List, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -19,6 +20,7 @@ from .configuration import (
   RECORDING_MANTIS_V4,
   UNIT_BLOCKS,
   DeviceConfiguration,
+  _fill_declared_configuration,
   compute_generation,
   configuration_to_json,
   read_configuration,
@@ -32,7 +34,9 @@ from .errors import (
   MantisNotConnectedError,
   MantisTimeoutError,
 )
+from .features.led_bar import LedBar
 from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
+from .features.pump import Pump
 from .features.rfid import RFID_BAUD_RATE, RFID_FTDI_INTERFACE, Rfid, _initialize_rfid_module
 from .framing import (
   ABSOLUTE_POSITION_SENSOR_BOARD,
@@ -50,6 +54,11 @@ from .oem_config import _load_unit_configuration
 logger = logging.getLogger(__name__)
 
 MOTORS = (0, 1, 2)
+# The arm motors; board 11 reads their absolute encoders. Z has none.
+ABSOLUTE_ENCODER_MOTORS = (0, 1)
+# How often an absolute encoder is read for a valid position; each motor's first after connecting
+# is not.
+ABSOLUTE_ENCODER_READS = 5
 
 
 class MantisDriver:
@@ -89,6 +98,7 @@ class MantisDriver:
     declared_configuration_json: Optional[str] = None,
     oem_config_directory: Optional[str] = None,
     ftdi_library: Optional[str] = None,
+    show_actions: bool = True,
   ):
     """
     Args:
@@ -102,10 +112,13 @@ class MantisDriver:
       oem_config_directory: the unit's vendor ``Data/Device/Configs`` folder, read at every setup.
       ftdi_library: "libftdi" or "d2xx", for both links; None picks D2XX on Windows when FTDI's
         D2XX library loads, else libftdi. Ignored for a link given as ``io`` or ``rfid_io``.
+      show_actions: whether the v4's LED bar shows each action's colour, and the idle animation
+        between actions; False shows the idle animation from setup on.
 
     The unit's own values (``UNIT_BLOCKS``) come from ``oem_config_directory`` and the declared
-    file; where both have a block, they must agree. A block neither has comes from the
-    generation's recording, with a warning: another unit's values, less accurate on this one.
+    file; where both have a block, they must agree. A unit block or non-fitted device field the
+    declared file lacks comes from the folder, else the generation's recording (another unit's
+    values, less accurate on this one), with one warning naming each and where it came from.
     """
     self.io: FTDI = (
       io if io is not None else self._build_io(device_id=device_id, ftdi_library=ftdi_library)
@@ -129,7 +142,12 @@ class MantisDriver:
       else self._build_rfid_io(device_id=device_id, ftdi_library=ftdi_library)
     )
     self.plate_clamp: Optional[PlateClamp] = None
+    self.pump: Optional[Pump] = None
     self.rfid: Optional[Rfid] = None
+    self.led_bar: Optional[LedBar] = None
+    self._show_actions = show_actions
+    # The latest sequencer item the device reported played; the sequencer sets it.
+    self._sequence_progress: Optional[int] = None
     self._rfid_link_open = False
     self._connected = False
 
@@ -362,6 +380,128 @@ class MantisDriver:
     lower, upper = struct.unpack_from("<dd", reply)
     return lower, upper
 
+  async def request_motor_currents(self, *, motor: int) -> Tuple[float, float, float]:
+    """A motor's three currents, in the order the device sends them.
+
+    1.5, 1.0 and 0.6 on the v4's arms.
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=12, payload=struct.pack("<h", motor), attempts=3
+    )
+    first, second, third = struct.unpack_from("<ddd", reply)
+    return first, second, third
+
+  async def request_motor_configuration(
+    self, *, motor: int
+  ) -> Tuple[int, float, float, float, int, int]:
+    """A motor's configuration, its six fields as the device sends them.
+
+    A flag (1 on motor 1, 0 on motors 0 and 2 of the v4), three values (2000.0, 200.0, 0.0 on its
+    arms), the microsteps (100) and a last word (1 on every motor).
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=14, payload=struct.pack("<h", motor), attempts=3
+    )
+    flag, first, second, third, microsteps, last = struct.unpack_from("<HdddHH", reply)
+    return flag, first, second, third, microsteps, last
+
+  async def request_motor_status(self, *, motor: int) -> int:
+    """A motor's status word; ``MOTOR_STATUS_ERROR_BITS`` names the bits that report a fault.
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=20, payload=struct.pack("<h", motor), attempts=3
+    )
+    (status,) = struct.unpack_from("<H", reply)
+    return int(status)
+
+  async def request_motor_position(self, *, motor: int) -> float:
+    """A motor's demand position, in the device's units: where the controller drives it.
+
+    It is not measured. It reads back the last position declared to the motor until the motor
+    moves, wherever the motor sits; an arm moved by hand still reads it.
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=27, payload=struct.pack("<h", motor), attempts=3
+    )
+    (position,) = struct.unpack_from("<d", reply)
+    return float(position)
+
+  async def request_following_error_configuration(self, *, motor: int) -> Tuple[bool, float]:
+    """A motor's following-error check: (enabled, the largest following error), device units.
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=82, payload=struct.pack("<h", motor), attempts=3
+    )
+    enabled, maximum = struct.unpack_from("<Hd", reply)
+    return bool(enabled), float(maximum)
+
+  async def request_encoder_position(self, *, motor: int) -> float:
+    """A motor's servo encoder position, in the device's units.
+
+    It counts only while the device is powered: after power-on it reads about 0 wherever the motor
+    sits. ``request_absolute_encoder_position`` reads where an arm is.
+
+    Args:
+      motor: 0, 1 (arm) or 2 (Z).
+    """
+    self._check_index(name="motor", value=motor, allowed=MOTORS)
+    reply = await self._send_command(
+      board=MOTION_BOARD, command=84, payload=struct.pack("<h", motor), attempts=3
+    )
+    (position,) = struct.unpack_from("<d", reply)
+    return float(position)
+
+  async def request_absolute_encoder_position(self, *, motor: int) -> float:
+    """An arm motor's raw absolute encoder reading, from board 11; kept across power-off.
+
+    Not an angle yet: the unit's encoder correction and absolute homing position make it one. A
+    read the device marks not valid, as each motor's first after connecting is, is read again.
+
+    Args:
+      motor: 0 or 1 (arm).
+
+    Raises:
+      MantisTimeoutError: if none of ``ABSOLUTE_ENCODER_READS`` reads is valid.
+    """
+    self._check_index(name="motor", value=motor, allowed=ABSOLUTE_ENCODER_MOTORS)
+    for _ in range(ABSOLUTE_ENCODER_READS):
+      reply = await self._send_command(
+        board=ABSOLUTE_POSITION_SENSOR_BOARD,
+        command=30,
+        payload=struct.pack("<h", motor),
+        attempts=3,
+      )
+      valid, position = struct.unpack_from("<Hd", reply)
+      if valid:
+        return float(position)
+      logger.info(
+        "[%s] motor %d's absolute encoder read not valid; reading again", self.name, motor
+      )
+    raise MantisTimeoutError(
+      f"{self.name}: motor {motor}'s absolute encoder read no valid position in "
+      f"{ABSOLUTE_ENCODER_READS} reads"
+    )
+
   # -- discovery and setup --------------------------------------------------
 
   async def _request_configuration(self) -> DeviceConfiguration:
@@ -392,7 +532,7 @@ class MantisDriver:
     A feature already built is kept.
 
     Raises:
-      MantisConfigurationError: if the ``plate_clamp`` block is malformed.
+      MantisConfigurationError: if the ``plate_clamp`` or ``led_bar`` block is malformed.
     """
     if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
@@ -406,6 +546,43 @@ class MantisDriver:
         except (KeyError, TypeError, ValueError) as error:
           raise MantisConfigurationError(f"malformed plate_clamp block: {error!r}") from error
       self.plate_clamp = PlateClamp(driver=self, levels=levels)
+    if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
+      self.pump = Pump(driver=self)
+    # The LED bar is the v4's, on board 12: a v3 has none.
+    if (
+      self.configuration.generation == "v4"
+      and self.configuration.firmware_versions.get(LC3_BOARD) is not None
+      and self.led_bar is None
+    ):
+      led_bar_block = self._unit_blocks.get("led_bar")
+      if led_bar_block is None:
+        raise MantisConfigurationError(f"{self.name}: no led_bar block for this v4")
+      try:
+        number_of_leds = int(led_bar_block["number_of_leds"])
+      except (KeyError, TypeError, ValueError) as error:
+        raise MantisConfigurationError(f"malformed led_bar block: {error!r}") from error
+      if number_of_leds < 1:
+        raise MantisConfigurationError(f"malformed led_bar block: {number_of_leds} LEDs")
+      self.led_bar = LedBar(
+        driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
+      )
+
+  def _show_action(
+    self, *, action: str, show_inner_actions: bool = True, only_when_idle: bool = False
+  ) -> AsyncContextManager[None]:
+    """Show ``action``'s colour on the LED bar while the block runs; nothing without a bar or with
+    its ``show_actions`` off.
+
+    Args:
+      action: a key ``LedBar._show`` takes, other than "idle".
+      show_inner_actions: whether actions inside the block change the bar.
+      only_when_idle: change the bar only when no other action runs.
+    """
+    if self.led_bar is None or not self.led_bar.show_actions:
+      return contextlib.nullcontext()
+    return self.led_bar._show_action(
+      action=action, show_inner_actions=show_inner_actions, only_when_idle=only_when_idle
+    )
 
   def _check_declared_configuration(self) -> None:
     """Compare what is fitted with the declared configuration's ``device`` block, if there is one.
@@ -435,33 +612,28 @@ class MantisDriver:
         f"{self.name} does not match {self.declared_configuration_json}: " + "; ".join(differences)
       )
 
-  async def discover(self) -> None:
-    """Read the configuration into ``configuration``, check it against the declared one, then
-    build the features it lists, and the RFID reader if it answers on interface A.
+  def _load_unit_values(
+    self, *, generation: Optional[str]
+  ) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    """The declared file, or without one the folder's blocks, with each value it lacks taken from
+    the folder, else the generation's recording; and where each taken one came from, by key.
 
-    The reader is set up again after every opening of the link; one that fails is absent.
+    Args:
+      generation: picks the recording.
 
     Raises:
-      MantisConfigurationError: if the device does not match the declared configuration, the
-        unit's folder and declared file disagree on a block, or a block is malformed.
+      MantisConfigurationError: if the folder and the declared file disagree on a block.
     """
-    self.configuration = await self._request_configuration()
-    self._check_declared_configuration()
-    # The unit's blocks: its folder and its declared file must agree; a recording fills the rest.
     folder = (
       _load_unit_configuration(oem_config_directory=self.oem_config_directory)
       if self.oem_config_directory is not None
       else {}
     )
-    declared = (
-      read_configuration(path=self.declared_configuration_json)
-      if self.declared_configuration_json is not None
-      else {}
-    )
-    recording_path = (
-      RECORDING_MANTIS_V4 if self.configuration.generation == "v4" else RECORDING_MANTIS_V3
-    )
+    recording_path = RECORDING_MANTIS_V4 if generation == "v4" else RECORDING_MANTIS_V3
     recording = read_configuration(path=recording_path)
+    if self.declared_configuration_json is None:
+      return _fill_declared_configuration(declared=folder, sources=[(recording_path, recording)])
+    declared = read_configuration(path=self.declared_configuration_json)
     differences = [
       f"{block}: declared {declared[block]!r}, folder {folder[block]!r}"
       for block in UNIT_BLOCKS
@@ -474,20 +646,49 @@ class MantisDriver:
         f"{self.oem_config_directory} and {self.declared_configuration_json} disagree: "
         + "; ".join(differences)
       )
-    self._unit_blocks, self._unit_blocks_from_recording = {}, set()
-    for block in UNIT_BLOCKS:
-      if block in folder or block in declared:
-        self._unit_blocks[block] = folder[block] if block in folder else declared[block]
-      elif block in recording:
-        self._unit_blocks[block] = recording[block]
-        self._unit_blocks_from_recording.add(block)
-        logger.warning(
-          "[%s] %s: none of this unit's values given; using %s's, less accurate on this unit",
-          self.name,
-          block,
-          recording_path,
-        )
+    sources = [(recording_path, recording)]
+    if self.oem_config_directory is not None:
+      sources.insert(0, (self.oem_config_directory, folder))
+    return _fill_declared_configuration(declared=declared, sources=sources)
+
+  async def discover(self) -> None:
+    """Read the configuration into ``configuration``, check it against the declared one, then
+    build the features it lists, read the pump's sensor calibration into ``configuration``, and
+    build the RFID reader if it answers on interface A.
+
+    The reader is set up again after every opening of the link; one that fails is absent. A
+    calibration the pressure board does not answer is left empty.
+
+    Raises:
+      MantisConfigurationError: if the device does not match the declared configuration, the
+        unit's folder and declared file disagree on a block, or a block is malformed.
+    """
+    self.configuration = await self._request_configuration()
+    self._check_declared_configuration()
+    values, taken = self._load_unit_values(generation=self.configuration.generation)
+    recordings = (RECORDING_MANTIS_V3, RECORDING_MANTIS_V4)
+    if taken:
+      given = self.declared_configuration_json or self.oem_config_directory
+      logger.warning(
+        "[%s] %s: %s%s",
+        self.name,
+        f"not in {given}" if given is not None else "none given",
+        "; ".join(f"{key} from {where}" for key, where in taken.items()),
+        ", another unit's values, less accurate on this unit"
+        if any(where in recordings for where in taken.values())
+        else "",
+      )
+    self._unit_blocks = {block: values[block] for block in UNIT_BLOCKS if block in values}
+    self._unit_blocks_from_recording = {
+      block for block in UNIT_BLOCKS if taken.get(block) in recordings
+    }
     self._discover_features()
+    if self.pump is not None:
+      # Nothing uses the calibration yet: a board 10 that does not answer it does not fail setup.
+      try:
+        self.configuration.feedback_sensor_parameters = await self.pump._request_calibration()
+      except (TimeoutError, CommandRefusedError, FrameError, struct.error) as error:
+        logger.warning("[%s] the pressure sensors' calibration not read: %r", self.name, error)
     if self.rfid is None and self.rfid_io is not None and self._rfid_link_open:
       try:
         await _initialize_rfid_module(io=self.rfid_io)
@@ -523,7 +724,8 @@ class MantisDriver:
 
   def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
     """Write what this device reported to a file, to be declared later
-    (``declared_configuration_json``), with the unit's blocks; none taken from a recording.
+    (``declared_configuration_json``), with the unit's blocks; none taken from a recording. The
+    sensor calibration is not written: it is read at every setup.
 
     Args:
       path: where to write it.
@@ -562,7 +764,10 @@ class MantisDriver:
   async def _close(self) -> None:
     """Stop reading the link and close it, then close the RFID reader's link."""
     reader, self._reader = self._reader, None
-    if reader is not None:
+    if reader is not None and reader.done():
+      if not reader.cancelled():
+        reader.exception()  # a failed read was logged when it failed
+    elif reader is not None:
       reader.cancel()
       try:
         await reader
@@ -582,8 +787,16 @@ class MantisDriver:
           logger.warning("[%s] the RFID reader's link did not close", self.name, exc_info=True)
 
   async def stop(self) -> None:
-    """Fail the command in flight and every event waiter, release the plate clamp, stop reading
-    the link and close it. Each step runs whether or not the one before it succeeded."""
+    """Fail the command in flight and every event waiter, release the plate clamp, turn the LED
+    bar off, stop reading the link and close it.
+
+    Each step runs whether or not the one before it succeeded. After reading the link failed,
+    nothing is sent: the link is closed.
+    """
+    if self._reader is not None and self._reader.done() and self._connected:
+      failure = None if self._reader.cancelled() else self._reader.exception()
+      logger.warning("[%s] the link was lost (%r); closing it, sending nothing", self.name, failure)
+      self._connected = False
     stopped = f"{self.name} stopped"
     if self._pending is not None:
       _, _, future = self._pending
@@ -599,11 +812,18 @@ class MantisDriver:
           await self.plate_clamp.unlock()
       except Exception:
         logger.warning("[%s] could not release the plate clamp", self.name, exc_info=True)
+    if self.led_bar is not None and self._connected:
+      try:
+        await self.led_bar.turn_off()
+      except Exception:
+        logger.warning("[%s] could not turn the LED bar off", self.name, exc_info=True)
     self._connected = False
     await self._close()
 
   async def setup(self) -> None:
     """Open the link if it is not open, read the device's configuration and check it.
+
+    On a v4 the LED bar shows the setup, then "setup_done" for ``SETUP_DONE_HOLD``, then idle.
 
     Raises:
       MantisConfigurationError: if the device does not match the declared configuration.
@@ -615,6 +835,11 @@ class MantisDriver:
         await self._open()
         self._connected = True
       await self.discover()
+      if self.led_bar is not None and not self.led_bar.show_actions:
+        await self.led_bar._show(key="idle")  # the idle animation from setup on
+      async with self._show_action(action="setup", show_inner_actions=False):
+        if self.led_bar is not None and self.led_bar.show_actions:
+          await self.led_bar._show_setup_done()
     except BaseException:
       try:
         await self.stop()
