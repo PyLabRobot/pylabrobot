@@ -40,6 +40,7 @@ curiox/index
 formulatrix/index
 hamilton/index
 high_res/index
+hse/index
 inheco/index
 kbioscience/index
 kbiosystems/index

@@ -25,6 +25,7 @@ KINDS = (
   "electroporator",
   "fan",
   "flow cytometer",
+  "fluorometer",
   "heater shaker",
   "imager",
   "liquid handler",
