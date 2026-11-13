@@ -208,6 +208,8 @@ class LedBarDiscoveryTests(LedBarTestCase):
         driver = self.make_driver(
           link=FakeLink(answers=make_led_bar_answers()), declared_configuration_json=path
         )
+        # every board answers; a slow test runner must not time one out
+        driver.default_read_timeout = 5.0
         with self.assertRaisesRegex(MantisConfigurationError, "malformed led_bar block"):
           await driver.setup()
 
