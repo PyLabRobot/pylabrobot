@@ -17,6 +17,10 @@ from pylabrobot.bmg_labtech.clariostar.driver.configuration import (
   read_configuration,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
+from pylabrobot.bmg_labtech.clariostar.driver.simulator import (
+  CLARIOstarSimulationDriver,
+  CLARIOstarSimulationPumps,
+)
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   PARAMETERS_REPLY,
   STATUS_IDLE,
@@ -246,6 +250,31 @@ class SimulatorConstructionTests(unittest.IsolatedAsyncioTestCase):
   def test_simulation_takes_no_link(self):
     with self.assertRaises(ValueError):
       CLARIOstarPlus(simulation=True, io=FakeFTDI())
+
+
+class SimulatorPumpsTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_simulated_reader_with_pumps_checks_settings_and_pumps_at_once(self):
+    recording = os.path.join(
+      os.path.dirname(__file__), "recordings", "clariostar_1_20_temperature_controller_pumps_2.json"
+    )
+    driver = CLARIOstarSimulationDriver(declared_configuration_json=recording)
+    await driver.discover()
+    self.assertIsInstance(driver.pumps, CLARIOstarSimulationPumps)
+    assert driver.pumps is not None
+    self.assertTrue((await driver.request_status()).reagent_door_open)
+    await driver.pumps.prime(1, volume=500)
+    await driver.pumps.backflush(2, volume=1000, flow_rate=430)
+    with self.assertRaises(ValueError):
+      await driver.pumps.prime(1, volume=500, flow_rate=50)
+
+  async def test_the_device_exposes_the_pumps(self):
+    recording = os.path.join(
+      os.path.dirname(__file__), "recordings", "clariostar_1_20_temperature_controller_pumps_2.json"
+    )
+    reader = CLARIOstar(simulation=True, declared_configuration_json=recording)
+    await reader.driver.discover()
+    self.assertIsNotNone(reader.pumps)
+    self.assertIs(reader.pumps, reader.driver.pumps)
 
 
 if __name__ == "__main__":

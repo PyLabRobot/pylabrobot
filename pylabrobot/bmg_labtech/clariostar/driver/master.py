@@ -46,6 +46,7 @@ from .features.absorbance import Absorbance
 from .features.drawer import Drawer
 from .features.fluorescence import Fluorescence
 from .features.luminescence import Luminescence
+from .features.pumps import Pumps
 from .features.temperature_controller import TemperatureController
 from .framing import FTDI_HEADER, USB_HOST_ACK
 from .parameter_table import (
@@ -71,6 +72,9 @@ class CLARIOstarStatus:
   plate_detected: bool
   drawer_open: bool
   motors_enabled: bool
+  # Byte 3 bit 6, checked on firmware 1.20: set with the reagent door open, clear with it latched
+  # shut.
+  reagent_door_open: bool
   temperature_bottom: Optional[float]
   temperature_top: Optional[float]
 
@@ -113,6 +117,7 @@ class CLARIOstarDriver:
     """Command family: byte 0 of every logical payload."""
 
     INITIALIZE = 0x01
+    PUMP = 0x02
     DRAWER = 0x03
     RUN = 0x04
     REQUEST = 0x05
@@ -149,6 +154,7 @@ class CLARIOstarDriver:
   _NO_COMMAND_FAMILIES = frozenset(
     {
       CommandFamily.RUN,
+      CommandFamily.PUMP,
       CommandFamily.STOP,
       CommandFamily.STATUS,
       CommandFamily.TEMPERATURE_CONTROLLER,
@@ -167,6 +173,7 @@ class CLARIOstarDriver:
     ("plate_detected", 3, 1 << 1),
     ("drawer_open", 3, 1 << 0),
     ("motors_enabled", 3, 1 << 5),
+    ("reagent_door_open", 3, 1 << 6),
   ]
 
   @property
@@ -244,8 +251,8 @@ class CLARIOstarDriver:
     # One lock over the link: a reply belongs to the last command written, so exchanges never
     # overlap.
     self._lock = asyncio.Lock()
-    # Whether a measurement is running; the reader runs only one at a time
-    # (`_enforce_one_measurement_at_a_time`).
+    # Whether a measurement or pump command is running; the reader runs only one at a time
+    # (`_enforce_one_measurement_at_a_time`, `Pumps._run`).
     self._measuring = False
     self._last_warning: Optional[Tuple[int, int, int, int, int]] = None
     # Built on first use over the current io (`_ftdi`).
@@ -257,6 +264,8 @@ class CLARIOstarDriver:
     self.absorbance: Optional[Absorbance] = None
     self.fluorescence: Optional[Fluorescence] = None
     self.luminescence: Optional[Luminescence] = None
+    # Built by `discover` only if the reader reports a pump.
+    self.pumps: Optional[Pumps] = None
 
   # -- FTDI interface --------------------------------------------------------
 
@@ -709,6 +718,8 @@ class CLARIOstarDriver:
       self.fluorescence = Fluorescence(self)
     if self.configuration.luminescence_channels and self.luminescence is None:
       self.luminescence = Luminescence(self)
+    if any(self.configuration.pumps or ()) and self.pumps is None:
+      self.pumps = Pumps(self)
 
   def _check_firmware_compatibility(self) -> None:
     """Log a warning if the firmware version has not been checked on hardware."""

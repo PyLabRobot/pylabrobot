@@ -45,9 +45,18 @@ QUIT_CODE_DESCRIPTIONS: Dict[int, str] = {
 }
 
 
+# Where the first code alone does not name the reason: (first, second) -> description.
+QUIT_CODE_PAIR_DESCRIPTIONS: Dict[Tuple[int, int], str] = {
+  (243, 12): "pump priming aborted: the reagent door is closed",
+}
+
+
 def describe_quit_codes(quit_codes: Tuple[int, int, int, int, int]) -> str:
   """Format quit codes as `code (description), quit codes q1/q2/q3/q4/q5`."""
-  description = QUIT_CODE_DESCRIPTIONS.get(quit_codes[0], "no description known")
+  description = QUIT_CODE_PAIR_DESCRIPTIONS.get(
+    (quit_codes[0], quit_codes[1]),
+    QUIT_CODE_DESCRIPTIONS.get(quit_codes[0], "no description known"),
+  )
   return (
     f"quit code {quit_codes[0]} ({description}), quit codes {'/'.join(str(q) for q in quit_codes)}"
   )
@@ -65,3 +74,24 @@ class CommandRefusedError(Exception):
     self.payload = payload
     self.quit_codes = quit_codes
     super().__init__(f"CLARIOstar refused {payload.hex()}: {describe_quit_codes(quit_codes)}")
+
+
+class PumpAbortedError(Exception):
+  """A pump command ended early: the reader reported it aborted, or the reagent door closed."""
+
+  def __init__(
+    self,
+    parameters: bytes,
+    reason: str,
+    quit_codes: Optional[Tuple[int, int, int, int, int]] = None,
+  ):
+    """
+    Args:
+      parameters: the pump command's parameters (after the family byte).
+      reason: why the command ended early.
+      quit_codes: the five codes of the reader's warning, None if it was not read.
+    """
+    self.parameters = parameters
+    self.reason = reason
+    self.quit_codes = quit_codes
+    super().__init__(f"CLARIOstar pump command {parameters.hex()} ended early: {reason}")

@@ -24,6 +24,8 @@ from .driver import (
   Luminescence,
   LuminescenceConfiguration,
   MeasurementSettings,
+  PumpAbortedError,
+  Pumps,
   ShakeSettings,
   TemperatureController,
 )

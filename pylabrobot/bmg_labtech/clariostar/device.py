@@ -11,6 +11,7 @@ from .driver.features.absorbance import Absorbance
 from .driver.features.drawer import Drawer
 from .driver.features.fluorescence import Fluorescence
 from .driver.features.luminescence import Luminescence
+from .driver.features.pumps import Pumps
 from .driver.features.temperature_controller import TemperatureController
 from .driver.master import CLARIOstarDriver
 from .driver.simulator import CLARIOstarSimulationDriver
@@ -194,6 +195,11 @@ class CLARIOstarDevice(Resource):
   def luminescence(self) -> Optional[Luminescence]:
     """Luminescence measurement, or None if the reader has none; known after `setup`."""
     return self.driver.luminescence
+
+  @property
+  def pumps(self) -> Optional[Pumps]:
+    """The injector pumps, or None if the reader has none; known after `setup`."""
+    return self.driver.pumps
 
   async def setup(self) -> None:
     """Connect, initialize the reader (about 13 s), and check it is the model this device is.
