@@ -22,6 +22,7 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar import (
   _compute_rgb565,
 )
 from pylabrobot.formulatrix.mantis.driver.features.plate_clamp_tests import (
+  HALT,
   LED_BAR_COMMANDS,
   STATES_AFTER_LOCK_AT_LEVEL_2,
   STATES_AFTER_RELEASE_WHILE_LOCKED,
@@ -171,6 +172,7 @@ class LedBarTests(LedBarTestCase):
 
   async def test_fatal_error_and_unconnected_animations_sent(self):
     # Never answered on a device: only the frames sent are pinned.
+    self.bar._driver.default_read_timeout = 0.25
     for effect in ("fatal_error", "unconnected"):
       with self.assertRaises(MantisTimeoutError):
         await self.bar.start_animation(effect=effect)
@@ -187,6 +189,7 @@ class LedBarDiscoveryTests(LedBarTestCase):
   async def test_built_only_on_a_v4_whose_board_12_answers(self):
     for absent_boards, built in (((), True), ((11,), False), ((12,), False)):
       with self.subTest(absent_boards=absent_boards):
+        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
@@ -208,12 +211,11 @@ class LedBarDiscoveryTests(LedBarTestCase):
         driver = self.make_driver(
           link=FakeLink(answers=make_led_bar_answers()), declared_configuration_json=path
         )
-        # every board answers; a slow test runner must not time one out
-        driver.default_read_timeout = 5.0
         with self.assertRaisesRegex(MantisConfigurationError, "malformed led_bar block"):
           await driver.setup()
 
   async def test_a_v3_setup_and_stop_send_no_led_bar_frame(self):
+    self.default_read_timeout = 0.25  # board 11 never answers
     link = FakeLink(answers=make_answers(absent_boards=(11,)))
     driver = await self.set_up_driver(link=link)
     await driver.stop()
@@ -243,10 +245,12 @@ class SetupAndStopTests(LedBarTestCase):
     self.assertEqual(led_bar_frames(written=link.written), [START_IDLE_ANIMATION])
     self.led_bar_sleep.assert_not_awaited()
 
-  async def test_stop_releases_the_clamp_then_turns_off(self):
+  async def test_stop_halts_then_releases_the_clamp_then_turns_off(self):
     driver = await self.set_up_bar()
     await driver.stop()
-    self.assertEqual(self.sent(), [STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)])
+    self.assertEqual(
+      self.sent(), [*HALT, STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)]
+    )
 
   async def test_stop_without_show_actions_turns_off_only(self):
     driver = await self.set_up_bar(show_actions=False)
@@ -259,16 +263,16 @@ class SetupAndStopTests(LedBarTestCase):
   async def test_a_turn_off_that_fails_still_lets_the_next_setup_show(self):
     driver = await self.set_up_bar()
     del self.link.answers[color_write(colors=[OFF] * 20)]
+    driver.default_read_timeout = 0.25
     with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING"):
       await driver.stop()
     self.sent_before = len(self.link.written)
-    await driver.setup()
+    await driver.setup(skip_arm=True)
     self.assertEqual(self.states(), [BLUE, GREEN, "idle"])
 
   async def test_clamp_lock_and_unlock_show_nothing(self):
     driver = await self.set_up_bar(declared_configuration_json=RECORDING_MANTIS_V4)
     assert driver.plate_clamp is not None
-    driver.default_read_timeout = 5.0
     answer_states_in_turn(
       link=self.link,
       turns=[
@@ -329,6 +333,7 @@ class ActionTests(LedBarTestCase):
   async def test_a_led_bar_fault_neither_fails_nor_masks_the_action(self):
     del self.link.answers[STOP_ANIMATION]
     del self.link.answers[START_IDLE_ANIMATION]
+    self.driver.default_read_timeout = 0.25
     with self.assertLogs(led_bar.__name__, level="WARNING"):
       async with self.driver._show_action(action="setup"):
         pass
@@ -423,6 +428,7 @@ class ActionTests(LedBarTestCase):
 
   async def test_a_fill_fault_only_warns(self):
     del self.link.answers[STOP_ANIMATION]
+    self.driver.default_read_timeout = 0.25
     with self.assertLogs(led_bar.__name__, level="WARNING"):
       await self.bar._show_fill(done=1, total=3)
 

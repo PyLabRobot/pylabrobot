@@ -103,6 +103,7 @@ class PumpDiscoveryTests(DriverTestCase):
   async def test_built_only_when_the_pressure_board_answers(self):
     for absent_boards, built in (((), True), ((10,), False)):
       with self.subTest(absent_boards=absent_boards):
+        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         link = FakeLink(answers=make_answers(absent_boards=absent_boards))
         driver = await self.set_up_driver(link=link)
         self.assertEqual(driver.pump is not None, built)
@@ -113,6 +114,7 @@ class PumpDiscoveryTests(DriverTestCase):
     answers = make_answers()
     for board, command, request in CALIBRATION_READS:
       del answers[(board, command, request)]
+    self.default_read_timeout = 0.25
     driver = await self.set_up_driver(link=FakeLink(answers=answers))
     self.assertIsNotNone(driver.pump)
     self.assertEqual(driver.configuration.feedback_sensor_parameters, {})

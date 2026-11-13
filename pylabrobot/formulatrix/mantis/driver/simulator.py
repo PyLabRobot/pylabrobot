@@ -14,6 +14,7 @@ from .configuration import (
   read_configuration,
 )
 from .errors import MantisConfigurationError, MantisTimeoutError
+from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
@@ -130,6 +131,113 @@ class MantisSimulationLedBar(LedBar):
     """Return at once: a simulated bar has nothing to show."""
 
 
+class MantisSimulationArm(Arm):
+  """An arm with no device behind it: each command sets where its motors are, at once.
+
+  It stands at idle, as a parked arm does, and its absolute encoders read where it stands, so it
+  needs no encoder correction. Until declared, the controller holds every motor at 0, as after
+  power-on. Without a declared ``arm`` block its offsets are 0.
+  """
+
+  def __init__(
+    self,
+    *,
+    driver: "MantisSimulationDriver",
+    offsets: Optional[Dict[int, float]],
+    homing_position_a: Optional[Dict[int, float]],
+    encoder_correction: Optional[Dict[int, List[Tuple[float, float]]]],
+  ):
+    """
+    Args:
+      driver: the simulated driver.
+      offsets: each arm motor's offset, as for ``Arm``; None takes 0.
+      homing_position_a: as for ``Arm``; unused.
+      encoder_correction: as for ``Arm``; unused.
+    """
+    super().__init__(
+      driver=driver,
+      offsets=offsets if offsets is not None else {motor: 0.0 for motor in ARM_MOTORS},
+      homing_position_a=homing_position_a,
+      encoder_correction=encoder_correction,
+    )
+    self._positions: Dict[int, float] = {0: 0.0, 1: 0.0, Z_MOTOR: 0.0}
+    self._absolute_positions: Dict[int, float] = self._get_idle_targets()
+    self._z_homed = False
+
+  def _check_calibrated(self) -> None:
+    """Pass: a simulated arm needs only its offsets, which it always has."""
+
+  def _set_position(self, *, motor: int, position: float) -> None:
+    """Move a motor: the controller holds it there, and an arm motor's encoder reads it."""
+    self._positions[motor] = position
+    if motor in ARM_MOTORS:
+      self._absolute_positions[motor] = position
+
+  def _play_move(self, *, targets: List[Tuple[float, float, float]]) -> None:
+    """Play a queued move: each motor with a speed moves to its position."""
+    for motor, (position, speed, _) in enumerate(targets):
+      if speed != 0:
+        self._set_position(motor=motor, position=position)
+
+  async def _unchecked_fw_clear_motor_faults(self, *, motor: int) -> None:
+    """Clear nothing: a simulated motor has no faults."""
+
+  async def _unchecked_fw_set_motor_open_loop(self, *, motor: int, open_loop: bool) -> None:
+    """Change nothing: a simulated motor holds either way."""
+
+  async def _unchecked_fw_home(
+    self,
+    *,
+    motor: int,
+    method: int,
+    positive_edge: bool,
+    positive_direction: bool,
+    slow_speed: float,
+    fast_speed: float,
+    acceleration: float,
+  ) -> None:
+    """Put the motor on its flag, at 0, homed."""
+    self._set_position(motor=motor, position=0.0)
+    self._z_homed = self._z_homed or motor == Z_MOTOR
+
+  async def _unchecked_fw_move_absolute(
+    self, *, motor: int, position: float, speed: float, acceleration: float
+  ) -> None:
+    """Move the motor there at once."""
+    self._set_position(motor=motor, position=position)
+
+  async def _unchecked_fw_stop(self, *, motor: int, deceleration: float) -> None:
+    """Stop nothing: a simulated motor is never moving."""
+
+  async def _unchecked_fw_set_motor_position(self, *, motor: int, position: float) -> None:
+    """Hold the motor there; it does not move."""
+    self._positions[motor] = position
+
+  async def _unchecked_fw_set_following_error_configuration(
+    self, *, motor: int, enabled: bool, maximum: float
+  ) -> None:
+    """Set nothing: a simulated motor does not slip."""
+
+  async def _unchecked_fw_set_encoder_position(self, *, motor: int, position: float) -> None:
+    """Set nothing: the controller's position is the one simulated."""
+
+  async def _request_absolute_device_position(self, *, motor: int) -> float:
+    """Where the simulated arm motor stands, in device units."""
+    return self._absolute_positions[motor]
+
+  async def _home_z(self) -> None:
+    """Home Z at once: no motor slips, and no event is waited for."""
+    await self._unchecked_fw_home(
+      motor=Z_MOTOR,
+      method=0,
+      positive_edge=True,
+      positive_direction=False,
+      slow_speed=0.0,
+      fast_speed=0.0,
+      acceleration=0.0,
+    )
+
+
 class MantisSimulationDriver(MantisDriver):
   """A Mantis driver with no device behind it.
 
@@ -141,6 +249,7 @@ class MantisSimulationDriver(MantisDriver):
 
   The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after setup; started, it
   plays each item at once. Stop and abort keep what is queued, as on a v4; only a clear drops it.
+  The arm (``MantisSimulationArm``) moves at once; its motors read where it stands.
   """
 
   def __init__(
@@ -166,6 +275,7 @@ class MantisSimulationDriver(MantisDriver):
       show_actions=show_actions,
     )
     self._queued_items: List[int] = []
+    self._queued_moves: Dict[int, List[Tuple[float, float, float]]] = {}
     self._sequencer_started = False
 
   def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
@@ -228,13 +338,17 @@ class MantisSimulationDriver(MantisDriver):
     raise NotImplementedError(f"{self.name}: the motor configuration is not simulated")
 
   async def request_motor_status(self, *, motor: int) -> int:
-    """0: idle, no fault, as after power-on."""
+    """Idle, no fault; Z homed once the simulated arm homed it."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
+    if isinstance(self.arm, MantisSimulationArm) and motor == Z_MOTOR and self.arm._z_homed:
+      return MOTOR_HOMED
     return 0
 
   async def request_motor_position(self, *, motor: int) -> float:
-    """0, as after power-on."""
+    """Where the simulated arm's controller holds the motor; 0 without one, as after power-on."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
+    if isinstance(self.arm, MantisSimulationArm):
+      return self.arm._positions[motor]
     return 0.0
 
   async def request_following_error_configuration(self, *, motor: int) -> Tuple[bool, float]:
@@ -243,9 +357,9 @@ class MantisSimulationDriver(MantisDriver):
     raise NotImplementedError(f"{self.name}: the following-error check is not simulated")
 
   async def request_encoder_position(self, *, motor: int) -> float:
-    """0, as after power-on."""
-    self._check_index(name="motor", value=motor, allowed=MOTORS)
-    return 0.0
+    """Where the simulated arm's motor is: where its controller holds it; 0 without one, as after
+    power-on."""
+    return await self.request_motor_position(motor=motor)
 
   async def request_absolute_encoder_position(self, *, motor: int) -> float:
     """Raise: a raw reading means nothing without the unit's encoder correction."""
@@ -253,14 +367,18 @@ class MantisSimulationDriver(MantisDriver):
     raise NotImplementedError(f"{self.name}: the absolute encoders are not simulated")
 
   def _play_queued_items(self) -> None:
-    """Play every queued item at once, if the sequencer is started."""
+    """Play every queued item at once, if the sequencer is started; a move moves the arm."""
     if self._sequencer_started and self._queued_items:
+      for item in self._queued_items:
+        targets = self._queued_moves.pop(item, None)
+        if targets is not None and isinstance(self.arm, MantisSimulationArm):
+          self.arm._play_move(targets=targets)
       self._sequence_progress = self._last_drained_item = self._queued_items[-1]
       self._queued_items = []
 
   async def _unchecked_fw_clear_sequencer(self) -> int:
     """Empty the queue."""
-    self._queued_items = []
+    self._queued_items, self._queued_moves = [], {}
     return 0
 
   async def _unchecked_fw_start_sequencer(self) -> int:
@@ -286,6 +404,18 @@ class MantisSimulationDriver(MantisDriver):
     if len(self._queued_items) >= SEQUENCER_QUEUE_SIZE:
       return -1, 0
     self._queued_items.append(item)
+    free = SEQUENCER_QUEUE_SIZE - len(self._queued_items)
+    self._play_queued_items()
+    return free, 0
+
+  async def _unchecked_fw_queue_move_item(
+    self, *, item: int, relative: bool, wait: bool, targets: List[Tuple[float, float, float]]
+  ) -> Tuple[int, int]:
+    """Queue the move unless the queue is full; started, play it."""
+    if len(self._queued_items) >= SEQUENCER_QUEUE_SIZE:
+      return -1, 0
+    self._queued_items.append(item)
+    self._queued_moves[item] = targets
     free = SEQUENCER_QUEUE_SIZE - len(self._queued_items)
     self._play_queued_items()
     return free, 0
@@ -330,6 +460,13 @@ class MantisSimulationDriver(MantisDriver):
         number_of_leds=self.led_bar.number_of_leds,
         show_actions=self.led_bar.show_actions,
       )
+    if self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
+      self.arm = MantisSimulationArm(
+        driver=self,
+        offsets=self.arm.offsets,
+        homing_position_a=self.arm.homing_position_a,
+        encoder_correction=self.arm.encoder_correction,
+      )
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")
       slot_to_antenna: Optional[Dict[int, int]] = None
@@ -350,7 +487,7 @@ class MantisSimulationDriver(MantisDriver):
     """Open nothing: there is no link. The sequencer is stopped and empty."""
     logger.info("[%s] simulated, from %s", self.name, self.declared_configuration_json)
     self._next_item, self._last_drained_item, self._sequence_progress = 1, None, None
-    self._queued_items, self._sequencer_started = [], False
+    self._queued_items, self._queued_moves, self._sequencer_started = [], {}, False
 
   async def _close(self) -> None:
     """Close nothing: there is no link."""

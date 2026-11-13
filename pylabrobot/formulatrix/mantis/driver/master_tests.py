@@ -103,6 +103,11 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (12, 16, "0000"): "",
   (12, 17, "0000000056000100"): "0100",
   **{(12, 13, "00001400" + color * 20): "0100" for color in ("1f00", "e007", "0000")},
+  # The sequencer aborted, and each motor stopped at its default deceleration.
+  (0, 64, ""): "0000",
+  (0, 24, "0000814e1be8b40a8a40"): "0000",
+  (0, 24, "0100814e1be8b40a8a40"): "0000",
+  (0, 24, "0200bb34be4f05c2be40"): "0000",
 }
 # The sensor calibration the recorded replies carry, by controller.
 RECORDED_CALIBRATION: Dict[PressureController, Tuple[float, float]] = {
@@ -247,6 +252,9 @@ class FakeLink:
 
 
 class DriverTestCase(unittest.IsolatedAsyncioTestCase):
+  # every recorded reply is answered; a slow test runner must not time one out
+  default_read_timeout = 5.0
+
   def setUp(self):
     # The LED bar's holds are taken, not waited: setup holds "setup_done" for a second.
     patcher = mock.patch.object(LedBar, "_sleep", autospec=True)
@@ -255,13 +263,12 @@ class DriverTestCase(unittest.IsolatedAsyncioTestCase):
 
   def make_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
     driver = MantisDriver(io=link.io, rfid_io=link.reader.io, **kwargs)
-    # short, as a board that never answers waits it out; long enough for a slow test runner
-    driver.default_read_timeout = 0.25
+    driver.default_read_timeout = self.default_read_timeout
     return driver
 
-  async def set_up_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
+  async def set_up_driver(self, *, link: FakeLink, skip_arm: bool = True, **kwargs) -> MantisDriver:
     driver = self.make_driver(link=link, **kwargs)
-    await driver.setup()
+    await driver.setup(skip_arm=skip_arm)
     self.addAsyncCleanup(driver.stop)
     return driver
 
@@ -292,6 +299,7 @@ class SetupTests(DriverTestCase):
     )
 
   async def test_only_board_0_must_answer_and_each_other_board_is_asked_once(self):
+    self.default_read_timeout = 0.25  # boards 10 to 12 never answer
     link = FakeLink(answers=make_answers(absent_boards=(10, 11, 12)))
     driver = await self.set_up_driver(link=link)
     self.assertEqual(driver.configuration.generation, "v3")
@@ -325,6 +333,7 @@ class SetupTests(DriverTestCase):
         json.dump({"device": RECORDING["device"]}, f)
       link = FakeLink(answers=make_answers(absent_boards=(12,)))
       driver = self.make_driver(link=link, declared_configuration_json=path)
+      driver.default_read_timeout = 0.25  # board 12 never answers
       with self.assertRaisesRegex(
         MantisConfigurationError, "board 12: declared '0.1.8 DBG', device did not"
       ):
@@ -335,7 +344,7 @@ class SetupTests(DriverTestCase):
     link = FakeLink(answers=make_answers())
     driver = await self.set_up_driver(link=link)
     reader = driver._reader
-    await driver.setup()
+    await driver.setup(skip_arm=True)
     link.io.setup.assert_awaited_once()
     link.io.set_baudrate.assert_awaited_once()
     self.assertIs(driver._reader, reader)
@@ -351,7 +360,7 @@ class SetupTests(DriverTestCase):
     link.io.read.side_effect = read
     sent_before = len(link.written)
     with self.assertLogs("pylabrobot.formulatrix.mantis", level="INFO") as logs:
-      await driver.setup()
+      await driver.setup(skip_arm=True)
     warnings = [record for record in logs.records if record.levelname != "INFO"]
     self.assertEqual(len(warnings), 1)
     self.assertIn("the link was lost", warnings[0].getMessage())
@@ -457,7 +466,6 @@ class ReadTests(DriverTestCase):
 
   async def test_stop_fails_the_command_in_flight_and_every_event_waiter(self):
     del self.link.answers[(0, 2, b"")]
-    self.driver.default_read_timeout = 5.0
     waiter = self.driver._expect_event(board=0, code=0x0201)
     command = asyncio.ensure_future(self.driver.request_name())
     await asyncio.sleep(0.02)
@@ -469,6 +477,7 @@ class ReadTests(DriverTestCase):
 
   async def test_unanswered_read_is_resent_with_its_packet_number_then_times_out(self):
     del self.link.answers[(0, 10, b"\x01\x00")]
+    self.driver.default_read_timeout = 0.25
     with self.assertRaises(MantisTimeoutError):
       await self.driver.request_motor_limits(motor=1)
     self.assertEqual(len(set(self.link.written[-3:])), 1)
@@ -590,6 +599,7 @@ class SequencerTests(DriverTestCase):
 
   async def test_unanswered_start_is_not_resent(self):
     del self.link.answers[(0, 62, b"")]
+    self.driver.default_read_timeout = 0.25
     sent_before = len(self.link.written)
     with self.assertRaises(MantisTimeoutError):
       await self.driver._unchecked_fw_start_sequencer()
@@ -647,7 +657,7 @@ class SequencerTests(DriverTestCase):
       self.assertEqual(driver._sequence_progress, item)
     self.assertEqual(driver._last_drained_item, 5)
     await driver.stop()
-    await driver.setup()
+    await driver.setup(skip_arm=True)
     self.assertIsNone(driver._sequence_progress)
 
   async def test_full_queue_is_sent_again_under_the_next_item(self):
