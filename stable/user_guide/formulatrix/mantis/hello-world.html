@@ -834,19 +834,22 @@
 <tr class="row-even"><td><p>Interface</p></td>
 <td><p>USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader</p></td>
 </tr>
-<tr class="row-odd"><td><p>Plate clamp</p></td>
+<tr class="row-odd"><td><p>Sequencer</p></td>
+<td><p>queues PPI writes and waits until each is played; internal, for the features that act</p></td>
+</tr>
+<tr class="row-even"><td><p>Plate clamp</p></td>
 <td><p>lock at one of the unit’s levels, waiting for clamping done; unlock</p></td>
 </tr>
-<tr class="row-even"><td><p>RFID</p></td>
+<tr class="row-odd"><td><p>RFID</p></td>
 <td><p>the chip in each input slot: serial, chip type, date of manufacture</p></td>
 </tr>
-<tr class="row-odd"><td><p>LED bar (v4)</p></td>
+<tr class="row-even"><td><p>LED bar (v4)</p></td>
 <td><p>one colour, one per LED, or an animation; shows setup, off at stop</p></td>
 </tr>
-<tr class="row-even"><td><p>Unit configuration</p></td>
+<tr class="row-odd"><td><p>Unit configuration</p></td>
 <td><p>the clamp’s lock levels and each slot’s RFID antenna, from the unit’s vendor folder or a saved file; else a recording of its generation</p></td>
 </tr>
-<tr class="row-odd"><td><p>Not supported yet</p></td>
+<tr class="row-even"><td><p>Not supported yet</p></td>
 <td><p>motion, switching the pump or a pressure controller, chips, dispensing</p></td>
 </tr>
 </tbody>
@@ -855,7 +858,7 @@
 </section>
 <section id="how-it-talks">
 <h2>How it talks<a class="headerlink" href="#how-it-talks" title="Link to this heading">#</a></h2>
-<p>The Mantis connects over USB through a two-channel FTDI bridge. Interface B carries binary frames to the device’s boards: 0 for motion, 10 for pressure, 11 for the absolute position sensors (v4) and 12 for the LC3 board. The driver sends one command at a time and logs every event the device sends while connected. Interface A carries the RFID reader’s commands.</p>
+<p>The Mantis connects over USB through a two-channel FTDI bridge. Interface B carries binary frames to the device’s boards: 0 for motion, 10 for pressure, 11 for the absolute position sensors (v4) and 12 for the LC3 board. The driver sends one command at a time and logs every event the device sends while connected, by what it carries. Interface A carries the RFID reader’s commands.</p>
 <p>At setup the driver reads each board’s firmware version. A device whose board 11 answers is a v4; one whose board 11 does not is taken to be a v3.</p>
 </section>
 <section id="physical-setup">
@@ -904,7 +907,7 @@
 </section>
 <section id="simulation">
 <h3>Simulation<a class="headerlink" href="#simulation" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. The device name is not simulated.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">simulated</span> <span class="o">=</span> <span class="n">Mantis</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"simulated_mantis"</span><span class="p">,</span> <span class="n">simulation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1200,6 +1203,28 @@
 </div>
 </div>
 </section>
+<section id="events-and-the-sequencer">
+<h2>Events and the sequencer<a class="headerlink" href="#events-and-the-sequencer" title="Link to this heading">#</a></h2>
+<p>The device reports events unasked: a motor starting or ending a move, a motor error, the sequencer playing a queued item, an input changing. The driver logs each by what it carries. A motor error fails at once every wait for a motion event, with <code class="docutils literal notranslate"><span class="pre">MantisMotionError</span></code>.</p>
+<p>The sequencer on board 0 plays queued items in order, each held for its duration in the sequencer’s time steps, 1 ms on the v4. It is internal: the features that act queue through it. Here it holds the valve bank (PPI address 40) at 31, every valve closed, for about half a second: clear and start the sequencer, queue the write, then wait until the device reports it played. A write the device answers as not queued, its queue full, is sent again under a new item for at most <code class="docutils literal notranslate"><span class="pre">default_queue_full_timeout</span></code> seconds; no write is resent otherwise.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">_unchecked_fw_clear_sequencer</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">_unchecked_fw_start_sequencer</span><span class="p">()</span>
+<span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">_queue_ppi_write</span><span class="p">(</span><span class="n">duration</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">start_address</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="mi">31</span><span class="p">])</span>
+<span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">_wait_for_queue_item</span><span class="p">(</span><span class="n">item</span><span class="o">=</span><span class="n">item</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">default_queue_full_timeout</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
 <section id="stop">
 <h2>Stop<a class="headerlink" href="#stop" title="Link to this heading">#</a></h2>
 <p>Stop the visualizer and close the link.</p>
@@ -1282,6 +1307,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-clamp">Plate clamp</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rfid">RFID</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#led-bar">LED bar</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#events-and-the-sequencer">Events and the sequencer</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stop">Stop</a></li>
 </ul>
   </nav></div>

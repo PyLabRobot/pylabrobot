@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.events.decode\_motion\_started
+===================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.events
+
+.. autofunction:: decode_motion_started

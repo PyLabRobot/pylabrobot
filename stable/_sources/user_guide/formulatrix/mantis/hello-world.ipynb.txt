@@ -41,6 +41,7 @@
     "| Generations | v3 and v4, told apart at setup |\n",
     "| Reads | firmware versions, device name, motor limits and state, the arm's absolute encoders (v4), line pressures and the pressure board's state |\n",
     "| Interface | USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader |\n",
+    "| Sequencer | queues PPI writes and waits until each is played; internal, for the features that act |\n",
     "| Plate clamp | lock at one of the unit's levels, waiting for clamping done; unlock |\n",
     "| RFID | the chip in each input slot: serial, chip type, date of manufacture |\n",
     "| LED bar (v4) | one colour, one per LED, or an animation; shows setup, off at stop |\n",
@@ -55,7 +56,7 @@
    "source": [
     "## How it talks\n",
     "\n",
-    "The Mantis connects over USB through a two-channel FTDI bridge. Interface B carries binary frames to the device's boards: 0 for motion, 10 for pressure, 11 for the absolute position sensors (v4) and 12 for the LC3 board. The driver sends one command at a time and logs every event the device sends while connected. Interface A carries the RFID reader's commands.\n",
+    "The Mantis connects over USB through a two-channel FTDI bridge. Interface B carries binary frames to the device's boards: 0 for motion, 10 for pressure, 11 for the absolute position sensors (v4) and 12 for the LC3 board. The driver sends one command at a time and logs every event the device sends while connected, by what it carries. Interface A carries the RFID reader's commands.\n",
     "\n",
     "At setup the driver reads each board's firmware version. A device whose board 11 answers is a v4; one whose board 11 does not is taken to be a v3."
    ]
@@ -144,7 +145,7 @@
    "source": [
     "### Simulation\n",
     "\n",
-    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. The device name is not simulated."
+    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated."
    ]
   },
   {
@@ -704,6 +705,41 @@
    "outputs": [],
    "source": [
     "await mantis.led_bar.turn_off()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "mantis-sequencer-00",
+   "metadata": {},
+   "source": [
+    "## Events and the sequencer\n",
+    "\n",
+    "The device reports events unasked: a motor starting or ending a move, a motor error, the sequencer playing a queued item, an input changing. The driver logs each by what it carries. A motor error fails at once every wait for a motion event, with `MantisMotionError`.\n",
+    "\n",
+    "The sequencer on board 0 plays queued items in order, each held for its duration in the sequencer's time steps, 1 ms on the v4. It is internal: the features that act queue through it. Here it holds the valve bank (PPI address 40) at 31, every valve closed, for about half a second: clear and start the sequencer, queue the write, then wait until the device reports it played. A write the device answers as not queued, its queue full, is sent again under a new item for at most `default_queue_full_timeout` seconds; no write is resent otherwise."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-sequencer-01",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver._unchecked_fw_clear_sequencer()\n",
+    "await mantis.driver._unchecked_fw_start_sequencer()\n",
+    "item = await mantis.driver._queue_ppi_write(duration=500, start_address=40, values=[31])\n",
+    "await mantis.driver._wait_for_queue_item(item=item, timeout=10)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-sequencer-02",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "mantis.driver.default_queue_full_timeout"
    ]
   },
   {

@@ -15,6 +15,7 @@ pylabrobot.formulatrix.mantis.driver.master.MantisDriver
    .. autosummary::
       :toctree: .
    
+      ~MantisDriver.default_queue_full_timeout
       ~MantisDriver.default_read_timeout
    
    

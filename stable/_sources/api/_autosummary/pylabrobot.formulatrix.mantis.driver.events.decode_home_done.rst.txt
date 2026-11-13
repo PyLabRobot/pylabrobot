@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.events.decode\_home\_done
+==============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.events
+
+.. autofunction:: decode_home_done
