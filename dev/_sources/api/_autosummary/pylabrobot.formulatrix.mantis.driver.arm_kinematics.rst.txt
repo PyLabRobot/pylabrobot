@@ -1,0 +1,39 @@
+﻿:orphan:
+
+pylabrobot.formulatrix.mantis.driver.arm\_kinematics
+====================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver
+
+.. automodule:: pylabrobot.formulatrix.mantis.driver.arm_kinematics
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      compute_absolute_device_position
+      compute_corrected_encoder_reading
+      compute_device_position
+      compute_device_rate
+      compute_elbow_positions
+      compute_head_position
+      compute_joint_angles
+      compute_position
+      compute_wrapped_angle
+   
+   
+
+   
+   
+   
+
+   
+   
+   

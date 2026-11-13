@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.arm\_kinematics.compute\_absolute\_device\_position
+========================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.arm_kinematics
+
+.. autofunction:: compute_absolute_device_position

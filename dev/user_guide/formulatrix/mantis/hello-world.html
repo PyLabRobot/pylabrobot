@@ -798,7 +798,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="formulatrix-mantis">
 <h1>Formulatrix Mantis<a class="headerlink" href="#formulatrix-mantis" title="Link to this heading">#</a></h1>
-<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4’s LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve.</p>
+<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, brings the arm and Z up and parks them at stop (v4), locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4’s LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve.</p>
 <div class="plr-device-card" id="device-formulatrix-mantis">
   <div class="plr-device-card__head">
     <div>
@@ -814,7 +814,7 @@
   <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/formulatrix/mantis"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
 </div><div class="admonition warning">
 <p class="admonition-title">Warning</p>
-<p>This driver has run on one Mantis v4, on macOS and on Windows; no v3 has run it yet. <code class="docutils literal notranslate"><span class="pre">setup()</span></code> logs a warning on a firmware set not seen on a Mantis yet, which includes every v3. If you run this guide on a Mantis, please <a class="reference internal" href="../../needs-testing.html"><span class="std std-doc">report the result</span></a>.</p>
+<p>This driver has run on one Mantis v4, on macOS and on Windows; no v3 has run it yet. The arm’s bring-up and the stop that parks it have not yet run on a device through this driver; run them with the head clear and someone at the power switch. <code class="docutils literal notranslate"><span class="pre">setup()</span></code> logs a warning on a firmware set not seen on a Mantis yet, which includes every v3. If you run this guide on a Mantis, please <a class="reference internal" href="../../needs-testing.html"><span class="std std-doc">report the result</span></a>.</p>
 </div>
 <section id="properties">
 <h2>Properties<a class="headerlink" href="#properties" title="Link to this heading">#</a></h2>
@@ -835,22 +835,25 @@
 <td><p>USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader</p></td>
 </tr>
 <tr class="row-odd"><td><p>Sequencer</p></td>
-<td><p>queues PPI writes and waits until each is played; internal, for the features that act</p></td>
+<td><p>queues PPI writes and moves of the three motors, and waits until each is played; internal, for the features that act</p></td>
 </tr>
-<tr class="row-even"><td><p>Plate clamp</p></td>
+<tr class="row-even"><td><p>Arm (v4)</p></td>
+<td><p>brought up at setup from where its absolute encoders read; Z homed; parked at idle at stop</p></td>
+</tr>
+<tr class="row-odd"><td><p>Plate clamp</p></td>
 <td><p>lock at one of the unit’s levels, waiting for clamping done; unlock</p></td>
 </tr>
-<tr class="row-odd"><td><p>RFID</p></td>
+<tr class="row-even"><td><p>RFID</p></td>
 <td><p>the chip in each input slot: serial, chip type, date of manufacture</p></td>
 </tr>
-<tr class="row-even"><td><p>LED bar (v4)</p></td>
-<td><p>one colour, one per LED, or an animation; shows setup, off at stop</p></td>
+<tr class="row-odd"><td><p>LED bar (v4)</p></td>
+<td><p>one colour, one per LED, or an animation; shows setup, with the arm’s bring-up; off at stop</p></td>
 </tr>
-<tr class="row-odd"><td><p>Unit configuration</p></td>
-<td><p>the clamp’s lock levels and each slot’s RFID antenna, from the unit’s vendor folder or a saved file; else a recording of its generation</p></td>
+<tr class="row-even"><td><p>Unit configuration</p></td>
+<td><p>the clamp’s lock levels, each slot’s RFID antenna and the arm’s calibration, from the unit’s configuration folder or a saved file; the first two else from a recording of its generation</p></td>
 </tr>
-<tr class="row-even"><td><p>Not supported yet</p></td>
-<td><p>motion, switching the pump or a pressure controller, chips, dispensing</p></td>
+<tr class="row-odd"><td><p>Not supported yet</p></td>
+<td><p>moving the arm to a position, switching the pump or a pressure controller, chips, dispensing</p></td>
 </tr>
 </tbody>
 </table>
@@ -871,8 +874,8 @@
 </section>
 <section id="unit-configuration">
 <h2>Unit configuration<a class="headerlink" href="#unit-configuration" title="Link to this heading">#</a></h2>
-<p>Some of a Mantis’s values are set per unit and cannot be read off the device; they sit in the <code class="docutils literal notranslate"><span class="pre">.config</span></code> files of its vendor install, in <code class="docutils literal notranslate"><span class="pre">Data/Device/Configs</span></code>. Give setup that folder once, then save the configuration: the saved file carries the unit’s values from then on, and the folder is no longer needed. So far these are the plate clamp’s lock levels and each input slot’s RFID antenna.</p>
-<p>Without them, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it.</p>
+<p>Some of a Mantis’s values are set per unit and cannot be read off the device; they sit in the unit’s <code class="docutils literal notranslate"><span class="pre">.config</span></code> files, in <code class="docutils literal notranslate"><span class="pre">Data/Device/Configs</span></code>. Give setup that folder once, then save the configuration: the saved file carries the unit’s values from then on, and the folder is no longer needed. So far these are the plate clamp’s lock levels, each input slot’s RFID antenna and, on a v4, the arm’s calibration: each arm motor’s offset, absolute encoder reference and encoder correction.</p>
+<p>Without the clamp’s levels or the antennas, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. The arm’s calibration never comes from a recording: without it the arm is not brought up and setup refuses. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.formulatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mantis</span>
@@ -885,7 +888,7 @@
 </section>
 <section id="setup">
 <h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> opens both links, reads the firmware versions, the motor limits and the pressure sensors’ calibration, takes the unit’s values and sets up the RFID reader. It does not move anything. On a v4 the LED bar shows the setup, green for a second at its end, then the idle animation.</p>
+<p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> opens both links, reads the firmware versions, the motor limits and the pressure sensors’ calibration, takes the unit’s values and sets up the RFID reader. On a v4 it then brings the arm and Z up, as in the recorded v4 startup: it energises the arm motors, declares them where their absolute encoders read, moves them to idle, homes Z, and moves to idle again. It does so only if the head stands near idle, in front of or behind it; from anywhere else it refuses, the arm unpowered: park the arm at idle first. <code class="docutils literal notranslate"><span class="pre">setup(skip_arm=True)</span></code> reads only and moves nothing. On a v4 the LED bar shows the setup, the arm’s bring-up with it, green for a second at its end, then the idle animation.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
@@ -907,7 +910,7 @@
 </section>
 <section id="simulation">
 <h3>Simulation<a class="headerlink" href="#simulation" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its arm stands at idle, with no offsets unless the file declares the arm’s calibration, and setup brings it up at once; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">simulated</span> <span class="o">=</span> <span class="n">Mantis</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"simulated_mantis"</span><span class="p">,</span> <span class="n">simulation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1032,6 +1035,47 @@
 </div>
 </div>
 </section>
+</section>
+<section id="arm-v4">
+<h2>Arm (v4)<a class="headerlink" href="#arm-v4" title="Link to this heading">#</a></h2>
+<p>Motors 0 and 1 each turn a pair of links; the two long links meet at the head. The arm frame has its origin where motor 0 turns its links, in mm; at idle the head stands at about (15.0, 31.2). Each motor’s position, as the controller holds it: the arm motors in degrees, Z in mm down from its home flag.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">request_joint_position</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Each arm motor’s angle from its absolute encoder, corrected with the unit’s calibration, and where the head is:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">request_absolute_joint_position</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">request_head_position</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Whether the head can reach a point, in the arm frame; nothing is clamped. The bring-up and the stop move at the arm’s defaults, in degrees/s and mm/s:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">is_xy_reachable</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">60.0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">default_arm_speed</span><span class="p">,</span> <span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">default_z_speed</span>
+</pre></div>
+</div>
+</div>
+</div>
 </section>
 <section id="pressure">
 <h2>Pressure<a class="headerlink" href="#pressure" title="Link to this heading">#</a></h2>
@@ -1227,7 +1271,7 @@
 </section>
 <section id="stop">
 <h2>Stop<a class="headerlink" href="#stop" title="Link to this heading">#</a></h2>
-<p>Stop the visualizer and close the link.</p>
+<p>Stop the visualizer and close the link. On a v4, <code class="docutils literal notranslate"><span class="pre">stop()</span></code> first aborts the sequencer and stops every motor; an arm brought up is then parked at idle and Z lowered to 20 mm, as in the recorded close, unless the head is away from idle. Then the plate clamp is released.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">viewer</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
@@ -1303,6 +1347,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#absolute-encoders-v4">Absolute encoders (v4)</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arm-v4">Arm (v4)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pressure">Pressure</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-clamp">Plate clamp</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rfid">RFID</a></li>

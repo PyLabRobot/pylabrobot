@@ -15,6 +15,7 @@ pylabrobot.formulatrix.mantis.MantisDevice
    .. autosummary::
       :toctree: .
    
+      ~MantisDevice.arm
       ~MantisDevice.led_bar
       ~MantisDevice.location
       ~MantisDevice.name

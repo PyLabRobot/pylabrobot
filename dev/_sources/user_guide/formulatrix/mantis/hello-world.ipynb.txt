@@ -7,7 +7,7 @@
    "source": [
     "# Formulatrix Mantis\n",
     "\n",
-    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4's LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve."
+    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, brings the arm and Z up and parks them at stop (v4), locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4's LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve."
    ]
   },
   {
@@ -25,7 +25,7 @@
    "metadata": {},
    "source": [
     "```{warning}\n",
-    "This driver has run on one Mantis v4, on macOS and on Windows; no v3 has run it yet. `setup()` logs a warning on a firmware set not seen on a Mantis yet, which includes every v3. If you run this guide on a Mantis, please [report the result](../../needs-testing.md).\n",
+    "This driver has run on one Mantis v4, on macOS and on Windows; no v3 has run it yet. The arm's bring-up and the stop that parks it have not yet run on a device through this driver; run them with the head clear and someone at the power switch. `setup()` logs a warning on a firmware set not seen on a Mantis yet, which includes every v3. If you run this guide on a Mantis, please [report the result](../../needs-testing.md).\n",
     "```"
    ]
   },
@@ -41,12 +41,13 @@
     "| Generations | v3 and v4, told apart at setup |\n",
     "| Reads | firmware versions, device name, motor limits and state, the arm's absolute encoders (v4), line pressures and the pressure board's state |\n",
     "| Interface | USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader |\n",
-    "| Sequencer | queues PPI writes and waits until each is played; internal, for the features that act |\n",
+    "| Sequencer | queues PPI writes and moves of the three motors, and waits until each is played; internal, for the features that act |\n",
+    "| Arm (v4) | brought up at setup from where its absolute encoders read; Z homed; parked at idle at stop |\n",
     "| Plate clamp | lock at one of the unit's levels, waiting for clamping done; unlock |\n",
     "| RFID | the chip in each input slot: serial, chip type, date of manufacture |\n",
-    "| LED bar (v4) | one colour, one per LED, or an animation; shows setup, off at stop |\n",
-    "| Unit configuration | the clamp's lock levels and each slot's RFID antenna, from the unit's vendor folder or a saved file; else a recording of its generation |\n",
-    "| Not supported yet | motion, switching the pump or a pressure controller, chips, dispensing |"
+    "| LED bar (v4) | one colour, one per LED, or an animation; shows setup, with the arm's bring-up; off at stop |\n",
+    "| Unit configuration | the clamp's lock levels, each slot's RFID antenna and the arm's calibration, from the unit's configuration folder or a saved file; the first two else from a recording of its generation |\n",
+    "| Not supported yet | moving the arm to a position, switching the pump or a pressure controller, chips, dispensing |"
    ]
   },
   {
@@ -80,9 +81,9 @@
    "source": [
     "## Unit configuration\n",
     "\n",
-    "Some of a Mantis's values are set per unit and cannot be read off the device; they sit in the `.config` files of its vendor install, in `Data/Device/Configs`. Give setup that folder once, then save the configuration: the saved file carries the unit's values from then on, and the folder is no longer needed. So far these are the plate clamp's lock levels and each input slot's RFID antenna.\n",
+    "Some of a Mantis's values are set per unit and cannot be read off the device; they sit in the unit's `.config` files, in `Data/Device/Configs`. Give setup that folder once, then save the configuration: the saved file carries the unit's values from then on, and the folder is no longer needed. So far these are the plate clamp's lock levels, each input slot's RFID antenna and, on a v4, the arm's calibration: each arm motor's offset, absolute encoder reference and encoder correction.\n",
     "\n",
-    "Without them, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it."
+    "Without the clamp's levels or the antennas, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. The arm's calibration never comes from a recording: without it the arm is not brought up and setup refuses. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it."
    ]
   },
   {
@@ -104,7 +105,7 @@
    "source": [
     "## Setup\n",
     "\n",
-    "`setup()` opens both links, reads the firmware versions, the motor limits and the pressure sensors' calibration, takes the unit's values and sets up the RFID reader. It does not move anything. On a v4 the LED bar shows the setup, green for a second at its end, then the idle animation."
+    "`setup()` opens both links, reads the firmware versions, the motor limits and the pressure sensors' calibration, takes the unit's values and sets up the RFID reader. On a v4 it then brings the arm and Z up, as in the recorded v4 startup: it energises the arm motors, declares them where their absolute encoders read, moves them to idle, homes Z, and moves to idle again. It does so only if the head stands near idle, in front of or behind it; from anywhere else it refuses, the arm unpowered: park the arm at idle first. `setup(skip_arm=True)` reads only and moves nothing. On a v4 the LED bar shows the setup, the arm's bring-up with it, green for a second at its end, then the idle animation."
    ]
   },
   {
@@ -145,7 +146,7 @@
    "source": [
     "### Simulation\n",
     "\n",
-    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated."
+    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its arm stands at idle, with no offsets unless the file declares the arm's calibration, and setup brings it up at once; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated."
    ]
   },
   {
@@ -365,6 +366,82 @@
    "outputs": [],
    "source": [
     "await mantis.driver.request_absolute_encoder_position(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "mantis-arm-1",
+   "metadata": {},
+   "source": [
+    "## Arm (v4)\n",
+    "\n",
+    "Motors 0 and 1 each turn a pair of links; the two long links meet at the head. The arm frame has its origin where motor 0 turns its links, in mm; at idle the head stands at about (15.0, 31.2). Each motor's position, as the controller holds it: the arm motors in degrees, Z in mm down from its home flag."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-arm-2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.arm.request_joint_position()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "mantis-arm-3",
+   "metadata": {},
+   "source": [
+    "Each arm motor's angle from its absolute encoder, corrected with the unit's calibration, and where the head is:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-arm-4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.arm.request_absolute_joint_position()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-arm-5",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.arm.request_head_position()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "mantis-arm-6",
+   "metadata": {},
+   "source": [
+    "Whether the head can reach a point, in the arm frame; nothing is clamped. The bring-up and the stop move at the arm's defaults, in degrees/s and mm/s:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-arm-7",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "mantis.arm.is_xy_reachable(x=15.0, y=60.0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "mantis-arm-8",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "mantis.arm.default_arm_speed, mantis.arm.default_z_speed"
    ]
   },
   {
@@ -749,7 +826,7 @@
    "source": [
     "## Stop\n",
     "\n",
-    "Stop the visualizer and close the link."
+    "Stop the visualizer and close the link. On a v4, `stop()` first aborts the sequencer and stops every motor; an arm brought up is then parked at idle and Z lowered to 20 mm, as in the recorded close, unless the head is away from idle. Then the plate clamp is released."
    ]
   },
   {

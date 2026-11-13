@@ -63,7 +63,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp.html" />
+    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm.html" />
     <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
@@ -590,8 +590,9 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.stop">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisSimulationDriver.</span></span><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.stop" title="Link to this definition">#</a></dt>
-<dd><p>Fail the command in flight and every event waiter, release the plate clamp, turn the LED
-bar off, stop reading the link and close it.</p>
+<dd><p>Fail the command in flight and every event waiter; on a v4, abort the sequencer, stop the
+motors and park an arm brought up; release the plate clamp, turn the LED bar off, stop reading
+the link and close it.</p>
 <p>Each step runs whether or not the one before it succeeded. After reading the link failed,
 nothing is sent: the link is closed.</p>
 <dl class="field-list simple">
@@ -623,11 +624,11 @@ nothing is sent: the link is closed.</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp.html"
+       href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp</p>
+        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

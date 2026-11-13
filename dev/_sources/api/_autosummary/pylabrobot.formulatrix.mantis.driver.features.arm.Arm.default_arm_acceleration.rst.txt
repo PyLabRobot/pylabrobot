@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.Arm.default\_arm\_acceleration
+================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoproperty:: Arm.default_arm_acceleration

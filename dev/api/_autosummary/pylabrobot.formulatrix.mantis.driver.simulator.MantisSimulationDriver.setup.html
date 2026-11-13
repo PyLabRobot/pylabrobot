@@ -589,15 +589,24 @@
 <h1>pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup<a class="headerlink" href="#pylabrobot-formulatrix-mantis-driver-simulator-mantissimulationdriver-setup" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisSimulationDriver.</span></span><span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup" title="Link to this definition">#</a></dt>
-<dd><p>Open the link if it is not open, read the device’s configuration and check it.</p>
-<p>On a v4 the LED bar shows the setup, then “setup_done” for <code class="docutils literal notranslate"><span class="pre">SETUP_DONE_HOLD</span></code>, then idle.</p>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisSimulationDriver.</span></span><span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip_arm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup" title="Link to this definition">#</a></dt>
+<dd><p>Open the link if it is not open, read the device’s configuration and check it, then bring
+the arm and Z up on a v4 (<code class="docutils literal notranslate"><span class="pre">Arm.initialize</span></code>). This moves the device.</p>
+<p>On a v4 the LED bar shows the setup, the arm’s bring-up with it, then “setup_done” for
+<code class="docutils literal notranslate"><span class="pre">SETUP_DONE_HOLD</span></code>, then idle.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – if the device does not match the declared configuration.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>skip_arm</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – do not bring the arm up; nothing moves.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>None</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – if the device does not match the declared configuration, or the arm
+    is brought up without the unit’s <code class="docutils literal notranslate"><span class="pre">arm</span></code> block.</p></li>
+<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError"><strong>MantisMotionError</strong></a> – if the arm is not where it is moved straight to idle from, or faults.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
 </dd>
 </dl>
 </dd></dl>
