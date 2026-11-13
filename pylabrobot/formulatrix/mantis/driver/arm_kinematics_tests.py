@@ -63,7 +63,10 @@ class KinematicsTests(unittest.TestCase):
     self.assertAlmostEqual(y, 31.177, places=3)
 
   def test_inverse_and_forward_kinematics_agree(self):
-    for x, y in ((15.0, 31.177), (-57.0, 0.0), (60.0, 80.0), (0.0, 100.0)):
+    # In front of the arm and in the back zones, where the other solution lies elsewhere.
+    points = [(15.0, 31.177), (-57.0, 0.0), (60.0, 80.0), (0.0, 100.0)]
+    points += [(-85.0, -45.0), (75.0, -50.0), (-65.0, -4.0), (90.0, -50.0)]
+    for x, y in points:
       with self.subTest(x=x, y=y):
         theta_1, theta_2 = compute_joint_angles(x=x, y=y)
         head = compute_head_position(theta_1=theta_1, theta_2=theta_2)

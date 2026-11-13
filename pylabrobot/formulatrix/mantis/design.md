@@ -15,6 +15,8 @@ driver/master.py             MantisDriver. Owns the link, the reader, reply matc
                              bar.
 driver/arm_kinematics.py     The arm's geometry and units: device units, inverse and forward
                              kinematics, the absolute encoder's correction. Pure maths.
+driver/stage_transform.py    The stage transform: where a point on the wellplate is in the arm
+                             frame. Pure maths.
 driver/events.py             The events the device sends unasked: their codes, what each carries
                              and how it is logged.
 driver/simulator.py          MantisSimulationDriver, MantisSimulationArm,
@@ -25,7 +27,9 @@ driver/framing.py            The frame: header, check word, splitting, payload s
 driver/errors.py             MantisError and one error per kind; what the device's codes mean.
 driver/configuration.py      DeviceConfiguration: what the device answered about itself.
 driver/oem_config.py         The unit's own values, read from its vendor
-                             .config files, into a declared configuration.
+                             .config and sequence files, into a declared configuration.
+driver/sequence_files.py     The unit's sequence files: the waypoints of a route that moves the
+                             arm.
 driver/confirmed_firmware_versions.py
                              The firmware sets confirmed on a device, per generation.
 driver/features/             One class per thing the device is fitted with: Arm, PlateClamp, Pump,
@@ -59,8 +63,8 @@ no LED count. A difference between v3 and v4 is expressed there, by which featur
 by a branch on the generation inside a command.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
-what the device answered: generation, firmware versions, motor limits, and the pressure board's
-sensor calibration (`feedback_sensor_parameters`), read at setup and never written.
+what the device answered: generation, firmware versions and the pressure board's sensor
+calibration (`feedback_sensor_parameters`), read at setup and never written.
 `save_configuration` writes it; `declared_configuration_json` reads one back and setup refuses if
 the device disagrees on a fitted field (`FITTED_FIELDS`). The calibration is neither saved nor
 declared: the bottle and chip sensors' offsets are re-zeroed on the device between sessions, so
@@ -68,8 +72,10 @@ they are read at every setup. A declared file that holds one, saved by an earlie
 it is ignored. A simulated pump answers the generation's recording's.
 Each feature gets its own configuration when it is added, holding its own facts; the device
 configuration does not grow per feature, the calibration excepted, as discovery reads it with the
-firmware versions. Motor limits are compared as a build fact: every v4 is taken to share them until
-a second device shows otherwise.
+firmware versions. The arm's is `MantisArmConfiguration` on `arm.configuration`, as the PF400's
+`PreciseFlexArmConfiguration`: the motor limits, read for it at setup, and the unit's `arm`, `zones`,
+`approach_paths` and `stage` blocks. The motor limits are read at every setup and checked against every
+target, so they are not compared with a declared file; only the generation is fitted.
 
 **M4a. A unit's own values come from its folder or its declared file, else its generation's
 recording.** What is set per unit and cannot be read off the device sits in the unit's vendor
@@ -84,13 +90,20 @@ folder the saved file alone carries them. A block is loaded only where its sourc
 `plate_clamp.levels` for a clamp driven as a DC motor, `rfid.slot_to_antenna` where `RFID.config`
 exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`, `arm` where the unit
 declares the arms' absolute encoder references (a v4), its encoder correction from the `Data`
-folder.
+folder; `zones` where the unit declares its zones (a v4), with each zone's routes, and
+`approach_paths`, the unit's paths from idle to the waste (`"waste"`) and to each wash position
+(`"wash_1"`, `"wash_2"`), from `System/Sequences/Common`; `stage` where the unit
+declares its stage transform, with its tilt and arm type and the plate holder's origin from the
+`Data` folder.
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
-(`MOTION_CALIBRATION_BLOCKS`: `arm`) comes from the unit's folder or its declared file only; no
-recording holds one. Without it, nothing that needs it is sent: `Arm.initialize` refuses, and so
-does `setup` unless `skip_arm=True`. Factory files (encoder corrections, taught sequences) are
-never committed; tests use synthetic tables.
+(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `approach_paths`, `stage`) comes from the unit's folder or
+its declared file only; no recording holds one. Without it, nothing that needs it is sent: without
+`arm` `Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`; without `zones` the head
+is moved to idle from near idle only; without `approach_paths` a move to the waste or a wash refuses; without
+`stage` a move to a wellplate refuses. An arm type other than `Standard` is refused. A route file is
+read whole and refused on any line it does not understand, never skipped. Factory files (encoder
+corrections, taught sequences) are never committed; tests use synthetic tables.
 
 Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 
@@ -157,7 +170,17 @@ the device sent, decoded but not converted, until the feature that owns it knows
 A feature then converts in one place, on its configuration, and speaks PyLabRobot's units. No unit
 suffix on names in default units. The arm converts in `arm_kinematics`: 200 device units per motor
 revolution, degrees on the arms and mm on Z (down from its flag), each rate rounded up half a step
-as on the wire.
+as on the wire. A joint state keeps the motor's sign (Z down from its flag). The routes keep the
+frame their files write: the arm frame, Z down from its flag. Every public position and height is
+the nozzle's in the deck frame, every public speed the nozzle's in mm/s and mm/s²; degrees/s stay
+inside, on the wire. Over the plate holder a point goes through the stage transform
+(`stage_transform`) in full: y flipped to run from the holder's back edge, the height taken below
+the unit's `ReferenceHeight` (`StageTuning.config`), the arm type, the holder's origin, the
+projective matrix on x and y and the tilt on z; a point read back is the matrix inverted, so it
+reads where it was sent. Elsewhere x and y go through the arm frame fitted once to the stage over
+the holder, its edges included (`_get_deck_to_arm_transform`): one turn and shift, as the resource
+model places the arm by the manufacturer's model and each unit's differs by millimetres. A height is
+always the stage's, its tilt extended past the holder.
 
 **M7. A range is checked before anything is sent.** (STAR P5.) A read accepts only the indices
 seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CONTROLLERS`);
@@ -168,16 +191,58 @@ P9.) The raw call is `_unchecked_fw_*` and sends once; the public method checks 
 confirms what the device reports. `lock` checks the level against the declared levels, calls
 `_unchecked_fw_do_plate_clamping` and reads the clamp state until it reports clamping done.
 `Arm.initialize` matches the recorded v4 startup command for command: energise the arms, declare
-them three times where their absolute encoders read, set their following error, clear Z, declare,
-move to idle, home Z (waiting for its home-done event), twice declare and move to idle, home Z. A
-move reads each motor's status until none moves; a fault bit raises `MantisMotionError`. Idle is
-`POST_HOMING_POSITION` (the same on every unit seen) less the unit's offsets.
+them three times where their absolute encoders read, set their following error, clear Z, then
+recover to idle. Recovering declares the arms, moves them along the head's zone's route to its safe
+XY, homes Z (waiting for its home-done event), twice declares them and moves along the zone's route
+to idle, and homes Z; the zone is read again before each route, from the controller's position
+just declared. `recover_from_fault` stops every motor, clears Z's faults then the arms', and
+recovers the same way, as in a recorded recovery after a motor error. A route moves each motor its
+line names on its own (command 22), as in the recorded recoveries; every target is checked first. A
+command 22 answers a motor error code, and one not 0 raises `MantisMotionError` before the next
+move is sent. A move reads each motor's status until none moves; a fault bit raises
+`MantisMotionError`. Routes move at the `ROUTE_*` profile, the only one queued moves were recorded
+at; the other moves take the arms at it too unless an xy speed is given. A move that fails stops
+each motor at that move's own acceleration. Idle is
+`POST_HOMING_POSITION` (the same on every unit seen) less the unit's offsets; a route line's
+(x, y) goes through the same inverse kinematics, so a line at (15, 31.180) is sent as such.
+
+The moves are built bottom up. `move_to_joint_state` moves the motors a joint state names, queued
+(command 68), the sequencer cleared and started before each item and the item waited for. A move of
+Z alone is one item. A move of an arm motor is guarded, as v1 STAR's moves across the deck
+(`move_to_xy_positions`): Z rises first to `minimum_traverse_height_start` (the nozzle's height above
+the deck over where it starts and ends; `default_minimum_traverse_height` when None, and with that
+None `SAFE_HEIGHT` above Z's flag) if its encoder reads it below, by command 22, and is
+read back by its encoder (command 84, within `Z_TRAVERSE_TOLERANCE`) or it raises; then the arms move
+with Z held; then Z, if named. `move_to_xy_position` takes the nozzle to a deck-frame (x, y) through
+the inverse kinematics on it; `move_to_location` adds Z's move to the location's height;
+`move_to_z_position` moves Z alone where the nozzle stands. Every public move that moves the arms is
+guarded; a dispense, which moves between wells at well height, queues its moves
+privately. Every move checks every target against the motor limits read, and Z's speed and
+acceleration against `Z_SPEED_RANGE` and `Z_ACCELERATION_RANGE`, before anything is sent. Nothing
+models the chip racks.
+
+An xy speed in mm/s turns into each arm motor's by its turn over the nozzle's straight-line
+distance, acceleration likewise: the motors start and end together, the move takes as long as a
+straight one would, and the nozzle's path is not straight. Without one, given or
+`default_xy_speed`/`default_xy_acceleration`, the arms take the route profile. `park` rises and reads Z back the same way, then follows the zone's
+route to idle.
+
+`move_to_waste` and `move_to_wash(position=...)` follow the unit's approach paths, queued line for
+line as in the recorded move to the waste, from wherever the head stands, which is read from the
+motors, never remembered. A head on a path's descended part (after its last line at the safe
+height, within `APPROACH_PATH_TOLERANCE` of a line) is on that path. On the target's path it goes
+on from there. On a neighbouring path, one sharing the target's descent (the two washes), it goes
+back to that path's safe-Z line (its last line but one), then to the target's and down. On another it goes back to the last line the two share, then
+forward. In the open it is parked first. Going back, a path's lines play backwards, one queued
+item each; a line naming the arms and Z moves both
+in one item. Every other move, and `park`, from a pose on a path first goes back along it to its
+start.
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
 | what it touches | prefix | here |
 |---|---|---|
-| the device, doing work | `move_` | |
+| the device, doing work | `move_` | `arm.move_to_xy_position`, `arm.move_to_z_position` |
 | the device, a process left running | `start_`, `stop_` | |
 | the device's sensors | `measure_`, `sense_` | `pump.measure_pressure` |
 | the device's memory, reading | `request_` | `request_motor_limits`, `request_motor_status` |
@@ -191,14 +256,15 @@ Commands, boards and fields are named for what they do; no vendor class, method 
 (pump, pressure controllers, clamp, a chip) turns it off or releases it in a `finally`, each step in
 its own `try`, and the first fault is the one raised. `stop` fails what waits on the link; on a v4
 it aborts the sequencer, stops each motor at its default deceleration and, if every motor stopped,
-parks an arm brought up: Z up on its own, read back by its encoder (command 84), never the demand
-position (command 27); then queued, as in the recorded close, the arms, both, then Z down to
-`SHUTDOWN_Z` at idle. Then it releases each built feature, turns the LED bar off and closes the
-link. A move that fails part way stops the motors it sent a move and logs where their encoders
-read. A `lock` that does not report clamping done releases the clamp before raising, and `stop`
-releases a clamp that does not read released. A failed `Arm.initialize` unpowers the arm motors
-again, and a failed setup's `stop` does not park them. Failure behaviour is designed before
-coverage.
+parks an arm brought up: from away from idle first along its zone's route; then Z up on its own,
+read back by its encoder (command 84), never the demand position (command 27); then queued, as in
+the recorded close, the arms, both, then Z down to `SHUTDOWN_Z` at idle. Then it releases each
+built feature, turns the LED bar off and closes the link. A move that fails part way stops the
+motors it sent a move and logs where their encoders read. A `lock` that does not report clamping
+done releases the clamp before raising, and `stop` releases a clamp that does not read released. A
+failed `Arm.initialize` or `recover_from_fault` unpowers the arm motors again, and a failed setup's
+`stop` does not park them. Queued moves not reported played abort the sequencer, so nothing more
+plays, and log where the motors stopped. Failure behaviour is designed before coverage.
 
 **M11. Firmware is confirmed, never gated.** A version set outside `CONFIRMED_FIRMWARE_VERSIONS`
 warns once at setup; nothing refuses. A set goes in once it has been seen on a device.
@@ -226,11 +292,12 @@ above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clampi
 unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` reads off,
 every line at 0, with the recorded calibration; `MantisSimulationLedBar` takes every command and
 waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
-needs no encoder correction; its offsets are the declared ones, else 0. Each command moves it at
-once, and the motor reads answer from it; without it the motors read idle at 0, as after power-on.
-A motor read the configuration does not hold is not simulated. The sequencer, on the driver, holds
-`SEQUENCER_QUEUE_SIZE` items, stopped and empty after setup, and once started plays each item at
-once, a queued move moving the simulated arm; stop and abort keep what is queued.
+needs no encoder correction; its offsets are the declared ones, else 0, and its zones, approach paths and
+stage the declared ones, else none. Each command moves it at once, and the motor reads answer from
+it; without it the motors read idle at 0, as after power-on. A motor read the configuration does
+not hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items,
+stopped and empty after setup, and once started plays each item at once, a queued move moving the
+simulated arm; stop and abort keep what is queued.
 
 **M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
 add commands that the device runs together, each subsystem gets its own lock, taken in declaration
@@ -243,7 +310,11 @@ master's links. Interface B carries the command frames; interface A, the RFID re
 **M18. The resource model mirrors the device; it never decides for it.** (STAR P12.) `MantisDevice`
 builds the parts and holds the driver; a feature reaches the parts through the device, and moves
 keep them in step. A driver with no resource tree still drives. The Z column carries the arm's
-four links (`LinkBody`), turned to the joint angles setup reads after the bring-up.
+four links (`LinkBody`). The arm holds no resource: setup registers the device's
+`_update_arm_model` as the arm's `_pose_observer`, and after each move, park, approach path, recovery
+and the stop's park the arm reads its three encoders (command 84) and passes the links' angles and
+Z's height to it; the column rises and falls with Z. A failed move passes where it stopped from the
+reads it logs. With no observer nothing more is read; a failed update only warns (STAR P8).
 
 **M19. The LED bar shows what the device does, never at the cost of it.** An action runs inside
 `_show_action`: the bar shows its colour, the enclosing action's when it ends, the idle animation
@@ -268,8 +339,8 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
    (10 ms) and the reply timeout (5 s). A frame whose reserved word is not zero is logged, not
    refused.
 4. **The arm model is partial.** The links are drawn as boxes: the manufacturer's link models are
-   compressed in a form not converted yet. The Z column is drawn with Z at 0: how far it travels
-   with Z is not measured. Which side of the device motor 0's links sit on is taken from the name
+   compressed in a form not converted yet. The Z column is drawn where it stands with Z at 0 and
+   moved by Z's height; that the drawn pose is Z at 0 is not measured. Which side of the device motor 0's links sit on is taken from the name
    of a link length in the unit's files, not seen on a device. The motor reads stay on the driver
    in the device's units; the arm converts them.
 5. **Whether motor limits differ between devices of one generation** is unknown; one v4 has been
@@ -332,18 +403,81 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     within `Z_TRAVERSE_TOLERANCE` (0.1 mm) of its flag by its encoder, twice the largest gap read
     between Z's encoder and its demand position. Z's encoder has been read at rest only, never right
     after a move.
-28. **The arm is moved to idle only from near idle.** Without the unit's zones, setup and stop move
-    to idle only with the head within `FRONT_ZONE_X_RANGE` (the Front zone's x bounds, the same on
-    every unit seen); elsewhere they refuse. That admits the strip below the Front zone (y under
-    31 mm), where a recorded startup began (y about 28 mm): that startup moved X, Y and Z at once
-    from there; this driver raises Z first, as from the Front zone. The zones' routes lift this.
-29. **The absolute encoder's wrap and the forward kinematics' choice are not observed.** A motor's
-    position is taken one span lower above 100 (motor 0) or 120 (motor 1) device units, and of the
-    two solutions the head's is the one of greater y; no reading near a wrap has been seen.
+28. **Without the unit's zones, the arm is moved to idle only from near idle.** Setup, `park`,
+    `recover_from_fault` and stop then move to idle only with the head within `FRONT_ZONE_X_RANGE`
+    (the Front zone's x bounds), along the Front zone's routes, the same on every unit seen;
+    elsewhere they refuse. With the zones, the head's zone names its routes.
+29. **The absolute encoder's wrap is not observed.** A motor's position is taken one span lower
+    above 100 (motor 0) or 120 (motor 1) device units; no reading near a wrap has been seen. Of the
+    forward kinematics' two solutions the head's is the one left of the line between the elbows:
+    the recorded recoveries from four start poses each followed the zone it gives, and from one
+    (a left zone) the solution of greater y would have chosen a right zone. No recovery from a
+    back zone, where the two differ most, has been recorded.
 30. **A slip before Z homes refuses.** If an arm reads a following error just before Z homes,
     setup raises instead of homing; no recording shows what should follow.
 31. **Unpowering the arm (command 19, open loop) is unrecorded.** A failed bring-up sends it; its
     reply has not been seen.
-32. **The encoder correction files are found two levels above `oem_config_directory`.** That
-    argument still names `Data/Device/Configs`; the corrections sit in `Data/System`.
-
+32. **The encoder correction files and the sequences are found two levels above
+    `oem_config_directory`, the plate holder's origin one level above.** That argument still names
+    `Data/Device/Configs`; they sit in `Data/System` and `Data/Device/Adapters`.
+33. **Zones that share an edge are tried in `ZONES` order.** A head on an edge goes to the first
+    zone listed that holds it, in the order the unit lists its zones; the tie-break is not
+    known.
+34. **None of the moves, routes or approach paths has run through this driver.** Their wire form matches
+    recorded exchanges: a recovery's routes as command 22 per motor, the waste's path as queued
+    moves line for line, each matched against a recording; a `park` from any zone also uses
+    command 22, as the recovery does, since no park at a pause or a stop has been recorded.
+35. **`park` rises to the traverse height first, and an approach path is entered from idle, or
+    from the line it shares with the path the head is on.** Neither is recorded as a rule: the
+    recorded routes move X and Y at the height the head is at, and the recorded approach paths
+    start with the arms' move to the ready position. Both are this driver's guards, as STAR's park
+    lifts before it travels.
+36. **Z's speed and acceleration ranges are those of the recorded moves, not the device's.** The
+    jog's 1 to 20 mm/s at 500 mm/s² and the routes' 55 mm/s at 200 mm/s² were accepted; the
+    firmware refuses a speed or acceleration it will not take in the move's reply (5 or 6). Queued
+    moves have been recorded at 55 mm/s and 200 mm/s² only.
+37. **`recover_from_fault` stops each motor at the route acceleration.** In a recorded recovery
+    each was stopped at the acceleration of its last move, the route's there; the order of
+    stops, clears and declarations is the recorded one.
+38. **The waste's approach path is the generation's own file.** Every unit seen has both
+    `MoveToWasteStation` and `MoveToWasteStation_Adapter`, two different routes: a unit with zones
+    (a v4) reads the first, which a v4 played on the wire; one without them (a v3) reads the
+    second, not seen played, and a v3 builds no arm. The wash paths are
+    `MoveToWashStation1` and `2`; their `Lc3` variants are not read.
+39. **The resource model draws the arm where the manufacturer's model places it,** not where the
+    fit puts it: on the unit the fit was checked on, about 2 mm off.
+40. **`request_is_parked`'s tolerance, 0.5 degrees and 0.5 mm, is ours.** In the recordings the
+    declared arms read up to about 0.1 degrees from their idle target after a move there.
+41. **A command 22 answering a motor error code is untested.** Every reply seen is 0; no test
+    plays another. The check reads the code only; commands 19, 21 and 24 answer one too, unchecked.
+42. **The read-back after a rise is Z's encoder (command 84), not the demand position.** It
+    catches a rise the device refused, dropped or stalled, within `Z_TRAVERSE_TOLERANCE`; Z's
+    encoder has been read at rest only, never right after a move.
+43. **The stage transform has not commanded a move through this driver.** The same chain
+    reproduces, to 1 µm, the recorded head positions over the 96 wells of recorded dispenses on a
+    v4; that check needs the unit's own matrix and origin, so it is kept outside this repository
+    and the tests here are synthetic. Whether the nozzle stands over each well is for a device run
+    to show.
+44. **The holder's back-left corner is the wellplate frame's origin,** as the clamp pushes a
+    wellplate there, with A1 at the back left: y runs from the holder's back edge.
+45. **The stage maps the nozzle of a fitted chip.** It is the unit's calibration, made with a chip;
+    whether every chip's nozzle stands alike, and where the head stands without one, is not
+    measured. A height starts the unit's `ReferenceHeight` above the plate holder, at the stage
+    origin's z; the gap it gives has not been gauged with a chip seated, so absolute heights are
+    unverified. The tilt is validated over the holder only.
+46. **Off the plate holder, x and y are the fit's.** On the unit it was checked on, the fit leaves
+    under 0.2 mm over the holder and predicts its chip pick-ups to about 0.3 mm; another unit's
+    stage left 0.5 mm. At the holder's edge the two can differ by that much.
+47. **The stage's x and y offsets keep their x and y, unused.** Only their z tilts the stage;
+    the recorded x and y were reproduced without them.
+48. **The deck-frame moves are joint moves:** nothing models the chip racks, so they run only
+    with the path clear. With an xy speed the nozzle's path bows away from the straight line, by
+    tens of mm on long moves near the edge of reach.
+49. **No arm speed or acceleration limit is known.** The firmware refuses an illegal one in the
+    move's reply; it took a far faster arm command than the route profile's, which then failed on
+    its following error. Speeds in mm/s are scaled from the route profile only when given, untested
+    on a device.
+50. **The way out along an approach path is the path backwards, line for line,** as recorded
+    leaving a wash, and the move between the washes goes safe Z to safe Z, as recorded. A head
+    stopped between two lines of a path is not placed on it: it is in the open, and rises straight
+    up.

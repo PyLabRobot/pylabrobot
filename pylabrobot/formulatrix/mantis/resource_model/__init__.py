@@ -17,6 +17,16 @@ with open(os.path.join(os.path.dirname(__file__), "manifest.json"), encoding="ut
   # The device frame of ``manifest.json``: its size, base file and modules.
   MANIFEST: Dict[str, Any] = dict(json.load(f)["frames"]["Mantis"])
 
+# The main box's size, in mm, from the manufacturer's model: up to the top plate's surface.
+SIZE_X, SIZE_Y, SIZE_Z = MANIFEST["size"]
+# The plate holder on the deck: an SBS footprint pushed into the back-left of the pin nest, in mm.
+PLATE_HOLDER_LOCATION = Coordinate(23.62, 15.02, 0.0)
+PLATE_HOLDER_SIZE_X, PLATE_HOLDER_SIZE_Y = 127.76, 85.48
+# Where the right motor turns, x and y in the device frame, and the arm's height, in mm; the arm
+# frame is the device frame moved there and mirrored in y.
+ARM_BASE_X, ARM_BASE_Y = MANIFEST["joints"]["base_right"]
+ARM_Z = MANIFEST["joints"]["arm_z"]
+
 
 def _mesh(*, file: str) -> Dict[str, str]:
   """The ``mesh`` declaration for a model file in this folder."""
@@ -86,4 +96,18 @@ def arm_link(name: str, *, link: str) -> LinkBody:
   )
 
 
-__all__ = ["MANIFEST", "arm_link", "chip_rack", "z_column"]
+__all__ = [
+  "ARM_BASE_X",
+  "ARM_BASE_Y",
+  "ARM_Z",
+  "MANIFEST",
+  "PLATE_HOLDER_LOCATION",
+  "PLATE_HOLDER_SIZE_X",
+  "PLATE_HOLDER_SIZE_Y",
+  "SIZE_X",
+  "SIZE_Y",
+  "SIZE_Z",
+  "arm_link",
+  "chip_rack",
+  "z_column",
+]

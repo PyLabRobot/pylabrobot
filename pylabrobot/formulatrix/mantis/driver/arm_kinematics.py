@@ -143,7 +143,10 @@ def compute_elbow_positions(
 
 
 def compute_head_position(*, theta_1: float, theta_2: float) -> Tuple[float, float]:
-  """Where the head is for two link angles: forward kinematics, the solution of greater y.
+  """Where the head is for two link angles: forward kinematics.
+
+  Of the two solutions, the head's is the one left of the line from motor 0's elbow to motor 1's:
+  the recorded recoveries route from it in every zone recorded, the back zones included.
 
   Args:
     theta_1: motor 0's link angle, in degrees, the geometry's own.
@@ -168,14 +171,10 @@ def compute_head_position(*, theta_1: float, theta_2: float) -> Tuple[float, flo
   across = math.sqrt(max(0.0, RIGHT_LONG_ARM_LENGTH**2 - along**2))
   middle_x = first_x + along * (second_x - first_x) / distance
   middle_y = first_y + along * (second_y - first_y) / distance
-  solutions = [
-    (
-      middle_x + sign * across * (second_y - first_y) / distance,
-      middle_y - sign * across * (second_x - first_x) / distance,
-    )
-    for sign in (1.0, -1.0)
-  ]
-  return max(solutions, key=lambda solution: solution[1])
+  return (
+    middle_x - across * (second_y - first_y) / distance,
+    middle_y + across * (second_x - first_x) / distance,
+  )
 
 
 def compute_corrected_encoder_reading(

@@ -23,17 +23,21 @@ from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
 from .driver.simulator import MantisSimulationDriver
-from .resource_model import MANIFEST, arm_link, chip_rack, z_column
-
-# The main box's size, in mm, from the manufacturer's model: up to the top plate's surface.
-SIZE_X, SIZE_Y, SIZE_Z = MANIFEST["size"]
-# The plate holder on the deck: an SBS footprint pushed into the back-left of the pin nest, in mm.
-PLATE_HOLDER_LOCATION = Coordinate(23.62, 15.02, 0.0)
-PLATE_HOLDER_SIZE_X, PLATE_HOLDER_SIZE_Y = 127.76, 85.48
-# Where the right motor turns, x and y in the device frame, and the arm's height, in mm; the arm
-# frame is the device frame moved there and mirrored in y.
-ARM_BASE_X, ARM_BASE_Y = MANIFEST["joints"]["base_right"]
-ARM_Z = MANIFEST["joints"]["arm_z"]
+from .resource_model import (
+  ARM_BASE_X,
+  ARM_BASE_Y,
+  ARM_Z,
+  MANIFEST,
+  PLATE_HOLDER_LOCATION,
+  PLATE_HOLDER_SIZE_X,
+  PLATE_HOLDER_SIZE_Y,
+  SIZE_X,
+  SIZE_Y,
+  SIZE_Z,
+  arm_link,
+  chip_rack,
+  z_column,
+)
 
 
 class MantisDevice(Resource):
@@ -43,13 +47,17 @@ class MantisDevice(Resource):
   arm. The generation is read at setup (``driver.configuration.generation``).
   """
 
-  def _update_arm_model(self, *, theta_1: float, theta_2: float) -> None:
-    """Turn the arm's links to two link angles, the geometry's own, in degrees.
+  def _update_arm_model(self, *, theta_1: float, theta_2: float, z: float) -> None:
+    """Turn the arm's links to two link angles, the geometry's own, in degrees, and raise or lower
+    the Z column with the arm on it to a height.
 
     Args:
       theta_1: motor 0's link angle; with its offset, the angle the motor reads.
       theta_2: motor 1's link angle; with its offset, the angle the motor reads.
+      z: Z's height, in mm above its home flag, up positive.
     """
+    column_x, column_y, column_z = MANIFEST["modules"]["z_column"]["measured_at"]
+    self.z_column.location = Coordinate(x=column_x, y=column_y, z=column_z + z)
     right_elbow, left_elbow = compute_elbow_positions(theta_1=theta_1, theta_2=theta_2)
     head = compute_head_position(theta_1=theta_1, theta_2=theta_2)
     for side, base, elbow in (
@@ -164,7 +172,7 @@ class MantisDevice(Resource):
     self.assign_child_resource(self.right_chip_rack, location=measured_at["right_chip_rack"])
 
     # The Z column and the arm it carries, drawn at idle until setup reads where the arm is. The
-    # column is drawn where it stands with Z at 0: how far it travels with Z is not measured.
+    # column is drawn where it stands with Z at 0 and moves with Z, the arm on it.
     self.z_column = z_column(name=f"{name}_z_column")
     self.assign_child_resource(self.z_column, location=measured_at["z_column"])
     self.arm_links: Dict[str, LinkBody] = {}
@@ -184,7 +192,7 @@ class MantisDevice(Resource):
         location=short.distal_joint - long.proximal_joint + Coordinate(0.0, 0.0, above),
       )
       self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"] = short, long
-    self._update_arm_model(theta_1=0.0, theta_2=0.0)
+    self._update_arm_model(theta_1=0.0, theta_2=0.0, z=0.0)
 
   @property
   def plate_clamp(self) -> Optional[PlateClamp]:
@@ -219,9 +227,11 @@ class MantisDevice(Resource):
     """
     await self.driver.setup(skip_arm=skip_arm)
     arm = self.driver.arm
-    if arm is not None and arm.is_initialized:
-      theta_1, theta_2 = await arm.request_link_angles()
-      self._update_arm_model(theta_1=theta_1, theta_2=theta_2)
+    if arm is not None:
+      # Every move from here on passes where it ended to the model; the bring-up's is read here.
+      arm._pose_observer = self._update_arm_model
+      if arm.is_initialized:
+        await arm._report_pose()
 
   async def stop(self) -> None:
     """Stop the motors, park an arm brought up, release the clamp and disconnect."""
