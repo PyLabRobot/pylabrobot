@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.led\_bar.LedBar.\_\_init\_\_
+==========================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.led_bar
+
+.. automethod:: LedBar.__init__

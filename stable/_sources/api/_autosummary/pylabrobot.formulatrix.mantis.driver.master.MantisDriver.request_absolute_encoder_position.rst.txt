@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.master.MantisDriver.request\_absolute\_encoder\_position
+=============================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.master
+
+.. automethod:: MantisDriver.request_absolute_encoder_position

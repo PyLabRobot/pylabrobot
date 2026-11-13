@@ -1,0 +1,39 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationLedBar
+=====================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoclass:: MantisSimulationLedBar
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationLedBar.dispense_progress_color
+      ~MantisSimulationLedBar.error_color
+      ~MantisSimulationLedBar.setup_color
+      ~MantisSimulationLedBar.setup_done_color
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationLedBar.__init__
+      ~MantisSimulationLedBar.set_color
+      ~MantisSimulationLedBar.show_progress
+      ~MantisSimulationLedBar.start_animation
+      ~MantisSimulationLedBar.stop_animation
+      ~MantisSimulationLedBar.turn_off
+   
+   

@@ -64,7 +64,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.generation" href="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.generation.html" />
-    <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.features.rfid.Rfid.request_tags" href="pylabrobot.formulatrix.mantis.driver.features.rfid.Rfid.request_tags.html" />
+    <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.features.led_bar.LedBar.turn_off" href="pylabrobot.formulatrix.mantis.driver.features.led_bar.LedBar.turn_off.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
@@ -586,7 +586,7 @@
 <h1>pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration<a class="headerlink" href="#pylabrobot-formulatrix-mantis-driver-configuration-deviceconfiguration" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.formulatrix.mantis.driver.configuration.</span></span><span class="sig-name descname"><span class="pre">DeviceConfiguration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">generation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal['v3'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">'v4']</span> <span class="pre">|</span> <span class="pre">None</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">firmware_versions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict[int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">str</span> <span class="pre">|</span> <span class="pre">None]</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">motor_limits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict[int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">~typing.Tuple[float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">float]]</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.formulatrix.mantis.driver.configuration.</span></span><span class="sig-name descname"><span class="pre">DeviceConfiguration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">generation:</span> <span class="pre">~typing.Literal['v3',</span> <span class="pre">'v4']</span> <span class="pre">|</span> <span class="pre">None</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">firmware_versions:</span> <span class="pre">~typing.Dict[int,</span> <span class="pre">str</span> <span class="pre">|</span> <span class="pre">None]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">motor_limits:</span> <span class="pre">~typing.Dict[int,</span> <span class="pre">~typing.Tuple[float,</span> <span class="pre">float]]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">feedback_sensor_parameters:</span> <span class="pre">~typing.Dict[~typing.Literal['bottle',</span> <span class="pre">'chip',</span> <span class="pre">'vacuum'],</span> <span class="pre">~typing.Tuple[float,</span> <span class="pre">float]]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>What the device reported about itself.</p>
 <dl class="field-list simple">
@@ -596,6 +596,9 @@
 <li><p><strong>firmware_versions</strong> (<em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> | </em><em>None</em><em>]</em>) – each board’s firmware version, by board; None for a board that did not
 answer.</p></li>
 <li><p><strong>motor_limits</strong> (<em>Dict</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>Tuple</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>]</em>) – each motor’s (lower, upper) limit, by motor, in the device’s units.</p></li>
+<li><p><strong>feedback_sensor_parameters</strong> (<em>Dict</em><em>[</em><em>Literal</em><em>[</em><em>'bottle'</em><em>, </em><em>'chip'</em><em>, </em><em>'vacuum'</em><em>]</em><em>, </em><em>Tuple</em><em>[</em><em>float</em><em>, </em><em>float</em><em>]</em><em>]</em>) – each pressure controller’s feedback sensor (scale, offset), by
+controller name (<code class="docutils literal notranslate"><span class="pre">PRESSURE_CONTROLLERS</span></code>), not by its index as the motors are; as the
+pressure board holds them, empty without one. Read at every setup, never saved.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Parameters<span class="colon">:</span></dt>
@@ -603,6 +606,7 @@ answer.</p></li>
 <li><p><strong>generation</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><em>Literal</em></a><em>[</em><em>'v3'</em><em>, </em><em>'v4'</em><em>] </em><em>| </em><em>None</em>)</p></li>
 <li><p><strong>firmware_versions</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> | </em><em>None</em><em>]</em>)</p></li>
 <li><p><strong>motor_limits</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>feedback_sensor_parameters</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><em>Literal</em></a><em>[</em><em>'bottle'</em><em>, </em><em>'chip'</em><em>, </em><em>'vacuum'</em><em>]</em><em>, </em><em>~typing.Tuple</em><em>[</em><em>float</em><em>, </em><em>float</em><em>]</em><em>]</em>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -616,6 +620,9 @@ answer.</p></li>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.motor_limits.html#pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.motor_limits" title="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.motor_limits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">motor_limits</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.feedback_sensor_parameters.html#pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.feedback_sensor_parameters" title="pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration.feedback_sensor_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">feedback_sensor_parameters</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -645,12 +652,12 @@ answer.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.formulatrix.mantis.driver.features.rfid.Rfid.request_tags.html"
+       href="pylabrobot.formulatrix.mantis.driver.features.led_bar.LedBar.turn_off.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.features.rfid.Rfid.request_tags</p>
+        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.features.led_bar.LedBar.turn_off</p>
       </div>
     </a>
     <a class="right-next"

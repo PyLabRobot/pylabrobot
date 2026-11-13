@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.pump.Pump.request\_feedback\_sensor\_parameters
+=============================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.pump
+
+.. automethod:: Pump.request_feedback_sensor_parameters

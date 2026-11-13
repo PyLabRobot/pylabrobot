@@ -1,0 +1,29 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump
+===================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoclass:: MantisSimulationPump
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationPump.__init__
+      ~MantisSimulationPump.measure_pressure
+      ~MantisSimulationPump.request_controller_enabled
+      ~MantisSimulationPump.request_controller_status
+      ~MantisSimulationPump.request_feedback_sensor_parameters
+      ~MantisSimulationPump.request_pump_on
+   
+   

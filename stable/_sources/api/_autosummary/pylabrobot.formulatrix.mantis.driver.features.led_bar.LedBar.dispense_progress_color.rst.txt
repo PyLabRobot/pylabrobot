@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.led\_bar.LedBar.dispense\_progress\_color
+=======================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.led_bar
+
+.. autoproperty:: LedBar.dispense_progress_color

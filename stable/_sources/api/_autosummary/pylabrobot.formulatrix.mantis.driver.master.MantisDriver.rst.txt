@@ -28,8 +28,15 @@ pylabrobot.formulatrix.mantis.driver.master.MantisDriver
    
       ~MantisDriver.__init__
       ~MantisDriver.discover
+      ~MantisDriver.request_absolute_encoder_position
+      ~MantisDriver.request_encoder_position
       ~MantisDriver.request_firmware_version
+      ~MantisDriver.request_following_error_configuration
+      ~MantisDriver.request_motor_configuration
+      ~MantisDriver.request_motor_currents
       ~MantisDriver.request_motor_limits
+      ~MantisDriver.request_motor_position
+      ~MantisDriver.request_motor_status
       ~MantisDriver.request_name
       ~MantisDriver.save_configuration
       ~MantisDriver.setup

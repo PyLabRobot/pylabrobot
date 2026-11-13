@@ -798,7 +798,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="formulatrix-mantis">
 <h1>Formulatrix Mantis<a class="headerlink" href="#formulatrix-mantis" title="Link to this heading">#</a></h1>
-<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name and motor limits, locks and unlocks the plate clamp, and reads which chip sits in each input slot. Nothing else in this driver moves the device, switches the pump on or opens a valve.</p>
+<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4’s LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve.</p>
 <div class="plr-device-card" id="device-formulatrix-mantis">
   <div class="plr-device-card__head">
     <div>
@@ -829,7 +829,7 @@
 <td><p>v3 and v4, told apart at setup</p></td>
 </tr>
 <tr class="row-odd"><td><p>Reads</p></td>
-<td><p>firmware versions, device name, motor limits</p></td>
+<td><p>firmware versions, device name, motor limits and state, the arm’s absolute encoders (v4), line pressures and the pressure board’s state</p></td>
 </tr>
 <tr class="row-even"><td><p>Interface</p></td>
 <td><p>USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader</p></td>
@@ -840,11 +840,14 @@
 <tr class="row-even"><td><p>RFID</p></td>
 <td><p>the chip in each input slot: serial, chip type, date of manufacture</p></td>
 </tr>
-<tr class="row-odd"><td><p>Unit configuration</p></td>
+<tr class="row-odd"><td><p>LED bar (v4)</p></td>
+<td><p>one colour, one per LED, or an animation; shows setup, off at stop</p></td>
+</tr>
+<tr class="row-even"><td><p>Unit configuration</p></td>
 <td><p>the clamp’s lock levels and each slot’s RFID antenna, from the unit’s vendor folder or a saved file; else a recording of its generation</p></td>
 </tr>
-<tr class="row-even"><td><p>Not supported yet</p></td>
-<td><p>motion and the motor reads, pneumatics and the pressure reads, chips, dispensing</p></td>
+<tr class="row-odd"><td><p>Not supported yet</p></td>
+<td><p>motion, switching the pump or a pressure controller, chips, dispensing</p></td>
 </tr>
 </tbody>
 </table>
@@ -866,7 +869,7 @@
 <section id="unit-configuration">
 <h2>Unit configuration<a class="headerlink" href="#unit-configuration" title="Link to this heading">#</a></h2>
 <p>Some of a Mantis’s values are set per unit and cannot be read off the device; they sit in the <code class="docutils literal notranslate"><span class="pre">.config</span></code> files of its vendor install, in <code class="docutils literal notranslate"><span class="pre">Data/Device/Configs</span></code>. Give setup that folder once, then save the configuration: the saved file carries the unit’s values from then on, and the folder is no longer needed. So far these are the plate clamp’s lock levels and each input slot’s RFID antenna.</p>
-<p>Without them, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. Where the folder and a saved file both hold a value, they must agree, or setup refuses.</p>
+<p>Without them, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.formulatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mantis</span>
@@ -879,7 +882,7 @@
 </section>
 <section id="setup">
 <h2>Setup<a class="headerlink" href="#setup" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> opens both links, reads the firmware versions and the motor limits, takes the unit’s values and sets up the RFID reader. It does not move anything.</p>
+<p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> opens both links, reads the firmware versions, the motor limits and the pressure sensors’ calibration, takes the unit’s values and sets up the RFID reader. It does not move anything. On a v4 the LED bar shows the setup, green for a second at its end, then the idle animation.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
@@ -901,7 +904,7 @@
 </section>
 <section id="simulation">
 <h3>Simulation<a class="headerlink" href="#simulation" title="Link to this heading">#</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, and every declared RFID slot reads empty. The device name is not simulated.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. The device name is not simulated.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">simulated</span> <span class="o">=</span> <span class="n">Mantis</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"simulated_mantis"</span><span class="p">,</span> <span class="n">simulation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -967,6 +970,107 @@
 </div>
 </div>
 </div>
+<section id="motor-state">
+<h3>Motor state<a class="headerlink" href="#motor-state" title="Link to this heading">#</a></h3>
+<p>A motor’s status word; <code class="docutils literal notranslate"><span class="pre">MOTOR_STATUS_ERROR_BITS</span></code> names the bits that report a fault:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_motor_status</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Its demand position, where the controller drives it. It is not measured: it reads back the last position declared to the motor until the motor moves. Its servo encoder position counts only while the device is powered, from about 0 at power-on wherever the motor sits.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_motor_position</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_encoder_position</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Its following-error check (enabled, the largest following error), its three currents and its configuration, as the device sends them:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_following_error_configuration</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_motor_currents</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_motor_configuration</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="absolute-encoders-v4">
+<h3>Absolute encoders (v4)<a class="headerlink" href="#absolute-encoders-v4" title="Link to this heading">#</a></h3>
+<p>Board 11 reads the absolute encoder of each arm motor, 0 and 1, kept across power-off. The reading is raw, not yet an angle. Each motor’s first read after connecting is not valid; the driver reads again until one is.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">request_absolute_encoder_position</span><span class="p">(</span><span class="n">motor</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="pressure">
+<h2>Pressure<a class="headerlink" href="#pressure" title="Link to this heading">#</a></h2>
+<p>The pump exists only when the pressure board (board 10) answered at setup. Its three pressure controllers, <code class="docutils literal notranslate"><span class="pre">&quot;bottle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;chip&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;vacuum&quot;</span></code>, each regulate one line from a feedback sensor. Nothing here switches the pump or a controller on.</p>
+<p>Each sensor’s calibration, (scale, offset), as setup read it; it is never written nor saved. The offsets are re-zeroed on the device between sessions, so setup reads them every time:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">feedback_sensor_parameters</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>A line’s pressure, in psi; inHg on the vacuum:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">measure_pressure</span><span class="p">(</span><span class="n">controller</span><span class="o">=</span><span class="s2">"chip"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Whether the pump runs, whether a controller regulates, and its status: 0 off, 1 settled, 2 unsettled.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">request_pump_on</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">request_controller_enabled</span><span class="p">(</span><span class="n">controller</span><span class="o">=</span><span class="s2">"chip"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">request_controller_status</span><span class="p">(</span><span class="n">controller</span><span class="o">=</span><span class="s2">"chip"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
 </section>
 <section id="plate-clamp">
 <h2>Plate clamp<a class="headerlink" href="#plate-clamp" title="Link to this heading">#</a></h2>
@@ -1024,6 +1128,73 @@
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">rfid</span><span class="o">.</span><span class="n">request_tags</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="led-bar">
+<h2>LED bar<a class="headerlink" href="#led-bar" title="Link to this heading">#</a></h2>
+<p>The v4’s LED bar shows what the device does: blue while setup runs, green for a second when it is done, then the idle animation; off at stop. An action that fails leaves it red. It exists only on a v4 whose LC3 board (board 12) answered at setup; a v3 has none. Its LED count is the unit’s (<code class="docutils literal notranslate"><span class="pre">NumberOfLed</span></code> in <code class="docutils literal notranslate"><span class="pre">Device.config</span></code>), as declared:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">number_of_leds</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Show one colour on every LED: a name (<code class="docutils literal notranslate"><span class="pre">&quot;blue&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;green&quot;</span></code>, …), a web hex or an RGB565 value. Any animation stops first:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">"#FF0080"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Or one colour per LED, as many as it has:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="s2">"green"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">10</span> <span class="o">+</span> <span class="p">[</span><span class="s2">"off"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Each action’s colour is an attribute of the bar (<code class="docutils literal notranslate"><span class="pre">setup_color</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_done_color</span></code>, <code class="docutils literal notranslate"><span class="pre">error_color</span></code>, <code class="docutils literal notranslate"><span class="pre">dispense_progress_color</span></code>, …), checked when it is set; each bar has its own:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">setup_color</span> <span class="o">=</span> <span class="s2">"#FF0080"</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Show progress: a share of the LEDs from the left in <code class="docutils literal notranslate"><span class="pre">dispense_progress_color</span></code>, the rest off. Each frame holds the link about 62 ms, so show at most one per LED in an action:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">show_progress</span><span class="p">(</span><span class="n">done</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Play the idle animation, <code class="docutils literal notranslate"><span class="pre">&quot;wave&quot;</span></code>, repeating:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">start_animation</span><span class="p">(</span><span class="n">effect</span><span class="o">=</span><span class="s2">"wave"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Stop it; the bar holds what it shows:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">stop_animation</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Turn every LED off. <code class="docutils literal notranslate"><span class="pre">Mantis(show_actions=False)</span></code> shows no action’s colour, only the idle animation from setup on.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">turn_off</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1102,9 +1273,15 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#visualizer">Visualizer</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#firmware-versions">Firmware versions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#name">Name</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#motors">Motors</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#motors">Motors</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#motor-state">Motor state</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#absolute-encoders-v4">Absolute encoders (v4)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pressure">Pressure</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-clamp">Plate clamp</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rfid">RFID</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#led-bar">LED bar</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stop">Stop</a></li>
 </ul>
   </nav></div>

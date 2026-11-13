@@ -590,8 +590,10 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.stop">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisDriver.</span></span><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.master.MantisDriver.stop" title="Link to this definition">#</a></dt>
-<dd><p>Fail the command in flight and every event waiter, release the plate clamp, stop reading
-the link and close it. Each step runs whether or not the one before it succeeded.</p>
+<dd><p>Fail the command in flight and every event waiter, release the plate clamp, turn the LED
+bar off, stop reading the link and close it.</p>
+<p>Each step runs whether or not the one before it succeeded. After reading the link failed,
+nothing is sent: the link is closed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>None</p>

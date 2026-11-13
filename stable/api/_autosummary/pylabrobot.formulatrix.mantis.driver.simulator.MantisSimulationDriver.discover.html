@@ -63,7 +63,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version.html" />
+    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_absolute_encoder_position" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_absolute_encoder_position.html" />
     <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.__init__" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.__init__.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
@@ -591,8 +591,10 @@
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.discover">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisSimulationDriver.</span></span><span class="sig-name descname"><span class="pre">discover</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.discover" title="Link to this definition">#</a></dt>
 <dd><p>Read the configuration into <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, check it against the declared one, then
-build the features it lists, and the RFID reader if it answers on interface A.</p>
-<p>The reader is set up again after every opening of the link; one that fails is absent.</p>
+build the features it lists, read the pump’s sensor calibration into <code class="docutils literal notranslate"><span class="pre">configuration</span></code>, and
+build the RFID reader if it answers on interface A.</p>
+<p>The reader is set up again after every opening of the link; one that fails is absent. A
+calibration the pressure board does not answer is left empty.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – if the device does not match the declared configuration, the
@@ -626,11 +628,11 @@ build the features it lists, and the RFID reader if it answers on interface A.</
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version.html"
+       href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_absolute_encoder_position.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version</p>
+        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_absolute_encoder_position</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

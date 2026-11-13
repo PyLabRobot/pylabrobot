@@ -1,0 +1,39 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.led\_bar.LedBar
+=============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.led_bar
+
+.. autoclass:: LedBar
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LedBar.dispense_progress_color
+      ~LedBar.error_color
+      ~LedBar.setup_color
+      ~LedBar.setup_done_color
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LedBar.__init__
+      ~LedBar.set_color
+      ~LedBar.show_progress
+      ~LedBar.start_animation
+      ~LedBar.stop_animation
+      ~LedBar.turn_off
+   
+   
