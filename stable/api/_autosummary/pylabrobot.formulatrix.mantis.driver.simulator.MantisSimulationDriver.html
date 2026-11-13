@@ -595,7 +595,8 @@ at once, every RFID slot reads empty, and the LED bar takes every command and ho
 motors read idle at 0, as after power-on. The device name and the motor reads the configuration
 does not hold are not simulated.</p>
 <p>The sequencer holds <code class="docutils literal notranslate"><span class="pre">SEQUENCER_QUEUE_SIZE</span></code> items, stopped and empty after setup; started, it
-plays each item at once. Stop and abort keep what is queued, as on a v4; only a clear drops it.</p>
+plays each item at once. Stop and abort keep what is queued, as on a v4; only a clear drops it.
+The arm (<code class="docutils literal notranslate"><span class="pre">MantisSimulationArm</span></code>) moves at once; its motors read where it stands.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
@@ -621,7 +622,7 @@ plays each item at once. Stop and abort keep what is queued, as on a v4; only a 
 <td><p>Raise: a raw reading means nothing without the unit's encoder correction.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_encoder_position.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_encoder_position" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_encoder_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_encoder_position</span></code></a>(*, motor)</p></td>
-<td><p>0, as after power-on.</p></td>
+<td><p>Where the simulated arm's motor is: where its controller holds it; 0 without one, as after power-on.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_firmware_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_firmware_version</span></code></a>(*[, board])</p></td>
 <td><p>The declared firmware version of a board.</p></td>
@@ -639,10 +640,10 @@ plays each item at once. Stop and abort keep what is queued, as on a v4; only a 
 <td><p>A motor's declared (lower, upper) limit.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_motor_position.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_motor_position" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_motor_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_motor_position</span></code></a>(*, motor)</p></td>
-<td><p>0, as after power-on.</p></td>
+<td><p>Where the simulated arm's controller holds the motor; 0 without one, as after power-on.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_motor_status.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_motor_status" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_motor_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_motor_status</span></code></a>(*, motor)</p></td>
-<td><p>0: idle, no fault, as after power-on.</p></td>
+<td><p>Idle, no fault; Z homed once the simulated arm homed it.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_name.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_name" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.request_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_name</span></code></a>()</p></td>
 <td><p>Raise: the name is not part of the configuration.</p></td>
@@ -650,11 +651,11 @@ plays each item at once. Stop and abort keep what is queued, as on a v4; only a 
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.save_configuration.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.save_configuration" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.save_configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_configuration</span></code></a>(path[, indent])</p></td>
 <td><p>Write what this device reported to a file, to be declared later (<code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), with the unit's blocks; none taken from a recording.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
-<td><p>Open the link if it is not open, read the device's configuration and check it.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>(*[, skip_arm])</p></td>
+<td><p>Open the link if it is not open, read the device's configuration and check it, then bring the arm and Z up on a v4 (<code class="docutils literal notranslate"><span class="pre">Arm.initialize</span></code>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.stop.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.stop" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDriver.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
-<td><p>Fail the command in flight and every event waiter, release the plate clamp, turn the LED bar off, stop reading the link and close it.</p></td>
+<td><p>Fail the command in flight and every event waiter; on a v4, abort the sequencer, stop the motors and park an arm brought up; release the plate clamp, turn the LED bar off, stop reading the link and close it.</p></td>
 </tr>
 </tbody>
 </table>

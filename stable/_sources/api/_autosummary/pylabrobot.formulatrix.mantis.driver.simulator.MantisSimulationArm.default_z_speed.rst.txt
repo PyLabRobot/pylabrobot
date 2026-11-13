@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm.default\_z\_speed
+====================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoproperty:: MantisSimulationArm.default_z_speed

@@ -643,11 +643,11 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.save_configuration.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver.save_configuration" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.save_configuration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_configuration</span></code></a>(path[, indent])</p></td>
 <td><p>Write what this device reported to a file, to be declared later (<code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), with the unit's blocks; none taken from a recording.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.setup.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver.setup" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>()</p></td>
-<td><p>Open the link if it is not open, read the device's configuration and check it.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.setup.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver.setup" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.setup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setup</span></code></a>(*[, skip_arm])</p></td>
+<td><p>Open the link if it is not open, read the device's configuration and check it, then bring the arm and Z up on a v4 (<code class="docutils literal notranslate"><span class="pre">Arm.initialize</span></code>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.stop.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver.stop" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a>()</p></td>
-<td><p>Fail the command in flight and every event waiter, release the plate clamp, turn the LED bar off, stop reading the link and close it.</p></td>
+<td><p>Fail the command in flight and every event waiter; on a v4, abort the sequencer, stop the motors and park an arm brought up; release the plate clamp, turn the LED bar off, stop reading the link and close it.</p></td>
 </tr>
 </tbody>
 </table>

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.Arm.request\_head\_position
+=============================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. automethod:: Arm.request_head_position

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm.request\_link\_angles
+========================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. automethod:: MantisSimulationArm.request_link_angles
