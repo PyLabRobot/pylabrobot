@@ -16,8 +16,10 @@ service names in `DeviceInfo.services`.
 | Optional complete images | [images.proto](v1/images.proto) | `ImageBackend`, `ImageService`, `ImageClient` |
 
 The [Celigo service](../revvity/celigo/grpc/README.md) composes all three with its
-own operation service. A pump can compose device/status and jobs without any
-image API, codecs, image quota, or Celigo imports. There is no universal command
+own operation service. The [VSpin service](../agilent/vspin/grpc/README.md) composes
+device/status and jobs for initialization and centrifuge runs. A pump can compose
+device/status and jobs without any image API, codecs, image quota, or Celigo
+imports. There is no universal command
 dictionary or shared hardware executor.
 
 ## Installation and connection
