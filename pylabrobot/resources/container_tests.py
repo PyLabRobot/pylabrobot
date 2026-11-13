@@ -6,6 +6,11 @@ from pylabrobot.serializer import serialize
 
 from .container import Container
 from .coordinate import Coordinate
+from .petri_dish import PetriDish
+from .trash import Trash
+from .trough import Trough, TroughBottomType
+from .tube import Tube, TubeBottomType
+from .well import CrossSectionType, Well, WellBottomType
 
 
 class TestContainer(unittest.TestCase):
@@ -37,6 +42,7 @@ class TestContainer(unittest.TestCase):
         "type": "Container",
         "material_z_thickness": 1,
         "max_volume": 1000,
+        "nominal_volume": 1000,
         "compute_volume_from_height": serialize(compute_volume_from_height),
         "compute_height_from_volume": serialize(compute_height_from_volume),
         "height_volume_data": None,
@@ -219,6 +225,164 @@ class TestContainer(unittest.TestCase):
     c.tracker.commit()
     self.assertGreaterEqual(len(received), 2)  # at least set_volume and remove_liquid fired
     self.assertEqual(c.tracker.get_used_volume(), 400)
+
+  def test_nominal_volume(self):
+    c = Container(name="c", size_x=10, size_y=10, size_z=10, max_volume=1000, nominal_volume=800)
+    self.assertEqual(c.nominal_volume, 800)
+    self.assertEqual(c.max_volume, 1000)
+    self.assertEqual(Container.deserialize(c.serialize()).nominal_volume, 800)
+
+  def test_nominal_volume_defaults_to_max_volume(self):
+    """An unspecified nominal_volume falls back to max_volume (the physical capacity)."""
+    c = Container(name="c", size_x=10, size_y=10, size_z=10, max_volume=1000)
+    self.assertEqual(c.nominal_volume, 1000)
+
+  def test_deserialize_legacy_without_nominal_volume(self):
+    """A payload predating nominal_volume deserializes, falling back to max_volume."""
+    legacy = Container(name="c", size_x=10, size_y=10, size_z=10, max_volume=1000).serialize()
+    del legacy["nominal_volume"]
+    self.assertEqual(Container.deserialize(legacy).nominal_volume, 1000)
+
+  def test_positional_constructor_arguments(self):
+    """Positional arguments keep their bindings when nominal_volume is omitted."""
+
+    def compute_volume_from_height(height):
+      return height * 20
+
+    def compute_height_from_volume(volume):
+      return volume / 20
+
+    height_volume_data = {0: 0, 10: 1000}
+    zones = [(Coordinate(0, 0, 0), Coordinate(1, 1, 1))]
+    constructors = [
+      (
+        Container,
+        (
+          "container",
+          10,
+          10,
+          10,
+          1,
+          1000,
+          "custom",
+          "model",
+          compute_volume_from_height,
+          compute_height_from_volume,
+          height_volume_data,
+          zones,
+          {"source": "positional"},
+        ),
+      ),
+      (
+        Well,
+        (
+          "well",
+          10,
+          10,
+          10,
+          1,
+          WellBottomType.FLAT,
+          "custom",
+          "model",
+          1000,
+          compute_volume_from_height,
+          compute_height_from_volume,
+          CrossSectionType.RECTANGLE,
+          height_volume_data,
+          zones,
+        ),
+      ),
+      (
+        Tube,
+        (
+          "tube",
+          10,
+          10,
+          10,
+          1000,
+          1,
+          "custom",
+          "model",
+          TubeBottomType.FLAT,
+          compute_volume_from_height,
+          compute_height_from_volume,
+          height_volume_data,
+          zones,
+        ),
+      ),
+      (
+        Trough,
+        (
+          "trough",
+          10,
+          10,
+          10,
+          1000,
+          1,
+          2,
+          "custom",
+          "model",
+          TroughBottomType.FLAT,
+          compute_volume_from_height,
+          compute_height_from_volume,
+          height_volume_data,
+          zones,
+        ),
+      ),
+      (
+        PetriDish,
+        (
+          "petri_dish",
+          10,
+          10,
+          1,
+          "custom",
+          "model",
+          1000,
+          compute_volume_from_height,
+          compute_height_from_volume,
+          height_volume_data,
+          zones,
+        ),
+      ),
+      (
+        Trash,
+        (
+          "trash",
+          10,
+          10,
+          10,
+          1,
+          1000,
+          "custom",
+          "model",
+          compute_volume_from_height,
+          compute_height_from_volume,
+          height_volume_data,
+          zones,
+        ),
+      ),
+    ]
+    for container_type, args in constructors:
+      with self.subTest(container_type=container_type.__name__):
+        c = container_type(*args)
+        self.assertEqual(c.max_volume, 1000)
+        self.assertEqual(c.nominal_volume, 1000)
+        self.assertEqual(c.material_z_thickness, 1)
+        self.assertEqual(c.category, "custom")
+        self.assertEqual(c.model, "model")
+        self.assertEqual(c.compute_volume_from_height(5), 100)
+        self.assertEqual(c.compute_height_from_volume(100), 5)
+        self.assertEqual(c.height_volume_data, height_volume_data)
+        self.assertEqual(c.no_go_zones, zones)
+        if isinstance(c, Well):
+          self.assertEqual(c.bottom_type, WellBottomType.FLAT)
+          self.assertEqual(c.cross_section_type, CrossSectionType.RECTANGLE)
+        if isinstance(c, Trough):
+          self.assertEqual(c.bottom_type, TroughBottomType.FLAT)
+          self.assertEqual(c.through_base_to_container_base, 2)
+        if container_type is Container:
+          self.assertEqual(c.metadata, {"source": "positional"})
 
 
 class TestNoGoZoneCollision(unittest.TestCase):

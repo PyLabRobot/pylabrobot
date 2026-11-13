@@ -267,6 +267,7 @@ def nest_96_wellplate_200uL_Fb(name: str) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
       bottom_type=WellBottomType.FLAT,
       max_volume=372.4,  # computed from spec (brim-full, the last height_volume_data point)
+      nominal_volume=200,  # from spec (recommended medium volume 0.1-0.2 mL)
       height_volume_data=_nest_96_wellplate_200uL_Fb_height_volume_data,
       name_prefix=name,
     ),
