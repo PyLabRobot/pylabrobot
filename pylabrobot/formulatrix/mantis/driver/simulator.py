@@ -1,5 +1,6 @@
 """A simulated Mantis: the driver with no device behind it, answering from its configuration."""
 
+import dataclasses
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -14,7 +15,7 @@ from .configuration import (
   read_configuration,
 )
 from .errors import MantisConfigurationError, MantisTimeoutError
-from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm
+from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm, MantisArmConfiguration
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
@@ -139,27 +140,17 @@ class MantisSimulationArm(Arm):
   power-on. Without a declared ``arm`` block its offsets are 0.
   """
 
-  def __init__(
-    self,
-    *,
-    driver: "MantisSimulationDriver",
-    offsets: Optional[Dict[int, float]],
-    homing_position_a: Optional[Dict[int, float]],
-    encoder_correction: Optional[Dict[int, List[Tuple[float, float]]]],
-  ):
+  def __init__(self, *, driver: "MantisSimulationDriver", configuration: MantisArmConfiguration):
     """
     Args:
       driver: the simulated driver.
-      offsets: each arm motor's offset, as for ``Arm``; None takes 0.
-      homing_position_a: as for ``Arm``; unused.
-      encoder_correction: as for ``Arm``; unused.
+      configuration: as for ``Arm``; without offsets each takes 0.
     """
-    super().__init__(
-      driver=driver,
-      offsets=offsets if offsets is not None else {motor: 0.0 for motor in ARM_MOTORS},
-      homing_position_a=homing_position_a,
-      encoder_correction=encoder_correction,
-    )
+    if configuration.offsets is None:
+      configuration = dataclasses.replace(
+        configuration, offsets={motor: 0.0 for motor in ARM_MOTORS}
+      )
+    super().__init__(driver=driver, configuration=configuration)
     self._positions: Dict[int, float] = {0: 0.0, 1: 0.0, Z_MOTOR: 0.0}
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
     self._z_homed = False
@@ -202,9 +193,10 @@ class MantisSimulationArm(Arm):
 
   async def _unchecked_fw_move_absolute(
     self, *, motor: int, position: float, speed: float, acceleration: float
-  ) -> None:
-    """Move the motor there at once."""
+  ) -> int:
+    """Move the motor there at once; answer no error."""
     self._set_position(motor=motor, position=position)
+    return 0
 
   async def _unchecked_fw_stop(self, *, motor: int, deceleration: float) -> None:
     """Stop nothing: a simulated motor is never moving."""
@@ -275,6 +267,7 @@ class MantisSimulationDriver(MantisDriver):
       show_actions=show_actions,
     )
     self._queued_items: List[int] = []
+    self._simulated_motor_limits: Dict[int, Tuple[float, float]] = {}
     self._queued_moves: Dict[int, List[Tuple[float, float, float]]] = {}
     self._sequencer_started = False
 
@@ -321,9 +314,9 @@ class MantisSimulationDriver(MantisDriver):
     raise NotImplementedError(f"{self.name}: the device name is not simulated")
 
   async def request_motor_limits(self, *, motor: int) -> Tuple[float, float]:
-    """A motor's declared (lower, upper) limit."""
+    """A motor's (lower, upper) limit as its generation's recording holds it."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
-    return self.configuration.motor_limits[motor]
+    return self._simulated_motor_limits[motor]
 
   async def request_motor_currents(self, *, motor: int) -> Tuple[float, float, float]:
     """Raise: the currents are not part of the configuration."""
@@ -439,15 +432,25 @@ class MantisSimulationDriver(MantisDriver):
     values, _ = self._load_unit_values(generation=generation)
     configuration = configuration_from_json(fields=values["device"])
     configuration.generation = generation
+    recording = RECORDING_MANTIS_V4 if generation == "v4" else RECORDING_MANTIS_V3
+    self._simulated_motor_limits = {
+      int(motor): (float(lower), float(upper))
+      for motor, (lower, upper) in read_configuration(path=recording)["device"]
+      .get("motor_limits", {})
+      .items()
+    }
     return configuration
 
-  def _discover_features(self) -> None:
+  def _discover_features(self, *, motor_limits: Dict[int, Tuple[float, float]]) -> None:
     """Build the features as a device would, simulated, and the RFID reader.
+
+    Args:
+      motor_limits: as for ``MantisDriver``.
 
     Raises:
       MantisConfigurationError: if a declared block is malformed.
     """
-    super()._discover_features()
+    super()._discover_features(motor_limits=motor_limits)
     if self.plate_clamp is not None and not isinstance(
       self.plate_clamp, MantisSimulationPlateClamp
     ):
@@ -461,12 +464,7 @@ class MantisSimulationDriver(MantisDriver):
         show_actions=self.led_bar.show_actions,
       )
     if self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
-      self.arm = MantisSimulationArm(
-        driver=self,
-        offsets=self.arm.offsets,
-        homing_position_a=self.arm.homing_position_a,
-        encoder_correction=self.arm.encoder_correction,
-      )
+      self.arm = MantisSimulationArm(driver=self, configuration=self.arm.configuration)
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")
       slot_to_antenna: Optional[Dict[int, int]] = None

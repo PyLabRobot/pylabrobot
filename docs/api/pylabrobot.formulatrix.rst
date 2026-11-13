@@ -22,6 +22,8 @@ Mantis
    driver.simulator.MantisSimulationLedBar
    driver.features.arm.Arm
    driver.arm_kinematics
+   driver.stage_transform
+   driver.sequence_files
    driver.features.plate_clamp.PlateClamp
    driver.features.pump.Pump
    driver.features.rfid.Rfid

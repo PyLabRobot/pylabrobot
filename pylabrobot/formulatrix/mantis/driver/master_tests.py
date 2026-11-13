@@ -293,9 +293,14 @@ class SetupTests(DriverTestCase):
       DeviceConfiguration(
         generation="v4",
         firmware_versions={0: "4.20.6.2", 10: "1.0.8", 11: "0.1.7 DBG", 12: "0.1.8 DBG"},
-        motor_limits={0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
         feedback_sensor_parameters=RECORDED_CALIBRATION,
       ),
+    )
+    # The motor limits are the arm's, read for it.
+    assert driver.arm is not None
+    self.assertEqual(
+      driver.arm.configuration.motor_limits,
+      {0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
     )
 
   async def test_only_board_0_must_answer_and_each_other_board_is_asked_once(self):
