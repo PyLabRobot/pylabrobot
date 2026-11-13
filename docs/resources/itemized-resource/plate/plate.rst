@@ -39,7 +39,7 @@ This standard is similar to the `Opentrons API labware naming standard <https://
 Lids
 ----
 
-Plates can optionally have a lid, which will also be a child of the :class:`~pylabrobot.resources.plate.Plate` class. The lid is modelled by the ``Lid`` class.
+Plates can optionally have a lid, which will also be a child of the :class:`~pylabrobot.resources.plate.Plate` class. The lid is modelled by the ``Lid`` class; see the :doc:`Lid guide </resources/lid/lid>`.
 
 ----
 
