@@ -29,7 +29,7 @@ from pylabrobot.io.usb import USB
 
 from .configuration import (
   BARCODE_READER_POSITIONS,
-  DECODED_FIRMWARE,
+  FIRMWARE_1_RANGE,
   FITTED_FIELDS,
   DeviceConfiguration,
   configuration_to_json,
@@ -563,7 +563,7 @@ class CLARIOstarDriver:
     """A stored parameters reply's values, by key (see ``PARAMETER_TABLE``).
 
     Raises:
-      ValueError: if the reply comes from firmware outside ``DECODED_FIRMWARE``.
+      ValueError: if the reply comes from firmware outside ``FIRMWARE_1_RANGE``.
     """
     parameters = {
       name: int.from_bytes(
@@ -573,7 +573,7 @@ class CLARIOstarDriver:
       )
       for name, address, size in PARAMETER_TABLE
     }
-    if not DECODED_FIRMWARE[0] <= parameters["firmware_version"] <= DECODED_FIRMWARE[1]:
+    if not FIRMWARE_1_RANGE[0] <= parameters["firmware_version"] <= FIRMWARE_1_RANGE[1]:
       raise ValueError(
         f"stored parameters of firmware {parameters['firmware_version']} are not decoded"
       )
@@ -604,7 +604,7 @@ class CLARIOstarDriver:
 
     Raises:
       ValueError: if the reply is not a whole stored parameters reply, or comes from firmware
-        outside ``DECODED_FIRMWARE``.
+        outside ``FIRMWARE_1_RANGE``.
     """
     return self._decode_parameters(await self._request_parameters_reply())
 

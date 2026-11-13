@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 INIT_REPLY_TYPE = 0x13
 
-# The firmware whose replies are decoded, as (lowest, highest) firmware number x 1000: the 1.x line.
-# Older firmware is untested; 2.x (the line with native USB) lays its replies out unseen.
-DECODED_FIRMWARE = (1300, 1999)
+# The 1.x firmware whose replies are read, as (lowest, highest) firmware number x 1000. Older
+# firmware is untested; 2.x (the line with native USB) lays its replies out differently.
+FIRMWARE_1_RANGE = (1300, 1999)
 
 _BARCODE_READER_TYPES = {0: "SE 923", 1: "CSE 600", 2: "SE 955", 3: "SE 965"}
 BARCODE_READER_POSITIONS = ("front", "right", "optional 1", "optional 2")
@@ -218,7 +218,7 @@ class DeviceConfiguration:
 
     Raises:
       ValueError: if the payload is not a whole INIT reply, or comes from firmware outside
-        `DECODED_FIRMWARE`; the main board fields are filled either way.
+        `FIRMWARE_1_RANGE`; the main board fields are filled either way.
     """
     blocks = dict(_blocks(payload))
     main_board = _block(blocks, 0x01, 5)
@@ -227,7 +227,7 @@ class DeviceConfiguration:
     self.firmware_build = main_board[2]
     self.mainboard_revision = main_board[4]
     self.model = "CLARIOstarPlus" if main_board[4] >= 2 else "CLARIOstar"
-    if not DECODED_FIRMWARE[0] <= firmware <= DECODED_FIRMWARE[1]:
+    if not FIRMWARE_1_RANGE[0] <= firmware <= FIRMWARE_1_RANGE[1]:
       raise ValueError(f"INIT reply of firmware {self.firmware_version} is not decoded here")
     for update in (
       self._update_from_detectors,
