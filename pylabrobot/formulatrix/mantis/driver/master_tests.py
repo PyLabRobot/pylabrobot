@@ -10,12 +10,19 @@ from typing import Dict, List, Optional, Tuple
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
+from pylabrobot.formulatrix.mantis.driver import master as master_module
 from pylabrobot.formulatrix.mantis.driver.configuration import DeviceConfiguration
 from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisConfigurationError,
   MantisConnectionLostError,
+  MantisMotionError,
   MantisNotConnectedError,
   MantisTimeoutError,
+)
+from pylabrobot.formulatrix.mantis.driver.events import (
+  MOVE_DONE_EVENT,
+  SEQUENCE_STOPPED_EVENT,
+  decode_sequence_stopped,
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
 from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
@@ -103,6 +110,49 @@ RECORDED_CALIBRATION: Dict[PressureController, Tuple[float, float]] = {
   "chip": (0.010661732405424118, -13.671295166015625),
   "vacuum": (0.010320834815502167, -38.775638580322266),
 }
+# The sequencer's replies, by (board, command, request payload), as hex: clear, start, stop and
+# abort, and queue writes to address 40 of item 1 (a hold of 10) and items 3 to 5 (holds of 500).
+RECORDED_SEQUENCER_REPLIES: Dict[Tuple[int, int, str], str] = {
+  (0, 61, ""): "0000",
+  (0, 62, ""): "0000",
+  (0, 63, ""): "0000",
+  (0, 64, ""): "0000",
+  (0, 65, "01000a00280001001f00"): "c7000000",
+  (0, 65, "0300f401280001000000"): "c7000000",
+  (0, 65, "0400f401280001000000"): "c7000000",
+  (0, 65, "0500f401280001000000"): "c6000000",
+}
+# A clear that answered 8.
+RECORDED_CLEAR_REPLY_8 = "0800"
+# Item 1 reported played, sent with the reply that queued it.
+RECORDED_ITEM_1_PLAYED = "12000000100100000000100301000000c800db02"
+# Items 3, 4 and 5 reported played, 0.5 s apart after their replies.
+RECORDED_ITEMS_3_TO_5_PLAYED = [
+  "120000002d0100000000100303000200c600e802",
+  "120000002d0100000000100304000100c700ed02",
+  "120000002d0100000000100305000000c800e202",
+]
+# Queue writes of one hold at address 40, items 368 to 373, and their replies: the queue was full
+# until item 373.
+RECORDED_QUEUE_FULL_REPLIES: Dict[str, str] = {
+  "70010100280001001b00": "ffff0000",
+  "71010100280001001b00": "ffff0000",
+  "72010100280001001b00": "ffff0000",
+  "73010100280001001b00": "ffff0000",
+  "74010100280001001b00": "ffff0000",
+  "75010100280001001b00": "01000000",
+}
+# The sequencer reported stopped, after a stop and after an abort.
+RECORDED_STOPPED_AFTER_STOP = "100000002244000000001103363200001575"
+RECORDED_STOPPED_AFTER_ABORT = "100000004f0d0000000011030c000000420e"
+# Motor 0 reported error 9, the sequencer stopped, then the move ended.
+RECORDED_MOTOR_ERROR_EVENTS = [
+  "10000000c85f00000000030200000900d25d",
+  "10000000c85f000000001103d9310000106d",
+  "28000000c85f00000000010200000001000000a08ac75740000000000000000000000000000000003c7b",
+]
+# A frame with code 0x7FFF and no payload, sent instead of a reply.
+RECORDED_CODE_7FFF_FRAME = "0c000000000000000000ff7ff37f"
 # Motor 0's absolute encoder after connecting: its first read not valid, the next valid.
 ABSOLUTE_ENCODER_REPLIES_AFTER_POWER_ON = ["00000000000000000000", "010000000000f43f6740"]
 # The link reader's failure when the USB cable was pulled from a Mantis v4, through D2XX.
@@ -154,17 +204,19 @@ class FakeReader:
 
 
 class FakeLink:
-  """Answers each frame written with its recorded reply, echoing packet number and board. A list
-  of replies is played in order and its last reply repeats. An antenna switch selects
-  ``reader``'s antenna."""
+  """Answers each frame written with its recorded reply, echoing packet number and board, then
+  with the event frames recorded after it, if any. A list of replies is played in order and its
+  last reply repeats. An antenna switch selects ``reader``'s antenna."""
 
   def __init__(
     self,
     answers: Dict[Tuple[int, int, bytes], List[bytes]],
     *,
     reader: Optional[FakeReader] = None,
+    events: Optional[Dict[Tuple[int, int, bytes], List[bytes]]] = None,
   ):
     self.answers = answers
+    self.events = events or {}
     self.reader = reader or FakeReader()
     self.written: List[bytes] = []
     self.incoming = bytearray()
@@ -184,6 +236,8 @@ class FakeLink:
       self.incoming.extend(
         build_frame(packet_number=packet_number, board=board, command=0, payload=reply)
       )
+      for event in self.events.get((board, command, payload), []):
+        self.incoming.extend(event)
     return len(data)
 
   async def read(self, num_bytes: int = 1) -> bytes:
@@ -494,6 +548,179 @@ class MotorReadTests(DriverTestCase):
     with self.assertRaisesRegex(MantisTimeoutError, "no valid position in 5 reads"):
       await self.driver.request_absolute_encoder_position(motor=1)
     self.assertEqual(len(self.link.written) - sent_before, ABSOLUTE_ENCODER_READS)
+
+
+class SequencerTests(DriverTestCase):
+  async def asyncSetUp(self):
+    answers = make_answers()
+    for (board, command, request), reply in RECORDED_SEQUENCER_REPLIES.items():
+      answers[(board, command, bytes.fromhex(request))] = [bytes.fromhex(reply)]
+    for request, reply in RECORDED_QUEUE_FULL_REPLIES.items():
+      answers[(0, 65, bytes.fromhex(request))] = [bytes.fromhex(reply)]
+    self.link = FakeLink(
+      answers=answers,
+      events={
+        (0, 65, bytes.fromhex("01000a00280001001f00")): [bytes.fromhex(RECORDED_ITEM_1_PLAYED)],
+        (0, 63, b""): [bytes.fromhex(RECORDED_STOPPED_AFTER_STOP)],
+        (0, 64, b""): [bytes.fromhex(RECORDED_STOPPED_AFTER_ABORT)],
+      },
+    )
+    self.driver = await self.set_up_driver(link=self.link)
+
+  def sent_since(self, count: int) -> List[Tuple[int, int, bytes]]:
+    return [parse_frame(frame=frame)[1:] for frame in self.link.written[count:]]
+
+  async def test_sequencer_commands_are_sent_once_and_return_their_reply(self):
+    driver = self.driver
+    cases = [
+      (61, driver._unchecked_fw_clear_sequencer),
+      (62, driver._unchecked_fw_start_sequencer),
+      (63, driver._unchecked_fw_stop_sequencer),
+      (64, driver._unchecked_fw_abort_sequencer),
+    ]
+    for command, send in cases:
+      with self.subTest(command=command):
+        sent_before = len(self.link.written)
+        self.assertEqual(await send(), 0)
+        self.assertEqual(self.sent_since(sent_before), [(0, command, b"")])
+
+  async def test_clear_returns_the_word_it_answers(self):
+    self.link.answers[(0, 61, b"")] = [bytes.fromhex(RECORDED_CLEAR_REPLY_8)]
+    self.assertEqual(await self.driver._unchecked_fw_clear_sequencer(), 8)
+
+  async def test_unanswered_start_is_not_resent(self):
+    del self.link.answers[(0, 62, b"")]
+    sent_before = len(self.link.written)
+    with self.assertRaises(MantisTimeoutError):
+      await self.driver._unchecked_fw_start_sequencer()
+    self.assertEqual(self.sent_since(sent_before), [(0, 62, b"")])
+
+  async def test_stop_and_abort_are_followed_by_the_stopped_event(self):
+    driver = self.driver
+    cases = [
+      (driver._unchecked_fw_stop_sequencer, (0x3236, 0)),
+      (driver._unchecked_fw_abort_sequencer, (12, 0)),
+    ]
+    for send, expected in cases:
+      with self.subTest(expected=expected):
+        waiter = driver._expect_event(board=0, code=SEQUENCE_STOPPED_EVENT)
+        await send()
+        payload = await driver._wait_for_event(waiter=waiter, timeout=1.0)
+        self.assertEqual(decode_sequence_stopped(payload=payload), expected)
+
+  async def test_item_played_with_its_reply_is_not_missed(self):
+    driver = self.driver
+    await driver._unchecked_fw_clear_sequencer()
+    await driver._unchecked_fw_start_sequencer()
+    sent_before = len(self.link.written)
+    item = await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
+    self.assertEqual(item, 1)
+    self.assertEqual(self.sent_since(sent_before), [(0, 65, bytes.fromhex("01000a00280001001f00"))])
+    await driver._wait_for_queue_item(item=item, timeout=1.0)
+    self.assertEqual(driver._event_waiters, [])
+
+  async def test_wait_for_the_last_item_passes_over_the_earlier_ones(self):
+    driver = self.driver
+    driver._next_item = 3
+    items = [
+      await driver._queue_ppi_write(duration=500, start_address=40, values=[0]) for _ in "345"
+    ]
+    self.assertEqual(items, [3, 4, 5])
+    wait = asyncio.ensure_future(driver._wait_for_queue_item(item=5, timeout=1.0))
+    await asyncio.sleep(0.02)
+    for frame in RECORDED_ITEMS_3_TO_5_PLAYED[:2]:
+      self.link.incoming.extend(bytes.fromhex(frame))
+    await asyncio.sleep(0.05)
+    self.assertFalse(wait.done())
+    self.link.incoming.extend(bytes.fromhex(RECORDED_ITEMS_3_TO_5_PLAYED[2]))
+    await wait
+
+  async def test_every_item_played_is_kept_for_the_dispense_progress(self):
+    driver = self.driver
+    self.assertIsNone(driver._sequence_progress)
+    driver._next_item = 3
+    for _ in "345":
+      await driver._queue_ppi_write(duration=500, start_address=40, values=[0])
+    for frame, item in zip(RECORDED_ITEMS_3_TO_5_PLAYED, [3, 4, 5]):
+      self.link.incoming.extend(bytes.fromhex(frame))
+      await asyncio.sleep(0.02)
+      self.assertEqual(driver._sequence_progress, item)
+    self.assertEqual(driver._last_drained_item, 5)
+    await driver.stop()
+    await driver.setup()
+    self.assertIsNone(driver._sequence_progress)
+
+  async def test_full_queue_is_sent_again_under_the_next_item(self):
+    self.driver._next_item = 368
+    sent_before = len(self.link.written)
+    item = await self.driver._queue_ppi_write(duration=1, start_address=40, values=[27])
+    self.assertEqual(item, 373)
+    self.assertEqual(
+      self.sent_since(sent_before),
+      [(0, 65, bytes.fromhex(request)) for request in RECORDED_QUEUE_FULL_REPLIES],
+    )
+
+  async def test_queue_staying_full_times_out(self):
+    self.driver._next_item = 368
+    sent_before = len(self.link.written)
+    with mock.patch.object(master_module, "time") as clock:
+      clock.monotonic.side_effect = [0.0, 60.0]
+      with self.assertRaisesRegex(MantisTimeoutError, "stayed full for 60.0 s"):
+        await self.driver._queue_ppi_write(duration=1, start_address=40, values=[27])
+    self.assertEqual(len(self.sent_since(sent_before)), 1)
+
+  async def test_queue_write_refuses_out_of_range_arguments(self):
+    cases: List[Tuple[int, int, List[int]]] = [
+      (10, 120, [31]),
+      (0, 40, [31]),
+      (0x8000, 40, [31]),
+      (10, 40, []),
+      (10, 40, [0x10000]),
+    ]
+    sent_before = len(self.link.written)
+    for duration, start_address, values in cases:
+      with self.subTest(duration=duration, start_address=start_address, values=values):
+        with self.assertRaises(ValueError):
+          await self.driver._queue_ppi_write(
+            duration=duration, start_address=start_address, values=values
+          )
+    self.assertEqual(len(self.link.written), sent_before)
+
+  async def test_default_queue_full_timeout_is_checked_when_assigned(self):
+    with self.assertRaises(ValueError):
+      self.driver.default_queue_full_timeout = 0.0
+    self.assertEqual(self.driver.default_queue_full_timeout, 60.0)
+
+  async def test_motor_error_fails_every_motion_wait_at_once(self):
+    driver = self.driver
+    stopped = driver._expect_event(board=0, code=SEQUENCE_STOPPED_EVENT)
+    move_done = driver._expect_event(board=0, code=MOVE_DONE_EVENT)
+    wait = asyncio.ensure_future(driver._wait_for_queue_item(item=0x31D9, timeout=5.0))
+    await asyncio.sleep(0.02)
+    for frame in RECORDED_MOTOR_ERROR_EVENTS:
+      self.link.incoming.extend(bytes.fromhex(frame))
+    with self.assertRaisesRegex(MantisMotionError, "motor 0 reported error 9") as raised:
+      await wait
+    self.assertEqual((raised.exception.motor, raised.exception.code), (0, 9))
+    with self.assertRaises(MantisMotionError):
+      await driver._wait_for_event(waiter=move_done, timeout=1.0)
+    payload = await driver._wait_for_event(waiter=stopped, timeout=1.0)
+    self.assertEqual(decode_sequence_stopped(payload=payload), (0x31D9, 0))
+
+  async def test_sequencer_stop_is_a_warning_and_a_move_done_is_not(self):
+    with self.assertLogs(master_module.logger, level="WARNING") as logs:
+      for frame in RECORDED_MOTOR_ERROR_EVENTS:
+        self.link.incoming.extend(bytes.fromhex(frame))
+      await asyncio.sleep(0.05)
+    output = "".join(logs.output)
+    self.assertIn("sequencer stopped at item", output)
+    self.assertNotIn("moved", output)
+
+  async def test_event_not_decoded_is_logged_by_its_number(self):
+    with self.assertLogs(master_module.logger, level="WARNING") as logs:
+      self.link.incoming.extend(bytes.fromhex(RECORDED_CODE_7FFF_FRAME))
+      await asyncio.sleep(0.05)
+    self.assertIn("event 0x7fff, not decoded", "".join(logs.output))
 
 
 if __name__ == "__main__":

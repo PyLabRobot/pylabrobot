@@ -8,6 +8,7 @@ import unittest
 from pylabrobot.formulatrix.mantis import Mantis
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import MantisTimeoutError
+from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.simulator import MantisSimulationLedBar
 
 
@@ -129,6 +130,40 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     await bar.turn_off()
     with self.assertRaises(ValueError):
       await bar.set_color(color="purple")
+
+  async def test_sequencer_plays_what_is_queued_once_started(self):
+    driver = self.mantis.driver
+    item = await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
+    self.assertEqual(item, 1)
+    with self.assertRaises(MantisTimeoutError):
+      await driver._wait_for_queue_item(item=item, timeout=1.0)
+    self.assertIsNone(driver._sequence_progress)
+    await driver._unchecked_fw_start_sequencer()
+    await driver._wait_for_queue_item(item=item, timeout=1.0)
+    item = await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
+    await driver._wait_for_queue_item(item=item, timeout=1.0)
+    self.assertEqual(driver._sequence_progress, item)
+    await driver._unchecked_fw_stop_sequencer()
+    item = await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
+    with self.assertRaises(MantisTimeoutError):
+      await driver._wait_for_queue_item(item=item, timeout=1.0)
+
+  async def test_stopped_sequencer_fills_its_queue_and_a_clear_empties_it(self):
+    driver = self.mantis.driver
+    free_slots = [
+      (
+        await driver._unchecked_fw_queue_write_ppi(
+          item=item, duration=10, start_address=40, values=[31]
+        )
+      )[0]
+      for item in range(1, SEQUENCER_QUEUE_SIZE + 2)
+    ]
+    self.assertEqual(free_slots, list(range(SEQUENCER_QUEUE_SIZE - 1, -2, -1)))
+    driver.default_queue_full_timeout = 0.01
+    with self.assertRaisesRegex(MantisTimeoutError, "stayed full"):
+      await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
+    await driver._unchecked_fw_clear_sequencer()
+    await driver._queue_ppi_write(duration=10, start_address=40, values=[31])
 
   async def test_simulated_mantis_sends_nothing(self):
     with self.assertRaisesRegex(NotImplementedError, "sends nothing"):
