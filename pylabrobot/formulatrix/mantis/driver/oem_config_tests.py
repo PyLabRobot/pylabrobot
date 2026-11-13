@@ -11,6 +11,8 @@ from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 from pylabrobot.formulatrix.mantis.driver.oem_config import (
+  ENCODER_CORRECTION_DIRECTORY,
+  ENCODER_CORRECTION_FILE,
   _load_unit_configuration,
   _parse_config_entries,
 )
@@ -29,6 +31,7 @@ V4_DEVICE_CONFIG = (
     '    <add key="RfidMultiplexerDelay" value="0" />\r\n'
     '    <add key="PlateClampInisiatePWM" value="0.119,0.21,0.3" />\r\n'
     '    <add key="PlateClampTimer" value="2000,1000,500" />\r\n'
+    '    <add key="NumberOfLed" value="20" />\r\n'
   )
   + TAIL
 )
@@ -61,6 +64,38 @@ V3_DEVICE_CONFIG = (
 )
 
 
+# RobotArm.config lines in a v4 install's layout, with synthetic offsets and references.
+SYNTHETIC_V4_ROBOT_ARM_CONFIG = (
+  HEAD
+  + (
+    '    <add key="Motor.1.Offset" value="-0.1" />\r\n'
+    '    <add key="Motor.1.HomingPositionN" value="-50.0" />\r\n'
+    '    <add key="Motor.1.HomingPositionA" value="150.5" />\r\n'
+    '    <add key="Motor.2.Offset" value="-0.5" />\r\n'
+    '    <add key="Motor.2.HomingPositionN" value="120.0" />\r\n'
+    '    <add key="Motor.2.HomingPositionA" value="50.25" />\r\n'
+    '    <add key="Motor.3.Offset" value="0" />\r\n'
+  )
+  + TAIL
+)
+# A v3 install's RobotArm.config has no HomingPositionA.
+SYNTHETIC_V3_ROBOT_ARM_CONFIG = (
+  HEAD
+  + (
+    '    <add key="Motor.1.Offset" value="0" />\r\n'
+    '    <add key="Motor.1.HomingPositionN" value="-50.0" />\r\n'
+    '    <add key="Motor.2.Offset" value="0" />\r\n'
+    '    <add key="Motor.2.HomingPositionN" value="120.0" />\r\n'
+  )
+  + TAIL
+)
+# A synthetic encoder correction in the files' layout: ideal, measured, measured.
+SYNTHETIC_CORRECTION_ROWS = [(row, row - 0.25) for row in range(1, 201)]
+SYNTHETIC_CORRECTION_CSV = "\ufeff" + "".join(
+  f"{ideal},{measured},{measured}\r\n" for ideal, measured in SYNTHETIC_CORRECTION_ROWS
+)
+
+
 def write_files(*, directory: str, files: Dict[str, str]) -> str:
   for file_name, text in files.items():
     with open(os.path.join(directory, file_name), "w", encoding="utf-8", newline="") as f:
@@ -69,13 +104,15 @@ def write_files(*, directory: str, files: Dict[str, str]) -> str:
 
 
 class LoadUnitConfigurationTests(unittest.TestCase):
-  def test_a_v4_folder_gives_its_lock_levels_and_antennas(self):
+  def test_a_v4_folder_gives_its_lock_levels_antennas_and_led_count(self):
     with tempfile.TemporaryDirectory() as directory:
       files = {"Device.config": V4_DEVICE_CONFIG, "RFID.config": V4_RFID_CONFIG}
       blocks = _load_unit_configuration(
         oem_config_directory=write_files(directory=directory, files=files)
       )
-    self.assertEqual(blocks, {block: RECORDING[block] for block in ("plate_clamp", "rfid")})
+    self.assertEqual(
+      blocks, {block: RECORDING[block] for block in ("plate_clamp", "rfid", "led_bar")}
+    )
 
   def test_a_v3_folder_gives_neither(self):
     with tempfile.TemporaryDirectory() as directory:
@@ -99,6 +136,77 @@ class LoadUnitConfigurationTests(unittest.TestCase):
         _load_unit_configuration(oem_config_directory=directory)
 
 
+def write_install(*, directory: str, configs: Dict[str, str], corrections: Dict[int, str]) -> str:
+  """Lay out a unit's Data folder and return its Device/Configs folder."""
+  configs_directory = os.path.join(directory, "Data", "Device", "Configs")
+  correction_directory = os.path.join(directory, "Data", ENCODER_CORRECTION_DIRECTORY)
+  os.makedirs(configs_directory)
+  os.makedirs(correction_directory)
+  write_files(directory=configs_directory, files=configs)
+  write_files(
+    directory=correction_directory,
+    files={
+      ENCODER_CORRECTION_FILE.format(motor=motor): text for motor, text in corrections.items()
+    },
+  )
+  return configs_directory
+
+
+class ArmBlockTests(unittest.TestCase):
+  def load(self, *, configs: Dict[str, str], corrections: Dict[int, str]):
+    with tempfile.TemporaryDirectory() as directory:
+      return _load_unit_configuration(
+        oem_config_directory=write_install(
+          directory=directory, configs=configs, corrections=corrections
+        )
+      )
+
+  def test_a_v4_install_gives_the_offsets_references_and_corrections(self):
+    blocks = self.load(
+      configs={"Device.config": V4_DEVICE_CONFIG, "RobotArm.config": SYNTHETIC_V4_ROBOT_ARM_CONFIG},
+      corrections={0: SYNTHETIC_CORRECTION_CSV, 1: SYNTHETIC_CORRECTION_CSV},
+    )
+    rows = [[float(ideal), measured] for ideal, measured in SYNTHETIC_CORRECTION_ROWS]
+    self.assertEqual(
+      blocks["arm"],
+      {
+        "offsets": {"0": -0.1, "1": -0.5},
+        "homing_position_a": {"0": 150.5, "1": 50.25},
+        "encoder_correction": {"0": rows, "1": rows},
+      },
+    )
+
+  def test_a_v3_install_gives_no_arm_block(self):
+    blocks = self.load(
+      configs={"Device.config": V3_DEVICE_CONFIG, "RobotArm.config": SYNTHETIC_V3_ROBOT_ARM_CONFIG},
+      corrections={},
+    )
+    self.assertNotIn("arm", blocks)
+
+  def test_a_missing_correction_refuses(self):
+    with self.assertRaisesRegex(
+      MantisConfigurationError, "motor 1's encoder correction is missing"
+    ):
+      self.load(
+        configs={
+          "Device.config": V4_DEVICE_CONFIG,
+          "RobotArm.config": SYNTHETIC_V4_ROBOT_ARM_CONFIG,
+        },
+        corrections={0: SYNTHETIC_CORRECTION_CSV},
+      )
+
+  def test_a_correction_that_does_not_ascend_refuses(self):
+    descending = "".join(f"{row},{200 - row},{200 - row}\r\n" for row in range(1, 201))
+    with self.assertRaisesRegex(MantisConfigurationError, "measured column ascending"):
+      self.load(
+        configs={
+          "Device.config": V4_DEVICE_CONFIG,
+          "RobotArm.config": SYNTHETIC_V4_ROBOT_ARM_CONFIG,
+        },
+        corrections={0: descending, 1: SYNTHETIC_CORRECTION_CSV},
+      )
+
+
 class UnitBlockSourceTests(DriverTestCase):
   async def set_up_with(self, **kwargs):
     return await self.set_up_driver(link=FakeLink(answers=make_answers()), **kwargs)
@@ -116,7 +224,9 @@ class UnitBlockSourceTests(DriverTestCase):
         oem_config_directory=write_files(directory=directory, files=files)
       )
       saved = self.saved_blocks(driver=driver, directory=directory)
-    self.assertEqual(saved, {block: RECORDING[block] for block in ("plate_clamp", "rfid")})
+    self.assertEqual(
+      saved, {block: RECORDING[block] for block in ("plate_clamp", "rfid", "led_bar")}
+    )
 
   async def test_a_folder_and_declared_file_that_agree_set_up(self):
     with tempfile.TemporaryDirectory() as directory:
@@ -139,6 +249,38 @@ class UnitBlockSourceTests(DriverTestCase):
       )
       with self.assertRaisesRegex(MantisConfigurationError, "plate_clamp: declared"):
         await driver.setup()
+
+  async def test_a_folder_and_declared_file_that_disagree_on_the_led_count_refuse_setup(self):
+    with tempfile.TemporaryDirectory() as directory:
+      text = V4_DEVICE_CONFIG.replace('"NumberOfLed" value="20"', '"NumberOfLed" value="24"')
+      write_files(directory=directory, files={"Device.config": text})
+      driver = self.make_driver(
+        link=FakeLink(answers=make_answers()),
+        oem_config_directory=directory,
+        declared_configuration_json=RECORDING_MANTIS_V4,
+      )
+      with self.assertRaisesRegex(MantisConfigurationError, "led_bar: declared"):
+        await driver.setup()
+    self.assertIsNone(driver.led_bar)
+
+  async def test_an_older_declared_file_takes_what_it_lacks_from_the_folder(self):
+    self.default_read_timeout = 0.25  # the 24 LEDs' colour writes are never answered
+    older = {block: values for block, values in RECORDING.items() if block != "led_bar"}
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "older.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump(older, f)
+      text = V4_DEVICE_CONFIG.replace('"NumberOfLed" value="20"', '"NumberOfLed" value="24"')
+      folder = write_files(directory=directory, files={"Device.config": text})
+      with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING") as logs:
+        driver = await self.set_up_with(
+          oem_config_directory=folder, declared_configuration_json=path
+        )
+    self.assertEqual(len(logs.output), 1)
+    self.assertIn(f"not in {path}: led_bar from {folder}", logs.output[0])
+    self.assertNotIn("less accurate", logs.output[0])
+    assert driver.led_bar is not None
+    self.assertEqual(driver.led_bar.number_of_leds, 24)
 
   async def test_neither_takes_the_recording_warns_and_saves_none_of_it(self):
     with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING") as logs:

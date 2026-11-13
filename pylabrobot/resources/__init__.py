@@ -58,6 +58,7 @@ from .resource_state import (
 )
 from .revvity import *
 from .rotation import Rotation
+from .sarstedt import *
 from .sergi import *
 from .tecan import *
 from .thermo_fisher import *

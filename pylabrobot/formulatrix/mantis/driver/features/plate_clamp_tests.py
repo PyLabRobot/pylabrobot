@@ -16,6 +16,15 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, Fa
 RELEASE = (12, 31, bytes.fromhex("000000000000e83f000000000000000088130000"))
 LOCK_AT_LEVEL_2 = (12, 30, bytes.fromhex("0000000000000000e17a14ae47e1ca3fe8030000"))
 STATE_READ = (12, 33, b"")
+# The LED bar's commands on board 12: a colour, the animation stopped, the animation started.
+LED_BAR_COMMANDS = ((12, 13), (12, 16), (12, 17))
+# What a stop sends before the clamp: the sequencer aborted, each motor stopped.
+HALT = [
+  (0, 64, b""),
+  (0, 24, bytes.fromhex("0000814e1be8b40a8a40")),
+  (0, 24, bytes.fromhex("0100814e1be8b40a8a40")),
+  (0, 24, bytes.fromhex("0200bb34be4f05c2be40")),
+]
 # The states the device read after each command, as recorded.
 STATES_AFTER_RELEASE_WHILE_RELEASED = ["0600", "0600"]
 STATES_AFTER_RELEASE_WHILE_LOCKED = ["0500", "0600"]
@@ -48,12 +57,12 @@ class PlateClampTests(DriverTestCase):
     )
     assert self.driver.plate_clamp is not None
     self.clamp = self.driver.plate_clamp
-    # every clamp command is answered; a short timeout would resend a read the runner was slow on
-    self.driver.default_read_timeout = 5.0
     self.sent_before = len(self.link.written)
 
   def sent(self) -> List[Tuple[int, int, bytes]]:
-    return [parse_frame(frame=frame)[1:] for frame in self.link.written[self.sent_before :]]
+    """The clamp's frames since setup; the LED bar's are pinned in its own tests."""
+    frames = [parse_frame(frame=frame)[1:] for frame in self.link.written[self.sent_before :]]
+    return [frame for frame in frames if frame[:2] not in LED_BAR_COMMANDS]
 
   async def test_unlock(self):
     answer_states_in_turn(link=self.link, turns=[(31, STATES_AFTER_RELEASE_WHILE_LOCKED)])
@@ -111,6 +120,7 @@ class PlateClampTests(DriverTestCase):
       self.sent(),
       [RELEASE, STATE_READ, LOCK_AT_LEVEL_2]
       + [STATE_READ] * 8
+      + HALT
       + [STATE_READ, RELEASE, STATE_READ, STATE_READ],
     )
 
@@ -118,7 +128,7 @@ class PlateClampTests(DriverTestCase):
     self.link.answers[STATE_READ] = [bytes.fromhex(state) for state in STATES_AT_POWER_ON]
     answer_states_in_turn(link=self.link, turns=[(31, STATES_AFTER_RELEASE_AT_POWER_ON)])
     await self.driver.stop()
-    self.assertEqual(self.sent(), [STATE_READ, RELEASE, STATE_READ])
+    self.assertEqual(self.sent(), HALT + [STATE_READ, RELEASE, STATE_READ])
 
 
 class PlateClampDiscoveryTests(DriverTestCase):
@@ -135,6 +145,7 @@ class PlateClampDiscoveryTests(DriverTestCase):
   async def test_built_only_when_the_lc3_board_answers(self):
     for absent_boards, built in (((), True), ((12,), False)):
       with self.subTest(absent_boards=absent_boards):
+        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )

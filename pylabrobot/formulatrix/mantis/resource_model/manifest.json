@@ -1,5 +1,5 @@
 {
-  "note": "Modular. The device frame is the main box's: origin at the body's front-left corner, at the bottom of the feet. The base file is authored in that frame and also draws the side lobes outside the box. Every other file is authored in its own resource's frame, its lowest corner at the origin, so declaring it on that resource needs no offset. `measured_at` records where a part sits in the device frame in the pose the manufacturer's model is drawn in, in millimetres.",
+  "note": "Modular. The device frame is the main box's: origin at the body's front-left corner, at the bottom of the feet. The base file is authored in that frame and also draws the side lobes outside the box. Every other file is authored in its own resource's frame, its lowest corner at the origin, so declaring it on that resource needs no offset. `measured_at` records where a part sits in the device frame in the pose the manufacturer's model is drawn in, in millimetres. An arm link is drawn as its box (no model file): `proximal_joint` and `distal_joint` sit in its own frame, and `above` is how far an outer link sits above the short link it hangs from. `joints` record where, in the device frame and the pose drawn (the arm at idle), the right motor turns (`base_right`, at the height `arm_z`).",
   "units": "mm",
   "up": "Z",
   "frames": {
@@ -36,7 +36,101 @@
             82.93,
             184.0
           ]
+        },
+        "z_column": {
+          "file": "formulatrix_mantis_z_column.glb",
+          "size": [
+            76.07,
+            90.0,
+            109.03
+          ],
+          "measured_at": [
+            49.79,
+            119.56,
+            92.57
+          ]
         }
+      },
+      "arm_links": {
+        "right_short_arm": {
+          "size": [
+            77.0,
+            22.04,
+            19.0
+          ],
+          "proximal_joint": [
+            7.0,
+            15.037,
+            0.0
+          ],
+          "distal_joint": [
+            70.0,
+            15.037,
+            0.0
+          ],
+          "above": 0.0
+        },
+        "right_long_arm": {
+          "size": [
+            100.47,
+            17.0,
+            8.06
+          ],
+          "proximal_joint": [
+            7.0,
+            9.997,
+            0.0
+          ],
+          "distal_joint": [
+            91.0,
+            9.997,
+            0.0
+          ],
+          "above": 7.56
+        },
+        "left_short_arm": {
+          "size": [
+            73.97,
+            14.0,
+            25.0
+          ],
+          "proximal_joint": [
+            7.0,
+            7.0,
+            0.0
+          ],
+          "distal_joint": [
+            70.0,
+            7.0,
+            0.0
+          ],
+          "above": 0.0
+        },
+        "left_long_arm": {
+          "size": [
+            96.54,
+            13.94,
+            9.75
+          ],
+          "proximal_joint": [
+            6.002,
+            7.0,
+            0.0
+          ],
+          "distal_joint": [
+            90.002,
+            7.0,
+            0.0
+          ],
+          "above": 8.89
+        }
+      },
+      "joints": {
+        "base_right": [
+          72.549,
+          142.594
+        ],
+        "arm_z": 204.41
       }
     }
   }
