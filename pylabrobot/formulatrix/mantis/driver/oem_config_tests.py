@@ -264,6 +264,7 @@ class UnitBlockSourceTests(DriverTestCase):
     self.assertIsNone(driver.led_bar)
 
   async def test_an_older_declared_file_takes_what_it_lacks_from_the_folder(self):
+    self.default_read_timeout = 0.25  # the 24 LEDs' colour writes are never answered
     older = {block: values for block, values in RECORDING.items() if block != "led_bar"}
     with tempfile.TemporaryDirectory() as directory:
       path = os.path.join(directory, "older.json")

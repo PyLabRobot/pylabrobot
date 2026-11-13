@@ -57,8 +57,6 @@ class PlateClampTests(DriverTestCase):
     )
     assert self.driver.plate_clamp is not None
     self.clamp = self.driver.plate_clamp
-    # every clamp command is answered; a short timeout would resend a read the runner was slow on
-    self.driver.default_read_timeout = 5.0
     self.sent_before = len(self.link.written)
 
   def sent(self) -> List[Tuple[int, int, bytes]]:
@@ -147,6 +145,7 @@ class PlateClampDiscoveryTests(DriverTestCase):
   async def test_built_only_when_the_lc3_board_answers(self):
     for absent_boards, built in (((), True), ((12,), False)):
       with self.subTest(absent_boards=absent_boards):
+        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )

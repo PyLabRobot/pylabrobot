@@ -40,7 +40,6 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   make_led_bar_answers,
 )
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
-from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   RECORDED_MOTOR_ERROR_EVENTS,
   DriverTestCase,
@@ -296,6 +295,7 @@ class InitializeTests(ArmTestCase):
     )
     driver = await self.set_up_arm(link=link)
     await driver.arm.initialize()
+    driver.default_read_timeout = 0.25  # stop's read of Z's encoder is never answered
     commands = self.sent(link)
     self.assertEqual(
       [token(command) for command in commands if command[1] != 20], get_expected_startup()
@@ -315,6 +315,7 @@ class InitializeTests(ArmTestCase):
     link = ArmLink(answers=make_answers())
     del link.answers[(0, 19, bytes.fromhex("01000000"))]
     driver = await self.set_up_arm(link=link)
+    driver.default_read_timeout = 0.25
     with self.assertRaises(MantisTimeoutError):
       await driver.arm.initialize()
     self.assertEqual(self.sent(link)[-2:], UNPOWER)
@@ -328,6 +329,7 @@ class InitializeTests(ArmTestCase):
     self.assertEqual(self.sent(link), [])
 
   async def test_setup_without_the_arm_block_refuses_before_anything_moves(self):
+    self.default_read_timeout = 0.25  # the red colour write is never answered
     link = FakeLink(answers=make_answers())
     driver = self.make_driver(link=link, declared_configuration_json=self.declare(arm_block=None))
     with self.assertRaisesRegex(MantisConfigurationError, "no arm calibration"):
@@ -342,6 +344,7 @@ class InitializeTests(ArmTestCase):
     for motor, reply in AWAY_POSITION_REPLIES.items():
       link.answers[(0, 27, struct.pack("<h", motor))] = [bytes.fromhex(reply)]
     driver = await self.set_up_arm(link=link)
+    driver.default_read_timeout = 0.25  # unpowering the arms is never answered
     with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
       await driver.arm.initialize()
     sent = self.sent(link)
@@ -356,6 +359,7 @@ class InitializeTests(ArmTestCase):
       events={(0, 21, home): [bytes.fromhex(RECORDED_MOTOR_ERROR_EVENTS[0])]},
     )
     driver = await self.set_up_arm(link=link)
+    driver.default_read_timeout = 0.25  # unpowering the arms is never answered
     with self.assertRaisesRegex(MantisMotionError, "reported error 9") as caught:
       await driver.arm.initialize()
     self.assertEqual((caught.exception.motor, caught.exception.code), (0, 9))
@@ -382,12 +386,6 @@ class InitializeTests(ArmTestCase):
 
 
 class SetupDisplayTests(ArmTestCase):
-  def make_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
-    driver = super().make_driver(link=link, **kwargs)
-    # every command of the bring-up is answered; a slow test runner must not time one out
-    driver.default_read_timeout = 5.0
-    return driver
-
   def startup_link(self, *, answers) -> ArmLink:
     """Answers the recorded startup, Z reporting its homing done, and ``answers``."""
     home = bytes.fromhex(RECORDED_STARTUP[-1].split(":")[2])
@@ -402,6 +400,7 @@ class SetupDisplayTests(ArmTestCase):
     )
     assert driver.arm is not None
     self.assertTrue(driver.arm.is_initialized)
+    driver.default_read_timeout = 0.25  # stop's read of Z's encoder is never answered
     frames = [parse_frame(frame=frame)[1:] for frame in link.written]
     moves = [index for index, (_, command, _) in enumerate(frames) if command in (19, 21, 22)]
     self.assertLess(frames.index(color_write(colors=[BLUE] * 20)), moves[0])
@@ -433,6 +432,7 @@ class SetupDisplayTests(ArmTestCase):
     self.assertTrue(any("did not show 'setup'" in line for line in logs.output))
     assert driver.arm is not None
     self.assertTrue(driver.arm.is_initialized)
+    driver.default_read_timeout = 0.25  # stop's read of Z's encoder is never answered
 
   async def test_without_show_actions_the_bring_up_shows_only_the_idle_animation(self):
     link = self.startup_link(answers=make_answers())
@@ -444,6 +444,7 @@ class SetupDisplayTests(ArmTestCase):
     )
     assert driver.arm is not None
     self.assertTrue(driver.arm.is_initialized)
+    driver.default_read_timeout = 0.25  # stop's read of Z's encoder is never answered
     self.assertEqual(led_bar_frames(written=link.written), [START_IDLE_ANIMATION])
 
 
@@ -568,6 +569,7 @@ class StopTests(ArmTestCase):
     link = self.close_link()
     del link.answers[(0, 24, bytes.fromhex("0100814e1be8b40a8a40"))]
     driver = await self.set_up_arm(link=link)
+    driver.default_read_timeout = 0.25
     driver.arm._initialized = True
     with self.assertLogs(
       "pylabrobot.formulatrix.mantis.driver.features.arm", level="WARNING"
@@ -662,6 +664,7 @@ class DiscoveryTests(ArmTestCase):
   async def test_built_only_when_board_11_answers(self):
     for absent_boards, built in (((), True), ((11,), False)):
       with self.subTest(absent_boards=absent_boards):
+        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
