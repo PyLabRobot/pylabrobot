@@ -1,0 +1,29 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.pump.Pump
+=======================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.pump
+
+.. autoclass:: Pump
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Pump.__init__
+      ~Pump.measure_pressure
+      ~Pump.request_controller_enabled
+      ~Pump.request_controller_status
+      ~Pump.request_feedback_sensor_parameters
+      ~Pump.request_pump_on
+   
+   

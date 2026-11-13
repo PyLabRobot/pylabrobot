@@ -7,7 +7,7 @@
    "source": [
     "# Formulatrix Mantis\n",
     "\n",
-    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name and motor limits, locks and unlocks the plate clamp, and reads which chip sits in each input slot. Nothing else in this driver moves the device, switches the pump on or opens a valve."
+    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4's LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve."
    ]
   },
   {
@@ -39,12 +39,13 @@
     "| | |\n",
     "|---|---|\n",
     "| Generations | v3 and v4, told apart at setup |\n",
-    "| Reads | firmware versions, device name, motor limits |\n",
+    "| Reads | firmware versions, device name, motor limits and state, the arm's absolute encoders (v4), line pressures and the pressure board's state |\n",
     "| Interface | USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader |\n",
     "| Plate clamp | lock at one of the unit's levels, waiting for clamping done; unlock |\n",
     "| RFID | the chip in each input slot: serial, chip type, date of manufacture |\n",
+    "| LED bar (v4) | one colour, one per LED, or an animation; shows setup, off at stop |\n",
     "| Unit configuration | the clamp's lock levels and each slot's RFID antenna, from the unit's vendor folder or a saved file; else a recording of its generation |\n",
-    "| Not supported yet | motion and the motor reads, pneumatics and the pressure reads, chips, dispensing |"
+    "| Not supported yet | motion, switching the pump or a pressure controller, chips, dispensing |"
    ]
   },
   {
@@ -80,7 +81,7 @@
     "\n",
     "Some of a Mantis's values are set per unit and cannot be read off the device; they sit in the `.config` files of its vendor install, in `Data/Device/Configs`. Give setup that folder once, then save the configuration: the saved file carries the unit's values from then on, and the folder is no longer needed. So far these are the plate clamp's lock levels and each input slot's RFID antenna.\n",
     "\n",
-    "Without them, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. Where the folder and a saved file both hold a value, they must agree, or setup refuses."
+    "Without them, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it."
    ]
   },
   {
@@ -102,7 +103,7 @@
    "source": [
     "## Setup\n",
     "\n",
-    "`setup()` opens both links, reads the firmware versions and the motor limits, takes the unit's values and sets up the RFID reader. It does not move anything."
+    "`setup()` opens both links, reads the firmware versions, the motor limits and the pressure sensors' calibration, takes the unit's values and sets up the RFID reader. It does not move anything. On a v4 the LED bar shows the setup, green for a second at its end, then the idle animation."
    ]
   },
   {
@@ -143,7 +144,7 @@
    "source": [
     "### Simulation\n",
     "\n",
-    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, and every declared RFID slot reads empty. The device name is not simulated."
+    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its motors read idle at 0; its pump reads off, every line at 0, with the recorded sensor calibration. The device name is not simulated."
    ]
   },
   {
@@ -261,6 +262,190 @@
   },
   {
    "cell_type": "markdown",
+   "id": "motor-state",
+   "metadata": {},
+   "source": [
+    "### Motor state\n",
+    "\n",
+    "A motor's status word; `MOTOR_STATUS_ERROR_BITS` names the bits that report a fault:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "motor-status",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_motor_status(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "motor-positions",
+   "metadata": {},
+   "source": [
+    "Its demand position, where the controller drives it. It is not measured: it reads back the last position declared to the motor until the motor moves. Its servo encoder position counts only while the device is powered, from about 0 at power-on wherever the motor sits."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "motor-position",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_motor_position(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "motor-encoder-position",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_encoder_position(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "motor-settings",
+   "metadata": {},
+   "source": [
+    "Its following-error check (enabled, the largest following error), its three currents and its configuration, as the device sends them:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "motor-following-error",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_following_error_configuration(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "motor-currents",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_motor_currents(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "motor-configuration",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_motor_configuration(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "absolute-encoders",
+   "metadata": {},
+   "source": [
+    "### Absolute encoders (v4)\n",
+    "\n",
+    "Board 11 reads the absolute encoder of each arm motor, 0 and 1, kept across power-off. The reading is raw, not yet an angle. Each motor's first read after connecting is not valid; the driver reads again until one is."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "absolute-encoder-position",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.driver.request_absolute_encoder_position(motor=0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "pressure",
+   "metadata": {},
+   "source": [
+    "## Pressure\n",
+    "\n",
+    "The pump exists only when the pressure board (board 10) answered at setup. Its three pressure controllers, `\"bottle\"`, `\"chip\"` and `\"vacuum\"`, each regulate one line from a feedback sensor. Nothing here switches the pump or a controller on.\n",
+    "\n",
+    "Each sensor's calibration, (scale, offset), as setup read it; it is never written nor saved. The offsets are re-zeroed on the device between sessions, so setup reads them every time:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "pressure-calibration",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "mantis.driver.configuration.feedback_sensor_parameters"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "pressure-measure",
+   "metadata": {},
+   "source": [
+    "A line's pressure, in psi; inHg on the vacuum:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "pressure-measure-chip",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.pump.measure_pressure(controller=\"chip\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "pressure-state",
+   "metadata": {},
+   "source": [
+    "Whether the pump runs, whether a controller regulates, and its status: 0 off, 1 settled, 2 unsettled."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "pump-on",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.pump.request_pump_on()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "controller-enabled",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.pump.request_controller_enabled(controller=\"chip\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "controller-status",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.pump.request_controller_status(controller=\"chip\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
    "id": "mantis-clamp-text",
    "metadata": {},
    "source": [
@@ -373,6 +558,152 @@
    "outputs": [],
    "source": [
     "await mantis.rfid.request_tags()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar",
+   "metadata": {},
+   "source": [
+    "## LED bar\n",
+    "\n",
+    "The v4's LED bar shows what the device does: blue while setup runs, green for a second when it is done, then the idle animation; off at stop. An action that fails leaves it red. It exists only on a v4 whose LC3 board (board 12) answered at setup; a v3 has none. Its LED count is the unit's (`NumberOfLed` in `Device.config`), as declared:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-count",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "mantis.led_bar.number_of_leds"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-color-text",
+   "metadata": {},
+   "source": [
+    "Show one colour on every LED: a name (`\"blue\"`, `\"green\"`, ...), a web hex or an RGB565 value. Any animation stops first:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-color",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.led_bar.set_color(color=\"#FF0080\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-per-led-text",
+   "metadata": {},
+   "source": [
+    "Or one colour per LED, as many as it has:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-per-led",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.led_bar.set_color(color=[\"green\"] * 10 + [\"off\"] * 10)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-action-color-text",
+   "metadata": {},
+   "source": [
+    "Each action's colour is an attribute of the bar (`setup_color`, `setup_done_color`, `error_color`, `dispense_progress_color`, ...), checked when it is set; each bar has its own:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-action-color",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "mantis.led_bar.setup_color = \"#FF0080\""
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-progress-text",
+   "metadata": {},
+   "source": [
+    "Show progress: a share of the LEDs from the left in `dispense_progress_color`, the rest off. Each frame holds the link about 62 ms, so show at most one per LED in an action:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-progress",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.led_bar.show_progress(done=3, total=8)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-start-animation-text",
+   "metadata": {},
+   "source": [
+    "Play the idle animation, `\"wave\"`, repeating:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-start-animation",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.led_bar.start_animation(effect=\"wave\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-stop-animation-text",
+   "metadata": {},
+   "source": [
+    "Stop it; the bar holds what it shows:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-stop-animation",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.led_bar.stop_animation()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "led-bar-off-text",
+   "metadata": {},
+   "source": [
+    "Turn every LED off. `Mantis(show_actions=False)` shows no action's colour, only the idle animation from setup on."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "led-bar-off",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await mantis.led_bar.turn_off()"
    ]
   },
   {

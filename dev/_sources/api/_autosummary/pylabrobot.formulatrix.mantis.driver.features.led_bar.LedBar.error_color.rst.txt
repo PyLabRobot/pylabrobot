@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.led\_bar.LedBar.error\_color
+==========================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.led_bar
+
+.. autoproperty:: LedBar.error_color
