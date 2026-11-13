@@ -24,6 +24,7 @@ Mantis
    driver.features.rfid.Rfid
    driver.features.led_bar.LedBar
    driver.configuration.DeviceConfiguration
+   driver.events
    driver.errors.MantisError
    driver.errors.FrameError
    driver.errors.ChecksumError

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.events.decode\_input\_changed
+==================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.events
+
+.. autofunction:: decode_input_changed

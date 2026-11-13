@@ -1,0 +1,38 @@
+﻿:orphan:
+
+pylabrobot.formulatrix.mantis.driver.events
+===========================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver
+
+.. automodule:: pylabrobot.formulatrix.mantis.driver.events
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      decode_home_done
+      decode_input_changed
+      decode_motion_started
+      decode_motor_error
+      decode_move_done
+      decode_sequence_progress
+      decode_sequence_stopped
+      describe_event
+   
+   
+
+   
+   
+   
+
+   
+   
+   
