@@ -2154,6 +2154,20 @@
     "notes": "HTTP scan control and TIFF retrieval; port pending hardware verification."
   },
   {
+    "id": "thermo-fisher-kingfisher-flex",
+    "vendor": "Thermo Fisher",
+    "name": "KingFisher Flex",
+    "kind": "magnetic particle processor",
+    "capabilities": ["magnetic bead processing"],
+    "status": "wip",
+    "needs_hardware_testing": true,
+    "api": "pylabrobot.thermo_fisher.kingfisher.flex.KingFisherFlex",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/kingfisher/flex",
+    "doc_slug": "thermo_fisher/kingfisher/flex/hello-world",
+    "notes": "96DW local BDZ execution tested on macOS/firmware 1.01.0, including 37 C heating, beads, drying and PLR confirmations. Partial tip pickup remains unresolved; broader formats/features and general protocol authoring remain unsupported."
+  },
+  {
     "id": "thermo-fisher-kingfisher-presto",
     "vendor": "Thermo Fisher",
     "name": "KingFisher Presto",
