@@ -598,22 +598,33 @@ class SampleLinearPath(unittest.TestCase):
     # Short way through ±180° -> midpoint near ±180°, not near 0°.
     self.assertGreater(abs(mid_back.rotation.z), 170.0)
 
-  def test_pure_rotation_in_place_raises(self):
-    """No translation + non-zero rotation: caps are mm/s, repurposing them
-    as deg/s is a footgun. Surface clearly so the caller switches to
-    move_to_joint_state."""
+  def test_pure_rotation_keeps_grip_center_fixed_with_angular_limits(self):
+    """Yaw changes in place at bounded angular speed and acceleration."""
     start = _linear_pose(50.0, 100.0, 30.0, yaw=10.0)
     end = _linear_pose(50.0, 100.0, 30.0, yaw=40.0)
-    with self.assertRaises(NotImplementedError):
-      kinematics.sample_linear_path(
-        self.cfg,
-        self.gp,
-        start,
-        end,
-        vel_mm_per_s=20.0,
-        accel_mm_per_s2=200.0,
-        dt_s=0.008,
-      )
+    dt = 0.008
+    samples = kinematics.sample_linear_path(
+      self.cfg,
+      self.gp,
+      start,
+      end,
+      vel_mm_per_s=20.0,
+      accel_mm_per_s2=200.0,
+      dt_s=dt,
+      angular_speed=5.0,
+      angular_acceleration=10.0,
+    )
+    poses = [kinematics.fk(sample.joints, self.cfg, self.gp) for sample in samples]
+    for pose in poses:
+      self.assertAlmostEqual(pose.location.x, start.location.x)
+      self.assertAlmostEqual(pose.location.y, start.location.y)
+      self.assertAlmostEqual(pose.location.z, start.location.z)
+    self.assertAlmostEqual(poses[-1].rotation.z, 40.0)
+    velocities = [(b.rotation.z - a.rotation.z) / dt for a, b in zip(poses, poses[1:])]
+    self.assertLessEqual(max(abs(v) for v in velocities), 5.0 + 1e-8)
+    accelerations = [(b - a) / dt for a, b in zip(velocities, velocities[1:])]
+    self.assertLessEqual(max(abs(a) for a in accelerations), 10.0 + 1e-7)
+    self.assertTrue(all(v == 0 for v in samples[-1].encoder_velocity.values()))
 
 
 if __name__ == "__main__":

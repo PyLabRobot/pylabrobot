@@ -20,6 +20,7 @@ guard is initialised the same way the find_z tests do it (manual Lock +
 """
 
 import asyncio
+import copy
 import inspect
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
@@ -31,8 +32,9 @@ from pylabrobot.paa.kx2.config import (
   KX2Config,
 )
 from pylabrobot.paa.kx2.kinematics import CartesianPose
-from pylabrobot.paa.kx2.kx2 import KX2
-from pylabrobot.paa.kx2.protocol import JointMoveDirection
+from pylabrobot.paa.kx2 import kinematics
+from pylabrobot.paa.kx2.kx2 import KX2, _NodeEmcyState
+from pylabrobot.paa.kx2.protocol import CanError, JointMoveDirection
 from pylabrobot.resources import Coordinate, Rotation
 
 
@@ -82,6 +84,8 @@ class _FakeDriver:
     self.send_calls: List[Tuple[int, int, int]] = []
     self.cancel_after_sends: Optional[int] = None
     self.registers: Dict[Tuple[int, int, int], bytes] = {}
+    self.positions: Dict[int, int] = {}
+    self.endpoint_error = 0
 
   async def _ipm_select_mode(self, enable: bool) -> None:
     self.calls.append(("_ipm_select_mode", (enable,)))
@@ -120,7 +124,7 @@ class _FakeDriver:
       )
     )
 
-  def _ipm_check_queue_fault(self, node_ids: List[int]) -> None:
+  def _ipm_check_queue_fault(self, node_ids: List[int], *, allow_empty: bool = False) -> None:
     # Synchronous helper; record the call so tests can verify backpressure
     # checks happen at the expected points.
     self.calls.append(("_ipm_check_queue_fault", (tuple(int(n) for n in node_ids),)))
@@ -149,7 +153,7 @@ class _FakeDriver:
     self.calls.append(("_clear_emcy_state", (node_id,)))
 
   async def request_axis_position(self, node_id, pu=False):
-    return 0
+    return self.positions[node_id]
 
   async def _can_sdo_upload(self, nid, index, sub):
     return self.registers.get((nid, index, sub), b"\x03")
@@ -161,10 +165,18 @@ class _FakeDriver:
   async def _execute(self, nid, cmd, index=0):
     self.calls.append((cmd, (nid,)))
 
+  async def _control_word_set(self, nid, value, sync=True):
+    self.calls.append(("controlword", (nid, value)))
+
   async def _motor_get_motion_status(self, nid):
     return 0
 
+  async def request_axis_enabled(self, nid):
+    return True
+
   async def _wait_for_moves_done(self, nodes, timeout):
+    for nid, position, velocity in self.send_calls:
+      self.positions[nid] = position + self.endpoint_error
     self.calls.append(("wait_done", (tuple(nodes), timeout)))
 
 
@@ -173,7 +185,9 @@ def _attach_fake(backend, fake, *, rename=None):
   backend._can_sdo_upload = fake._can_sdo_upload
   backend._can_sdo_download = fake._can_sdo_download
   backend._execute = fake._execute
+  backend._control_word_set = fake._control_word_set
   backend._motor_get_motion_status = fake._motor_get_motion_status
+  backend.request_axis_enabled = fake.request_axis_enabled
   backend._wait_for_moves_done = fake._wait_for_moves_done
   backend._ipm_select_mode = fake._ipm_select_mode
   backend._ipm_set_time_interval = fake._ipm_set_time_interval
@@ -185,6 +199,7 @@ def _attach_fake(backend, fake, *, rename=None):
   backend._motors_ensure_enabled = fake._motors_ensure_enabled
   backend._clear_emcy_state = fake._clear_emcy_state
   backend._motor_read_position_raw = fake.request_axis_position
+  backend._has_session_pdo = lambda node, number, *, transmit: True
 
 
 def _build_backend(
@@ -221,6 +236,13 @@ def _build_backend(
     return dict(joints)
 
   backend.request_joint_state = _request_joint_position  # type: ignore[assignment]
+  for axis in backend.configuration.axes:
+    position = joints[axis]
+    if axis == Axis.ELBOW:
+      position = kinematics.convert_elbow_position_to_angle(backend.configuration, position)
+    fake_driver.positions[int(axis)] = round(
+      position * backend.configuration.axes[axis].motor_conversion_factor
+    )
   return backend
 
 
@@ -279,6 +301,8 @@ class LinearPathHappyPath(unittest.TestCase):
     dt_calls = [c for c in fake.calls if c[0] == "_ipm_set_time_interval"]
     self.assertEqual(len(dt_calls), 1)
     self.assertEqual(dt_calls[0][1], (backend._PVT_DT_MS,))
+    names = [name for name, _ in fake.calls]
+    self.assertLess(names.index("_ipm_set_time_interval"), names.index("_ipm_select_mode"))
 
   def test_select_mode_true_then_false(self):
     """Mode is flipped on at start, off in cleanup. The drive must end in
@@ -296,13 +320,8 @@ class LinearPathHappyPath(unittest.TestCase):
     self.assertEqual(selects[0], (True,))
     self.assertEqual(selects[-1], (False,))
 
-  def test_stream_end_drops_ip_enable_before_waiting(self):
-    """After the last frame, the runtime must drop ip-enable (_ipm_stop) and
-    NOT poll for any wait condition. The Elmo drive doesn't latch SW bit-10
-    until ip-enable goes low — polling it inside IP mode hangs forever — and
-    leaving ip-enable asserted past the buffer drain raises EMCY 0x8A
-    (underflow). Mirrors C# MotorsMovePathExecute which proceeds straight to
-    PVTBeginMotion(false) once streaming completes."""
+  def test_stream_end_waits_for_buffered_motion_before_disabling_interpolation(self):
+    """Submitting the terminal point does not mean the look-ahead buffer has drained."""
     fake = _FakeDriver()
     backend = _build_backend(fake)
     asyncio.run(
@@ -313,7 +332,7 @@ class LinearPathHappyPath(unittest.TestCase):
       )
     )
     names = [name for name, _ in fake.calls]
-    self.assertLess(names.index("_ipm_stop"), names.index("wait_done"))
+    self.assertLess(names.index("wait_done"), names.index("_ipm_stop"))
     self.assertFalse([c for c in fake.calls if c[0] == "_ipm_wait_motion_complete"])
     stops = [c for c in fake.calls if c[0] == "_ipm_stop"]
     self.assertGreaterEqual(len(stops), 1)
@@ -397,6 +416,114 @@ class LinearPathValidation(unittest.TestCase):
           max_gripper_acceleration=None,
         )
       )
+
+
+class StreamedEndpoints(unittest.IsolatedAsyncioTestCase):
+  """Exercise encoder resolution, absolute coordinates, and measured completion."""
+
+  def _samples(self, fake: _FakeDriver) -> List[kinematics.LinearPathSample]:
+    """A small wrist move with the other axes stationary."""
+    positions = {Axis(nid): value for nid, value in fake.positions.items()}
+    return [
+      kinematics.LinearPathSample(
+        time_s=i * 0.008,
+        joints={},
+        encoder_position={
+          axis: value + (46 * i if axis == Axis.WRIST else 0) for axis, value in positions.items()
+        },
+        encoder_velocity={axis: 0 for axis in positions},
+      )
+      for i in range(3)
+    ]
+
+  async def test_motion_below_500_counts_is_sent(self):
+    fake = _FakeDriver()
+    backend = _build_backend(fake)
+    samples = self._samples(fake)
+    await backend._stream_samples(samples)
+    self.assertEqual([node for node, _, _ in fake.send_calls], [Axis.WRIST] * 3)
+    self.assertEqual(fake.positions[Axis.WRIST], samples[-1].encoder_position[Axis.WRIST])
+
+  async def test_missed_endpoint_raises_and_cleans_up(self):
+    fake = _FakeDriver()
+    backend = _build_backend(fake)
+    fake.endpoint_error = 30
+    with self.assertRaisesRegex(CanError, "WRIST did not reach"):
+      await backend._stream_samples(self._samples(fake))
+    self.assertIn(("_ipm_select_mode", (False,)), fake.calls)
+    self.assertIn(("ST", (Axis.WRIST,)), fake.calls)
+
+  async def test_terminal_empty_fifo_requires_the_measured_endpoint(self):
+    for error in (0, 30):
+      with self.subTest(endpoint_error=error):
+        fake = _FakeDriver()
+        fake.endpoint_error = error
+        backend = _build_backend(fake)
+
+        async def wait_done(nodes, timeout):
+          await fake._wait_for_moves_done(nodes, timeout)
+          backend._emcy[Axis.WRIST] = _NodeEmcyState(underflow=True)
+
+        backend._wait_for_moves_done = wait_done  # type: ignore[method-assign]
+        backend._ipm_check_queue_fault = lambda nodes, **kw: KX2._ipm_check_queue_fault(  # type: ignore[method-assign]
+          backend, nodes, **kw
+        )
+        if error:
+          with self.assertRaisesRegex(CanError, "WRIST did not reach"):
+            await backend._stream_samples(self._samples(fake))
+        else:
+          await backend._stream_samples(self._samples(fake))
+
+  async def test_empty_fifo_during_feeding_is_rejected(self):
+    fake = _FakeDriver()
+    backend = _build_backend(fake)
+
+    async def send(nid, position, velocity):
+      await fake._ipm_send_pvt_point(nid, position, velocity)
+      backend._emcy[Axis.WRIST] = _NodeEmcyState(underflow=True)
+
+    backend._ipm_send_pvt_point = send  # type: ignore[method-assign]
+    backend._ipm_check_queue_fault = lambda nodes, **kw: KX2._ipm_check_queue_fault(  # type: ignore[method-assign]
+      backend, nodes, **kw
+    )
+    with self.assertRaisesRegex(CanError, "underflow"):
+      await backend._stream_samples(self._samples(fake))
+
+  async def test_previous_stream_empty_fifo_does_not_poison_the_next_move(self):
+    fake = _FakeDriver()
+    backend = _build_backend(fake)
+    backend._emcy[Axis.WRIST] = _NodeEmcyState(underflow=True)
+    backend._ipm_check_queue_fault = lambda nodes, **kw: KX2._ipm_check_queue_fault(  # type: ignore[method-assign]
+      backend, nodes, **kw
+    )
+    await backend._stream_samples(self._samples(fake))
+
+  def test_full_fifo_is_fatal_even_after_feeding(self):
+    backend = KX2()
+    backend._emcy[Axis.WRIST] = _NodeEmcyState(queue_full=True)
+    with self.assertRaisesRegex(CanError, "queue_full"):
+      backend._ipm_check_queue_fault([Axis.WRIST], allow_empty=True)
+
+  async def test_stale_start_is_rejected_before_enabling(self):
+    fake = _FakeDriver()
+    backend = _build_backend(fake)
+    samples = self._samples(fake)
+    fake.positions[Axis.Z] += 2000
+    with self.assertRaisesRegex(ValueError, "measured Z"):
+      await backend._stream_samples(samples)
+    self.assertFalse(fake.send_calls)
+    self.assertFalse([name for name, _ in fake.calls if name == "_motors_ensure_enabled"])
+
+  async def test_rotary_wrap_keeps_caller_samples_unchanged(self):
+    fake = _FakeDriver()
+    backend = _build_backend(fake)
+    backend.configuration.axes[Axis.WRIST].unlimited_travel = True
+    samples = self._samples(fake)
+    original = copy.deepcopy(samples)
+    fake.positions[Axis.WRIST] += 360000
+    await backend._stream_samples(samples)
+    self.assertEqual(samples, original)
+    self.assertEqual(fake.positions[Axis.WRIST], 360092)
 
 
 class LinearPathDispatchDefault(unittest.TestCase):

@@ -48,7 +48,7 @@ class MemoryCAN(CANopen):
     self.write_count = 0
     self.fail_at = -1
     for node in self.states:
-      self.values.update({(node, "MS", 0): 0, (node, "MO", 0): 0, (node, "SR", 1): 0xC000})
+      self.values.update({(node, "MS", 0): 0, (node, "MO", 0): 0, (node, "SR", 0): 0xC000})
       for transmit, numbers in ((True, (1, 3, 4)), (False, (1, 3))):
         for number in numbers:
           comm = (0x1800 if transmit else 0x1400) + number - 1
@@ -65,6 +65,7 @@ class MemoryCAN(CANopen):
           self.registers[node, mapping, 2] = b"\x20\x00\x6c\x60"
           self.registers[node, 0x2F20, number] = b"\x01\x00\x00\x00"
       for index, sub, size in (
+        (0x6040, 0, 2),
         (0x60C0, 0, 2),
         (0x60C4, 2, 4),
         (0x60C4, 3, 1),
@@ -157,8 +158,8 @@ def driver() -> Tuple[KX2, MemoryCAN]:
 class RestorationTests(unittest.IsolatedAsyncioTestCase):
   """Exercise production setup, teardown and configuration scopes."""
 
-  async def test_empty_pdo_slots_and_boot_mode_are_not_overwritten(self) -> None:
-    """A fresh Gold drive's zero mapping slots cannot be written back after use."""
+  async def test_empty_pdo_slots_support_streaming_and_restore_active_configuration(self) -> None:
+    """Unused descriptors may stay initialized; mapping counts and communication restore."""
     arm, io = driver()
     for node in io.states:
       for mapping in (0x1A02, 0x1A03, 0x1602):
@@ -169,12 +170,19 @@ class RestorationTests(unittest.IsolatedAsyncioTestCase):
     before = dict(io.registers)
     await arm.setup()
     self.assertEqual(io.registers[1, 0x6060, 0], b"\x00")
-    self.assertFalse(arm._has_session_pdo(1, 3, transmit=True))
-    self.assertFalse(arm._has_session_pdo(1, 3, transmit=False))
-    with self.assertRaisesRegex(CanError, "initialized RPDO"):
-      await arm._ipm_select_mode(True)
+    self.assertTrue(arm._has_session_pdo(1, 3, transmit=True))
+    self.assertTrue(arm._has_session_pdo(1, 3, transmit=False))
+    await arm._ipm_select_mode(True)
+    await arm._ipm_select_mode(False)
     await arm.stop()
-    self.assertEqual(io.registers, before)
+    for key, value in before.items():
+      node, index, sub = key
+      if index in (0x1A02, 0x1A03, 0x1602) and sub:
+        continue
+      if index in (0x6060, 0x6061) and node in arm.motion_node_ids:
+        self.assertEqual(io.registers[key], b"\x01")
+      else:
+        self.assertEqual(io.registers[key], value, key)
 
   async def test_disabled_gold_drives_are_stationary(self) -> None:
     """Gold MS=3 permits setup without enabling the motors."""
@@ -185,6 +193,37 @@ class RestorationTests(unittest.IsolatedAsyncioTestCase):
     await arm._stop_axes([1])
     await arm.stop()
     self.assertTrue(all(io.values[node, "MO", 0] == 0 for node in io.states))
+
+  async def test_interpreter_serializes_different_commands_on_the_same_drive(self) -> None:
+    """Input polling cannot overwrite a pending motion-status reply on the same node."""
+    arm, io = driver()
+    await arm.setup()
+    started, release = asyncio.Event(), asyncio.Event()
+    original_write = io.write
+    commands = []
+
+    async def delayed_write(
+      cob_id: int, data: bytes, *, remote: bool = False, dlc: int | None = None
+    ) -> None:
+      """Hold one drive's status reply while other requests contend for its channel."""
+      commands.append((cob_id, data[:2]))
+      if cob_id == 0x302 and data[:2] == b"MS":
+        started.set()
+        await release.wait()
+      await original_write(cob_id, data, remote=remote, dlc=dlc)
+
+    io.write = delayed_write  # type: ignore[method-assign]
+    status = asyncio.create_task(arm._query_int(2, "MS", 0))
+    await started.wait()
+    sensor = asyncio.create_task(arm._query_int(2, "IB", 20))
+    await arm._query_int(1, "PX", 0)
+    await asyncio.sleep(0.01)
+    self.assertNotIn((0x302, b"IB"), commands)
+    self.assertIn((0x301, b"PX"), commands)
+    release.set()
+    await asyncio.gather(status, sensor)
+    self.assertIn((0x302, b"IB"), commands)
+    await arm.stop()
 
   async def test_binary_interpreter_error_is_not_a_value(self) -> None:
     """A rejected command carries an error flag, even for a floating-point request."""
@@ -222,6 +261,55 @@ class RestorationTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(io.registers, before)
       self.assertEqual(io.states, states)
       self.assertFalse(io.connected)
+
+  async def test_acknowledged_but_ignored_restore_is_reported(self) -> None:
+    """An SDO acknowledgement does not prove the requested setting was restored."""
+    arm, io = driver()
+    await arm.setup()
+    write = io.download
+
+    async def ignore_mode_restore(node, index, sub, data):
+      """Model a drive acknowledging a mode value it cannot select."""
+      if index == 0x6060 and data == b"\x03":
+        return
+      await write(node, index, sub, data)
+
+    io.download = ignore_mode_restore  # type: ignore[method-assign]
+    io.registers[1, 0x6060, 0] = b"\x03"
+    with self.assertRaisesRegex(CanError, "did not restore 0x6060"):
+      async with arm._preserve_settings(sdo=[(1, 0x6060, 0), (1, 0x6081, 0)]):
+        await io.download(1, 0x6060, 0, b"\x01")
+        await io.download(1, 0x6081, 0, b"\x04\x00\x00\x00")
+    self.assertEqual(io.registers[1, 0x6081, 0], b"\x03\x00\x00\x00")
+    self.assertTrue(arm._faulted)
+    with self.assertRaisesRegex(CanError, "did not restore 0x6060"):
+      await arm.stop()
+    self.assertFalse(io.connected)
+
+  async def test_interpolation_buffer_access_enabled_after_clear_and_mode_selection(self) -> None:
+    """A cleared but disabled buffer discards the preload and underflows on start."""
+    arm, io = driver()
+    await arm.setup()
+    writes = AsyncMock(wraps=io.download)
+    io.download = writes  # type: ignore[method-assign]
+    await arm._ipm_select_mode(True)
+    for node in arm.motion_node_ids:
+      sequence = [
+        (call.args[1], call.args[2], call.args[3])
+        for call in writes.call_args_list
+        if call.args[0] == node and call.args[1] in (0x6060, 0x60C4)
+      ]
+      self.assertEqual(
+        sequence,
+        [
+          (0x6060, 0, b"\x01"),
+          (0x60C4, 6, b"\x00"),
+          (0x6060, 0, b"\x07"),
+          (0x60C4, 6, b"\x01"),
+        ],
+      )
+    await arm._ipm_select_mode(False)
+    await arm.stop()
 
   async def test_cancelled_scope_restores_current_interlock_and_settings(self) -> None:
     """Restore exact current limits after cancellation without violating CL <= PL."""

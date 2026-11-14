@@ -87,10 +87,6 @@ class KX2BarcodeReader:
         await finish_io(asyncio.ensure_future(self.io.stop()))
         raise
       self._connected = True
-      logger.warning(
-        "KX2 barcode reader: version queries and empty scans tested on BD01J09; "
-        "successful barcode decoding remains unverified"
-      )
       logger.info("KX2 barcode reader connected: version=%s", version)
 
   async def request_software_version(self) -> str:

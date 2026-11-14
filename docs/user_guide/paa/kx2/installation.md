@@ -8,6 +8,11 @@ pip install -e ".[canopen,serial]"
 
 The arm uses CANopen at 500 kbit/s through its CAN USB connection. The optional barcode reader uses a separate USB-to-serial connection; omit `serial` if unused. The Python driver uses portable `python-can` adapter interfaces through `pylabrobot.io.CANopen`.
 
+## Limitations
+
+- The optional rail is not supported.
+- Configurations without the servo gripper are not supported.
+
 ## CAN adapter
 
 Install the driver for the adapter fitted to your arm and identify its channel. On Linux, a SocketCAN adapter normally appears as `can0`. Configure the interface before opening PLR:

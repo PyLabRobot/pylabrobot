@@ -12,6 +12,72 @@ from pylabrobot.paa.kx2.tests.lifecycle_tests import driver
 class OperationsTests(unittest.IsolatedAsyncioTestCase):
   """Check partial targets, contact evidence, homing and deliberate parking."""
 
+  async def test_estop_requires_both_safety_channels(self) -> None:
+    """Either open safety channel blocks enabling a motor."""
+    arm, io = driver()
+    await arm.setup()
+    for status in (0, 0x4000, 0x8000):
+      io.values[1, "SR", 0] = status
+      self.assertTrue(await arm.request_estop())
+      with self.assertRaisesRegex(CanError, "e-stop is active"):
+        await arm._motor_enable(Axis.Z, True, use_ds402=True)
+    io.values[1, "SR", 0] = 0xC000
+    self.assertFalse(await arm.request_estop())
+    await arm.stop()
+
+  async def test_stop_halts_canopen_profile_without_changing_enable_state(self) -> None:
+    """An interpreter stop alone cannot terminate a CANopen position profile."""
+    arm, io = driver()
+    await arm.setup()
+    original_write = io.write
+
+    async def respond_to_halt(cob_id, data, **kwargs):
+      await original_write(cob_id, data, **kwargs)
+      if cob_id == 0x202 and int.from_bytes(data, "little") & 0x100:
+        io.values[2, "MS", 0] = 1
+
+    io.write = respond_to_halt  # type: ignore[method-assign]
+    for controlword in (0x3F, 0x06):
+      io.values[2, "MO", 0] = 1
+      io.registers[2, 0x6040, 0] = controlword.to_bytes(2, "little")
+      io.values[2, "MS", 0] = 2
+      await arm._stop_axes([Axis.Z])
+      expected = ((controlword | 0x100) & ~0x10).to_bytes(2, "little")
+      self.assertIn((0x202, expected), io.frames)
+    io.frames.clear()
+    io.values[2, "MO", 0], io.values[2, "MS", 0] = 0, 3
+    io.registers[2, 0x6040, 0] = b"\x3f\x00"
+    await arm._stop_axes([Axis.Z])
+    self.assertFalse(any(cob == 0x202 for cob, _ in io.frames))
+    await arm.stop()
+
+  async def test_limit_stop_requires_stationary_reference_and_matching_feedback(self) -> None:
+    """A latched MS=2 is acceptable only after the reference and feedback settle."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[2, "MS", 0] = 2
+    io.values[2, "PX", 0] = io.values[2, "DV", 3] = 50000
+    io.values[2, "DV", 5] = 10
+    original_query = arm._query_int
+    velocity_samples = 0
+
+    async def query(node_id, command, index=0):
+      nonlocal velocity_samples
+      if command == "DV" and index == 5:
+        velocity_samples += 1
+        if velocity_samples == 4:
+          io.values[2, "DV", 5] = 0
+          io.values[2, "PX", 0] = 49900
+        if velocity_samples == 8:
+          io.values[2, "PX", 0] = 50000
+      return await original_query(node_id, command, index)
+
+    arm._query_int = query  # type: ignore[method-assign]
+    await arm._stop_axes([Axis.Z])
+    self.assertGreater(velocity_samples, 8)
+    self.assertEqual(io.values[2, "MS", 0], 2)
+    await arm.stop()
+
   async def test_point_move_stops_then_restores_jog_end_velocity(self) -> None:
     """A nonzero prior end velocity cannot carry a point move beyond its target."""
     arm, io = driver()
@@ -75,9 +141,14 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
     """High current on a stationary jaw away from the hard stop counts as contact."""
     arm, io = driver()
     await arm.setup()
+    io.values[2, "IB", 20] = 1
     io.values[6, "CL", 1], io.values[6, "IQ", 0] = 1.0, 0.95
+    io.values[6, "MO", 0] = 1
     io.values[6, "PX", 0] = 20000
     self.assertTrue(await arm.gripper.sense_plate_gripped())
+    io.values[6, "MO", 0] = 0
+    self.assertFalse(await arm.gripper.sense_plate_gripped())
+    io.values[6, "MO", 0] = 1
     io.values[6, "IQ", 0] = 0.1
     self.assertFalse(await arm.gripper.sense_plate_gripped())
     io.values[6, "IQ", 0] = 0.95
@@ -90,34 +161,136 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
     arm, io = driver()
     await arm.setup()
     io.values[6, "PL", 1], io.values[6, "CL", 1] = 0.8, 0.4
-    arm._motors_move_joint_locked = AsyncMock(side_effect=CanError("blocked"))  # type: ignore[method-assign]
+    io.values[6, "PX", 0] = 30000
+    arm._start_joint_plan = AsyncMock(side_effect=CanError("blocked"))  # type: ignore[method-assign]
     with self.assertRaisesRegex(CanError, "blocked"):
       await arm.gripper.move_to_jaw_position(20, max_force_percent=50)
     self.assertAlmostEqual(io.values[6, "CL", 1], 0.4)
     self.assertAlmostEqual(io.values[6, "PL", 1], 0.8)
     await arm.stop()
 
-  async def test_contact_stops_and_joins_closing_motion(self) -> None:
-    """Sustained current ends a close before its unreachable position target."""
+  async def test_current_during_jaw_motion_is_not_a_grip(self) -> None:
+    """High motor current while the jaw is still moving cannot confirm a held plate."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[6, "MO", 0] = 1
+    io.values[6, "CL", 1], io.values[6, "IQ", 0] = 1.0, 0.95
+    arm.gripper.request_jaw_position = AsyncMock(  # type: ignore[method-assign]
+      side_effect=[10.0, 10.0, 10.1]
+    )
+    self.assertFalse(await arm.gripper.sense_plate_gripped())
+    await arm.stop()
+
+  async def test_contact_retains_target_and_current_until_release(self) -> None:
+    """A grip holds its limited current; opening restores the original limits."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[2, "IB", 20] = 1
+    io.values[6, "CL", 1], io.values[6, "PL", 1] = 0.4, 0.8
+    io.values[6, "PX", 0], io.values[6, "IQ", 0] = 30000, 0.57
+    io.values[6, "MO", 0], io.values[6, "MS", 0] = 1, 1
+    start = AsyncMock()
+    arm._start_joint_plan = start  # type: ignore[method-assign]
+    await arm.gripper.move_to_jaw_position(
+      20, max_force_percent=50, check_plate_gripped=True, max_speed=1, max_acceleration=2
+    )
+    self.assertAlmostEqual(io.values[6, "CL", 1], 0.6)
+    self.assertAlmostEqual(io.values[6, "PL", 1], 1.2)
+    self.assertNotIn((0x306, b"ST\x00\x00"), io.frames)
+    self.assertEqual(start.call_args.args[0].moves[0].velocity, 1000)
+    self.assertEqual(start.call_args.args[0].moves[0].acceleration, 2000)
+    self.assertEqual(arm.configuration.axes[Axis.SERVO_GRIPPER].max_vel, 100)
+    io.values[6, "MS", 0] = 0
+
+    async def open_jaws(plan):
+      self.assertAlmostEqual(io.values[6, "CL", 1], 1.2)
+      io.values[6, "PX", 0] = plan.moves[0].position
+
+    arm._start_joint_plan = open_jaws  # type: ignore[method-assign]
+    await arm.gripper.move_to_jaw_position(40, force_sensing=False)
+    self.assertAlmostEqual(io.values[6, "CL", 1], 0.4)
+    self.assertAlmostEqual(io.values[6, "PL", 1], 0.8)
+    await arm.stop()
+
+  async def test_current_without_plate_detection_is_not_a_grip(self) -> None:
+    """Motor resistance alone cannot establish plate presence."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[6, "MO", 0], io.values[6, "PX", 0] = 1, 30000
+    io.values[6, "CL", 1], io.values[6, "IQ", 0] = 0.6, 0.59
+    self.assertFalse(await arm.gripper.sense_plate_gripped())
+    io.values[2, "IB", 20] = 1
+    io.values[6, "PX", 0] = 199980
+    self.assertFalse(await arm.gripper.sense_plate_gripped())
+    await arm.stop()
+
+  async def test_stall_before_closure_is_not_reported_as_a_grip(self) -> None:
+    """Insufficient current at the open limit must fail rather than claim contact."""
     arm, io = driver()
     await arm.setup()
     io.values[6, "CL", 1], io.values[6, "PL", 1] = 0.4, 0.8
-    io.values[6, "PX", 0], io.values[6, "IQ", 0] = 30000, 0.57
-    joined = asyncio.Event()
-
-    async def move(*args, **kwargs) -> None:
-      """Represent a drive waiting to reach a target behind the plate."""
-      try:
-        await asyncio.Future()
-      finally:
-        joined.set()
-
-    arm._motors_move_joint_locked = move  # type: ignore[method-assign]
-    await arm.gripper.move_to_jaw_position(20, max_force_percent=50, check_plate_gripped=True)
-    self.assertTrue(joined.is_set())
+    io.values[6, "MO", 0], io.values[6, "MS", 0] = 1, 1
+    io.values[6, "PX", 0], io.values[6, "IQ", 0] = 199980, 0.24
+    io.values[2, "IB", 20] = 1
+    arm._start_joint_plan = AsyncMock()  # type: ignore[method-assign]
+    with self.assertRaisesRegex(CanError, "before measurable jaw closure"):
+      await arm.gripper.move_to_jaw_position(196, max_force_percent=20)
     self.assertAlmostEqual(io.values[6, "CL", 1], 0.4)
     self.assertIn((0x306, b"ST\x00\x00"), io.frames)
     await arm.stop()
+
+  async def test_release_accepts_settled_feedback_with_profiler_done(self) -> None:
+    """MS=1 does not invalidate feedback within the jaw tolerance."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[6, "CL", 1], io.values[6, "PL", 1] = 0.4, 0.8
+    io.values[6, "PX", 0], io.values[6, "MO", 0], io.values[6, "MS", 0] = 30000, 1, 1
+
+    async def open_jaws(plan):
+      self.assertAlmostEqual(io.values[6, "CL", 1], 1.2)
+      io.values[6, "PX", 0] = plan.moves[0].position - 5
+
+    arm._start_joint_plan = open_jaws  # type: ignore[method-assign]
+    await arm.gripper.move_to_jaw_position(40, force_sensing=False, max_speed=1)
+    self.assertAlmostEqual(io.values[6, "CL", 1], 0.4)
+    self.assertAlmostEqual(io.values[6, "PL", 1], 0.8)
+    await arm.stop()
+
+  async def test_cancelled_close_stops_before_restoring_current(self) -> None:
+    """Cancelling a closing profile cannot leave a producer or closing target running."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[6, "CL", 1], io.values[6, "PL", 1] = 0.4, 0.8
+    io.values[6, "PX", 0], io.values[6, "MO", 0] = 30000, 1
+    begun = asyncio.Event()
+
+    async def begin(plan):
+      begun.set()
+
+    arm._start_joint_plan = begin  # type: ignore[method-assign]
+    task = asyncio.create_task(arm.gripper.move_to_jaw_position(20, max_force_percent=50))
+    await begun.wait()
+    task.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+    self.assertIn((0x306, b"ST\x00\x00"), io.frames)
+    self.assertAlmostEqual(io.values[6, "CL", 1], 0.4)
+    self.assertAlmostEqual(io.values[6, "PL", 1], 0.8)
+    await arm.stop()
+
+  async def test_disconnect_restores_current_after_held_grip(self) -> None:
+    """The connection owns cleanup for a grip that has not been released."""
+    arm, io = driver()
+    await arm.setup()
+    io.values[2, "IB", 20] = 1
+    io.values[6, "CL", 1], io.values[6, "PL", 1] = 0.4, 0.8
+    io.values[6, "PX", 0], io.values[6, "IQ", 0] = 30000, 0.57
+    io.values[6, "MO", 0], io.values[6, "MS", 0] = 1, 1
+    arm._start_joint_plan = AsyncMock()  # type: ignore[method-assign]
+    await arm.gripper.move_to_jaw_position(20, max_force_percent=50)
+    await arm.stop()
+    self.assertAlmostEqual(io.values[6, "CL", 1], 0.4)
+    self.assertAlmostEqual(io.values[6, "PL", 1], 0.8)
 
   async def test_hard_stop_uses_jog_begin_error_query_and_stop(self) -> None:
     """Homing decisions run in Python, with a stop after the observed hard-stop error."""

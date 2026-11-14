@@ -624,6 +624,8 @@ def sample_linear_path(
   accel_mm_per_s2: float,
   dt_s: float,
   current_joints: Optional[Dict[Axis, float]] = None,
+  angular_speed: float = 30.0,
+  angular_acceleration: float = 100.0,
 ) -> List[LinearPathSample]:
   """Sample a straight tool-tip path from ``start_pose`` to ``end_pose`` at dt.
 
@@ -638,6 +640,8 @@ def sample_linear_path(
       WRIST/SHOULDER are 360°-snapped toward ``current_joints`` so the
       trajectory doesn't begin with a full unwind. ELBOW position passes
       through unchanged (linear axis).
+    angular_speed: maximum yaw speed in degrees per second.
+    angular_acceleration: maximum yaw acceleration in degrees per second squared.
 
   Returns:
     Dense list of samples, one per dt step. The last sample lands exactly
@@ -647,7 +651,10 @@ def sample_linear_path(
     differences and are clamped to zero at the very last sample so the
     drive ends stationary.
   """
-  if vel_mm_per_s <= 0 or accel_mm_per_s2 <= 0 or dt_s <= 0:
+  if not all(
+    isfinite(v) and v > 0
+    for v in (vel_mm_per_s, accel_mm_per_s2, dt_s, angular_speed, angular_acceleration)
+  ):
     raise ValueError(
       f"sample_linear_path: vel/accel/dt must be positive (got "
       f"{vel_mm_per_s}, {accel_mm_per_s2}, {dt_s})"
@@ -658,29 +665,24 @@ def sample_linear_path(
   start_yaw, end_yaw = start_pose.rotation.z, end_pose.rotation.z
   length = sqrt((ex - sx) ** 2 + (ey - sy) ** 2 + (ez - sz) ** 2)
 
-  # Pure rotation in place is unsupported here: the speed/accel caps are
-  # mm/s and mm/s², so reusing them as deg/s for a wrist spin would silently
-  # command rotational rates the caller didn't intend. Use a joint-space
-  # move for orientation-only changes.
   rot_delta = abs(((end_yaw - start_yaw + 540.0) % 360.0) - 180.0)
-  if length <= _EPS and rot_delta > _EPS:
-    raise NotImplementedError(
-      "sample_linear_path: pure rotation (no translation) is not supported. "
-      f"Translation length={length:.4f} mm, rotation delta={rot_delta:.2f}°. "
-      "Use move_to_joint_position with the target wrist angle for "
-      "orientation-only changes."
-    )
-
-  # Cartesian arc-length trapezoid. Yaw rides the same s/length ratio so
-  # rotation lands together with translation.
-  s_seq = _arc_length_trapezoid_times(length, vel_mm_per_s, accel_mm_per_s2, dt_s)
+  # Translation and yaw follow the same normalized progress, with independent units.
+  speeds, accelerations = [], []
+  if length > _EPS:
+    speeds.append(vel_mm_per_s / length)
+    accelerations.append(accel_mm_per_s2 / length)
+  if rot_delta > _EPS:
+    speeds.append(angular_speed / rot_delta)
+    accelerations.append(angular_acceleration / rot_delta)
+  progress = (
+    _arc_length_trapezoid_times(1.0, min(speeds), min(accelerations), dt_s) if speeds else [1.0]
+  )
 
   prev_for_snap: Optional[Dict[Axis, float]] = (
     dict(current_joints) if current_joints is not None else None
   )
   poses: List[Dict[Axis, float]] = []
-  for s in s_seq:
-    alpha = (s / length) if length > 0 else 1.0
+  for alpha in progress:
     pose_i = CartesianPose(
       location=Coordinate(
         x=sx + alpha * (ex - sx),

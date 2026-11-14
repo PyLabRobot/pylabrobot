@@ -24,6 +24,7 @@ class ProximityTests(unittest.IsolatedAsyncioTestCase):
     async def move(target, **kwargs) -> None:
       """Only the descent remains in flight until the sensor interrupts it."""
       if target[Axis.Z] == 80:
+        self.assertEqual(io.values[2, "IL", 4], 8)
         started.set()
         try:
           await asyncio.Future()

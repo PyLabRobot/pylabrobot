@@ -49,7 +49,6 @@ from pylabrobot.paa.kx2.protocol import (
   TPDOTrigger,
   _decode_emcy,
   _ElmoObjectDataType,
-  _InputLogic,
   _NodeEmcyState,
   _u32_le,
 )
@@ -156,10 +155,6 @@ class KX2:
   # otherwise the (PRELOAD+1)th frame queue_fulls immediately.
   _PVT_DT_MS: int = 8
   _PVT_PRELOAD: int = 8
-  # Below this trajectory delta (in encoder counts) an axis is considered
-  # "not moving" and skipped from IPM streaming — the drive idles on
-  # sub-threshold motion and leaves frames stuck in its IP buffer otherwise.
-  _SKIP_AXIS_COUNTS: int = 500
 
   _parking_position: Optional[Dict[Axis, float]]
 
@@ -270,14 +265,8 @@ class KX2:
     # this dict directly.
     self._pending_bi: Dict[Tuple[int, str, int], asyncio.Future] = {}
 
-    # Per-(node, cmd, idx) lock around the future-install + send + await
-    # cycle in _send_bi. Without it, two coroutines firing the same
-    # request would clobber each other's pending-future entry; with the
-    # motion lock above mitigating most of it but direct driver callers
-    # (notebook diagnostics) and gathered queries with overlapping keys
-    # still hit the race. setdefault(asyncio.Lock()) is fine because the
-    # garbage Lock from a missed-race insert is immediately discarded.
-    self._bi_locks: Dict[Tuple[int, str, int], asyncio.Lock] = {}
+    # Serialize requests on each drive's binary-interpreter channel.
+    self._bi_locks: Dict[int, asyncio.Lock] = {}
     self._invalid_bi_keys: set[Tuple[int, str, int]] = set()
 
     self._ipm_mode: bool = False
@@ -385,12 +374,11 @@ class KX2:
     targets = list(self.motion_node_ids) if node_id == _GROUP_NODE_ID else [node_id]
     keys = [(nid, cmd, cmd_index) for nid in targets]
 
-    # Acquire one lock per target key first, so a second caller with the
-    # same key waits at the gate instead of clobbering our pending future.
-    # AsyncExitStack releases the locks in LIFO order on any exit path.
+    # Each drive has one interpreter request/response channel. Serialize even
+    # different commands on that drive; distinct nodes can still run concurrently.
     async with contextlib.AsyncExitStack() as stack:
-      for key in keys:
-        await stack.enter_async_context(self._bi_locks.setdefault(key, asyncio.Lock()))
+      for nid in sorted(targets):
+        await stack.enter_async_context(self._bi_locks.setdefault(nid, asyncio.Lock()))
 
       if any(key in self._invalid_bi_keys for key in keys):
         raise CanError("A timed-out CAN reply is ambiguous; reconnect before reusing this command")
@@ -539,8 +527,20 @@ class KX2:
     sdo_items = sorted(saved.sdo.items(), key=lambda item: item[0][1] != 0x60C0)
     for sdo_key, data in sdo_items:
       try:
-        if await self._can_sdo_upload(*sdo_key) != data:
+        actual = await self._can_sdo_upload(*sdo_key)
+        # Zero is an unselectable power-on state. Preserve it while untouched;
+        # after motion, leave the drive in idle profile-position mode.
+        if sdo_key[1:] == (0x6060, 0) and data == b"\x00" and actual != data:
+          data = b"\x01"
+        if actual != data:
           await self._can_sdo_download(*sdo_key, list(data))
+          restored = await self._can_sdo_upload(*sdo_key)
+          if restored != data:
+            node, index, sub = sdo_key
+            raise CanError(
+              f"Node {node} did not restore 0x{index:04X}:{sub}: "
+              f"expected {data.hex()}, read {restored.hex()}"
+            )
       except BaseException as exc:
         errors.append(exc)
     if errors:
@@ -587,13 +587,8 @@ class KX2:
     )
 
   async def _save_restorable_pdo(self, node: int, number: int, *, transmit: bool) -> None:
-    """Leave empty mapping slots untouched: Gold firmware rejects restoring zero entries."""
+    """Save active PDO configuration and writable descriptor contents."""
     saved = await self._snapshot_pdo(node, number, transmit=transmit)
-    if any(sub and int.from_bytes(data, "little") == 0 for sub, data in saved.entries.items()):
-      logger.debug(
-        "Leaving uninitialized %sPDO%d unchanged on node %d", "T" if transmit else "R", number, node
-      )
-      return
     self._session_pdos.append(saved)
 
   async def _restore_pdo(self, saved: _PDOSettings) -> None:
@@ -602,7 +597,9 @@ class KX2:
     await self._can_sdo_download(saved.node, saved.communication, 1, _u32_le(cob | 0x80000000))
     await self._can_sdo_download(saved.node, saved.mapping, 0, [0])
     for sub, data in saved.entries.items():
-      if sub:
+      # Unused zero descriptors are not writable on Gold firmware. Restoring
+      # the original mapping count keeps these descriptors inactive.
+      if sub and any(data):
         await self._can_sdo_download(saved.node, saved.mapping, sub, list(data))
     await self._can_sdo_download(saved.node, saved.mapping, 0, list(saved.entries[0]))
     for sub, data in saved.fields.items():
@@ -638,13 +635,35 @@ class KX2:
         await self._execute(axis, "ST")
       except BaseException as exc:
         errors.append(exc)
+      try:
+        # A disabled drive may retain an enabled controlword, so do not replay it.
+        if await self.request_axis_enabled(axis):
+          controlword = int.from_bytes(await self._can_sdo_upload(axis, 0x6040, 0), "little")
+          await self._control_word_set(axis, (controlword | 0x100) & ~0x10)
+      except BaseException as exc:
+        errors.append(exc)
     deadline = time.monotonic() + 3.0
     for axis in axes:
       try:
+        reference: Optional[int] = None
+        settled_since: Optional[float] = None
         while await self._motor_get_motion_status(axis) not in (0, 1, 3):
+          # A reverse-limit stop can leave MS=2 latched. Require a stationary
+          # position reference, zero profiler velocity and matching feedback.
+          desired = await self._query_int(axis, "DV", 3)
+          velocity = await self._query_int(axis, "DV", 5)
+          actual = await self._query_int(axis, "PX", 0)
+          tolerance = self._encoder_tolerance(Axis(axis)) if self._config is not None else 1
+          if velocity == 0 and abs(actual - desired) <= tolerance:
+            if desired != reference or settled_since is None:
+              reference, settled_since = desired, time.monotonic()
+            elif time.monotonic() - settled_since >= 0.15:
+              break
+          else:
+            reference, settled_since = None, None
           if time.monotonic() >= deadline:
             raise CanError(f"Axis {axis} did not stop")
-          await asyncio.sleep(0.01)
+          await asyncio.sleep(0.02)
       except BaseException as exc:
         errors.append(exc)
     if errors:
@@ -824,6 +843,8 @@ class KX2:
           if await self._motor_check_if_move_done(int(nid)):
             return
         except CanError as e:
+          if self._faulted:
+            raise
           # Transient bus error — keep polling. Visible at DEBUG so a wedged
           # bus shows up in logs instead of just burning the full timeout.
           logger.debug("wait_for_moves_done node %d: transient CAN error: %s", nid, e)
@@ -848,7 +869,6 @@ class KX2:
     """Send the synchronous PDO latch frame."""
     if not self.io.connected:
       raise CanError("_can_sync called before setup()")
-    # SYNC object (0x080), no data.
     await self.io.write(0x80, b"")
 
   async def _control_word_set(self, node_id: int, value: int, sync: bool = True) -> None:
@@ -919,7 +939,7 @@ class KX2:
     Reads the shoulder drive's SR (status register) via the binary
     interpreter. Bits 14/15 encode the stop/safety state.
     """
-    r = await self._query_int(Axis.SHOULDER, "SR", 1)
+    r = await self._query_int(Axis.SHOULDER, "SR", 0)
     return (r & 0x4000) == 0 or (r & 0x8000) == 0
 
   async def _motor_enable(self, node_id: int, state: bool, *, use_ds402: bool) -> None:
@@ -1098,8 +1118,8 @@ class KX2:
     for nid in node_ids:
       await self._trigger_new_setpoint(int(nid), cw_low, cw_high)
 
-  async def _execute_joint_plan(self, plan: MotorsMovePlan) -> None:
-    """Caller MUST hold _motion_guard."""
+  async def _start_joint_plan(self, plan: MotorsMovePlan) -> None:
+    """Configure and start the profile; caller holds the motion guard and owns completion."""
     for nid in {move.node_id for move in plan.moves}:
       await self._set_op_mode(nid, 1)
     self._ipm_mode = False
@@ -1145,7 +1165,13 @@ class KX2:
 
     node_ids = [move.node_id for move in plan.moves]
     await self._ppm_begin_motion(node_ids)
-    await self._wait_for_moves_done(node_ids, timeout=plan.move_time + 2)
+
+  async def _execute_joint_plan(self, plan: MotorsMovePlan) -> None:
+    """Run a profile to completion while the caller holds the motion guard."""
+    await self._start_joint_plan(plan)
+    await self._wait_for_moves_done(
+      [move.node_id for move in plan.moves], timeout=plan.move_time + 2
+    )
 
   async def _motors_move_absolute_execute_locked(self, plan: MotorsMovePlan) -> None:
     """Execute a plan with scoped velocity, acceleration, direction and operation mode."""
@@ -1206,6 +1232,8 @@ class KX2:
         await self._set_op_mode(nid, 1)
         await self._ipm_clear_queue(nid)
         await self._set_op_mode(nid, 7)
+        # Clearing disables buffer access; re-enable it before loading points.
+        await self._can_sdo_download(nid, 0x60C4, 0x06, [1])
       # Let drives finish ingesting mode 7 + buffer reset before any RPDO3
       # write — without this, back-to-back IPM moves intermittently see the
       # first preload write hit EMCY 0x34 / 0xBA (queue_full) against a
@@ -1251,21 +1279,14 @@ class KX2:
     position_enc: int,
     velocity_enc_per_s: int,
   ) -> None:
-    """Append one PVT (P, V) data point to the drive's interpolation buffer
-    via RPDO3.
+    """Append a position/velocity record through RPDO3.
 
     Wire layout (8 bytes, little-endian, RPDO3 COB-ID = 0x400 + node_id):
       [0..3] TargetPositionIP (INT32 encoder counts)
       [4..7] TargetVelocityIP (INT32 encoder counts/sec)
 
-    Synchronous — `network.send_message` queues to the kernel CAN buffer in
-    microseconds with no I/O wait, so there's nothing to await. Marking it
-    `async` would mislead callers about the cost (no event-loop yield) and
-    add a coroutine-frame allocation per send.
-
-    RPDO3 is mapped EventDriven (no SYNC needed) at setup. Caller paces the
-    feed; sending faster than the buffer drains raises EMCY 0x34 from the
-    drive (queue-full)."""
+    RPDO3 is event driven; the caller paces records to match the interpolation period.
+    """
     if not self.io.connected:
       raise CanError("ipm_send_pvt_point called before setup()")
     payload = int(position_enc).to_bytes(4, "little", signed=True) + int(
@@ -1284,16 +1305,11 @@ class KX2:
     Disabled is silently dropped — the state machine needs the 6→7→15
     transitions visible to its poll loop.
 
-    Resets the per-axis IPM queue counters BEFORE issuing the CW edge so a
-    queue_full/underflow fired between preload and begin (e.g. malformed
-    first point) is preserved for the runtime to inspect and surface."""
+    Queue errors collected during preload remain available to the runtime."""
     ids = [int(n) for n in node_ids]
     if not ids:
       return
     await self._motors_ensure_enabled(ids)
-    for nid in ids:
-      if nid in self._emcy:
-        self._emcy[nid] = _NodeEmcyState()
     for nid in ids[:-1]:
       await self._control_word_set(nid, 0x1F, sync=False)
     await self._control_word_set(ids[-1], 0x1F, sync=True)
@@ -1310,7 +1326,7 @@ class KX2:
       await self._control_word_set(nid, 0x0F, sync=False)
     await self._control_word_set(ids[-1], 0x0F, sync=True)
 
-  def _ipm_check_queue_fault(self, node_ids: List[int]) -> None:
+  def _ipm_check_queue_fault(self, node_ids: List[int], *, allow_empty: bool = False) -> None:
     """Raise CanError if any axis has a fatal IPM queue condition.
 
     Inspects the EMCY-driven ``_emcy`` state for ``queue_full`` (drive
@@ -1326,7 +1342,7 @@ class KX2:
         continue
       if st.queue_full:
         bad.append(f"Axis {nid} queue_full (failed write @ {st.queue_full_failed_write_pointer})")
-      if st.underflow:
+      if st.underflow and not allow_empty:
         bad.append(f"Axis {nid} underflow")
     if bad:
       raise CanError("IPM queue fault: " + "; ".join(bad))
@@ -1337,6 +1353,31 @@ class KX2:
       await self._ipm_stop(active_axes)
     finally:
       await self._ipm_select_mode(False)
+
+  def _encoder_tolerance(self, axis: Axis) -> int:
+    """Allow 0.01 drive units of settling error, or one encoder count."""
+    return max(1, round(abs(self._cfg.axes[axis].motor_conversion_factor) * 0.01))
+
+  async def _check_encoder_targets(self, targets: Dict[Axis, int]) -> None:
+    """Reject a settled move that did not reach its absolute encoder targets."""
+    for axis, target in targets.items():
+      actual = await self._motor_read_position_raw(axis)
+      if abs(actual - target) > self._encoder_tolerance(axis):
+        raise CanError(
+          f"{axis.name} did not reach its target: expected {target}, measured {actual} counts"
+        )
+
+  async def _wait_for_encoder_targets(self, targets: Dict[Axis, int], timeout: float = 3.0) -> None:
+    """Keep the final position reference active until feedback reaches the endpoint."""
+    deadline = time.monotonic() + timeout
+    while True:
+      try:
+        await self._check_encoder_targets(targets)
+        return
+      except CanError:
+        if time.monotonic() >= deadline:
+          raise
+      await asyncio.sleep(0.02)
 
   async def _stream_samples_unscoped(self, samples: "List[kinematics.LinearPathSample]") -> None:
     """Stream a pre-built list of LinearPathSamples through the drive's IPM
@@ -1352,50 +1393,45 @@ class KX2:
       await self._ipm_select_mode(False)
       return
 
-    # Skip axes with small total motion (Δ ≤ _SKIP_AXIS_COUNTS). Two reasons:
-    # (1) the drive idles on sub-threshold motion and leaves frames stuck in
-    # the IP buffer; (2) rotary axes (shoulder, wrist) wrap — IK gives
-    # angles in (-180, 180] but the drive's encoder counts up across
-    # revolutions, so streaming raw IK values for a rotary axis that's
-    # currently many revolutions in causes the drive to interpret each
-    # command as a huge multi-rotation move and tracking-error fault.
     all_axes = [int(ax) for ax in (Axis.SHOULDER, Axis.Z, Axis.ELBOW, Axis.WRIST)]
     active_axes: List[int] = []
     for nid in all_axes:
       seq = [s.encoder_position[Axis(nid)] for s in samples]
-      if max(seq) - min(seq) > self._SKIP_AXIS_COUNTS:
+      if max(seq) != min(seq):
         active_axes.append(nid)
+
+    # Only complete revolutions are equivalent absolute rotary positions.
+    # A stale start position must not translate the requested path or endpoint.
+    offsets: Dict[Axis, int] = {}
+    for nid in all_axes:
+      axis = Axis(nid)
+      actual = await self._motor_read_position_raw(nid)
+      planned = samples[0].encoder_position[axis]
+      cfg = self._cfg.axes[axis]
+      offset = 0
+      if axis in (Axis.SHOULDER, Axis.WRIST) and cfg.unlimited_travel:
+        revolution = cfg.motor_conversion_factor * 360
+        offset = round(round((actual - planned) / revolution) * revolution)
+      if abs(actual - planned - offset) > self._encoder_tolerance(axis):
+        raise ValueError(f"Streamed path does not start at the measured {axis.name} position")
+      offsets[axis] = offset
     if not active_axes:
       return
-
-    # Enable healthy drives before streaming.
     await self._motors_ensure_enabled(active_axes)
 
-    # Align the sample sequence to the drive's actual encoder positions.
-    # Rotary axes (shoulder, wrist) wrap — the drive's encoder counts up
-    # forever across full rotations, but IK gives joint angles in (-180,
-    # 180]; sample[0] therefore lands many revolutions away from the drive's
-    # actual position. Sending those raw triggers an immediate position-
-    # tracking fault (drive rejects RPDO3, looks like queue_full to us).
-    # Shift every sample's encoder_position by (actual_now - sample[0]) so
-    # the trajectory rides on top of the drive's current encoder, preserving
-    # all relative motion.
-    enc_now = {}
-    for nid in active_axes:
-      enc_now[nid] = await self._motor_read_position_raw(nid)
-    for nid in active_axes:
-      offset = enc_now[nid] - samples[0].encoder_position[Axis(nid)]
-      if offset == 0:
-        continue
-      for s in samples:
-        s.encoder_position[Axis(nid)] += offset
-
-    dt_s = self._PVT_DT_MS / 1000.0
+    interval = self._PVT_DT_MS
+    dt_s = interval / 1000.0
     preload = min(self._PVT_PRELOAD, len(samples))
 
+    # The interpolation period is latched when the drive enters mode 7.
+    for nid in active_axes:
+      state = self._emcy.get(nid)
+      if state is not None:
+        state.queue_full = False
+        state.underflow = False
+    await self._ipm_set_time_interval(interval)
     await self._ipm_select_mode(True)
     try:
-      await self._ipm_set_time_interval(self._PVT_DT_MS)
       # Preload PRELOAD frames per axis. The drive starts consuming as soon
       # as begin_motion fires; preload lets the producer fall behind by up
       # to (PRELOAD-1) * dt without underflowing the queue.
@@ -1404,7 +1440,7 @@ class KX2:
           ax = Axis(nid)
           await self._ipm_send_pvt_point(
             nid,
-            samples[i].encoder_position[ax],
+            samples[i].encoder_position[ax] + offsets[ax],
             samples[i].encoder_velocity[ax],
           )
       self._ipm_check_queue_fault(active_axes)
@@ -1423,15 +1459,24 @@ class KX2:
           ax = Axis(nid)
           await self._ipm_send_pvt_point(
             nid,
-            samples[i].encoder_position[ax],
+            samples[i].encoder_position[ax] + offsets[ax],
             samples[i].encoder_velocity[ax],
           )
         self._ipm_check_queue_fault(active_axes)
 
-      # The controller consumes a finite look-ahead buffer. Clear ip-enable after
-      # sending the terminal point; waiting for bit 10 before this can underflow.
-      await self._ipm_stop(active_axes)
+      # Let the terminal zero-velocity point settle before disabling interpolation.
       await self._wait_for_moves_done(active_axes, timeout=3.0)
+      # An exhausted FIFO disables interpolation and reports underflow even at
+      # the terminal zero-velocity point. Only accept it after feeding the whole
+      # path, waiting for settled feedback, and verifying every endpoint below.
+      self._ipm_check_queue_fault(active_axes, allow_empty=True)
+      await self._wait_for_encoder_targets(
+        {
+          Axis(nid): samples[-1].encoder_position[Axis(nid)] + offsets[Axis(nid)]
+          for nid in all_axes
+        }
+      )
+      await self._ipm_stop(active_axes)
     finally:
       await finish_io(asyncio.ensure_future(self._finish_stream(active_axes)))
 
@@ -1476,6 +1521,12 @@ class KX2:
             await self._motor_enable(nid, enabled, use_ds402=False)
         except BaseException as exc:
           errors.append(exc)
+      try:
+        if self.gripper._hold_settings is not None:
+          await self._stop_axes([Axis.SERVO_GRIPPER])
+        await self.gripper._restore_current_limits()
+      except BaseException as exc:
+        errors.append(exc)
       try:
         await self._restore_registers(self._session_registers)
       except BaseException as exc:
@@ -2053,10 +2104,7 @@ class KX2:
     async with self._lifecycle_lock:
       if self._setup_finished:
         return
-      logger.warning(
-        "KX2: small joint moves and homing tested on Twitter 01.01.15.00; "
-        "loaded handling, streaming and complete boot-state restoration remain unverified"
-      )
+      logger.warning("KX2 hardware validation is incomplete")
       self._faulted = False
       self._stopping = False
       try:
@@ -2082,7 +2130,13 @@ class KX2:
       pass
 
   async def stop(self) -> None:
-    """Finish active work, restore session settings, and close both transports."""
+    """Finish active work, restore session settings, and close both transports.
+
+    Gold firmware cannot restore unused mapping descriptors to zero; their original
+    mapping counts and communication settings are restored, leaving them inactive.
+    An untouched power-on mode 0 is preserved. After motion, it becomes idle profile
+    position mode 1 because mode 0 cannot be selected through the drive protocol.
+    """
     async with self._lifecycle_lock:
       self._stopping = True
       try:
@@ -2214,9 +2268,8 @@ class KX2:
   ) -> None:
     """Set IL[input_num]: drive auto-acts on input edges (e.g. halt motion).
 
-    Pass an `_InputLogic` member or raw int for `logic`. With `StopForward` the
-    drive halts the motor itself the instant the input trips during forward
-    motion — no software in the loop. Skips the write if value already matches;
+    ``logic`` is the drive's active-low IL code; ``logic_high`` selects high polarity.
+    Skips the write if the value already matches;
     settles 250ms after a real change (Elmo IL needs time to apply).
     """
     value = int(logic) + (1 if logic_high else 0)
@@ -2577,7 +2630,10 @@ class KX2:
         tripped = False
         try:
           await self._configure_input_logic(
-            self._PROXIMITY_SENSOR_AXIS, self._PROXIMITY_SENSOR_INPUT, _InputLogic.StopForward
+            # Active-low reverse limit: stop descent while allowing upward withdrawal.
+            self._PROXIMITY_SENSOR_AXIS,
+            self._PROXIMITY_SENSOR_INPUT,
+            8,
           )
           task = asyncio.create_task(
             self._motors_move_joint_locked(
@@ -2606,6 +2662,8 @@ class KX2:
     *,
     max_gripper_speed: Optional[float],
     max_gripper_acceleration: Optional[float],
+    max_gripper_angular_speed: float = 30.0,
+    max_gripper_angular_acceleration: float = 100.0,
   ) -> None:
     """Sample a straight tool-tip path to ``target_pose`` and stream it.
     Caller MUST hold ``_motion_guard``."""
@@ -2626,6 +2684,8 @@ class KX2:
       accel_mm_per_s2=max_gripper_acceleration,
       dt_s=self._PVT_DT_MS / 1000.0,
       current_joints=current_joints,
+      angular_speed=max_gripper_angular_speed,
+      angular_acceleration=max_gripper_angular_acceleration,
     )
     await self._stream_samples(samples)
 
@@ -2649,6 +2709,8 @@ class KX2:
     max_gripper_speed: Optional[float] = None,
     max_gripper_acceleration: Optional[float] = None,
     path: Literal["joint", "linear"] = "joint",
+    max_gripper_angular_speed: Optional[float] = None,
+    max_gripper_angular_acceleration: Optional[float] = None,
   ) -> None:
     """Move the gripper to a Cartesian ``location`` with yaw ``direction`` (deg).
 
@@ -2665,11 +2727,19 @@ class KX2:
         pose, sampled and streamed via the drive's interpolation buffer (PVT).
         Requires ``max_gripper_speed`` and ``max_gripper_acceleration`` — they
         directly drive the Cartesian profile (no cap == no speed to stream).
+        Yaw is independently limited by ``max_gripper_angular_speed`` (deg/s,
+        default 30) and ``max_gripper_angular_acceleration`` (deg/s², default 100).
+        Rotation-only moves hold the grip center fixed. Angular limits apply
+        only to ``path="linear"``.
     """
     if path not in ("joint", "linear") or not all(
       math.isfinite(v) for v in (location.x, location.y, location.z, direction)
     ):
       raise ValueError("A finite Cartesian target and path='joint' or 'linear' are required")
+    if path == "joint" and (
+      max_gripper_angular_speed is not None or max_gripper_angular_acceleration is not None
+    ):
+      raise ValueError("Angular limits require path='linear'")
     pose = CartesianPose(location=location, rotation=Rotation(z=direction))
     if path == "linear":
       async with self._motion_guard():
@@ -2677,6 +2747,12 @@ class KX2:
           pose,
           max_gripper_speed=max_gripper_speed,
           max_gripper_acceleration=max_gripper_acceleration,
+          max_gripper_angular_speed=(
+            30.0 if max_gripper_angular_speed is None else max_gripper_angular_speed
+          ),
+          max_gripper_angular_acceleration=(
+            100.0 if max_gripper_angular_acceleration is None else max_gripper_angular_acceleration
+          ),
         )
       return
     async with self._motion_guard():
@@ -2907,6 +2983,8 @@ class KX2:
     max_gripper_acceleration: Optional[float] = None,
     check_plate_gripped: bool = True,
     max_force_percent: Optional[int] = None,
+    max_jaw_speed: Optional[float] = None,
+    max_jaw_acceleration: Optional[float] = None,
   ) -> None:
     """Move to the Cartesian target and grip using the supplied jaw width."""
     async with self._motion_guard():
@@ -2917,7 +2995,11 @@ class KX2:
         max_gripper_acceleration=max_gripper_acceleration,
       )
       await self.gripper.move_to_jaw_position(
-        resource_width, max_force_percent=max_force_percent, check_plate_gripped=check_plate_gripped
+        resource_width,
+        max_force_percent=max_force_percent,
+        check_plate_gripped=check_plate_gripped,
+        max_speed=max_jaw_speed,
+        max_acceleration=max_jaw_acceleration,
       )
 
   async def drop_at_location(
@@ -2928,6 +3010,8 @@ class KX2:
     *,
     max_gripper_speed: Optional[float] = None,
     max_gripper_acceleration: Optional[float] = None,
+    max_jaw_speed: Optional[float] = None,
+    max_jaw_acceleration: Optional[float] = None,
   ) -> None:
     """Move to the Cartesian target and release to the supplied jaw width."""
     async with self._motion_guard():
@@ -2937,7 +3021,12 @@ class KX2:
         max_gripper_speed=max_gripper_speed,
         max_gripper_acceleration=max_gripper_acceleration,
       )
-      await self.gripper.move_to_jaw_position(resource_width, force_sensing=False)
+      await self.gripper.move_to_jaw_position(
+        resource_width,
+        force_sensing=False,
+        max_speed=max_jaw_speed,
+        max_acceleration=max_jaw_acceleration,
+      )
 
   async def pick_up_at_joint_state(
     self,
@@ -2948,6 +3037,8 @@ class KX2:
     max_gripper_acceleration: Optional[float] = None,
     check_plate_gripped: bool = True,
     max_force_percent: Optional[int] = None,
+    max_jaw_speed: Optional[float] = None,
+    max_jaw_acceleration: Optional[float] = None,
   ) -> None:
     """Move to the joint target and grip using the supplied jaw width."""
     async with self._motion_guard():
@@ -2957,7 +3048,11 @@ class KX2:
         max_gripper_acceleration=max_gripper_acceleration,
       )
       await self.gripper.move_to_jaw_position(
-        resource_width, max_force_percent=max_force_percent, check_plate_gripped=check_plate_gripped
+        resource_width,
+        max_force_percent=max_force_percent,
+        check_plate_gripped=check_plate_gripped,
+        max_speed=max_jaw_speed,
+        max_acceleration=max_jaw_acceleration,
       )
 
   async def drop_at_joint_state(
@@ -2967,6 +3062,8 @@ class KX2:
     *,
     max_gripper_speed: Optional[float] = None,
     max_gripper_acceleration: Optional[float] = None,
+    max_jaw_speed: Optional[float] = None,
+    max_jaw_acceleration: Optional[float] = None,
   ) -> None:
     """Move to the joint target and release to the supplied jaw width."""
     async with self._motion_guard():
@@ -2975,7 +3072,12 @@ class KX2:
         max_gripper_speed=max_gripper_speed,
         max_gripper_acceleration=max_gripper_acceleration,
       )
-      await self.gripper.move_to_jaw_position(resource_width, force_sensing=False)
+      await self.gripper.move_to_jaw_position(
+        resource_width,
+        force_sensing=False,
+        max_speed=max_jaw_speed,
+        max_acceleration=max_jaw_acceleration,
+      )
 
   def motion_limits(self) -> "_MotionLimits":
     """Per-axis (max_speed, max_acceleration) read from the drives at setup.
