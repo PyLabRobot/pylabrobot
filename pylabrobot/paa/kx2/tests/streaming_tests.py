@@ -86,13 +86,16 @@ class _FakeDriver:
     self.registers: Dict[Tuple[int, int, int], bytes] = {}
     self.positions: Dict[int, int] = {}
     self.endpoint_error = 0
+    self.mode_nodes: List[List[int]] = []
 
-  async def _ipm_select_mode(self, enable: bool) -> None:
+  async def _ipm_select_mode(self, enable: bool, node_ids=None) -> None:
     self.calls.append(("_ipm_select_mode", (enable,)))
+    if enable:
+      self.mode_nodes.append(list(node_ids))
     for node in (1, 2, 3, 4):
       self.registers[node, 0x6060, 0] = bytes([7 if enable else 1])
 
-  async def _ipm_set_time_interval(self, ms: int) -> None:
+  async def _ipm_set_time_interval(self, ms: int, node_ids=None) -> None:
     self.calls.append(("_ipm_set_time_interval", (ms,)))
     for node in (1, 2, 3, 4):
       self.registers[node, 0x60C2, 1] = bytes([ms])
@@ -442,6 +445,7 @@ class StreamedEndpoints(unittest.IsolatedAsyncioTestCase):
     samples = self._samples(fake)
     await backend._stream_samples(samples)
     self.assertEqual([node for node, _, _ in fake.send_calls], [Axis.WRIST] * 3)
+    self.assertEqual(fake.mode_nodes, [[Axis.WRIST]])
     self.assertEqual(fake.positions[Axis.WRIST], samples[-1].encoder_position[Axis.WRIST])
 
   async def test_missed_endpoint_raises_and_cleans_up(self):

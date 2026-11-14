@@ -312,6 +312,36 @@ class OperationsTests(unittest.IsolatedAsyncioTestCase):
     self.assertNotIn(b"XQ", commands)
     await arm.stop()
 
+  async def test_jaw_target_after_homing_uses_calibrated_reference(self) -> None:
+    """The interpreter homing reference must not carry into the next CANopen move."""
+    arm, io = driver()
+    await arm.setup()
+    needs_reference_reset = False
+    original_write = io.write
+
+    async def home(config):
+      nonlocal needs_reference_reset
+      needs_reference_reset = True
+      io.values[6, "PX", 0] = 30000
+
+    async def write(cob_id: int, data: bytes, *, remote: bool = False, dlc: int | None = None):
+      nonlocal needs_reference_reset
+      if cob_id == 0x306 and data == b"MO\x00\x00\x00\x00\x00\x00":
+        needs_reference_reset = False
+      await original_write(cob_id, data, remote=remote, dlc=dlc)
+
+    async def move(plan):
+      self.assertFalse(needs_reference_reset)
+      io.values[6, "PX", 0] = plan.moves[0].position
+
+    io.write = write  # type: ignore[method-assign]
+    arm._home_servo_gripper = home  # type: ignore[method-assign]
+    arm._start_joint_plan = move  # type: ignore[method-assign]
+    await arm.gripper.home()
+    await arm.gripper.move_to_jaw_position(29, force_sensing=False, max_speed=1)
+    self.assertEqual(await arm.gripper.request_jaw_position(), 29)
+    await arm.stop()
+
   async def test_park_requires_calibrated_explicit_target(self) -> None:
     """There is no universal parking pose across different KX2 installations."""
     arm, _ = driver()

@@ -270,6 +270,7 @@ class KX2:
     self._invalid_bi_keys: set[Tuple[int, str, int]] = set()
 
     self._ipm_mode: bool = False
+    self._ipm_axes: List[int] = []
 
     # EMCY (CANopen Emergency, COB-ID 0x80 + node_id) state. Subscribed in
     # setup(); fires on the canopen listener thread, marshalled into the
@@ -1198,9 +1199,8 @@ class KX2:
     pointer doesn't replay old points on the next IPM enable."""
     await self._can_sdo_download(int(node_id), 0x60C4, 0x06, [0])
 
-  async def _ipm_select_mode(self, enable: bool) -> None:
-    """Enable/disable IPM (Interpolated Position Mode, 0x6060=7) on all motion
-    axes via standard SDO writes.
+  async def _ipm_select_mode(self, enable: bool, node_ids: Optional[List[int]] = None) -> None:
+    """Enable/disable interpolation on the participating motion axes.
 
     The ``_ipm_mode`` bookkeeping flag is set *pessimistically*: True before
     the SDO writes on enable, False after them on disable. So a partial
@@ -1209,26 +1209,26 @@ class KX2:
     we cleanly stayed in PPM.
     """
     if enable:
+      ids = list(self.motion_node_ids if node_ids is None else node_ids)
       if any(
-        not self._has_session_pdo(nid, number, transmit=False)
-        for nid in self.motion_node_ids
-        for number in (1, 3)
+        not self._has_session_pdo(nid, number, transmit=False) for nid in ids for number in (1, 3)
       ):
         raise CanError(
           "Linear motion requires initialized RPDO1/RPDO3 mappings that can be restored"
         )
       self._ipm_mode = True
+      self._ipm_axes = ids
       # First, latch CW=0x0F on every axis (op-enabled, NO ip-enable/new-
       # setpoint trigger). PPM leaves CW bit 4 high; in mode 7 bit 4 means
       # "interpolation enabled" so an unreset CW makes the drive try to
       # interpolate an empty buffer the moment we flip to mode 7, and the next
       # RPDO3 preload hits EMCY 0x34 / 0xBA (queue_full on first write).
       # RPDO1 is SynchronousCyclic so the writes need a SYNC to take effect.
-      for nid in self.motion_node_ids:
+      for nid in ids:
         await self._control_word_set(nid, 0x0F, sync=False)
       await self._can_sync()
       # Now do the mode-bounce + buffer clear per axis.
-      for nid in self.motion_node_ids:
+      for nid in ids:
         await self._set_op_mode(nid, 1)
         await self._ipm_clear_queue(nid)
         await self._set_op_mode(nid, 7)
@@ -1246,7 +1246,7 @@ class KX2:
       # the wire either way).
       if self._ipm_mode:
         try:
-          for nid in self.motion_node_ids:
+          for nid in self._ipm_axes:
             await self._set_op_mode(nid, 1)  # profile position mode
         finally:
           # Clear bookkeeping even on partial failure — the alternative is
@@ -1254,9 +1254,10 @@ class KX2:
           # cause the next select_mode(True) to take the re-arm branch
           # against drives possibly already in PPM.
           self._ipm_mode = False
+          self._ipm_axes = []
 
-  async def _ipm_set_time_interval(self, ms: int) -> None:
-    """Program 0x60C2:01 = ms on every motion axis. The 0x60C2:02 = -3 written
+  async def _ipm_set_time_interval(self, ms: int, node_ids: Optional[List[int]] = None) -> None:
+    """Program 0x60C2:01 = ms on participating axes. The 0x60C2:02 = -3 written
     at setup means the unit is milliseconds; this just sets the count.
 
     Drive-level: integer ms only (UNSIGNED8). Caller picks dt; runtime passes
@@ -1264,7 +1265,7 @@ class KX2:
     matches what the drive integrates between points."""
     if not 0 <= int(ms) <= 255:
       raise ValueError(f"ipm_set_time_interval: ms must fit in UINT8, got {ms}")
-    for nid in self.motion_node_ids:
+    for nid in self.motion_node_ids if node_ids is None else node_ids:
       await self._can_sdo_download_elmo_object(
         nid,
         24770,
@@ -1429,8 +1430,8 @@ class KX2:
       if state is not None:
         state.queue_full = False
         state.underflow = False
-    await self._ipm_set_time_interval(interval)
-    await self._ipm_select_mode(True)
+    await self._ipm_set_time_interval(interval, active_axes)
+    await self._ipm_select_mode(True, active_axes)
     try:
       # Preload PRELOAD frames per axis. The drive starts consuming as soon
       # as begin_motion fires; preload lets the producer fall behind by up
@@ -1563,6 +1564,7 @@ class KX2:
       self._session_configured = False
       self._session_registers = _Registers()
       self._ipm_mode = False
+      self._ipm_axes = []
     if errors:
       logger.error("KX2 restoration failed: %s", errors)
       raise errors[0]
@@ -2079,7 +2081,7 @@ class KX2:
       await self._can_sdo_download_elmo_object(nid, 24770, 2, -3, _ElmoObjectDataType.INTEGER8)
       await self._can_sdo_download_elmo_object(nid, 24669, 0, 1, _ElmoObjectDataType.INTEGER16)
 
-    # Only reuse initialized mappings that can be restored exactly.
+    # Map synchronous controlwords and event-driven interpolation records.
     for nid in self.motion_node_ids:
       if self._has_session_pdo(nid, 1, transmit=False):
         await self._rpdo_map(
@@ -2104,7 +2106,6 @@ class KX2:
     async with self._lifecycle_lock:
       if self._setup_finished:
         return
-      logger.warning("KX2 hardware validation is incomplete")
       self._faulted = False
       self._stopping = False
       try:
@@ -2509,6 +2510,11 @@ class KX2:
           await self._home_servo_gripper(sgc)
         finally:
           await finish_io(asyncio.ensure_future(self._stop_axes([sg])))
+      # Reinitialize the position reference after restoring interpreter settings
+      # so subsequent CANopen targets use the calibrated encoder datum.
+      await self._motor_enable(sg, False, use_ds402=False)
+      await self._motor_enable(sg, True, use_ds402=False)
+      logger.info("KX2 gripper homed")
 
   async def _get_servo_gripper_force_fraction(self) -> float:
     """Return |IQ| / CL clamped to [0, 1] — the fraction of the configured

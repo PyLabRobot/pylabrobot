@@ -311,6 +311,21 @@ class RestorationTests(unittest.IsolatedAsyncioTestCase):
     await arm._ipm_select_mode(False)
     await arm.stop()
 
+  async def test_interpolation_leaves_nonparticipating_drives_untouched(self) -> None:
+    """A Z-only stream cannot enable or select interpolation on the wrist."""
+    arm, io = driver()
+    await arm.setup()
+    before = dict(io.registers)
+    io.frames.clear()
+    await arm._ipm_set_time_interval(8, [Axis.Z])
+    await arm._ipm_select_mode(True, [Axis.Z])
+    await arm._ipm_select_mode(False)
+    for key, data in before.items():
+      if key[0] != Axis.Z:
+        self.assertEqual(io.registers[key], data, key)
+    self.assertEqual([cob for cob, _ in io.frames if 0x201 <= cob <= 0x204], [0x202])
+    await arm.stop()
+
   async def test_cancelled_scope_restores_current_interlock_and_settings(self) -> None:
     """Restore exact current limits after cancellation without violating CL <= PL."""
     arm, io = driver()
