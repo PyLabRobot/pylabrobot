@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.paa.kx2.CartesianPose
+================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoclass:: CartesianPose
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CartesianPose.location
+      ~CartesianPose.rotation
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CartesianPose.__init__
+   
+   

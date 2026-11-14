@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.pick\_up\_at\_location
+=============================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.pick_up_at_location

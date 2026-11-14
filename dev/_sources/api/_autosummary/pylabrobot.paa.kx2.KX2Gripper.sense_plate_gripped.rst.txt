@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2Gripper.sense\_plate\_gripped
+===================================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2Gripper.sense_plate_gripped

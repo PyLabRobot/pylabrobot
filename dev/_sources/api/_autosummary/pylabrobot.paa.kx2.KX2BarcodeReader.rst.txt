@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.paa.kx2.KX2BarcodeReader
+===================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoclass:: KX2BarcodeReader
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2BarcodeReader.default_baudrate
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2BarcodeReader.__init__
+      ~KX2BarcodeReader.request_software_version
+      ~KX2BarcodeReader.scan_barcode
+      ~KX2BarcodeReader.setup
+      ~KX2BarcodeReader.stop
+   
+   

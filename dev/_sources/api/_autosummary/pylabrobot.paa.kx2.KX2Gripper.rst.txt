@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.paa.kx2.KX2Gripper
+=============================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoclass:: KX2Gripper
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2Gripper.jaw_width_range
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2Gripper.__init__
+      ~KX2Gripper.check_plate_gripped
+      ~KX2Gripper.home
+      ~KX2Gripper.move_to_jaw_position
+      ~KX2Gripper.request_jaw_position
+      ~KX2Gripper.sense_fully_closed
+      ~KX2Gripper.sense_plate_gripped
+   
+   

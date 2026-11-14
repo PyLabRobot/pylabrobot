@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.Axis.as\_integer\_ratio
+==========================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: Axis.as_integer_ratio

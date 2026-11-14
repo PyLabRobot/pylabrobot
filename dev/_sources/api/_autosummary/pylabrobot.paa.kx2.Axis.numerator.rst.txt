@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.Axis.numerator
+=================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoattribute:: Axis.numerator

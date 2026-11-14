@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.Axis.SHOULDER
+================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoattribute:: Axis.SHOULDER

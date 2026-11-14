@@ -1,0 +1,68 @@
+﻿:orphan:
+
+
+pylabrobot.paa.kx2.KX2
+======================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoclass:: KX2
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2.barcode_reader
+      ~KX2.configuration
+      ~KX2.emcy_move_error
+      ~KX2.last_emcy
+      ~KX2.loop
+      ~KX2.parking_position
+      ~KX2.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2.__init__
+      ~KX2.add_emcy_callback
+      ~KX2.drop_at_joint_state
+      ~KX2.drop_at_location
+      ~KX2.find_with_proximity_sensor
+      ~KX2.find_z_with_proximity_sensor
+      ~KX2.halt
+      ~KX2.motion_limits
+      ~KX2.move_parametric
+      ~KX2.move_through_waypoints
+      ~KX2.move_to_joint_state
+      ~KX2.move_to_location
+      ~KX2.park
+      ~KX2.pick_up_at_joint_state
+      ~KX2.pick_up_at_location
+      ~KX2.request_axis_enabled
+      ~KX2.request_axis_fault
+      ~KX2.request_axis_position
+      ~KX2.request_drive_version
+      ~KX2.request_estop
+      ~KX2.request_gripper_pose
+      ~KX2.request_input
+      ~KX2.request_joint_state
+      ~KX2.request_output
+      ~KX2.scan_barcode
+      ~KX2.sense_proximity
+      ~KX2.set_output
+      ~KX2.setup
+      ~KX2.start_freedrive_mode
+      ~KX2.stop
+      ~KX2.stop_freedrive_mode
+      ~KX2.wait_for_proximity_sensor
+   
+   
