@@ -1834,8 +1834,12 @@
     "capabilities": [
       "arm"
     ],
-    "status": "mostly",
-    "api_version": "v0",
+    "status": "wip",
+    "api_version": "v1",
+    "api": "pylabrobot.paa.KX2",
+    "code_slug": "paa/kx2",
+    "doc_slug": "paa/kx2/hello-world",
+    "needs_hardware_testing": true,
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
   },
   {

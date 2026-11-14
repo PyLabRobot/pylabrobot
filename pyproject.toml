@@ -16,6 +16,7 @@ plr = "pylabrobot.cli:main"
 
 [project.optional-dependencies]
 serial = ["pyserial"]
+canopen = ["canopen>=2.4,<3"]
 usb = ["pyusb", "libusb-package"]
 ftdi = ["pylibftdi", "pyusb"]
 hid = ["hid"]
@@ -37,7 +38,7 @@ pico = ["PyLabRobot[sila]", "opencv-python", "numpy"]
 precise-flex-vision = ["numpy", "pillow"]
 xarm = ["xarm-python-sdk"]
 odyssey = ["Pillow"]
-all = ["PyLabRobot[serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,precise-flex-vision,xarm,odyssey]"]
+all = ["PyLabRobot[canopen,serial,usb,ftdi,hid,btx,modbus,websockets,visualizer,opentrons,sila,pico,precise-flex-vision,xarm,odyssey]"]
 test = [
   "pytest>=9.1",
   "pytest-xdist",

@@ -1,3 +1,4 @@
+from .canopen import CANopen
 from .capture import start_capture, stop_capture
 from .command_line import CommandLineResult, CommandLineTransport, CommandLineValidator
 from .http import HTTP, HTTPError

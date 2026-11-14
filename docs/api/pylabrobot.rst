@@ -40,6 +40,7 @@ Manufacturers
     pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.opentrons
+    pylabrobot.paa
     pylabrobot.qinstruments
     pylabrobot.revvity
     pylabrobot.sartorius

@@ -48,6 +48,7 @@ mettler_toledo/index
 micronic/index
 molecular_devices/index
 opentrons/index
+paa/index
 qinstruments/index
 revvity/index
 sartorius/index
