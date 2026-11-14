@@ -18,6 +18,7 @@ from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm
 from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
+from .features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .features.pump import PressureController, Pump
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
@@ -60,6 +61,15 @@ class MantisSimulationPump(Pump):
   Off, its controllers off and disabled, every line at 0, with the recorded sensor calibration.
   """
 
+  def __init__(self, *, driver: "MantisSimulationDriver"):
+    """Start with the simulated air pump off."""
+    super().__init__(driver=driver)
+    self._on = False
+
+  async def _unchecked_fw_set_pump_on(self, *, on: bool) -> None:
+    """Set the simulated pump's control state at once."""
+    self._on = on
+
   async def measure_pressure(self, *, controller: PressureController) -> float:
     """0: no line holds pressure."""
     self._get_controller_index(controller=controller)
@@ -93,8 +103,8 @@ class MantisSimulationPump(Pump):
     return False
 
   async def request_pump_on(self) -> bool:
-    """False: the pump is off."""
-    return False
+    """The simulated pump's control state."""
+    return self._on
 
   async def _request_calibration(self) -> Dict[PressureController, Tuple[float, float]]:
     """The generation's recording's calibration; none recorded is none."""
@@ -104,6 +114,23 @@ class MantisSimulationPump(Pump):
     return {
       controller: (float(scale), float(offset)) for controller, (scale, offset) in recorded.items()
     }
+
+
+class MantisSimulationPneumaticPlateClamp(PneumaticPlateClamp):
+  """A pneumatic clamp whose valve changes state immediately, without reaching a wire."""
+
+  def __init__(self, *, driver: "MantisSimulationDriver", pump: Pump, auxiliary_output: int):
+    """Use the simulated pressure-board pump and the declared clamp output."""
+    super().__init__(driver=driver, pump=pump, auxiliary_output=auxiliary_output)
+    self._locked = False
+
+  async def _unchecked_fw_set_locked(self, *, locked: bool) -> None:
+    """Set the simulated valve's control state."""
+    self._locked = locked
+
+  async def request_locked(self, *, attempts: int = 3) -> bool:
+    """The simulated valve's control state."""
+    return self._locked
 
 
 class MantisSimulationRfid(Rfid):
@@ -505,12 +532,18 @@ class MantisSimulationDriver(MantisDriver):
       MantisConfigurationError: if a declared block is malformed.
     """
     super()._discover_features()
-    if self.plate_clamp is not None and not isinstance(
+    if self.pump is not None and not isinstance(self.pump, MantisSimulationPump):
+      self.pump = MantisSimulationPump(driver=self)
+    if isinstance(self.plate_clamp, PneumaticPlateClamp):
+      if not isinstance(self.plate_clamp, MantisSimulationPneumaticPlateClamp):
+        assert self.pump is not None
+        self.plate_clamp = MantisSimulationPneumaticPlateClamp(
+          driver=self, pump=self.pump, auxiliary_output=self.plate_clamp.auxiliary_output
+        )
+    elif self.plate_clamp is not None and not isinstance(
       self.plate_clamp, MantisSimulationPlateClamp
     ):
       self.plate_clamp = MantisSimulationPlateClamp(driver=self, levels=self.plate_clamp.levels)
-    if self.pump is not None and not isinstance(self.pump, MantisSimulationPump):
-      self.pump = MantisSimulationPump(driver=self)
     if self.led_bar is not None and not isinstance(self.led_bar, MantisSimulationLedBar):
       self.led_bar = MantisSimulationLedBar(
         driver=self,

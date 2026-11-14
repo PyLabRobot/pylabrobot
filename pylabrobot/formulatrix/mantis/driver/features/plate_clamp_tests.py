@@ -69,6 +69,12 @@ class PlateClampTests(DriverTestCase):
     await self.clamp.unlock()
     self.assertEqual(self.sent(), [RELEASE, STATE_READ, STATE_READ])
 
+  async def test_request_locked_reports_clamping_done(self):
+    """Use the motor controller's completed-state readback."""
+    self.link.answers[STATE_READ] = [bytes.fromhex("0300"), bytes.fromhex("0600")]
+    self.assertTrue(await self.clamp.request_locked())
+    self.assertFalse(await self.clamp.request_locked())
+
   async def test_clamping_done_never_read_releases_and_raises(self):
     answer_states_in_turn(
       link=self.link,

@@ -18,6 +18,7 @@ Mantis
    driver.simulator.MantisSimulationArm
    driver.simulator.MantisSimulationV3Arm
    driver.simulator.MantisSimulationPlateClamp
+   driver.simulator.MantisSimulationPneumaticPlateClamp
    driver.simulator.MantisSimulationPump
    driver.simulator.MantisSimulationRfid
    driver.simulator.MantisSimulationLedBar
@@ -25,6 +26,7 @@ Mantis
    driver.features.arm_v3.V3Arm
    driver.arm_kinematics
    driver.features.plate_clamp.PlateClamp
+   driver.features.pneumatic_plate_clamp.PneumaticPlateClamp
    driver.features.pump.Pump
    driver.features.rfid.Rfid
    driver.features.led_bar.LedBar

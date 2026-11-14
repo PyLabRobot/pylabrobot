@@ -138,13 +138,25 @@ class LoadUnitConfigurationTests(unittest.TestCase):
       blocks, {block: RECORDING[block] for block in ("plate_clamp", "rfid", "led_bar")}
     )
 
-  def test_a_v3_folder_gives_neither(self):
+  def test_a_v3_folder_gives_the_pneumatic_clamp_output(self):
     with tempfile.TemporaryDirectory() as directory:
       files = {"Device.config": V3_DEVICE_CONFIG}
       blocks = _load_unit_configuration(
         oem_config_directory=write_files(directory=directory, files=files)
       )
-    self.assertEqual(blocks, {})
+    self.assertEqual(
+      blocks, {"plate_clamp": {"controller": "pressure_regulator", "auxiliary_output": 2}}
+    )
+
+  def test_missing_or_unsupported_pneumatic_output_refuses(self):
+    """The unit must explicitly map the supported clamp output."""
+    for replacement in ('key="MissingAux" value="2"', 'key="PlateClampAuxId" value="1"'):
+      with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+        config = V3_DEVICE_CONFIG.replace('key="PlateClampAuxId" value="2"', replacement)
+        with self.assertRaises(MantisConfigurationError):
+          _load_unit_configuration(
+            oem_config_directory=write_files(directory=directory, files={"Device.config": config})
+          )
 
   def test_keys_with_spaces_before_the_equals_sign_are_read(self):
     with tempfile.TemporaryDirectory() as directory:

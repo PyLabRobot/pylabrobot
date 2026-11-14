@@ -83,6 +83,10 @@ class PlateClamp:
     (state,) = struct.unpack_from("<H", reply)
     return int(state)
 
+  async def request_locked(self, *, attempts: int = 3) -> bool:
+    """Whether the motor controller reports clamping done."""
+    return await self.request_state(attempts=attempts) == CLAMPING_DONE
+
   async def unlock(self) -> None:
     """Release the clamp and wait until it reads unclamping done.
 
@@ -108,6 +112,11 @@ class PlateClamp:
       raise MantisTimeoutError(
         f"{self._driver.name}: the clamp did not release; last state {state}"
       )
+
+  async def _release(self) -> None:
+    """Release at shutdown unless the motor already reports unclamping done."""
+    if await self.request_state(attempts=1) != UNCLAMPING_DONE:
+      await self.unlock()
 
   async def lock(self, *, level: Optional[int] = None) -> None:
     """Release the clamp, lock it at ``level`` and wait until it reads clamping done.
