@@ -208,7 +208,7 @@ class MantisDevice(Resource):
 
   @property
   def arm(self) -> Optional[Arm]:
-    """The arm and Z, once setup found board 11 (a v4); None before or without it."""
+    """The v3 or v4 arm and Z after discovery; None before. Setup initializes it unless skipped."""
     return self.driver.arm
 
   async def setup(self, *, skip_arm: bool = False) -> None:

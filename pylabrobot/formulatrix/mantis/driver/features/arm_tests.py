@@ -27,6 +27,7 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisTimeoutError,
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import POST_HOMING_POSITION, Arm
+from pylabrobot.formulatrix.mantis.driver.features.arm_v3 import V3Arm
 from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   BLUE,
   GREEN,
@@ -661,14 +662,14 @@ class MoveFailureTests(ArmTestCase):
 
 
 class DiscoveryTests(ArmTestCase):
-  async def test_built_only_when_board_11_answers(self):
-    for absent_boards, built in (((), True), ((11,), False)):
+  async def test_board_11_selects_the_arm_implementation(self):
+    for absent_boards, arm_class in (((), Arm), ((11,), V3Arm)):
       with self.subTest(absent_boards=absent_boards):
         self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
-        self.assertEqual(driver.arm is not None, built)
+        self.assertIs(type(driver.arm), arm_class)
 
   async def test_the_arm_block_is_never_taken_from_a_recording(self):
     path = os.path.join(self.directory, "recording.json")

@@ -16,6 +16,7 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisTimeoutError,
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
+from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.simulator import (
   MantisSimulationArm,
@@ -58,12 +59,38 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
       with open(path, "w", encoding="utf-8") as f:
         json.dump(recording, f)
       mantis = Mantis(simulation=True, declared_configuration_json=path)
-      await mantis.setup()
+      await mantis.setup(skip_arm=True)
       self.addAsyncCleanup(mantis.stop)
     self.assertEqual(mantis.driver.configuration.generation, "v3")
     self.assertIsNone(mantis.led_bar)
     with self.assertRaises(MantisTimeoutError):
       await mantis.driver.request_firmware_version(board=11)
+
+  async def test_v3_initialization_uses_the_declared_route_and_can_repeat(self):
+    """A v3 simulation homes every axis and stops without the v4 park move."""
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      recording = json.load(file)
+    recording["device"]["firmware_versions"]["11"] = None
+    recording["device"]["generation"] = "v3"
+    recording["arm"] = SYNTHETIC_V3_ARM_BLOCK
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "v3.json")
+      with open(path, "w", encoding="utf-8") as file:
+        json.dump(recording, file)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      self.addAsyncCleanup(mantis.stop)
+      for _ in range(2):
+        await mantis.setup()
+        assert mantis.arm is not None
+        self.assertTrue(mantis.arm.is_initialized)
+        position = await mantis.arm.request_head_position()
+        self.assertAlmostEqual(position.x, 15.0)
+        self.assertAlmostEqual(position.y, 31.177)
+        for motor in (0, 1, 2):
+          self.assertEqual(await mantis.driver.request_motor_status(motor=motor), 4)
+        await mantis.stop()
+        self.assertFalse(mantis.arm.is_initialized)
+        self.assertEqual(await mantis.driver.request_motor_position(motor=2), 0.0)
 
   async def test_rfid_reads_every_declared_slot_empty(self):
     rfid = self.mantis.rfid
