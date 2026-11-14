@@ -2891,7 +2891,7 @@ class KX2:
     The curve passes through every waypoint with C¹ continuity (no stop at
     intermediate waypoints). Tangents at each interior waypoint are derived
     from neighbours; endpoint tangents are extrapolated from the first/last
-    segment. The whole spline is time-reparametrized into a trapezoidal
+    segment. The whole spline is time-reparameterized into a trapezoidal
     arc-length profile with peak Cartesian speed ``speed`` (mm/s) and peak
     acceleration ``acceleration`` (mm/s²), then sampled at the IPM cadence.
 
@@ -2903,8 +2903,8 @@ class KX2:
       acceleration: peak Cartesian acceleration, mm/s².
 
     Raises:
-      ValueError if waypoints < 2 or speed/acceleration <= 0.
-      IKError if any sample's joints are out of range.
+      ValueError: If there are fewer than two waypoints or speed/acceleration is not positive.
+      IKError: If any sample's joints are out of range.
     """
     if len(waypoints) < 2:
       raise ValueError(f"need at least 2 waypoints, got {len(waypoints)}")

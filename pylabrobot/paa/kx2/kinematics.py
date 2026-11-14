@@ -899,7 +899,7 @@ def sample_waypoint_path(
       prev_pt = p
 
   if total_len <= _EPS:
-    # All waypoints colinear at one point — bail out with a hold-in-place
+    # All waypoints coincide — bail out with a hold-in-place
     # 2-sample trajectory so the streamer no-ops cleanly.
     one_pose = waypoints[0]
     return sample_parametric_path(

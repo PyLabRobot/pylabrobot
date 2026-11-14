@@ -443,7 +443,7 @@ class SampleLinearPath(unittest.TestCase):
 
   def test_samples_stay_on_straight_line(self):
     """FK every sample. Cross-product of (sample - start) with (end - start)
-    is zero iff the sample is colinear; tolerance handles floating-point."""
+    is zero iff the sample is collinear; tolerance handles floating-point."""
     samples = kinematics.sample_linear_path(
       self.cfg,
       self.gp,

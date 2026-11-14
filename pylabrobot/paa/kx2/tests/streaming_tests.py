@@ -25,6 +25,7 @@ import inspect
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
+from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.config import (
   Axis,
   AxisConfig,
@@ -32,7 +33,6 @@ from pylabrobot.paa.kx2.config import (
   KX2Config,
 )
 from pylabrobot.paa.kx2.kinematics import CartesianPose
-from pylabrobot.paa.kx2 import kinematics
 from pylabrobot.paa.kx2.kx2 import KX2, _NodeEmcyState
 from pylabrobot.paa.kx2.protocol import CanError, JointMoveDirection
 from pylabrobot.resources import Coordinate, Rotation
