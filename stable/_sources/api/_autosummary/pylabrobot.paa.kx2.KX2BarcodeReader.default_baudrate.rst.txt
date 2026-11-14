@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2BarcodeReader.default\_baudrate
+=====================================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoattribute:: KX2BarcodeReader.default_baudrate

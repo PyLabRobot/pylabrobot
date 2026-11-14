@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.sense\_proximity
+=======================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.sense_proximity

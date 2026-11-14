@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.request\_drive\_version
+==============================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.request_drive_version

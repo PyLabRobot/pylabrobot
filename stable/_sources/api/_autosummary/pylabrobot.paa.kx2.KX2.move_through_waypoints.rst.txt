@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.move\_through\_waypoints
+===============================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.move_through_waypoints

@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.last\_emcy
+=================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoproperty:: KX2.last_emcy

@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.Axis.denominator
+===================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoattribute:: Axis.denominator

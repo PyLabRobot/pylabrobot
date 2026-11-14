@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.Axis.conjugate
+=================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: Axis.conjugate

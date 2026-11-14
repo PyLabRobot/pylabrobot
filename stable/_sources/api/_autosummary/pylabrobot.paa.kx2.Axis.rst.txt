@@ -1,0 +1,46 @@
+﻿:orphan:
+
+
+pylabrobot.paa.kx2.Axis
+=======================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoclass:: Axis
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Axis.real
+      ~Axis.imag
+      ~Axis.numerator
+      ~Axis.denominator
+      ~Axis.is_motion
+      ~Axis.is_linear
+      ~Axis.SHOULDER
+      ~Axis.Z
+      ~Axis.ELBOW
+      ~Axis.WRIST
+      ~Axis.RAIL
+      ~Axis.SERVO_GRIPPER
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Axis.conjugate
+      ~Axis.bit_length
+      ~Axis.bit_count
+      ~Axis.as_integer_ratio
+      ~Axis.__init__
+   
+   

@@ -1,0 +1,38 @@
+﻿:orphan:
+
+
+pylabrobot.paa.kx2.KX2Config
+============================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoclass:: KX2Config
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2Config.wrist_offset
+      ~KX2Config.elbow_offset
+      ~KX2Config.elbow_zero_offset
+      ~KX2Config.axes
+      ~KX2Config.base_to_gripper_clearance_z
+      ~KX2Config.base_to_gripper_clearance_arm
+      ~KX2Config.robot_on_rail
+      ~KX2Config.servo_gripper
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KX2Config.__init__
+   
+   

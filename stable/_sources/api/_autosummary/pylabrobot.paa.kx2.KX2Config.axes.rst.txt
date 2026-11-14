@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2Config.axes
+=================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoattribute:: KX2Config.axes

@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2Config.base\_to\_gripper\_clearance\_z
+============================================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoattribute:: KX2Config.base_to_gripper_clearance_z

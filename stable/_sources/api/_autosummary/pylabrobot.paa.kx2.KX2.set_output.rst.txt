@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.set\_output
+==================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.set_output

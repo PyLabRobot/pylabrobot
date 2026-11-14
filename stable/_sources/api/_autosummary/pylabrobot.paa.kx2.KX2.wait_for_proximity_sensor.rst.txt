@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.wait\_for\_proximity\_sensor
+===================================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.wait_for_proximity_sensor

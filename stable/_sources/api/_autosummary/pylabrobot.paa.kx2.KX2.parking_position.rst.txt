@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.parking\_position
+========================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. autoproperty:: KX2.parking_position

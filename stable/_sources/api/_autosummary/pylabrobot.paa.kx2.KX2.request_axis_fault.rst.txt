@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.request\_axis\_fault
+===========================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.request_axis_fault

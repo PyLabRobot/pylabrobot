@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.start\_freedrive\_mode
+=============================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.start_freedrive_mode

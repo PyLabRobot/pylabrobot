@@ -1,0 +1,6 @@
+pylabrobot.paa.kx2.KX2.find\_with\_proximity\_sensor
+====================================================
+
+.. currentmodule:: pylabrobot.paa.kx2
+
+.. automethod:: KX2.find_with_proximity_sensor
