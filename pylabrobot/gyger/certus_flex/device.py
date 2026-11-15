@@ -13,6 +13,7 @@ from pylabrobot.resources import Plate, Well
 from .geometry import MotionBounds, PlateRegistration, Position
 from .plans import DispensePlan, DispenseStep, Order, PreparedDispense, ordered_steps
 from .calibration import ValveCalibration
+from .run import ControllerFault, RunAborted, RunControl
 from ._inco import Argument, Inco
 from ._inco_udp import IncoUDP
 
@@ -248,6 +249,8 @@ class CertusFlex:
         raise ValueError("source_ip is only supported for direct UDP connections")
       self._inco = Inco(host, target, port=7979 if port is None else port, timeout=timeout)
     self._operation_lock = asyncio.Lock()
+    self._active_run: Optional[RunControl] = None
+    self._abort_lock = asyncio.Lock()
     self.timeout = timeout
     self.poll_interval = poll_interval
     self.head = head
@@ -410,6 +413,8 @@ class CertusFlex:
   async def _move(self, command: str, *arguments: Argument) -> None:
     """Submit a positioning command and await completion."""
     await self._require_ready(_POSITION)
+    if self._active_run is not None:
+      self._active_run._check_abort()
     logger.info("CERTUS FLEX motion: %s", command)
     await self._inco.call(_POSITION + ".Cmd." + command, *arguments)
     await self._wait_state(_POSITION, ("ready",), initial="ready")
@@ -779,33 +784,109 @@ class CertusFlex:
       except BaseException:
         logger.exception("Could not confirm stopping CERTUS channel %d", channel)
 
-  async def execute_plan(self, plan: DispensePlan, *, speed: Speed = "slow") -> int:
-    """Execute grouped requests with one barrier per group; return confirmed dose count.
+  async def _close_outputs(self, channels: Sequence[int]) -> None:
+    """Stop and close selected valves, reporting failures after attempting every output."""
+    failures = []
+    for channel in channels:
+      for command in ("StopDispens", "CloseValve"):
+        try:
+          await self._inco.call(self.valves[channel]._path + ".Cmd." + command)
+        except Exception as exc:
+          failures.append(f"channel {channel} {command}: {exc}")
+    if failures:
+      raise CertusFlexError("Could not confirm valve closure: " + "; ".join(failures))
+    await self._sync_valves()
+    for channel in channels:
+      await self._wait_state(self.valves[channel]._path, ("ready", "on"))
 
-    Requests are queued sequentially, allowing the controller to operate independent
-    valves together. This is not a guarantee of simultaneous pulse edges. On success
-    the head is raised at the final XY position; park/discharge remain explicit.
+  async def close_all(self) -> None:
+    """Close all selected-head valves after any active operation finishes.
+
+    Use :meth:`abort` to interrupt an active plan instead of waiting for its lock.
+    Neither method discharges pressure or stops an in-flight stage move.
+    """
+    async with self._operation_lock:
+      await self._close_outputs(range(len(self.valves)))
+
+  async def abort(self) -> None:
+    """Abort the active controlled operation and close valves without a recovery move.
+
+    A submitted dose remains uncertain if completion was not confirmed. An in-flight
+    stage move may finish. This is a software stop, not the physical emergency stop.
+    Failure to communicate raises; it must not be interpreted as confirmed closure.
+    """
+    async with self._abort_lock:
+      if self._active_run is not None:
+        self._active_run._request_abort()
+        await self._close_outputs(range(len(self.valves)))
+        return
+    await self.close_all()
+
+  async def get_faults(self) -> tuple[ControllerFault, ...]:
+    """Read pending native issues without acknowledging or clearing them."""
+    count = await self._inco.get_number(_ROOT + ".Msg.Msg")
+    if not math.isfinite(count) or count != int(count) or not 0 <= count <= 1024:
+      raise CertusFlexError(f"Invalid controller issue count: {count}")
+    faults = []
+    for index in range(int(count)):
+      entity = await self._inco.get_string(_ROOT + f".Msg.Entity!Object{index}")
+      if not entity or any(c in entity for c in ".!()\\"):
+        raise CertusFlexError("Invalid controller issue entity")
+      path = _ROOT + ".Msg.Entity." + entity + "."
+      faults.append(
+        ControllerFault(
+          entity=entity,
+          identifier=int(await self._inco.get_number(path + "Id")),
+          code=int(await self._inco.get_number(path + "Code")),
+          task=await self._inco.get_string(path + "Task"),
+          text=await self._inco.get_string(path + "Text"),
+          flags=int(await self._inco.get_number(path + "Flags")),
+          native_time=await self._inco.get_number(path + "Time"),
+        )
+      )
+    return tuple(faults)
+
+  async def execute_plan(
+    self, plan: DispensePlan, *, speed: Speed = "slow", control: Optional[RunControl] = None
+  ) -> int:
+    """Execute grouped requests and return the number of confirmed doses.
+
+    Pause/resume applies at completed, raised group boundaries. Aborted and failed
+    runs cannot resume. The progress snapshot identifies an unconfirmed group.
+    Consecutive valves are queued before one barrier; simultaneous edges are not
+    guaranteed. Park and pressure discharge remain explicit.
     """
     profile = _speed(speed)
-    if not plan.groups:
-      return 0
-    completed = 0
+    run = RunControl() if control is None else control
     channels = sorted({p.step.channel for group in plan.groups for p in group})
     async with self._operation_lock:
-      await self._check_plan(plan)
+      run._start(len(plan.groups))
+      self._active_run = run
       try:
-        for group in plan.groups:
+        if plan.groups:
+          await self._check_plan(plan)
+        for index, group in enumerate(plan.groups):
+          await run._boundary()
           await self._move_registered(plan.registration, group[0].position, profile)
+          run._check_abort()
           for item in group:
             await self.valves[item.step.channel]._require_ready()
           for item in group:
+            run._check_abort()
+            run._update(uncertain_group=index)
             await self._inco.call(
               self.valves[item.step.channel]._path + ".Cmd.Dispens", item.duration * 1e6
             )
           await self._sync_valves()
+          run._check_abort()
           for item in group:
             await self.valves[item.step.channel]._require_ready()
-          completed += len(group)
+          run._check_abort()
+          run._update(
+            completed_groups=index + 1,
+            completed_doses=run.progress.completed_doses + len(group),
+            uncertain_group=None,
+          )
           await self._move(
             "MoveXYZ",
             group[0].position[0],
@@ -813,10 +894,17 @@ class CertusFlex:
             plan.registration.clearance,
             profile,
           )
-      except BaseException:
+        run._check_abort()
+        run._update(state="completed")
+      except BaseException as exc:
+        run._update(state="aborted" if isinstance(exc, RunAborted) else "failed", error=str(exc))
         await self._stop_outputs(channels)
         raise
-    return completed
+      finally:
+        # Do not release the operation lock while an abort is still closing outputs.
+        async with self._abort_lock:
+          self._active_run = None
+    return run.progress.completed_doses
 
   async def move_to(self, x: float, y: float, z: float, *, speed: Speed = "slow") -> None:
     """Move to controller coordinates in mm using a named firmware speed profile.

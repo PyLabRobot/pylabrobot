@@ -18,3 +18,7 @@ pylabrobot.gyger package
     PlateRegistration
     DispenseStep
     DispensePlan
+    RunControl
+    RunProgress
+    RunAborted
+    ControllerFault

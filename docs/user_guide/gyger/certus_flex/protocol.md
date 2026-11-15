@@ -389,3 +389,24 @@ Volume operations inherit the configured correction factor unless explicitly
 overridden, and check actual pressure and setpoint against the calibration.
 Imported curves establish the command calculation; measured accuracy still depends
 on the installed valve, liquid, pressure, and the quality of those measurements.
+
+## Run control and faults
+
+Pass a single-use `RunControl` to `execute_plan(plan, control=control)`. Its immutable
+`progress` snapshot reports state, total/completed groups, confirmed doses, and an
+`uncertain_group` when submitted liquid commands lack confirmed completion.
+`control.pause()` requests a pause after the current group completes and Z raises;
+`await control.wait_paused()` observes that boundary. `control.resume()` continues
+with the next group. Run the executor in an asyncio task to operate these controls.
+
+`await certus.abort()` prevents further submissions, wakes a paused run, and stops
+and closes every selected-head valve. The executor raises `RunAborted`; a failed
+or aborted run cannot resume. An in-flight stage move may finish. Closure failures
+raise and do not prove that a valve stopped. No recovery movement, discharge, or
+retry is implicit. `close_all()` waits for the current operation before closing
+valves. Neither is a substitute for the physical emergency stop.
+
+`await certus.get_faults()` returns controller issue IDs, codes, tasks, descriptive
+text, flags, and native timestamps without acknowledging them. Resolve the cause
+before explicitly starting another operation; the driver never clears faults to
+force a run through.

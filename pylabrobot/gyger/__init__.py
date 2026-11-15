@@ -12,3 +12,5 @@ from .certus_flex import (
 from .certus_flex.geometry import MotionBounds, PlateRegistration
 
 from .certus_flex.plans import DispenseStep, DispensePlan
+
+from .certus_flex.run import ControllerFault, RunAborted, RunControl, RunProgress
