@@ -1,21 +1,21 @@
 """Control a CERTUS FLEX through its INCO controller interface."""
 
 import asyncio
-import logging
 import json
-from pathlib import Path
+import logging
 import math
 import time
+from pathlib import Path
 from typing import Literal, Optional, Sequence, Union
 
 from pylabrobot.resources import Plate, Well
 
-from .geometry import MotionBounds, PlateRegistration, Position
-from .plans import DispensePlan, DispenseStep, Order, PreparedDispense, ordered_steps
-from .calibration import ValveCalibration
-from .run import ControllerFault, RunAborted, RunControl
 from ._inco import Argument, Inco
 from ._inco_udp import IncoUDP
+from .calibration import ValveCalibration
+from .geometry import MotionBounds, PlateRegistration, Position
+from .plans import DispensePlan, DispenseStep, Order, PreparedDispense, ordered_steps
+from .run import ControllerFault, RunAborted, RunControl
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +183,77 @@ class CertusValve:
     async with self._device._operation_lock:
       await self._dispense_for(duration)
 
+  def _volume_duration(self, volume: float, correction_factor: Optional[float] = None) -> float:
+    """Convert using this channel's measured curve and configured correction factor."""
+    if self.calibration is None:
+      raise ValueError("Assign this valve's calibration before using volumes")
+    duration = self.calibration.duration_for_volume(
+      volume,
+      correction_factor=self.correction_factor if correction_factor is None else correction_factor,
+    )
+    self._validate_duration(duration)
+    return duration
+
+  async def _check_calibration_pressure(self) -> None:
+    """Require the measured pressure for every calibrated opening."""
+    if self.calibration is None:
+      raise ValueError("Assign this valve's calibration before using volumes")
+    actual = await self._device.get_pressure()
+    setpoint = await self._device._inco.get_number(_PRESSURE + ".Prop.SetPressure")
+    if any(
+      not math.isfinite(p) or abs(p - self.calibration.pressure) > 0.01 for p in (actual, setpoint)
+    ):
+      raise CertusFlexError("Current pressure does not match the valve calibration")
+
+  async def prime_volume(self, volume: float) -> None:
+    """Prime a calibrated volume in µL at the current waste position.
+
+    A continuous opening uses the channel's measured curve and correction factor.
+    The requested volume must be within that curve and the controller prime limit.
+    """
+    async with self._device._operation_lock:
+      duration = self._volume_duration(volume)
+      await self._check_calibration_pressure()
+      await self._prime(duration)
+
+  def _purge_volume_durations(
+    self, volume: float, pulse_volume: float
+  ) -> tuple[tuple[float, float], ...]:
+    """Prepare whole pulses and a calibrated remainder before any fluid command."""
+    if _finite(volume, "volume") <= 0 or _finite(pulse_volume, "pulse_volume") <= 0:
+      raise ValueError("Purge volumes must be positive")
+    if pulse_volume > volume:
+      raise ValueError("pulse_volume must not exceed volume")
+    pulses = int(volume / pulse_volume)
+    remainder = volume - pulses * pulse_volume
+    if math.isclose(remainder, pulse_volume, rel_tol=1e-10, abs_tol=1e-12):
+      pulses += 1
+      remainder = 0
+    duration = self._volume_duration(pulse_volume)
+    result = [(pulses * duration, duration)] if pulses else []
+    if not math.isclose(remainder, 0, abs_tol=1e-12):
+      remainder_duration = self._volume_duration(remainder)
+      result.append((remainder_duration, remainder_duration))
+    for total, pulse in result:
+      self._validate_purge(total, pulse, None)
+    return tuple(result)
+
+  async def purge_volume(self, volume: float, *, pulse_volume: float) -> None:
+    """Purge µL as calibrated pulses at the current waste position.
+
+    Each pulse (including a remainder) must lie within the measured curve. Volume
+    is converted per pulse, rather than treating cumulative volume as one opening.
+    """
+    async with self._device._operation_lock:
+      requests = self._purge_volume_durations(volume, pulse_volume)
+      await self._check_calibration_pressure()
+      try:
+        for total, pulse in requests:
+          await self._purge(total, pulse, None)
+      except BaseException:
+        await self._device._stop_outputs([self._device.valves.index(self)])
+        raise
+
   async def dispense(self, volume: float, *, correction_factor: Optional[float] = None) -> None:
     """Dispense a calibrated volume in µL at the current position.
 
@@ -191,18 +262,9 @@ class CertusValve:
     Supply the channel's CERTUS CONTROL volume correction factor when applicable;
     omitting it uses the configured channel factor (initially 1.0). The factor is applied before interpolation.
     """
-    if self.calibration is None:
-      raise ValueError("Assign this valve's calibration before dispensing by volume")
-    calibration = self.calibration
-    duration = calibration.duration_for_volume(
-      volume,
-      correction_factor=self.correction_factor if correction_factor is None else correction_factor,
-    )
     async with self._device._operation_lock:
-      pressure = await self._device.get_pressure()
-      setpoint = await self._device._inco.get_number(_PRESSURE + ".Prop.SetPressure")
-      if abs(pressure - calibration.pressure) > 0.01 or abs(setpoint - calibration.pressure) > 0.01:
-        raise CertusFlexError("Current pressure does not match the valve calibration")
+      duration = self._volume_duration(volume, correction_factor)
+      await self._check_calibration_pressure()
       await self._dispense_for(duration)
 
 
@@ -250,6 +312,7 @@ class CertusFlex:
       self._inco = Inco(host, target, port=7979 if port is None else port, timeout=timeout)
     self._operation_lock = asyncio.Lock()
     self._active_run: Optional[RunControl] = None
+    self._idle_run: Optional[RunControl] = None
     self._abort_lock = asyncio.Lock()
     self.timeout = timeout
     self.poll_interval = poll_interval
@@ -273,6 +336,10 @@ class CertusFlex:
 
   async def stop(self) -> None:
     """Disconnect; this does not abort controller motion or turn off pressure."""
+    if self._active_run is not None:
+      self._active_run._request_abort()
+    if self._idle_run is not None:
+      self._idle_run._request_abort()
     await self._inco.stop()
     logger.info("Disconnected from CERTUS FLEX")
 
@@ -647,23 +714,14 @@ class CertusFlex:
     valve = self.valves[channel]
     if valve.calibration is None:
       raise ValueError("Assign the selected valve's calibration before dispensing")
-    duration = valve.calibration.duration_for_volume(
-      volume,
-      correction_factor=valve.correction_factor if correction_factor is None else correction_factor,
-    )
-    valve._validate_duration(duration)
+    valve._volume_duration(volume, correction_factor)
     if volume + well.tracker.get_used_volume() > well.max_volume:
       raise ValueError("Dispense would exceed the well capacity")
     async with self._operation_lock:
+      duration = valve._volume_duration(volume, correction_factor)
       await self._check_registration(registration)
       await valve._require_ready()
-      actual = await self.get_pressure()
-      setpoint = await self._inco.get_number(_PRESSURE + ".Prop.SetPressure")
-      if (
-        abs(actual - valve.calibration.pressure) > 0.01
-        or abs(setpoint - valve.calibration.pressure) > 0.01
-      ):
-        raise CertusFlexError("Current pressure does not match the valve calibration")
+      await valve._check_calibration_pressure()
       await self._move_registered(registration, target, profile)
       await valve._dispense_for(duration)
 
@@ -816,6 +874,8 @@ class CertusFlex:
     Failure to communicate raises; it must not be interpreted as confirmed closure.
     """
     async with self._abort_lock:
+      if self._idle_run is not None:
+        self._idle_run._request_abort()
       if self._active_run is not None:
         self._active_run._request_abort()
         await self._close_outputs(range(len(self.valves)))
@@ -961,6 +1021,147 @@ class CertusFlex:
         await self._inco.call(_PRESSURE + ".Cmd.Init")
         await self._wait_state(_PRESSURE, ("busy", "ready"))
       await asyncio.wait_for(self._poll_pressure(pressure), self.timeout)
+
+  def _channels(self, channels: Sequence[int]) -> tuple[int, ...]:
+    """Validate a nonempty selection without duplicates before motion or opening."""
+    selected = tuple(channels)
+    if not selected or any(
+      isinstance(c, bool) or not isinstance(c, int) or not 0 <= c < len(self.valves)
+      for c in selected
+    ):
+      raise ValueError("channels must contain valid zero-based valve indexes")
+    if len(set(selected)) != len(selected):
+      raise ValueError("channels must not contain duplicates")
+    return selected
+
+  async def _maintenance_pressure(self) -> None:
+    """Require stable regulated pressure without changing its setpoint."""
+    actual = await self.get_pressure()
+    setpoint = await self._inco.get_number(_PRESSURE + ".Prop.SetPressure")
+    if not math.isfinite(actual) or not 0.051 <= setpoint <= 1 or abs(actual - setpoint) > 0.01:
+      raise CertusFlexError("Maintenance requires regulated dispensing pressure")
+
+  async def flush(
+    self,
+    channels: Sequence[int],
+    *,
+    duration: float,
+    speed: Speed = "slow",
+    control: Optional[RunControl] = None,
+  ) -> None:
+    """Flush continuously into prime waste for a controller-enforced duration in seconds.
+
+    Valves are queued together using timed Prime, avoiding an indefinite opening on
+    connection loss. Duration must fit every selected valve's PrimeTimeout. Run in
+    a task and call ``abort()`` to stop early. Success parks; pressure is unchanged.
+    """
+    selected = self._channels(channels)
+    CertusValve._validate_duration(duration)
+    profile = _speed(speed)
+    run = RunControl() if control is None else control
+    async with self._operation_lock:
+      run._start(1)
+      self._active_run = run
+      try:
+        await self.validate_head()
+        for channel in selected:
+          await self.valves[channel]._validate_prime_duration(duration)
+          await self.valves[channel]._require_ready()
+        await self._maintenance_pressure()
+        await run._boundary()
+        await self._move("MoveZToPark", profile)
+        await self._move("MoveXYToPrime", profile)
+        await self._move("MoveZToPrime", profile)
+        for channel in selected:
+          run._check_abort()
+          run._update(uncertain_group=0)
+          await self._inco.call(self.valves[channel]._path + ".Cmd.Prime", duration * 1e6)
+        await self._sync_valves()
+        run._check_abort()
+        for channel in selected:
+          await self.valves[channel]._require_ready()
+        run._check_abort()
+        run._update(completed_groups=1, completed_doses=len(selected), uncertain_group=None)
+        await self._move("MoveZToPark", profile)
+        await self._move("MoveXYToPark", profile)
+        run._check_abort()
+        run._update(state="completed")
+      except BaseException as exc:
+        run._update(state="aborted" if isinstance(exc, RunAborted) else "failed", error=str(exc))
+        if run.progress.uncertain_group is not None:
+          await self._stop_outputs(selected)
+        raise
+      finally:
+        async with self._abort_lock:
+          self._active_run = None
+
+  async def idle_purge(
+    self,
+    channels: Sequence[int],
+    *,
+    interval: float,
+    cycles: int,
+    duration: float,
+    pulse_duration: float,
+    speed: Speed = "slow",
+    control: Optional[RunControl] = None,
+  ) -> None:
+    """Run a finite host-scheduled purge into waste whenever the device is available.
+
+    Wait ``interval`` seconds before each cycle, then acquire the operation lock.
+    Active plate plans (including paused plans) finish before a cycle can move.
+    Each cycle parks on success and releases the lock. No persistent firmware timer
+    is installed. Abort wakes the interval wait; cancellation never repeats a pulse.
+    """
+    selected = self._channels(channels)
+    if _finite(interval, "interval") <= 0:
+      raise ValueError("interval must be positive")
+    if isinstance(cycles, bool) or not isinstance(cycles, int) or cycles < 1:
+      raise ValueError("cycles must be a positive integer")
+    CertusValve._validate_purge(duration, pulse_duration, None)
+    profile = _speed(speed)
+    if self._idle_run is not None:
+      raise CertusFlexError("An idle-purge schedule is already active")
+    run = RunControl() if control is None else control
+    run._start(cycles)
+    self._idle_run = run
+    try:
+      for cycle in range(cycles):
+        await run._sleep(interval)
+        await run._boundary()
+        async with self._operation_lock:
+          self._active_run = run
+          try:
+            run._check_abort()
+            await self.validate_head()
+            await self._maintenance_pressure()
+            for channel in selected:
+              await self.valves[channel]._require_ready()
+            await self._move("MoveZToPark", profile)
+            await self._move("MoveXYToPurge", profile)
+            await self._move("MoveZToPurge", profile)
+            for channel in selected:
+              run._check_abort()
+              run._update(uncertain_group=cycle)
+              await self.valves[channel]._purge(duration, pulse_duration, None)
+              run._check_abort()
+              run._update(completed_doses=run.progress.completed_doses + 1)
+            run._update(completed_groups=cycle + 1, uncertain_group=None)
+            await self._move("MoveZToPark", profile)
+            await self._move("MoveXYToPark", profile)
+          except BaseException:
+            await self._stop_outputs(selected)
+            raise
+          finally:
+            async with self._abort_lock:
+              self._active_run = None
+      run._check_abort()
+      run._update(state="completed")
+    except BaseException as exc:
+      run._update(state="aborted" if isinstance(exc, RunAborted) else "failed", error=str(exc))
+      raise
+    finally:
+      self._idle_run = None
 
   async def clean_cycle(
     self,

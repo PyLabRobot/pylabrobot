@@ -21,7 +21,9 @@ class UDPTests(unittest.IsolatedAsyncioTestCase):
     self.io = UDP("test", "127.0.0.1", self.peer.getsockname()[1], read_timeout=0.05)
     await self.io.setup()
     await self.io.write(b"hello")
-    data, self.address = await asyncio.get_running_loop().sock_recvfrom(self.peer, 65535)
+    self.peer.settimeout(1)
+    data, self.address = await asyncio.to_thread(self.peer.recvfrom, 65535)
+    self.peer.setblocking(False)
     self.assertEqual(data, b"hello")
 
   async def asyncTearDown(self) -> None:

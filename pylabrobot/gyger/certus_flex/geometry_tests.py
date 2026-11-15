@@ -1,7 +1,7 @@
 """Plate transforms, physical envelope checks, and pre-motion validation."""
 
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb
 
@@ -65,25 +65,35 @@ class PlateOperationTests(unittest.IsolatedAsyncioTestCase):
     self.reg = registration()
     self.device = CertusFlex("example.invalid", head="flex8_angled")
     self.device.serial_number = "C196069"
-    self.device._inco = MagicMock(spec=IncoUDP)
-    self.device._inco.get_number.return_value = 4.0
-    self.device._move = AsyncMock()
-    self.device.get_position = AsyncMock(side_effect=[(-62, 30, 65.5), (57.38, 29.96, 35.4)])
+    self.inco = MagicMock(spec=IncoUDP)
+    self.device._inco = self.inco
+    self.inco.get_number.return_value = 4.0
+    move_patch = patch.object(self.device, "_move", new_callable=AsyncMock)
+    self.move: AsyncMock = move_patch.start()
+    self.addCleanup(move_patch.stop)
+    position_patch = patch.object(
+      self.device,
+      "get_position",
+      new_callable=AsyncMock,
+      side_effect=[(-62, 30, 65.5), (57.38, 29.96, 35.4)],
+    )
+    position_patch.start()
+    self.addCleanup(position_patch.stop)
 
   async def test_clearance_path(self) -> None:
     await self.device.move_to_well(self.reg, self.reg.plate.get_item("B2"), channel=1)
-    moves = self.device._move.call_args_list
+    moves = self.move.call_args_list
     self.assertEqual(moves[0].args, ("MoveXYZ", -62, 30, 65.5, "Slow"))
     self.assertEqual(moves[1].args[0], "MoveXYZ")
     self.assertEqual(moves[1].args[3], 65.5)
     self.assertAlmostEqual(moves[2].args[3], 35.4)
 
   async def test_wrong_head_and_capacity_send_no_motion(self) -> None:
-    self.device._inco.get_number.return_value = 1.0
+    self.inco.get_number.return_value = 1.0
     with self.assertRaises(CertusFlexError):
       await self.device.move_to_well(self.reg, self.reg.plate.get_item("B2"), channel=1)
-    self.device._move.assert_not_awaited()
+    self.move.assert_not_awaited()
     self.device.valves[1].calibration = ValveCalibration(((1, 0.001), (1000, 0.1)), pressure=0.2)
     with self.assertRaisesRegex(ValueError, "capacity"):
       await self.device.dispense_to_well(self.reg, self.reg.plate.get_item("B2"), 900, channel=1)
-    self.device._move.assert_not_awaited()
+    self.move.assert_not_awaited()

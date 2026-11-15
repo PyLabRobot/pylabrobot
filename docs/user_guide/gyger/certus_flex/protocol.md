@@ -18,6 +18,10 @@ angled FLEX8 head. The fixtures retain controller replies for regression testing
 | INCO server TCP | Native request fixtures and simulated responses; no hardware verification |
 | Prime, purge, clean cycle | One water cycle on channels 2/3 at 0.2 bar: 20 ms cumulative purge in 1 ms pulses, 250 ms pause, 100 ms prime per channel; observed flow into waste, park, and zero pressure after explicit discharge |
 | Volume-to-time conversion | Vendor-source reference cases cover interpolation, volume correction, units, and the valve command; physical volume accuracy depends on the supplied calibration |
+| Registered plate plan | Live Corning 96-well geometry and channel offsets; four 1 ms water commands to B2/C2/B3/C3 in two compatible channel groups; raised pause after two confirmed doses, then resume |
+| Run controls | Paused-plan abort prevented every dose; stop/close accepted on all eight outputs; no pending faults before or after the integration protocol |
+| Extended maintenance | 50 ms bounded flush per channel and one 2 ms cumulative idle purge in 1 ms pulses on channels 2/3; park and zero pressure after discharge |
+| Configuration reuse | Device/head identity round trip on the connected controller; populated vendor calibration and configuration validation use offline fixtures, because measured curves for the installed valves were not supplied |
 
 Reference-axis motion, the full travel envelope, other head types, and cleaning
 effectiveness remain unverified. Instrument calibration and cleaning effectiveness
@@ -25,20 +29,19 @@ are separate from driver command verification and depend on the installed valves
 
 ## Capability coverage
 
-The registry's **Basic** level describes the current feature coverage. **Mostly**
-means most capabilities are available, with some known commands still missing;
-see [support levels](../../machines.md#reading-the-table). Hardware verification
-for the implemented operations is listed above.
+The registry's **Mostly** level means routine plate and maintenance workflows are
+available, with the exclusions below. Hardware verification is scoped to the
+specific head, controller, and operations in the table above.
 
-| User workflow | Current API | Remaining capability |
-| --- | --- | --- |
-| Connect, initialize, move, park, regulate pressure | Implemented | Installed-head detection/validation and detailed fault reporting |
-| Dispense at a well | Machine coordinates and per-valve dispensing | PLR `Plate`/`Well` registration, channel offsets, dispense height, and travel/plate bounds |
-| Fill a plate or selected region | User-written loops | A prevalidated per-well volume plan, row/column ordering, repeats, and progress |
-| Use several reagents efficiently | Channels are independently addressable; operations are serialized | Geometrically compatible channel groups queued before one completion barrier |
-| Reuse calibration | `ValveCalibration` points, pressure checks, and volume correction | Import/export of vendor calibration data with valve/fluid/pressure metadata; repeat-shot measurement workflow |
-| Prepare lines and clean | Timed prime, purge, and clean cycle | Controlled flush start/stop, volume-based maintenance, and scheduled idle purging |
-| Interrupt and recover a run | Fault detection; clean-cycle abort on failure | Public abort/close-all, detailed faults, and host-side pause/resume at confirmed completion boundaries |
+| User workflow | API |
+| --- | --- |
+| Connect and prepare | Direct UDP or INCO server, identity, installed-head validation, initialization, park, pressure, and detailed faults |
+| Target a plate well | PLR plate registration, channel offsets, height/clearance, travel bounds, and well capacity checks |
+| Fill a plate or region | Prevalidated plans, CSV volume maps, gradients, row/column/snake orders, repeats, and progress |
+| Use multiple channels | Compatible channel groups queued before a shared completion barrier |
+| Reuse calibration | Vendor XML import and metadata-preserving re-export, PLR JSON curves, per-channel correction, and device-bound configurations |
+| Prepare and clean lines | Timed and calibrated prime/purge, clean cycles, bounded continuous flush, and finite idle-purge schedules |
+| Control a run | Boundary pause/resume, abort, close-all, confirmed dose counts, and uncertain-group reporting |
 
 The manufacturer describes independent channel calibration, parallel dispensing,
 and multiple plate formats in its [technical specifications](https://www.fgyger.ch/certus-flex/technical-specifications/?lang=en).
@@ -47,12 +50,11 @@ documents regions, variable-volume patterns, maintenance, and interval purging.
 Thermo Fisher's [Certus automation interface](https://apps.thermofisher.com/apps/lahr/LA_Online_Help_Resource/en-us/Content/Topics/Drivers/Dispensers/DRVR%20Certus%20Flex.htm)
 also exposes plate access, dispense tables, and head configuration.
 
-For routine plate workflows, the largest gaps are well-aware volume plans,
-coordinated channels, reusable calibration/configuration, and controllable run
-execution. These can be built in Python on the controller primitives. Vendor
-protocol-file execution, evaporation-curtain support, standby, and device-network
-configuration are additional capabilities outside this API. A numeric speed
-interface still requires protocol evidence; firmware profile names remain explicit.
+Vendor protocol-file execution, evaporation-curtain support, standby, device-network
+configuration, and a balance-assisted calibration acquisition workflow are outside
+this API. A numeric speed interface still requires protocol evidence; firmware
+profile names remain explicit. Supply measured curves for volume delivery; command
+verification does not establish the physical volume delivered by an uncalibrated valve.
 
 ## Connection
 
@@ -410,3 +412,27 @@ valves. Neither is a substitute for the physical emergency stop.
 text, flags, and native timestamps without acknowledging them. Resolve the cause
 before explicitly starting another operation; the driver never clears faults to
 force a run through.
+
+## Bounded flush and volume-based maintenance
+
+`await certus.flush([1, 2], duration=0.05)` moves to prime waste, queues a continuous
+opening on each selected valve, waits, and parks. `duration` is in seconds and must
+fit each valve's native prime timeout. It uses firmware-timed `Prime` rather than an
+indefinite `OpenValve`; connection loss cannot extend the requested opening. For an
+early stop, run it in a task and call `await certus.abort()`. A `RunControl` reports
+completion and uncertainty. Neither flush nor idle purge changes the pressure setpoint.
+
+With measured calibration assigned, `valves[i].prime_volume(volume)` opens once
+for the interpolated duration. `valves[i].purge_volume(volume, pulse_volume=...)`
+converts each pulse separately, including any remainder. All pulse volumes must
+fit the measured range; the whole request is validated before the first opening.
+These per-valve methods operate at the current position, which must be over waste.
+
+`idle_purge(channels, interval=..., cycles=..., duration=..., pulse_duration=...)`
+waits the specified seconds before each cycle, acquires the operation lock, moves
+to purge waste, purges the selected channels, and parks. The cycle count is required
+and finite. It waits for active or paused plate plans and releases the lock between
+cycles. Run it as an asyncio task for background maintenance; abort or cancel and
+await that task before disconnecting. No persistent firmware timer is installed.
+For maintenance, progress counts completed valve operations rather than individual
+pulses. Cleaning effectiveness depends on the fluid, contamination, and chosen recipe.

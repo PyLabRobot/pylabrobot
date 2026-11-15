@@ -13,7 +13,7 @@ class RunAborted(RuntimeError):
 
 @dataclass(frozen=True)
 class RunProgress:
-  """Confirmed counts and uncertainty for the current group (all counts are zero-based)."""
+  """Confirmed operation counts and an optional zero-based uncertain group index."""
 
   state: RunState = "pending"
   total_groups: int = 0
@@ -37,6 +37,7 @@ class RunControl:
     self._resume.set()
     self._paused = asyncio.Event()
     self._aborted = False
+    self._abort_event = asyncio.Event()
 
   @property
   def progress(self) -> RunProgress:
@@ -66,12 +67,22 @@ class RunControl:
   def _request_abort(self) -> None:
     """Wake a paused executor and prevent further dose submissions."""
     self._aborted = True
+    self._abort_event.set()
     self._resume.set()
 
   def _check_abort(self) -> None:
     """Reject further execution after an abort request."""
     if self._aborted:
       raise RunAborted("CERTUS run aborted; inspect progress before preparing another run")
+
+  async def _sleep(self, duration: float) -> None:
+    """Wait between maintenance cycles while allowing an abort to wake the scheduler."""
+    self._check_abort()
+    try:
+      await asyncio.wait_for(self._abort_event.wait(), duration)
+    except asyncio.TimeoutError:
+      return
+    self._check_abort()
 
   def _start(self, total: int) -> None:
     """Claim this controller once; failed and completed recipes cannot be resumed."""

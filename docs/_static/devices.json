@@ -2182,12 +2182,12 @@
     "capabilities": [
       "dispensing"
     ],
-    "status": "basic",
+    "status": "mostly",
     "needs_hardware_testing": false,
     "api": "pylabrobot.gyger.CertusFlex",
     "api_version": "v1",
     "code_slug": "gyger/certus_flex",
     "doc_slug": "gyger/certus_flex/hello-world",
-    "notes": "Hardware-tested over direct UDP with an angled FLEX8 head, including water dispensing and clean cycles. INCO server TCP and other heads have offline coverage only."
+    "notes": "Plate plans, coordinated channels, calibration reuse, run controls, and maintenance. Angled FLEX8 tested over direct Ethernet; INCO server and other heads use offline fixtures."
   }
 ]

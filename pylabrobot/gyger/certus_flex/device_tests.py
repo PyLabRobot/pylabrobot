@@ -2,7 +2,10 @@
 
 import asyncio
 import unittest
+from typing import TypedDict
 from unittest.mock import AsyncMock, MagicMock, call, patch
+
+from typing_extensions import NotRequired
 
 from ._inco import Inco, IncoError
 from ._inco_udp import IncoUDP
@@ -13,6 +16,16 @@ POSITION = ROOT + ".Module.Entity.PosSystem"
 PRESSURE = ROOT + ".Module.Entity.PressureRegulator"
 HEAD = ROOT + ".Module.Entity.Head"
 VALVE = ROOT + ".Module.Entity.Valve1"
+
+
+class CleanCycleParameters(TypedDict):
+  """Typed keyword arguments shared by clean-cycle cases."""
+
+  prime_duration: float
+  purge_duration: float
+  purge_pulse_duration: float
+  cycles: int
+  purge_interval: NotRequired[float]
 
 
 class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
@@ -308,7 +321,7 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
     waiter = patch.object(self.device, "_wait_state", new=AsyncMock())
     waiter.start()
     self.addCleanup(waiter.stop)
-    self.parameters = {
+    self.parameters: CleanCycleParameters = {
       "prime_duration": 0.1,
       "purge_duration": 0.02,
       "purge_pulse_duration": 0.001,
@@ -368,7 +381,8 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_clean_sequence_and_pressure_unchanged(self) -> None:
     """Purge all selected channels, pause, prime them, repeat, then park."""
-    parameters = self.parameters | {"cycles": 2}
+    parameters = self.parameters.copy()
+    parameters["cycles"] = 2
     with patch("pylabrobot.gyger.certus_flex.device.asyncio.sleep", new=AsyncMock()) as sleep:
       await self.device.clean_cycle([1, 2], **parameters)
     cycle = [
@@ -403,16 +417,17 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
     for channels in ([], [True], [-1], [8], [1, 1]):
       with self.subTest(channels=channels), self.assertRaises(ValueError):
         await self.device.clean_cycle(channels, **self.parameters)
-    for override in (
-      {"cycles": 0},
-      {"cycles": True},
-      {"prime_duration": float("nan")},
-      {"prime_duration": 11},
-      {"purge_pulse_duration": 0.03},
-      {"purge_interval": -1},
-    ):
-      with self.subTest(override=override), self.assertRaises(ValueError):
-        await self.device.clean_cycle([1], **(self.parameters | override))
+    invalid_parameters: tuple[CleanCycleParameters, ...] = (
+      {**self.parameters, "cycles": 0},
+      {**self.parameters, "cycles": True},
+      {**self.parameters, "prime_duration": float("nan")},
+      {**self.parameters, "prime_duration": 11},
+      {**self.parameters, "purge_pulse_duration": 0.03},
+      {**self.parameters, "purge_interval": -1},
+    )
+    for parameters in invalid_parameters:
+      with self.subTest(parameters=parameters), self.assertRaises(ValueError):
+        await self.device.clean_cycle([1], **parameters)
     self.inco.call.assert_not_awaited()
     self.inco.put_number.assert_not_awaited()
 
@@ -420,7 +435,8 @@ class MaintenanceTests(unittest.IsolatedAsyncioTestCase):
     """Ready flags alone do not authorize a clean cycle with zero pressure."""
     self.inco.get_number.side_effect = None
     self.inco.get_number.return_value = 4
-    parameters = self.parameters | {"prime_duration": 0.00005}
+    parameters = self.parameters.copy()
+    parameters["prime_duration"] = 0.00005
     # PrimeTimeout is returned in microseconds; supply a sufficient limit first.
     self.inco.get_number.side_effect = [1e6, 4, 4, 4, 4, 4, 0, 0]
     with self.assertRaises(CertusFlexError):

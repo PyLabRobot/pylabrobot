@@ -98,7 +98,7 @@ class IncoUDPTests(unittest.IsolatedAsyncioTestCase):
     for fixture in fixtures:
       self.io.read.return_value = bytes.fromhex(fixture["response"])
       if fixture["operation"] == "get_string":
-        value = await self.inco.get_string(fixture["path"])
+        value: str | float = await self.inco.get_string(fixture["path"])
       else:
         value = await self.inco.get_number(fixture["path"])
       self.assertEqual(value, fixture["value"])
@@ -154,6 +154,20 @@ class IncoUDPTests(unittest.IsolatedAsyncioTestCase):
       else:
         await self.inco.call(fixture["path"], *fixture["arguments"])
       self.io.write.assert_awaited_with(bytes.fromhex(fixture["request"]))
+
+  async def test_recorded_plate_groups_run_controls_and_maintenance(self) -> None:
+    """Replay accepted geometry reads, grouped doses, closure, flush, and idle purge."""
+    fixture = json.loads(
+      Path(__file__).with_name("fixtures").joinpath("hardware_udp_features.json").read_text()
+    )
+    for exchange in fixture["exchanges"]:
+      self.inco._sequence = exchange["sequence"] - 1
+      self.io.read.return_value = bytes.fromhex(exchange["response"])
+      if exchange["operation"] == "get_number":
+        self.assertEqual(await self.inco.get_number(exchange["path"]), exchange["value"])
+      else:
+        await self.inco.call(exchange["path"], *exchange["arguments"])
+      self.io.write.assert_awaited_with(bytes.fromhex(exchange["request"]))
 
   async def test_fixed_point_put_and_typed_procedures(self) -> None:
     """Verify payload layout recovered from the vendor's classic conversion routines."""

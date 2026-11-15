@@ -1,7 +1,7 @@
 """Whole-plan validation and coordinated multi-valve execution."""
 
 import unittest
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from ._inco_udp import IncoUDP
 from .device import CertusFlex, ValveCalibration
@@ -18,9 +18,15 @@ class PlanTests(unittest.IsolatedAsyncioTestCase):
     self.device.serial_number = "C196069"
     self.io = MagicMock(spec=IncoUDP)
     self.device._inco = self.io
-    self.device._move_registered = AsyncMock()
-    self.device._move = AsyncMock()
-    self.device._sync_valves = AsyncMock()
+    move_registered_patch = patch.object(self.device, "_move_registered", new_callable=AsyncMock)
+    self.move_registered: AsyncMock = move_registered_patch.start()
+    self.addCleanup(move_registered_patch.stop)
+    move_patch = patch.object(self.device, "_move", new_callable=AsyncMock)
+    self.move: AsyncMock = move_patch.start()
+    self.addCleanup(move_patch.stop)
+    sync_valves_patch = patch.object(self.device, "_sync_valves", new_callable=AsyncMock)
+    self.sync_valves: AsyncMock = sync_valves_patch.start()
+    self.addCleanup(sync_valves_patch.stop)
 
     async def number(path: str) -> float:
       return 0.2 if path.endswith(("Act.Pressure", "Prop.SetPressure")) else 4.0
@@ -58,7 +64,7 @@ class PlanTests(unittest.IsolatedAsyncioTestCase):
     ]
     result = await self.device.execute_plan(self.device.plan_dispense(self.reg, steps))
     self.assertEqual(result, 2)
-    self.device._sync_valves.assert_awaited_once()
+    self.sync_valves.assert_awaited_once()
     self.assertEqual(
       self.io.call.call_args_list,
       [
@@ -71,14 +77,14 @@ class PlanTests(unittest.IsolatedAsyncioTestCase):
     steps = [
       DispenseStep(self.reg.plate.get_item(w), c, duration=0.001) for w, c in (("B2", 1), ("C2", 2))
     ]
-    self.device._sync_valves.side_effect = TimeoutError("uncertain dose")
+    self.sync_valves.side_effect = TimeoutError("uncertain dose")
     with self.assertRaisesRegex(TimeoutError, "uncertain dose"):
       await self.device.execute_plan(self.device.plan_dispense(self.reg, steps))
     self.assertEqual(sum(c.args[0].endswith(".Dispens") for c in self.io.call.call_args_list), 2)
     self.assertEqual(
       sum(c.args[0].endswith(".StopDispens") for c in self.io.call.call_args_list), 2
     )
-    self.device._move.assert_not_awaited()
+    self.move.assert_not_awaited()
 
   async def test_changed_calibration_rejects_before_motion(self) -> None:
     step = DispenseStep(self.reg.plate.get_item("B2"), 1, volume=2)
@@ -86,4 +92,4 @@ class PlanTests(unittest.IsolatedAsyncioTestCase):
     self.device.valves[1].calibration = ValveCalibration(((1, 0.002), (500, 0.2)), pressure=0.2)
     with self.assertRaisesRegex(ValueError, "changed"):
       await self.device.execute_plan(plan)
-    self.device._move_registered.assert_not_awaited()
+    self.move_registered.assert_not_awaited()

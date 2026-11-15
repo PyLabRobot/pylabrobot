@@ -54,6 +54,15 @@ class PlateRegistration:
       self.plate.get_size_x(),
       self.plate.get_size_y(),
       self.plate.get_size_z(),
+      (
+        self.first_well,
+        self.valve_offsets,
+        self.height,
+        self.clearance,
+        self.bounds,
+        self.serial_number,
+        self.head,
+      ),
       tuple(
         (
           id(well),

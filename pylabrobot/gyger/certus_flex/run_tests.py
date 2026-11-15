@@ -2,7 +2,7 @@
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from ._inco_udp import IncoUDP
 from .device import CertusFlex, CertusFlexError
@@ -19,10 +19,18 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
     self.device.serial_number = "C196069"
     self.io = MagicMock(spec=IncoUDP)
     self.device._inco = self.io
-    self.device._check_plan = AsyncMock()
-    self.device._move_registered = AsyncMock()
-    self.device._move = AsyncMock()
-    self.device._sync_valves = AsyncMock()
+    check_plan_patch = patch.object(self.device, "_check_plan", new_callable=AsyncMock)
+    self.check_plan: AsyncMock = check_plan_patch.start()
+    self.addCleanup(check_plan_patch.stop)
+    move_registered_patch = patch.object(self.device, "_move_registered", new_callable=AsyncMock)
+    self.move_registered: AsyncMock = move_registered_patch.start()
+    self.addCleanup(move_registered_patch.stop)
+    move_patch = patch.object(self.device, "_move", new_callable=AsyncMock)
+    self.move: AsyncMock = move_patch.start()
+    self.addCleanup(move_patch.stop)
+    sync_valves_patch = patch.object(self.device, "_sync_valves", new_callable=AsyncMock)
+    self.sync_valves: AsyncMock = sync_valves_patch.start()
+    self.addCleanup(sync_valves_patch.stop)
     self.io.get_number.return_value = 4.0
     reg = registration()
     self.plan = self.device.plan_dispense(
@@ -36,12 +44,12 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
       if control.progress.completed_groups == 0:
         control.pause()
 
-    self.device._sync_valves.side_effect = barrier
+    self.sync_valves.side_effect = barrier
     task = asyncio.create_task(self.device.execute_plan(self.plan, control=control))
     await asyncio.wait_for(control.wait_paused(), 1)
     self.assertEqual(control.progress.completed_doses, 1)
     self.assertIsNone(control.progress.uncertain_group)
-    self.assertEqual(self.device._move.await_count, 1)
+    self.assertEqual(self.move.await_count, 1)
     control.resume()
     self.assertEqual(await asyncio.wait_for(task, 1), 2)
     self.assertEqual(control.progress.state, "completed")
@@ -58,7 +66,7 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
       entered.set()
       await release.wait()
 
-    self.device._move_registered.side_effect = moving
+    self.move_registered.side_effect = moving
     control = RunControl()
     task = asyncio.create_task(self.device.execute_plan(self.plan, control=control))
     await asyncio.wait_for(entered.wait(), 1)
@@ -70,7 +78,7 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(control.progress.uncertain_group)
     self.assertFalse(any(c.args[0].endswith(".Dispens") for c in self.io.call.call_args_list))
     self.assertEqual(sum(c.args[0].endswith(".CloseValve") for c in self.io.call.call_args_list), 8)
-    self.device._move.assert_not_awaited()
+    self.move.assert_not_awaited()
 
   async def test_abort_during_dose_preserves_uncertain_group(self) -> None:
     entered, release = asyncio.Event(), asyncio.Event()
@@ -100,7 +108,7 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
     await self.device.abort()
     with self.assertRaises(RunAborted):
       await asyncio.wait_for(task, 1)
-    self.device._move_registered.assert_not_awaited()
+    self.move_registered.assert_not_awaited()
 
   async def test_close_failure_is_not_reported_as_success(self) -> None:
     self.io.call.side_effect = TimeoutError("disconnected")
