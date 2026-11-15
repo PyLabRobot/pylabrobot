@@ -223,6 +223,22 @@
     "oem": "https://www.azenta.com/products/automated-plate-seal-remover-formerly-xpeel"
   },
   {
+    "id": "beckman-biomek-i7",
+    "vendor": "Beckman Coulter",
+    "name": "Biomek i7",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling",
+      "arm"
+    ],
+    "status": "mostly",
+    "api": "pylabrobot.beckman_coulter.biomek_i7.device.BiomekI7",
+    "api_version": "v1",
+    "code_slug": "beckman_coulter/biomek_i7",
+    "doc_slug": "beckman_coulter/biomek_i7/hello-world",
+    "notes": "A 96-channel head and a Span-8, each with a gripper, over USB with no Beckman software; tested on one instrument, motion checked against the Master Controller's logs."
+  },
+  {
     "id": "beckman-cytoflex-s",
     "vendor": "Beckman Coulter",
     "name": "CytoFLEX S",
