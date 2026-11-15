@@ -319,3 +319,21 @@ Measure delivered volume separately before supplying a calibration. Preserve
 the PLR capture and record firmware, head, valve, pressure, pulse duration, and
 observations. Automatic plate-to-well coordinate conversion is not implemented;
 motion methods currently take controller coordinates.
+
+## PLR plate and well operations
+
+`read_plate_registration(plate, bounds=...)` reads the controller's active plate
+origin, grid, height, park clearance, and per-channel offsets. It rejects a grid
+or installed head that disagrees with the selected resources. Supply a verified
+`MotionBounds` envelope: software-limit paths have not been established, so the
+API does not invent them. For a different plate definition, `PlateRegistration`
+also accepts explicitly measured geometry.
+
+`move_to_well(registration, well, channel=...)` raises vertically to clearance,
+traverses XY, lowers, and checks the reported position within 0.05 mm.
+`dispense_to_well(registration, well, volume, channel=...)` additionally checks
+calibration, pressure, and well capacity before moving. Positions use PLR well
+centers and controller valve offsets. A lid, rotation, changed plate geometry,
+foreign well, or target outside the supplied bounds is rejected. Keep the volume
+tracker's initial contents accurate; physical contents are not sensed, and these
+operations do not update the tracker automatically.

@@ -14,3 +14,5 @@ pylabrobot.gyger package
     CertusFlexError
     IncoError
     IncoProtocolError
+    MotionBounds
+    PlateRegistration

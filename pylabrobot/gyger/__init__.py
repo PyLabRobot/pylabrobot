@@ -8,3 +8,5 @@ from .certus_flex import (
   IncoProtocolError,
   ValveCalibration,
 )
+
+from .certus_flex.geometry import MotionBounds, PlateRegistration

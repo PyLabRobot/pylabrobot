@@ -7,6 +7,9 @@ import time
 from dataclasses import dataclass
 from typing import Literal, Optional, Sequence, Union
 
+from pylabrobot.resources import Plate, Well
+
+from .geometry import MotionBounds, PlateRegistration, Position
 from ._inco import Argument, Inco
 from ._inco_udp import IncoUDP
 
@@ -29,6 +32,8 @@ _SPEEDS = {
   "park": "Park",
   "clamp_close": "ClampClose",
 }
+_HEAD_IDS = {"flex5": 1, "flex8": 2, "flex4_angled": 3, "flex8_angled": 4}
+_DATA = _ROOT + ".Data.Entity.Module."
 _OUTPUTS = {
   "flex5": (1, 2, 3, 4, 5),
   "flex8": tuple(range(8)),
@@ -442,6 +447,143 @@ class CertusFlex:
     logger.info("CERTUS FLEX motion: %s", command)
     await self._inco.call(_POSITION + ".Cmd." + command, *arguments)
     await self._wait_state(_POSITION, ("ready",), initial="ready")
+
+  async def validate_head(self) -> None:
+    """Check the installed head against the explicitly selected channel mapping."""
+    actual = await self._inco.get_number(_HEAD + ".Act.Id")
+    if actual != _HEAD_IDS[self.head]:
+      raise CertusFlexError(f"Installed head ID {actual} does not match {self.head}")
+
+  async def read_plate_registration(
+    self,
+    plate: Plate,
+    *,
+    bounds: MotionBounds,
+    height: Optional[float] = None,
+  ) -> PlateRegistration:
+    """Read the active controller plate definition and channel offsets without moving.
+
+    The controller plate rows, columns, and pitch must match the PLR resource.
+    For another plate geometry, construct PlateRegistration with measured origins.
+    Bounds must be supplied from a verified machine envelope, not guessed travel limits.
+    """
+    async with self._operation_lock:
+      await self.validate_head()
+      if self.serial_number is None:
+        raise RuntimeError("Call setup before reading plate registration")
+      prefix = _DATA + "Wellplatedefinition.Prop."
+      for name, expected in (
+        ("RowNum", plate.num_items_y),
+        ("ColNum", plate.num_items_x),
+        ("XGrid", plate.item_dx),
+        ("YGrid", plate.item_dy),
+      ):
+        actual = await self._inco.get_number(prefix + name)
+        if not math.isclose(actual, expected, abs_tol=0.01, rel_tol=0):
+          raise ValueError(f"Controller plate {name}={actual} does not match {expected}")
+      origin = (
+        await self._inco.get_number(prefix + "XPosFirstWell"),
+        -await self._inco.get_number(prefix + "YPosFirstWell"),
+      )
+      offsets: list[Position] = []
+      for valve in self.valves:
+        xyz = [
+          await self._inco.get_number(_DATA + f"Position.Valve.Prop.{axis}Valve{valve.output_id}")
+          for axis in "XYZ"
+        ]
+        offsets.append((xyz[0], xyz[1], xyz[2]))
+      plate_height = (
+        await self._inco.get_number(prefix + "WellplateHeight") if height is None else height
+      )
+      clearance = await self._inco.get_number(_DATA + "Position.Park.Prop.PosZ")
+      return PlateRegistration(
+        plate,
+        first_well=origin,
+        valve_offsets=tuple(offsets),
+        height=plate_height,
+        clearance=clearance,
+        bounds=bounds,
+        serial_number=self.serial_number,
+        head=self.head,
+      )
+
+  async def _check_registration(self, registration: PlateRegistration) -> None:
+    """Check resource geometry, controller identity, and installed head before motion."""
+    registration.validate()
+    if registration.serial_number != self.serial_number or registration.head != self.head:
+      raise ValueError("Plate registration belongs to another dispenser or head")
+    await self.validate_head()
+
+  async def _move_registered(
+    self,
+    registration: PlateRegistration,
+    target: Position,
+    profile: str,
+  ) -> None:
+    """Raise vertically, traverse at clearance, lower, and verify position under the lock."""
+    current = await self.get_position()
+    registration.bounds.check(current)
+    high = (current[0], current[1], registration.clearance)
+    registration.bounds.check(high)
+    registration.bounds.check(target)
+    await self._move("MoveXYZ", *high, profile)
+    await self._move("MoveXYZ", target[0], target[1], registration.clearance, profile)
+    await self._move("MoveXYZ", *target, profile)
+    actual = await self.get_position()
+    if any(abs(a - b) > 0.05 for a, b in zip(actual, target)):
+      raise CertusFlexError(f"Position {actual} does not match target {target}")
+
+  async def move_to_well(
+    self,
+    registration: PlateRegistration,
+    well: Well,
+    *,
+    channel: int,
+    speed: Speed = "slow",
+  ) -> None:
+    """Position a registered well under one channel using vertical clearance moves."""
+    target = registration.target(well, channel)
+    profile = _speed(speed)
+    async with self._operation_lock:
+      await self._check_registration(registration)
+      await self._move_registered(registration, target, profile)
+
+  async def dispense_to_well(
+    self,
+    registration: PlateRegistration,
+    well: Well,
+    volume: float,
+    *,
+    channel: int,
+    correction_factor: float = 1.0,
+    speed: Speed = "slow",
+  ) -> None:
+    """Move to a PLR well and deliver a calibrated volume in µL.
+
+    Capacity is checked against the well's tracked starting volume. This method
+    does not infer existing liquid or update the resource volume tracker.
+    """
+    target = registration.target(well, channel)
+    profile = _speed(speed)
+    valve = self.valves[channel]
+    if valve.calibration is None:
+      raise ValueError("Assign the selected valve's calibration before dispensing")
+    duration = valve.calibration.duration_for_volume(volume, correction_factor=correction_factor)
+    valve._validate_duration(duration)
+    if volume + well.tracker.get_used_volume() > well.max_volume:
+      raise ValueError("Dispense would exceed the well capacity")
+    async with self._operation_lock:
+      await self._check_registration(registration)
+      await valve._require_ready()
+      actual = await self.get_pressure()
+      setpoint = await self._inco.get_number(_PRESSURE + ".Prop.SetPressure")
+      if (
+        abs(actual - valve.calibration.pressure) > 0.01
+        or abs(setpoint - valve.calibration.pressure) > 0.01
+      ):
+        raise CertusFlexError("Current pressure does not match the valve calibration")
+      await self._move_registered(registration, target, profile)
+      await valve._dispense_for(duration)
 
   async def move_to(self, x: float, y: float, z: float, *, speed: Speed = "slow") -> None:
     """Move to controller coordinates in mm using a named firmware speed profile.
