@@ -51,9 +51,9 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup_only_reads_identity(self) -> None:
     self.inco.get_string.side_effect = ["CF123", "1.2.3"]
-    with self.assertLogs("pylabrobot.gyger", level="WARNING") as logs:
+    with self.assertLogs("pylabrobot.gyger", level="INFO") as logs:
       await self.device.setup()
-    self.assertIn("untested", logs.output[0])
+    self.assertIn("Connected to CERTUS FLEX CF123, firmware 1.2.3", logs.output[0])
     self.assertEqual(self.device.serial_number, "CF123")
     self.assertEqual(self.device.firmware_version, "1.2.3")
     self.assertEqual(

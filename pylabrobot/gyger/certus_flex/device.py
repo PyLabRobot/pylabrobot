@@ -289,9 +289,6 @@ class CertusFlex:
 
   async def setup(self) -> None:
     """Connect and read identity without moving or pressurizing the machine."""
-    logger.warning(
-      "CERTUS FLEX native prime, purge, and clean-cycle commands are untested on hardware"
-    )
     await self._inco.setup()
     try:
       self.serial_number = await self._inco.get_string(_ROOT + ".Act.Serialnumber")

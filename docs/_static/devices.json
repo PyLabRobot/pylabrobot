@@ -2183,11 +2183,11 @@
       "dispensing"
     ],
     "status": "basic",
-    "needs_hardware_testing": true,
+    "needs_hardware_testing": false,
     "api": "pylabrobot.gyger.CertusFlex",
     "api_version": "v1",
     "code_slug": "gyger/certus_flex",
     "doc_slug": "gyger/certus_flex/hello-world",
-    "notes": "Direct UDP and INCO server TCP; motion, pressure, timed and calibrated dispensing, and valve maintenance. Native maintenance commands need hardware verification."
+    "notes": "Hardware-tested over direct UDP with an angled FLEX8 head, including water dispensing and clean cycles. INCO server TCP and other heads have offline coverage only."
   }
 ]

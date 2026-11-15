@@ -16,7 +16,7 @@ angled FLEX8 head. The fixtures retain controller replies for regression testing
 | Pressure | Regulation to 0.2 bar and discharge to approximately zero |
 | Timed valves | Water flow through channels 2/3; visible water in B2/C3 after 1 ms pulses |
 | INCO server TCP | Native request fixtures and simulated responses; no hardware verification |
-| Prime, purge, clean cycle | Command sequencing and failure tests; native maintenance commands unverified on hardware |
+| Prime, purge, clean cycle | One water cycle on channels 2/3 at 0.2 bar: 20 ms cumulative purge in 1 ms pulses, 250 ms pause, 100 ms prime per channel; observed flow into waste, park, and zero pressure after explicit discharge |
 | Volume-to-time conversion | Vendor-source reference cases cover interpolation, volume correction, units, and the valve command; physical volume accuracy depends on the supplied calibration |
 
 Reference-axis motion, the full travel envelope, other head types, and cleaning
@@ -73,7 +73,8 @@ completion barrier. The fixtures are not produced by the Python encoder.
 
 The `hardware_udp_*.json` fixtures in that directory contain real controller
 exchanges for reads, start/park procedures, numeric plate moves, pressure writes,
-timed valve commands, completion barriers, and discharge. Timeouts, cancellation,
+timed valve commands, prime limits, native purge/prime, waste positioning,
+completion barriers, and discharge. Timeouts, cancellation,
 malformed packets, and lost replies use a simulated transport; UDP datagram
 handling is tested on loopback sockets.
 

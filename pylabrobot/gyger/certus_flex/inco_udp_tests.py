@@ -140,6 +140,21 @@ class IncoUDPTests(unittest.IsolatedAsyncioTestCase):
         await self.inco.call(fixture["path"], *fixture["arguments"])
       self.io.write.assert_awaited_with(bytes.fromhex(fixture["request"]))
 
+  async def test_recorded_water_clean_cycle(self) -> None:
+    """Replay prime limits, waste positioning, purge/prime calls, barriers, and park."""
+    fixtures = json.loads(
+      Path(__file__).with_name("fixtures").joinpath("hardware_udp_maintenance.json").read_text()
+    )["exchanges"]
+    for fixture in fixtures:
+      self.inco._sequence = fixture["sequence"] - 1
+      self.io.read.return_value = bytes.fromhex(fixture["response"])
+      if fixture["operation"] == "get_number":
+        value = await self.inco.get_number(fixture["path"])
+        self.assertEqual(value, fixture["value"])
+      else:
+        await self.inco.call(fixture["path"], *fixture["arguments"])
+      self.io.write.assert_awaited_with(bytes.fromhex(fixture["request"]))
+
   async def test_fixed_point_put_and_typed_procedures(self) -> None:
     """Verify payload layout recovered from the vendor's classic conversion routines."""
     self.io.read.return_value = reply(1, b"")
