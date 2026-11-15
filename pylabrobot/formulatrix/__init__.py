@@ -1,3 +1,3 @@
 """Formulatrix devices."""
 
-from .mantis import Mantis
+from .mantis import CarouselConfiguration, Mantis, MantisCarousel
