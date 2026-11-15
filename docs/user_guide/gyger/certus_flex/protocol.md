@@ -337,3 +337,24 @@ centers and controller valve offsets. A lid, rotation, changed plate geometry,
 foreign well, or target outside the supplied bounds is rejected. Keep the volume
 tracker's initial contents accurate; physical contents are not sensed, and these
 operations do not update the tracker automatically.
+
+## Plate dispense plans
+
+Create `DispenseStep(well, channel, volume=...)` requests in µL, then call
+`plan_dispense(registration, steps, repeats=1, order="given", parallel=True)`.
+Planning is offline and checks the entire recipe, calibration range, target bounds,
+common pressure, and cumulative capacity before movement. Zero-volume wells are
+skipped. `DispenseStep.gradient` produces a linear gradient; `from_csv` accepts
+`well,channel,volume` columns and an optional `correction_factor`. Channels are
+zero-based. Orders are `given`, `row`, `column`, `snake_row`, and `snake_column`.
+
+`execute_plan(plan)` revalidates geometry, calibration, capacity, head, and pressure.
+Consecutive requests with distinct channels at a common stage position are queued
+before a shared valve barrier. This permits controller concurrency without
+promising simultaneous pulse edges. Other requests retain their specified order.
+On success the head is raised at the final XY position. Park and pressure discharge
+are explicit. A failed group is stopped best-effort and never automatically repeated.
+
+For commissioning, steps may specify `duration` instead of `volume`; these timed
+plans cannot check physical filled volume. Do not supply both quantities. Rebuild
+plans after changing calibration or plate geometry.

@@ -10,6 +10,7 @@ from typing import Literal, Optional, Sequence, Union
 from pylabrobot.resources import Plate, Well
 
 from .geometry import MotionBounds, PlateRegistration, Position
+from .plans import DispensePlan, DispenseStep, Order, PreparedDispense, ordered_steps
 from ._inco import Argument, Inco
 from ._inco_udp import IncoUDP
 
@@ -584,6 +585,159 @@ class CertusFlex:
         raise CertusFlexError("Current pressure does not match the valve calibration")
       await self._move_registered(registration, target, profile)
       await valve._dispense_for(duration)
+
+  def plan_dispense(
+    self,
+    registration: PlateRegistration,
+    steps: Sequence[DispenseStep],
+    *,
+    repeats: int = 1,
+    order: Order = "given",
+    parallel: bool = True,
+  ) -> DispensePlan:
+    """Validate an entire plate recipe before any hardware commands.
+
+    Volume limits include repeats, all channels, and the well's tracked initial
+    contents. Timed requests cannot provide a capacity guarantee. Calibration
+    and durations are frozen in the returned plan; rebuild after changing them.
+    """
+    if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
+      raise ValueError("repeats must be a positive integer")
+    registration.validate()
+    if registration.head != self.head or len(registration.valve_offsets) != len(self.valves):
+      raise ValueError("Registration does not match selected head")
+    for step in steps:
+      registration.target(step.well, step.channel)
+    ordered = ordered_steps(steps, registration, order)
+    prepared: list[PreparedDispense] = []
+    totals: dict[int, float] = {}
+    for _ in range(repeats):
+      for step in ordered:
+        position = registration.target(step.well, step.channel)
+        if step.volume == 0:
+          continue
+        pressure = None
+        if step.volume is not None:
+          calibration = self.valves[step.channel].calibration
+          if calibration is None:
+            raise ValueError(f"Channel {step.channel} needs a calibration")
+          duration = calibration.duration_for_volume(
+            step.volume, correction_factor=step.correction_factor
+          )
+          pressure = calibration.pressure
+          total = totals.get(id(step.well), step.well.tracker.get_used_volume()) + step.volume
+          if total > step.well.max_volume:
+            raise ValueError(f"Plan exceeds capacity of {step.well.name}")
+          totals[id(step.well)] = total
+        else:
+          assert step.duration is not None
+          duration = step.duration
+        CertusValve._validate_duration(duration)
+        prepared.append(PreparedDispense(step, position, duration, pressure))
+    pressures = {item.pressure for item in prepared if item.pressure is not None}
+    if len(pressures) > 1:
+      raise ValueError("All channels in a plan must use the same calibration pressure")
+    groups: list[list[PreparedDispense]] = []
+    for item in prepared:
+      if (
+        parallel
+        and groups
+        and item.step.channel not in [p.step.channel for p in groups[-1]]
+        and all(abs(a - b) <= 0.001 for a, b in zip(item.position, groups[-1][0].position))
+      ):
+        groups[-1].append(item)
+      else:
+        groups.append([item])
+    return DispensePlan(registration, tuple(tuple(group) for group in groups))
+
+  async def _check_plan(self, plan: DispensePlan) -> None:
+    """Recheck geometry, capacity, regulated pressure, and all participating valves."""
+    original = tuple(item for group in plan.groups for item in group)
+    rebuilt = self.plan_dispense(
+      plan.registration, [item.step for item in original], parallel=False
+    )
+    if tuple(item for group in rebuilt.groups for item in group) != original:
+      raise ValueError("Prepared plan or calibration changed; rebuild the plan")
+    await self._check_registration(plan.registration)
+    totals: dict[int, float] = {}
+    for group in plan.groups:
+      channels: set[int] = set()
+      if not group:
+        raise ValueError("Empty dispense group")
+      for item in group:
+        target = plan.registration.target(item.step.well, item.step.channel)
+        if target != item.position or item.step.channel in channels:
+          raise ValueError("Invalid or changed prepared dispense group")
+        if any(abs(a - b) > 0.001 for a, b in zip(target, group[0].position)):
+          raise ValueError("Grouped channels do not share a stage position")
+        channels.add(item.step.channel)
+        CertusValve._validate_duration(item.duration)
+        if item.step.volume is not None:
+          total = (
+            totals.get(id(item.step.well), item.step.well.tracker.get_used_volume())
+            + item.step.volume
+          )
+          if total > item.step.well.max_volume:
+            raise ValueError("Plan exceeds current well capacity")
+          totals[id(item.step.well)] = total
+        await self.valves[item.step.channel]._require_ready()
+    actual = await self.get_pressure()
+    setpoint = await self._inco.get_number(_PRESSURE + ".Prop.SetPressure")
+    if not math.isfinite(actual) or not 0.051 <= setpoint <= 1 or abs(actual - setpoint) > 0.01:
+      raise CertusFlexError("Plate dispensing requires regulated pressure")
+    if any(
+      item.pressure is not None and abs(item.pressure - setpoint) > 0.01
+      for group in plan.groups
+      for item in group
+    ):
+      raise CertusFlexError("Plan calibration pressure does not match the regulator")
+
+  async def _stop_outputs(self, channels: Sequence[int]) -> None:
+    """Best-effort stop of selected outputs without masking a failed operation."""
+    for channel in set(channels):
+      try:
+        await self._inco.call(self.valves[channel]._path + ".Cmd.StopDispens")
+      except BaseException:
+        logger.exception("Could not confirm stopping CERTUS channel %d", channel)
+
+  async def execute_plan(self, plan: DispensePlan, *, speed: Speed = "slow") -> int:
+    """Execute grouped requests with one barrier per group; return confirmed dose count.
+
+    Requests are queued sequentially, allowing the controller to operate independent
+    valves together. This is not a guarantee of simultaneous pulse edges. On success
+    the head is raised at the final XY position; park/discharge remain explicit.
+    """
+    profile = _speed(speed)
+    if not plan.groups:
+      return 0
+    completed = 0
+    channels = sorted({p.step.channel for group in plan.groups for p in group})
+    async with self._operation_lock:
+      await self._check_plan(plan)
+      try:
+        for group in plan.groups:
+          await self._move_registered(plan.registration, group[0].position, profile)
+          for item in group:
+            await self.valves[item.step.channel]._require_ready()
+          for item in group:
+            await self._inco.call(
+              self.valves[item.step.channel]._path + ".Cmd.Dispens", item.duration * 1e6
+            )
+          await self._sync_valves()
+          for item in group:
+            await self.valves[item.step.channel]._require_ready()
+          completed += len(group)
+          await self._move(
+            "MoveXYZ",
+            group[0].position[0],
+            group[0].position[1],
+            plan.registration.clearance,
+            profile,
+          )
+      except BaseException:
+        await self._stop_outputs(channels)
+        raise
+    return completed
 
   async def move_to(self, x: float, y: float, z: float, *, speed: Speed = "slow") -> None:
     """Move to controller coordinates in mm using a named firmware speed profile.

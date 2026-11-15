@@ -16,3 +16,5 @@ pylabrobot.gyger package
     IncoProtocolError
     MotionBounds
     PlateRegistration
+    DispenseStep
+    DispensePlan
