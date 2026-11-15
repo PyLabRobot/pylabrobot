@@ -28,6 +28,7 @@ from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import GripCheckError
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 from pylabrobot.beckman_coulter.biomek_i7.units import MM_PER_CM
 from pylabrobot.beckman_coulter.biomek_i7.units import optional_cm as _cm
 from pylabrobot.lib.pick_and_place.assignment import assign_placed_resource
@@ -172,7 +173,7 @@ def held_labware_of(
 ) -> g.HeldLabware:
   """What the rail and the pod's own collision check count for `resource` held by the gripper:
   its footprint, the lid on it as a stacked layer (as Biomek counts a gripped stack), and its
-  height, in cm.
+  height, in cm, from their labware definitions (recorded in `source`).
 
   Args:
     resource: what is held. A lid seated on it (`resource.lid`) is the layer above it.
@@ -187,6 +188,13 @@ def held_labware_of(
     size = [r.get_size_x() / MM_PER_CM, r.get_size_y() / MM_PER_CM]
     return size if across == "y" else size[::-1]
 
+  def definition(r: Resource) -> str:
+    """The labware definition `r` was made from, and its size (mm)."""
+    name = r.model or type(r).__name__
+    return f"{name} {r.get_size_x():g} x {r.get_size_y():g} x {r.get_size_z():g} mm"
+
+  sources = [definition(resource)]
+
   length, width = footprint(resource)
   layers = []
   top = resource.get_size_z()
@@ -196,6 +204,7 @@ def held_labware_of(
     dx, dy = corner if across == "y" else corner[::-1]
     layers.append(g.StackedLayer(dx, dy, *footprint(lid)))
     top = max(top, lid.location.z + lid.get_size_z())
+    sources.append(f"lid {definition(lid)}")
   return g.HeldLabware(
     length,
     width,
@@ -204,6 +213,7 @@ def held_labware_of(
     tuple(layers),
     height=top / MM_PER_CM,
     grip_offset=grip_height / MM_PER_CM,
+    source="; ".join(sources),
   )
 
 
@@ -221,6 +231,19 @@ class Gripper:
     self._held_checks = False
     self._held_speed = 1000
     self._taken_from: Tuple[Optional[Resource], Optional[Coordinate]] = (None, None)
+
+  @property
+  def default_minimum_traverse_height(self) -> traverse.TraverseDefault:
+    """How the gripper (and what it holds) travels by default: "safe", Biomek's safe height over the way (the tallest
+    thing under it, plus Biomek's margins); "max", as high as it goes; or a height, mm of
+    its lowest point above the deck. A call's `minimum_traverse_height_start` / `_end` overrides
+    it. It starts as Biomek's setting for the pod (`AlwaysMaxZ`); the deck check refuses any travel
+    too low, whatever the height."""
+    return self._pod.traverse_defaults["gripper"]
+
+  @default_minimum_traverse_height.setter
+  def default_minimum_traverse_height(self, value: traverse.TraverseDefault) -> None:
+    self._pod.traverse_defaults["gripper"] = traverse.traverse_default(value)
 
   def __str__(self) -> str:
     return f"{self._pod}'s gripper"
@@ -539,19 +562,32 @@ class Gripper:
     force = d.settings["GripperSqueezeForce"] if grip_strength is None else grip_strength
     logger.info("%s pick up %s (fingers %s)", pod.component, resource.name, direction)
     await self._check(checks, expect_labware=False)
+    # The approach is planned, nothing exempt; the get's own moves work in the resource's position.
     targets = self._travel_targets(plan)
     await pod._travel_gripper(targets, minimum_traverse_height=_cm(minimum_traverse_height_start))
-    await pod.move_axes({"GG": d.to_counts("GG", plan.open_width)})
-    await pod.move_axes({"GZ": d.to_counts("GZ", plan.gz)})
-    self._simulate(plan.width)
-    await pod.move_axes({"GG": d.to_counts("GG", plan.close_width)}, forces={"GG": force})
-    await self._check_stopped_width(plan)
-    await self._check(checks, expect_labware=True)
-    self._hold(resource, plan, checks, held_speed)
-    await pod.move_axes({"GZ": d.to_counts("GZ", plan.lift)}, held_speed)
-    await self._check(checks, expect_labware=True)
-    if minimum_traverse_height_end is not None:
-      await pod._move_over({}, held_speed, minimum_traverse_height=_cm(minimum_traverse_height_end))
+    with pod.working_at(resource):
+      await pod.move_axes({"GG": d.to_counts("GG", plan.open_width)})
+      await pod.move_axes({"GZ": d.to_counts("GZ", plan.gz)})
+      self._simulate(plan.width)
+      # What it closes on counts as part of the pod from the close on (on the rail, and against
+      # the pod's own parts and the deck): it moves with the fingers once they close.
+      self.set_held_labware(plan.held)
+      try:
+        await pod.move_axes({"GG": d.to_counts("GG", plan.close_width)}, forces={"GG": force})
+        await self._check_stopped_width(plan)
+        await self._check(checks, expect_labware=True)
+      except BaseException:
+        self.set_held_labware(None)
+        raise
+      self._hold(resource, plan, checks, held_speed)
+      await pod.move_axes({"GZ": d.to_counts("GZ", plan.lift)}, held_speed)
+      await self._check(checks, expect_labware=True)
+      # Then up to the height it travels at, still part of the get, as Biomek's get does.
+      await pod._raise_gripper(held_speed)
+      if minimum_traverse_height_end is not None:
+        await pod._move_over(
+          {}, held_speed, minimum_traverse_height=_cm(minimum_traverse_height_end)
+        )
 
   async def _check_stopped_width(self, plan: GripPlan) -> None:
     """The close is force-limited and stops on what it grips; one that reached its target closed
@@ -612,8 +648,11 @@ class Gripper:
       deck.check_can_drop_resource_here(held)
     else:
       to.check_can_drop_resource_here(held)
-    location = get_place_location(held, to, deck, rotation_applied_by_move=turn)
     rotation = (picked.rotation + turn) % 360
+    # Reckoned from the pickup: the gripper may have turned it since (as it hangs now, at the
+    # gripper's own angle), so the turn from where it hangs.
+    now = get_rotation_wrt(held, deck).z
+    location = get_place_location(held, to, deck, rotation_applied_by_move=rotation - now)
     pads, height = self._grip_point(
       held, location, rotation, offset, None, picked.held.grip_offset * MM_PER_CM
     )
@@ -662,29 +701,45 @@ class Gripper:
     checks = self._held_checks if check_grip is None else self._checks(check_grip)
     held_speed = self._held_speed if z_speed is None else self._held_field(z_speed)
     logger.info("%s place %s", pod.component, held.name)
+    # The approach is planned, nothing exempt; the put's own moves work in the destination.
     targets = self._travel_targets(plan)
     await pod._travel_gripper(
       targets, held_speed, minimum_traverse_height=_cm(minimum_traverse_height_start)
     )
-    await self._check(checks, expect_labware=True)
-    await pod.move_axes({"GZ": d.to_counts("GZ", plan.gz)}, held_speed)
-    await self._check(checks, expect_labware=True)
-    await pod.move_axes({"GG": d.to_counts("GG", plan.open_width)})
-    self._simulate(None)
-    picked = self._held_plan
-    if picked is None:
-      raise RuntimeError(f"{self}: has no plan for what it holds")
-    self._held = self._held_plan = None
-    self.set_held_labware(None)
-    # Off the gripper's model, turned as it was on the deck: the move adds its own turn.
-    if held.parent is not None:
-      held.unassign()
-    held.rotation = Rotation(z=picked.rotation)
-    assign_placed_resource(held, to, deck, location=location, rotation_applied_by_move=turn)
-    await self._check(checks, expect_labware=False)
-    await pod.move_axes({"GZ": d.to_counts("GZ", plan.lift)})
-    if minimum_traverse_height_end is not None:
-      await pod._move_over({}, minimum_traverse_height=_cm(minimum_traverse_height_end))
+    with pod.working_at(*self._places(to)):
+      await self._check(checks, expect_labware=True)
+      await pod.move_axes({"GZ": d.to_counts("GZ", plan.gz)}, held_speed)
+      await self._check(checks, expect_labware=True)
+      await pod.move_axes({"GG": d.to_counts("GG", plan.open_width)})
+      self._simulate(None)
+      picked = self._held_plan
+      if picked is None:
+        raise RuntimeError(f"{self}: has no plan for what it holds")
+      self._held = self._held_plan = None
+      self.set_held_labware(None)
+      # Off the gripper's model, turned as it was on the deck: the move adds its own turn.
+      if held.parent is not None:
+        held.unassign()
+      held.rotation = Rotation(z=picked.rotation)
+      assign_placed_resource(held, to, deck, location=location, rotation_applied_by_move=turn)
+      await self._check(checks, expect_labware=False)
+      await pod.move_axes({"GZ": d.to_counts("GZ", plan.lift)})
+      await pod._raise_gripper()  # up to its travel height, still part of the put
+      if minimum_traverse_height_end is not None:
+        await pod._move_over({}, minimum_traverse_height=_cm(minimum_traverse_height_end))
+
+  def _places(self, to: Union[Resource, Coordinate]) -> Tuple[Resource, ...]:
+    """What a place into `to` works in, for the deck check: `to`, or the deck position under a
+    deck `Coordinate`."""
+    if not isinstance(to, Coordinate):
+      return (to,)
+    deck, _, _ = self._context()
+    return tuple(
+      p
+      for p in deck.get_all_children()
+      if isinstance(p, ResourceHolder)
+      and _contains(p.get_location_wrt(deck), p.get_absolute_size_x(), p.get_absolute_size_y(), to)
+    )[:1]
 
   async def drop_resource(self, *args: Any, **kwargs: Any) -> None:
     """Deprecated: use `place_resource`."""
@@ -761,3 +816,7 @@ class Gripper:
       minimum_traverse_height_start=minimum_traverse_height_during,
       minimum_traverse_height_end=minimum_traverse_height_end,
     )  # fmt: skip
+
+
+def _contains(corner: Coordinate, size_x: float, size_y: float, point: Coordinate) -> bool:
+  return corner.x <= point.x <= corner.x + size_x and corner.y <= point.y <= corner.y + size_y

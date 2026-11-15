@@ -17,7 +17,7 @@ single-axis commands over USB. This driver replaces the top two and talks to the
 | L1 wire | the ACE messages | `driver/framing.py`, `board.py`, `protocol.py` |
 | L2 board commands | one board request each | `_unchecked_fw_*` on the pods and chassis |
 | L3 MC | one MC host command each | the pods' public primitives, `driver/recipes/` |
-| L4 planning | Biomek's planning | `driver/motion.py`, `pod_geometry.py`, `liquid.py` (no I/O) |
+| L4 planning | Biomek's planning | `driver/planning/`, `motion.py`, `pod_geometry.py`, `liquid.py` (no I/O) |
 | L5 PyLabRobot | the PLR API | `device.py`, the operation features, `resource_model/` |
 
 Each layer calls only the one below it.
@@ -45,7 +45,8 @@ instrument. Each source's values are fingerprinted: a file changed after import 
 on the instrument, discovery refuses one whose serial numbers are not the modules', and one whose
 sources have changed since. There is no switch to skip a check; the fix is to import again. A
 simulation with no files uses the package's generic instrument (`defaults/`), which a live session
-refuses.
+refuses. Every setting the driver reads is required in the pod's entry: a pod whose entry lacks one
+is refused (`required_settings`), never given a default.
 
 ## The pods
 
@@ -68,9 +69,8 @@ the MC's recipe (`driver/recipes/homing.py`), its targets from the motor record.
 **I7. Pod against pod is the driver's job.** Nothing below the driver stops the pods colliding.
 Before a pod moves, its swept X range (bridge, pipettor and gripper as posed, with what it holds)
 must clear the other pod's range and any move it has in flight, or the move is refused before
-anything is sent (`driver/x_rail.py`, Biomek's own rule). The driver does not move the other pod out
-of the way; a caller makes room (`Pod.move_aside`, `Pod.park`). The guard uses the configuration
-only, so it holds without a deck.
+anything is sent (`driver/x_rail.py`, Biomek's own rule, on its 1/16 cm grid). The guard uses
+the configuration only, so it holds without a deck.
 
 ## The deck and the device
 
@@ -93,10 +93,28 @@ state is the tip (`serialize_state`). The device saves the tree's state (`state_
 head's tips change, restores it when built, and carries it over to the models it rebuilds at setup:
 the 96-head cannot sense tips, so that is how they are known across sessions.
 
-**I12. Travel is a traverse height, not a path planner.** Before X/Y travel the channels and the
-gripper rise to a traverse height (by default near the top of travel; per call, as STAR's
-`minimum_traverse_height_*`). A height below what the deck model and Biomek's per-pod obstacles need
-is refused, not routed.
+**I12. Motion is planned and checked as Biomek's planner does** (`driver/planning/`):
+
+- *Parts.* Each tool is a few boxes, each widened by `AvoidanceMargin`: the 96-head (flange and
+  up, head, tips' block), a Span-8 probe (a lower box, an open-topped upper part), the gripper
+  (upper hand; lower hand, fingers and what it holds, which turn with GR). The pipettor's lower
+  parts reach `AdditionalSafeHeight` lower. The world is boxes too: the deck's positions, their own
+  obstacles, the instrument's structure.
+- *One check, before every move* (`check.py`): each part swept from start to end (a hull; a turn
+  from one quarter turn to another, the box over each corner's arc; any other turn, sampled),
+  against the deck (the operation's own position left out) and the pod's other tool, and the rail
+  (I7). Not clear: refused, nothing sent.
+- *A planned call is checked whole* (`features/pod.py`, `find_path.py`): out of any position the
+  pod stands in, straight up, part by part; up to the safe heights (the tallest thing under each
+  tool's footprint, plus margins); the travel one axis at a time in Biomek's order (`merge.py`);
+  down. Every move is checked before anything moves: one that is not clear refuses the call, and
+  nothing moves.
+- *Two models.* Planned moves are checked with more than the move check checks (the gripper
+  padded by `AdditionalSafeHeightGripper`), so they pass it; the check stands alone for every
+  other move.
+
+A call may give its traverse height (STAR's `minimum_traverse_height_*`); the travel at it is
+checked like any other, and refused when it is not clear.
 
 ## Operation features
 
@@ -121,7 +139,7 @@ shuck. It has no tip sensor, so `setup` ejects over its trash even with no tips 
 `direction`: travel turned, open, down, a force-limited close that stops on the labware, lift clear,
 carry, place. The grip point is the resource's `preferred_pickup_location`; the widths default to
 Biomek's margins around the labware's width; a close that reaches its target met nothing and is
-refused. A pod's own gripper and pipettor are kept apart (`driver/pod_collision.py`).
+refused. A pod's own gripper and pipettor are kept apart (`driver/planning/check.py`).
 
 **I15. Biomek's techniques are a translation, not a mode.** `techniques.py` turns a Biomek technique
 and liquid type into the features' keyword arguments, which a caller splats and overrides. There is

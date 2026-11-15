@@ -16,13 +16,11 @@ import logging
 import os
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7 import units
+from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.deck import (
   FRAME_X,
   FRAME_Y,
   BiomekI7Deck,
-  biomek_x,
-  biomek_y,
   deck_x,
   deck_y,
 )
@@ -45,6 +43,8 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles, obstacle_part
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.pod_model import OPEN, Part
 from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import (
   RECORDING_ENV,
   sense_recorded_tips,
@@ -52,6 +52,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import (
   simulated_boards,
 )
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import cm, pod_model
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.alps import BiomekALP, BiomekPosition
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import PROBES
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
   GripperModel,
@@ -60,10 +61,17 @@ from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
   place_span8_channel,
   span8_channels,
 )
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.structure import (
+  BiomekObstacle,
+  FrameToDevice,
+  merge_obstacles,
+  structure_resources,
+)
 from pylabrobot.resources.beckman_coulter.tips import beckman_coulter_biomek_tip_1070uL
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +99,17 @@ SIZE_Z = DECK_Z
 # BASE_BEHIND_Y0 behind Biomek Y 0.
 DECK_X = BASE_LEFT_OF_X0 - FRAME_X
 DECK_Y = BASE_Y_SPAN - BASE_BEHIND_Y0 - FRAME_Y
+
+# What the instrument's structure is drawn within, Biomek's frame (cm): its base, from just below
+# the deck surface to above the pods' tops (`structure_resources`).
+STRUCTURE_EXTENT = (
+  -BASE_LEFT_OF_X0 / 10,
+  (BASE_X_SPAN - BASE_LEFT_OF_X0) / 10,
+  -BASE_BEHIND_Y0 / 10,
+  (BASE_Y_SPAN - BASE_BEHIND_Y0) / 10,
+  -2.0,
+  60.0,
+)
 
 
 class BiomekI7Device(Resource):
@@ -136,12 +155,21 @@ class BiomekI7Device(Resource):
       category="device",
       model="beckman_coulter_biomek_i7",
     )
+    # Each pod's obstacles (`obstacles`), by pod number, until the tree changes.
+    self._obstacles: Dict[int, Obstacles] = {}
     if deck is None:
       # The default deck the declared configuration lays out, else an empty one.
       deck = BiomekI7Deck.from_configuration(driver.declared)
     self.deck = deck
     driver.deck = self.deck  # the operations work on this deck (STAR's `driver.deck`)
     self.assign_child_resource(self.deck, location=Coordinate(DECK_X, DECK_Y, DECK_Z))
+    # The instrument's structure around the deck, from the declared configuration's obstacles.
+    self.structure: List[BiomekObstacle] = []
+    to_device = FrameToDevice(Coordinate(DECK_X, DECK_Y, DECK_Z), FRAME_X, FRAME_Y)
+    obstacles = merge_obstacles(p.obstacles for p in driver.declared.pods.values())
+    for part, location in structure_resources(obstacles, STRUCTURE_EXTENT, to_device):
+      self.assign_child_resource(part, location=location)
+      self.structure.append(part)
 
     self.bridges: Dict[str, Resource] = {}
     self.pod_models: Dict[str, Resource] = {}
@@ -153,6 +181,11 @@ class BiomekI7Device(Resource):
     if state_json is not None and os.path.exists(state_json):
       self.load_state_from_file(state_json)  # the tips on the declared heads' shafts
     driver.on_tips_changed = self._tips_changed
+    driver.obstacles = self.obstacles
+    # Any resource assigned or unassigned under the device (labware, lids, tips, what a gripper
+    # holds; the callbacks reach up the tree) changes what the pods must clear.
+    self.register_did_assign_resource_callback(self.invalidate_obstacles)
+    self.register_did_unassign_resource_callback(self.invalidate_obstacles)
     if driver.arms:
       self._follow_driver()  # given a driver already set up
 
@@ -302,7 +335,7 @@ class BiomekI7Device(Resource):
   async def pause(self) -> None:
     """Pause for access, as Biomek's Pause step: the pods' drive power is cut and PAUSED shown,
     so the light curtain may be broken. Move the pods out of the way first if needed
-    (`move_aside`, `park`). See `BiomekI7Driver.pause`."""
+    (`park`, or a move of the pod). See `BiomekI7Driver.pause`."""
     await self.driver.pause()
 
   async def resume(self, speed: int = 200) -> None:
@@ -377,7 +410,9 @@ class BiomekI7Device(Resource):
       pod.pipettes._adopt_tips()
 
   def _tips_changed(self) -> None:
-    """A head's tips changed: save the tree's state, when there is a `state_json`."""
+    """A head's tips changed: the obstacles built are dropped, and the tree's state saved when
+    there is a `state_json`."""
+    self.invalidate_obstacles()
     if self.state_json is not None:
       self.save_state_to_file(self.state_json, indent=1)
 
@@ -550,39 +585,102 @@ class BiomekI7Device(Resource):
       if probe == 1:
         self.update_pod_location(pod.side, deck_y(cm(y - geo.mandrel1_y_offset + geo.pod_y_span)))
 
-  def traverse_clearance(
-    self, side: str, x: Tuple[float, float], y: Tuple[float, float], tip_length: float = 0.0
-  ) -> float:
-    """The lowest height, mm above the deck, a pod's channels may travel at over the area `x` by
-    `y` (deck x and y ranges, mm), for `Pod.move_over`'s `clearance`: the top of the tallest
-    resource there, plus the pod's `AdditionalSafeHeight`, plus `tip_length` (mm the tips reach
-    below the channels' bottom). Its Biomek-unit counterpart is `_traverse_clearance`."""
-    bx = sorted(units.to_cm(units.biomek_x(v)) for v in x)
-    by = sorted(units.to_cm(units.biomek_y(v)) for v in y)
-    clearance = self._traverse_clearance(
-      side, (bx[0], bx[1]), (by[0], by[1]), units.to_cm(tip_length)
-    )
-    return units.to_mm(clearance)
+  def obstacles(self, pod_number: int) -> Obstacles:
+    """What pod `pod_number`'s moves must clear, in Biomek's frame (cm), from this resource tree
+    alone, as Biomek builds it:
 
-  def _traverse_clearance(
-    self, side: str, x: Tuple[float, float], y: Tuple[float, float], tip_length: float = 0.0
-  ) -> float:
-    """The lowest height (Biomek Z, cm) a pod's channels may travel at over the area `x` by `y`
-    (Biomek X/Y, cm), for `Pod._move_over`'s `clearance`: the top of the tallest resource on the
-    deck there, plus the pod's `AdditionalSafeHeight`, plus `tip_length` (cm the tips reach below
-    the channels' bottom). Biomek's Z is the deck model's z in cm (design.md I9). The deck itself,
-    its ALPs' frames included, counts; the pods' own models do not."""
-    pod = self.driver.arm(side)
-    if pod.declared is None:
-      raise RuntimeError(f"{pod} has no declared configuration")
-    top = 0.0
-    for resource in self.deck.get_all_children():
-      loc = resource.get_location_wrt(self.deck)
-      left, right = biomek_x(loc.x) / 10, biomek_x(loc.x + resource.get_size_x()) / 10
-      back, front = biomek_y(loc.y + resource.get_size_y()) / 10, biomek_y(loc.y) / 10
-      if left < x[1] and x[0] < right and back < y[1] and y[0] < front:
-        top = max(top, (loc.z + resource.get_size_z()) / 10)
-    return top + pod.declared.geometry.additional_safe_height + tip_length
+    - the instrument's structure as Biomek bounds it (`structure`), each widened by its buffer;
+    - one box per deck position (`BiomekPosition`): its footprint, where this pod's calibration puts
+      it, from its ALP's base up to the higher of its `min_safe_height` and the top of what stands
+      on it (lids and standing tips included);
+    - each position's own obstacles (a trash's walls), from below the deck up.
+
+    What a gripper holds is not on the deck, so it is not here. Built once per pod and kept until
+    the tree changes (a resource assigned or unassigned anywhere under the device, tips included);
+    a resource moved by setting its `location` changes nothing the device hears of: call
+    `invalidate_obstacles` after such a change.
+
+    Raises:
+      ValueError: for a position turned other than by a multiple of 90 degrees.
+    """
+    found = self._obstacles.get(pod_number)
+    if found is None:
+      found = self._obstacles[pod_number] = self._build_obstacles(pod_number)
+    return found
+
+  def invalidate_obstacles(self, *_: Any) -> None:
+    """Forget the obstacles built for each pod: the next `obstacles` builds them again."""
+    self._obstacles.clear()
+
+  def _build_obstacles(self, pod_number: int) -> Obstacles:
+    """`obstacles`, built from the tree."""
+    structure = tuple(
+      obstacle_part(o.name, (o.x1, o.x2), (o.y1, o.y2), (o.z1, o.z2), o.buffer)
+      for o in (part.obstacle() for part in self.structure)
+    )
+    deck_origin = self.deck.get_absolute_location()
+    deck: List[Part] = []
+    positions = [
+      h for alp in self.deck.children for h in alp.children if isinstance(h, BiomekPosition)
+    ]
+    for position in positions:
+      rotation = position.get_absolute_rotation()
+      turn = rotation.z % 90
+      if min(turn, 90 - turn) > 1e-6:
+        raise ValueError(f"{position.name} is turned {rotation.z} degrees")
+      frame = (position.get_absolute_location() - deck_origin, rotation.get_rotation_matrix())
+      # Where this pod's own calibration puts the position: the frame its parts are modelled in.
+      shift = targeting.position_correction(
+        self.deck, self.driver.declared, position, pod_number, frame[0]
+      )
+      floor = frame[0].z
+      base = floor - (position.location.z if position.location is not None else 0.0)  # its ALP's
+      top = max(
+        [floor + position.min_safe_height]
+        + [c.get_highest_known_point() - deck_origin.z for c in position.children]
+      )
+      deck.append(
+        _world_box(
+          position.name,
+          frame,
+          (0, position.get_size_x()),
+          (0, position.get_size_y()),
+          (base, top),
+          shift,
+        )
+      )
+      for o in position.obstacles:
+        deck.append(
+          _world_box(
+            f"{position.name} {o.name}",
+            frame,
+            (o.x0, o.x1),
+            (o.y0, o.y1),
+            (-OPEN * 10, floor + o.top),
+            shift,
+          )
+        )
+    # Labware on no position (straight on the deck or on an ALP) is boxed by its own bounds, with
+    # no calibration to correct it by; an operation working in it leaves it out as a position's.
+    loose = [r for r in self.deck.children if not isinstance(r, BiomekALP)] + [
+      h for alp in self.deck.children if isinstance(alp, BiomekALP)
+      for h in alp.children if not isinstance(h, BiomekPosition)
+    ]  # fmt: skip
+    for resource in loose:
+      rotation = resource.get_absolute_rotation()
+      frame = (resource.get_absolute_location() - deck_origin, rotation.get_rotation_matrix())
+      deck.append(
+        _world_box(
+          resource.name,
+          frame,
+          (0, resource.get_size_x()),
+          (0, resource.get_size_y()),
+          (frame[0].z, resource.get_highest_known_point() - deck_origin.z),
+          (0.0, 0.0, 0.0),
+        )
+      )
+    holders = tuple(p.name for p in positions) + tuple(r.name for r in loose)
+    return Obstacles(structure, tuple(deck), holders)
 
   def update_bridge_location(self, side: str, x: float) -> None:
     """Put a side's bridge's left edge at deck x `x` mm, carrying its pod along the rails."""
@@ -688,3 +786,30 @@ def BiomekI7(
   elif driver is None:
     driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json)
   return BiomekI7Device(driver=driver, deck=deck, name=name, state_json=state_json)
+
+
+def _world_box(
+  name: str,
+  frame: Tuple[Coordinate, List[List[float]]],
+  x: Tuple[float, float],
+  y: Tuple[float, float],
+  z: Tuple[float, float],
+  shift: Tuple[float, float, float],
+) -> Part:
+  """The box `x` by `y` (mm along a frame's axes, from its origin; `frame`: that origin on the deck
+  and its rotation matrix), `z` (mm from the deck), in Biomek's frame (cm), moved by `shift`
+  (cm)."""
+  origin, matrix = frame
+  xs, ys = [], []
+  for px in x:
+    for py in y:
+      d = matrix_vector_multiply_3x3(matrix, (px, py, 0.0))
+      xs.append(units.biomek_x(origin.x + d[0]) / 10)
+      ys.append(units.biomek_y(origin.y + d[1]) / 10)
+  dx, dy, dz = shift
+  return obstacle_part(
+    name,
+    (min(xs) + dx, max(xs) + dx),
+    (min(ys) + dy, max(ys) + dy),
+    (z[0] / 10 + dz, z[1] / 10 + dz),
+  )

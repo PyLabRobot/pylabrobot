@@ -173,7 +173,12 @@ class Obstacle:
 
 # The settings the driver takes from a pod's entry in the instrument file, never assumed: a pod
 # whose entry lacks one is refused (`PodConfiguration`). Every pod's; a gripper's; each pod type's.
-POD_SETTINGS: Tuple[str, ...] = ()
+POD_SETTINGS: Tuple[str, ...] = (
+  "AStarSearchLimit",
+  "RotationPenalty",
+  "GlobalMinSafeHeight",
+  "AlwaysMaxZ",
+)
 GRIPPER_SETTINGS: Tuple[str, ...] = (
   "SensorEnabled",
   "GripperSqueezeForce",
@@ -181,6 +186,8 @@ GRIPPER_SETTINGS: Tuple[str, ...] = (
 TYPE_SETTINGS: Dict[str, Tuple[str, ...]] = {
   "span8": (
     "ProbeSize",
+    "MandrelExtender",
+    "LLSWireModel",
     "DefaultTipHubInfo",
     "LoadingOffsets",
     "DetectTips",
@@ -190,6 +197,7 @@ TYPE_SETTINGS: Dict[str, Tuple[str, ...]] = {
     "TipLoadZOffset",
     "MaxLoadingProbes",
     "MinLoadingInterval",
+    "DiscardOffset",
     "DiscardHeight",
     "DiscardSpeed",
     "DiscardOvershoot",
@@ -316,6 +324,9 @@ class DeckPosition:
   x_span: float
   y_span: float
   framed: Dict[int, str] = field(default_factory=dict)
+  # The least height (cm above its floor) the pods' parts stay over it (`MinSafeHeight`), where the
+  # instrument file gives one; None in a configuration imported before it was read.
+  min_safe_height: Optional[float] = None
 
   def corner(self, pod_number: int) -> Tuple[float, float, float]:
     """Raises:
@@ -558,6 +569,7 @@ class DeviceConfiguration:
         x_span=p["x_span"],
         y_span=p["y_span"],
         framed={int(n): v for n, v in p.get("framed", {}).items()},
+        min_safe_height=p.get("min_safe_height"),
       )
       for name, p in data.get("deck_positions", {}).items()
     }
@@ -610,6 +622,7 @@ class DeviceConfiguration:
           "x_span": p.x_span,
           "y_span": p.y_span,
           "framed": {str(n): v for n, v in p.framed.items()},
+          **({} if p.min_safe_height is None else {"min_safe_height": p.min_safe_height}),
         }
         for name, p in self.deck_positions.items()
       },

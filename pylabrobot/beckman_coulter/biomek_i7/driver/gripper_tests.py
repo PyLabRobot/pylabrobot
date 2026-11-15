@@ -9,8 +9,10 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.errors import GripCheckError
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import (
   Gripper,
   biomek_grip_direction,
+  held_labware_of,
 )
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_labware
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   generic_biomek,
 )
@@ -127,6 +129,7 @@ class GripperTests(unittest.IsolatedAsyncioTestCase):
       await gripper.pick_up_resource(
         self.lid, y_clearance=LID_Y_CLEARANCE, squeeze_mm=LID_SQUEEZE_MM
       )
+    self.assertIsNone(gripper._pod._held_labware)  # counted from the close, dropped with the grip
 
   async def test_a_plate_moves_between_positions(self) -> None:
     place_labware(self.biomek.deck, [{"position": "P16", "class": "BCFlat96", "name": "p2"}])
@@ -139,6 +142,16 @@ class GripperTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GripDefaultsTests(unittest.TestCase):
+  def test_what_is_held_records_the_definitions_it_was_sized_from(self) -> None:
+    plate = biomek_labware("BCFlat96", "plate", lid="default")
+    held = held_labware_of(plate)
+    self.assertEqual(
+      held.source,
+      "beckman_coulter_biomek_96_wellplate_flat 127.762 x 85.471 x 14.224 mm; "
+      f"lid beckman_coulter_biomek_lid_titerplatelid {plate.lid.get_size_x():g} x "
+      f"{plate.lid.get_size_y():g} x {plate.lid.get_size_z():g} mm",
+    )
+
   def test_grip_sides_follow_a1(self) -> None:
     plate = beckman_coulter_biomek_96_wellplate_flat("plate")
     # Where the fingers point: "A1 near" has the hand on A1's side, the left at rotation 0.

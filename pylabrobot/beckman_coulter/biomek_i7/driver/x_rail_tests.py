@@ -7,7 +7,7 @@ from typing import Optional
 
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.homing_tests import SimulatedRunTest
-from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
+from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import RailCollisionError, RailPose, XRail
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_configuration
 
 CONFIG = generic_configuration()
@@ -17,10 +17,10 @@ PARK_GG = 7.889  # the park's grip width, cm
 PLATE = g.HeldLabware(length=12.776, width=8.548)  # an SBS plate, held lengthwise
 
 
-def pose(side: str, counts: int, gr: Optional[float] = 0.0, held=None) -> PodPose:
+def pose(side: str, counts: int, gr: Optional[float] = 0.0, held=None) -> RailPose:
   """A pod at X `counts`, its gripper turned to `gr` degrees (None: not known)."""
   gripper = None if gr is None else g.GripperPose(gr, PARK_GG, held)
-  return PodPose(PODS[side].to_value("X", counts), gripper)
+  return RailPose(PODS[side].to_value("X", counts), gripper)
 
 
 def rail() -> XRail:
@@ -165,7 +165,7 @@ class RailTests(unittest.IsolatedAsyncioTestCase):
     r = rail()
     r.update("left", pose("left", 0))
 
-    async def read_right() -> PodPose:
+    async def read_right() -> RailPose:
       return pose("right", -2560)
 
     r.readers["right"] = read_right
@@ -183,6 +183,8 @@ class RailTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RailOnTheInstrumentTests(SimulatedRunTest):
+  """The rail guard on the instrument: a move into the other pod is refused."""
+
   async def test_a_move_into_the_other_pod_sends_no_motion(self) -> None:
     driver = await self.start(True)
     await driver.home()

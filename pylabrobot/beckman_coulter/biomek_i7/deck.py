@@ -11,7 +11,11 @@ deck's frame is PyLabRobot's, millimetres with Y towards the back, origin at the
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from pylabrobot.beckman_coulter.biomek_i7.resource_model.alps import ALP_TYPES, BiomekALP
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.alps import (
+  ALP_TYPES,
+  BiomekALP,
+  BiomekPosition,
+)
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.units import cm
 
 # The frame's conversions live in `units.py`; re-exported here, where they were first.
@@ -123,6 +127,15 @@ class BiomekI7Deck(Deck):
           )
           column += steps
       deck.assign_alp(alp, column=column, row=placed.row)
+      # The instrument file's per-position `MinSafeHeight`, where it gives one, over the ALP type's.
+      for site in alp.children:
+        given = configuration.deck_positions.get(site.name)
+        if (
+          isinstance(site, BiomekPosition)
+          and given is not None
+          and given.min_safe_height is not None
+        ):
+          site.min_safe_height = cm(given.min_safe_height)
     return deck
 
   def get_position(self, name: str) -> ResourceHolder:

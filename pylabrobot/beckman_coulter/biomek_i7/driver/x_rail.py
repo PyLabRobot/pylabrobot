@@ -9,7 +9,7 @@ holds (`driver/pod_geometry.py`).
 
 `XRail` applies the same rule. It differs in three ways:
 - **It refuses** a move into where the other pod stands, or will stand once its move ends,
-  rather than moving the other pod; `make_space` comes later.
+  rather than moving the other pod out of the way.
 - **It waits** when a move conflicts only with a move of the other pod still running, then
   checks again: the other pod is passing through, not staying (Biomek runs such moves together).
 - **It reserves** every move in flight, so two moves started together cannot pass through each
@@ -43,7 +43,7 @@ class RailCollisionError(ValueError):
 
 
 @dataclass(frozen=True)
-class PodPose:
+class RailPose:
   """Where a pod is, as the rail needs it: deck X (cm) and its gripper's pose, None when not
   known (then every pose the gripper could take is counted)."""
 
@@ -61,13 +61,13 @@ class XRail:
 
   def __init__(self, pods: Dict[Side, Optional[PodConfiguration]]):
     self.pods = pods
-    self._pose: Dict[Side, Optional[PodPose]] = {side: None for side in pods}
+    self._pose: Dict[Side, Optional[RailPose]] = {side: None for side in pods}
     self._reserved: Dict[Side, Optional[g.Range]] = {side: None for side in pods}
     self._end: Dict[Side, Optional[g.Range]] = {side: None for side in pods}
     self._done: Dict[Side, asyncio.Event] = {side: asyncio.Event() for side in pods}
     self._lock = asyncio.Lock()
     # How to read a pod's pose when the rail does not know it. Set by the driver.
-    self.readers: Dict[Side, Callable[[], Awaitable[PodPose]]] = {}
+    self.readers: Dict[Side, Callable[[], Awaitable[RailPose]]] = {}
     self._models = {
       side: g.GripperModel.from_bif(p.gripper_model) if p and p.gripper_model else None
       for side, p in pods.items()
@@ -88,15 +88,15 @@ class XRail:
       return None
     return g.Gripper(model, pose)
 
-  def range_at(self, side: Side, pose: PodPose) -> g.Range:
+  def range_at(self, side: Side, pose: RailPose) -> g.Range:
     """The X a pod takes up at a pose. An unknown gripper pose counts every pose it could take:
     the whole of GR's travel, fully open."""
     pod = self._require_pod(side)
     if pose.gripper is not None or self._models.get(side) is None:
       return g.pod_x_range(pod.geometry, pose.x, self._gripper(side, pose.gripper))
-    return self.swept(side, PodPose(pose.x, None), PodPose(pose.x, None))
+    return self.swept(side, RailPose(pose.x, None), RailPose(pose.x, None))
 
-  def swept(self, side: Side, start: PodPose, end: PodPose) -> g.Range:
+  def swept(self, side: Side, start: RailPose, end: RailPose) -> g.Range:
     """The X a pod takes up while moving from `start` to `end`."""
     pod = self._require_pod(side)
     a, b = start.gripper, end.gripper
@@ -111,7 +111,7 @@ class XRail:
       pod.geometry, start.x, end.x, self._gripper(side, a), self._gripper(side, b)
     )
 
-  def update(self, side: Side, pose: Optional[PodPose]) -> None:
+  def update(self, side: Side, pose: Optional[RailPose]) -> None:
     """Record where a pod is, or None when not known (after homing, or a move that failed). A
     known pose ends the reservation a failed move left, but never one of a move still running: a
     read can come back after that move started."""
@@ -124,6 +124,10 @@ class XRail:
   def _in_flight(self, side: Side) -> bool:
     return self._end[side] is not None
 
+  def in_flight(self, side: Side) -> bool:
+    """Whether a move of `side` is running (reserved on the rail)."""
+    return side in self.pods and self._in_flight(side)
+
   def occupied(self, side: Side) -> Optional[g.Range]:
     """The X a pod takes up now: its move's reservation while one is in flight or a failed one
     left, else its range where it is. None when its position is not known."""
@@ -132,7 +136,7 @@ class XRail:
     pose = self._pose.get(side)
     return None if pose is None else self.range_at(side, pose)
 
-  def check(self, side: Side, start: PodPose, end: PodPose) -> g.Range:
+  def check(self, side: Side, start: RailPose, end: RailPose) -> g.Range:
     """Check a move of `side` against the other pod. Returns the move's swept range.
 
     Raises:
@@ -180,7 +184,7 @@ class XRail:
       self.update(side, await self.readers[side]())
 
   @contextlib.asynccontextmanager
-  async def moving(self, side: Side, start: PodPose, end: PodPose) -> AsyncIterator[None]:
+  async def moving(self, side: Side, start: RailPose, end: RailPose) -> AsyncIterator[None]:
     """Hold a move's swept range for as long as the move runs.
 
     Checked and reserved together, under one lock. A move that conflicts only with the other

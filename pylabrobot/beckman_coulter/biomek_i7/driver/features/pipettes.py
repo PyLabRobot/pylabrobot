@@ -52,6 +52,7 @@ from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid, motion
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import NotHomedError, TipCheckError
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import shaft_of, show_tip
 from pylabrobot.beckman_coulter.biomek_i7.techniques import (
   Conditioning,
@@ -140,6 +141,8 @@ class PrimePlan:
   z: float
   stroke: float
   speed: int
+  # The wash station's position, for the deck check.
+  where: Tuple[Resource, ...] = ()
 
 
 class _Job(NamedTuple):
@@ -184,6 +187,8 @@ class DiscardPlan:
   z: float
   groups: Tuple[Tuple[int, ...], ...]
   shuck: Dict[int, float]
+  # The trash's position, for the deck check.
+  where: Tuple[Resource, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -237,10 +242,24 @@ class Pipettes:
     # (`BiomekI7Device`); empty when nothing models them.
     self.resources: List[Resource] = []
     self._priming: Optional["asyncio.Task[int]"] = None
+    self._priming_in: Tuple[Resource, ...] = ()  # the prime's wash station, until it stops
     self._stop_priming = asyncio.Event()
     # Whether the pumps are homed: None until this session homes them (`home_pumps`) or asks
     # (`_require_pumps_homed`); a power-up leaves them not homed, and Home All does not home them.
     self._pumps_homed: Optional[bool] = None
+
+  @property
+  def default_minimum_traverse_height(self) -> traverse.TraverseDefault:
+    """How the probes travel by default: "safe", Biomek's safe height over the way (the tallest
+    thing under they, plus Biomek's margins); "max", as high as they go; or a height, mm of
+    their lowest point above the deck. A call's `minimum_traverse_height_start` / `_end` overrides
+    it. It starts as Biomek's setting for the pod (`AlwaysMaxZ`); the deck check refuses any travel
+    too low, whatever the height."""
+    return self._pod.traverse_defaults["channels"]
+
+  @default_minimum_traverse_height.setter
+  def default_minimum_traverse_height(self, value: traverse.TraverseDefault) -> None:
+    self._pod.traverse_defaults["channels"] = traverse.traverse_default(value)
 
   def __str__(self) -> str:
     return f"{self._pod}'s channels"
@@ -387,6 +406,7 @@ class Pipettes:
       z=at.z,
       stroke=declared.limits["D1"][1],
       speed=percent_to_field(declared.settings["D1SpeedLimit"], truncate=True),
+      where=(position,),
     )
 
   @property
@@ -420,10 +440,12 @@ class Pipettes:
     pod = self._pod
     logger.info("%s prime over %s", pod.component, wash.name if wash else DEFAULT_WASH)
     await self._travel(plan.x, plan.y, plan.span, minimum_traverse_height)
-    await pod.move_axes(
-      {f"Z{n}": declared.to_counts(f"Z{n}", plan.z) for n in range(1, PROBES + 1)}, PRIME_Z_SPEED
-    )
-    await self.home_pumps()
+    with pod.working_at(*plan.where):
+      await pod.move_axes(
+        {f"Z{n}": declared.to_counts(f"Z{n}", plan.z) for n in range(1, PROBES + 1)}, PRIME_Z_SPEED
+      )
+      await self.home_pumps()
+    self._priming_in = plan.where
     self._stop_priming.clear()
     self._priming = asyncio.ensure_future(
       self._prime_strokes(plan, strokes, minimum_stroke_seconds)
@@ -472,7 +494,8 @@ class Pipettes:
     _, _, declared = self._context()
     pod = self._pod
     end = minimum_traverse_height_end
-    await pod._lift_channels(None if end is None else end / 10)
+    with pod.working_at(*self._priming_in):  # out of the wash station: the prime's own rise
+      await pod._lift_channels(None if end is None else end / 10)
     gap = declared.settings["SystemTrailingAirgap"]
     pumps = [f"D{n}" for n in range(1, PROBES + 1)]
     await pod.move_axes({a: declared.to_counts(a, gap) for a in pumps}, PRIME_AIR_GAP_SPEED)
@@ -719,6 +742,7 @@ class Pipettes:
       z=s["DiscardHeight"] - DISCARD_BELOW,
       groups=tuple(press_groups(probes, s["MaxUnloadingProbes"], s["MinUnloadingInterval"])),
       shuck={n: declared.limits[f"Z{n}"][1] + overshoot for n in probes},
+      where=(position,),
     )
 
   async def _travel(self, x: float, y: float, span: float, height: Optional[float]) -> None:
@@ -776,31 +800,35 @@ class Pipettes:
     def z(probes: Sequence[int], height: float) -> Dict[str, int]:
       return {f"Z{n}": declared.to_counts(f"Z{n}", height) for n in probes}
 
-    for plan in plans:
+    # Each batch's travel is planned, nothing exempt; its own moves work in its spots' positions,
+    # the last batch's through the rise out.
+    for i, plan in enumerate(plans):
       probes = [n for n, _ in plan.pairs]
       logger.info(
         "%s pick up tips on probes %s at X %.3f Y %.3f S %.3f",
         pod.component, probes, plan.x, plan.y, plan.span,
       )  # fmt: skip
       await self._travel(plan.x, plan.y, plan.span, minimum_traverse_height_start)
-      await pod.move_axes(z(plan.lowered, plan.approach))
-      previous: Tuple[int, ...] = ()
-      for group in plan.groups:
-        targets = z(previous, plan.exit)
-        targets.update({f"Z{n}": declared.to_counts(f"Z{n}", plan.seats[n]) for n in group})
-        await pod.move_axes(targets, speed)
-        previous = group
-      await pod.move_axes(z(previous, plan.exit), speed)
-      picked: Dict[int, Optional[Tip]] = {}
-      for probe, spot in plan.pairs:
-        tip = spot.tip_for_pickup()
-        if spot.tracks_tips:
-          spot.unassign_tip()
-        self._tips[probe] = tip
-        picked[probe] = tip
-      self._set_tips(picked)
-    end = minimum_traverse_height_end
-    await pod._lift_channels(None if end is None else end / 10)
+      with pod.working_at(*(s for _, s in plan.pairs)):
+        await pod.move_axes(z(plan.lowered, plan.approach))
+        previous: Tuple[int, ...] = ()
+        for group in plan.groups:
+          targets = z(previous, plan.exit)
+          targets.update({f"Z{n}": declared.to_counts(f"Z{n}", plan.seats[n]) for n in group})
+          await pod.move_axes(targets, speed)
+          previous = group
+        await pod.move_axes(z(previous, plan.exit), speed)
+        picked: Dict[int, Optional[Tip]] = {}
+        for probe, spot in plan.pairs:
+          tip = spot.tip_for_pickup()
+          if spot.tracks_tips:
+            spot.unassign_tip()
+          self._tips[probe] = tip
+          picked[probe] = tip
+        self._set_tips(picked)
+        if i == len(plans) - 1:
+          end = minimum_traverse_height_end
+          await pod._lift_channels(None if end is None else end / 10)
     await self._check_tips(sorted(n for plan in plans for n, _ in plan.pairs))
 
   async def drop_tips(self, tip_spots: Sequence[TipSpot], *args: Any, **kwargs: Any) -> None:
@@ -852,16 +880,17 @@ class Pipettes:
 
     below = {n: plan.z for n in probes}
     await self._travel(plan.x, plan.y, plan.span, minimum_traverse_height_start)
-    await pod.move_axes(z(probes, below))
-    speed = percent_to_field(declared.settings["DiscardSpeed"])
-    for group in plan.groups:
-      await pod.move_axes(z(group, plan.shuck), speed)
-      await pod.move_axes(z(group, below), speed)
-    for probe in probes:
-      self._tips.pop(probe, None)
-    self._set_tips({n: None for n in probes})
-    end = minimum_traverse_height_end
-    await pod._lift_channels(None if end is None else end / 10)
+    with pod.working_at(*plan.where):
+      await pod.move_axes(z(probes, below))
+      speed = percent_to_field(declared.settings["DiscardSpeed"])
+      for group in plan.groups:
+        await pod.move_axes(z(group, plan.shuck), speed)
+        await pod.move_axes(z(group, below), speed)
+      for probe in probes:
+        self._tips.pop(probe, None)
+      self._set_tips({n: None for n in probes})
+      end = minimum_traverse_height_end
+      await pod._lift_channels(None if end is None else end / 10)
     await self._check_tips(probes)
 
   async def _check_tips(self, probes: Sequence[int]) -> None:
@@ -1074,22 +1103,26 @@ class Pipettes:
         await self.set_valves({a: "output" for a in pumps})
       await pod.move_axes({a: declared.to_counts(a, gap) for a in pumps}, AIR_GAP_SPEED)
     self._set_cutoff_velocity(cutoff_to_counts(self._pod, "D1", cutoff_velocity))
-    for plan, moves in batches:
+    # Each batch's travel is planned, nothing exempt; its own moves work in its containers'
+    # positions, the last batch's through the rise out.
+    for i, (plan, moves) in enumerate(batches):
       await self._travel(plan.x, plan.y, plan.span, minimum_traverse_height_start)
-      for targets, speed, delay, sense in moves:
-        if sense:
-          await self._set_lls_sensitivity(lls_sensitivity)
-        if any(a.startswith("D") for a in targets) and any(
-          self._pod._valves.get(a) != "output" for a in targets if a.startswith("D")
-        ):
-          await self.set_valves({a: "output" for a in pumps})
-        await pod.move_axes({a: declared.to_counts(a, v) for a, v in targets.items()}, speed)
-        if delay > 0:
-          await asyncio.sleep(delay)
-      # Biomek turns every valve to output after each operation (`VO 255`).
-      await self.set_valves({a: "output" for a in pumps})
-    end = minimum_traverse_height_end
-    await pod._lift_channels(None if end is None else end / 10)
+      with pod.working_at(*(c for _, c in plan.pairs)):
+        for targets, speed, delay, sense in moves:
+          if sense:
+            await self._set_lls_sensitivity(lls_sensitivity)
+          if any(a.startswith("D") for a in targets) and any(
+            self._pod._valves.get(a) != "output" for a in targets if a.startswith("D")
+          ):
+            await self.set_valves({a: "output" for a in pumps})
+          await pod.move_axes({a: declared.to_counts(a, v) for a, v in targets.items()}, speed)
+          if delay > 0:
+            await asyncio.sleep(delay)
+        # Biomek turns every valve to output after each operation (`VO 255`).
+        await self.set_valves({a: "output" for a in pumps})
+        if i == len(batches) - 1:
+          end = minimum_traverse_height_end
+          await pod._lift_channels(None if end is None else end / 10)
 
   def _book(self, plans: List[ProbePlan], extra: float, aspirate: bool) -> List[Any]:
     """Move each probe's volume (+ `extra`) between its container's and its tip's trackers

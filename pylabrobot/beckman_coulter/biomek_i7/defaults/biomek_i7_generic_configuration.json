@@ -4,7 +4,7 @@
   "instrument_serial_number": null,
   "sources": {
     "instrument_file": {
-      "fingerprint": "sha256:9cbfcd7168db1a0a0e9f6436c4d1479bc1664e1c39c7e4c125f5694b96dee046"
+      "fingerprint": "sha256:a35f93cee89af8d302280bf0ffdd0c080d330041eff8bcd43775726d43d6081d"
     },
     "master_controller": {
       "fingerprint": "sha256:f4aceddd504ac0579c6fee9dad49a9ec4a637f2bd538ae4cd9a8191445a0af07"
@@ -956,7 +956,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 2.1
     },
     "CP1": {
       "corners": {
@@ -976,7 +977,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 2.0
     },
     "P1": {
       "corners": {
@@ -996,7 +998,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P10": {
       "corners": {
@@ -1016,7 +1019,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P11": {
       "corners": {
@@ -1036,7 +1040,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P12": {
       "corners": {
@@ -1056,7 +1061,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 0.0
     },
     "P13": {
       "corners": {
@@ -1076,7 +1082,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P14": {
       "corners": {
@@ -1096,7 +1103,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P15": {
       "corners": {
@@ -1116,7 +1124,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P16": {
       "corners": {
@@ -1136,7 +1145,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P17": {
       "corners": {
@@ -1156,7 +1166,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P18": {
       "corners": {
@@ -1176,7 +1187,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P19": {
       "corners": {
@@ -1196,7 +1208,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P2": {
       "corners": {
@@ -1216,7 +1229,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P20": {
       "corners": {
@@ -1236,7 +1250,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P21": {
       "corners": {
@@ -1256,7 +1271,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P22": {
       "corners": {
@@ -1276,7 +1292,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P23": {
       "corners": {
@@ -1296,7 +1313,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P24": {
       "corners": {
@@ -1316,7 +1334,8 @@
       "framed": {
         "1": "Deck",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P3": {
       "corners": {
@@ -1336,7 +1355,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P4": {
       "corners": {
@@ -1356,7 +1376,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P5": {
       "corners": {
@@ -1376,7 +1397,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P6": {
       "corners": {
@@ -1396,7 +1418,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P7": {
       "corners": {
@@ -1416,7 +1439,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P8": {
       "corners": {
@@ -1436,7 +1460,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "P9": {
       "corners": {
@@ -1456,7 +1481,8 @@
       "framed": {
         "1": "Position",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 0.0
     },
     "TA1": {
       "corners": {
@@ -1476,7 +1502,8 @@
       "framed": {
         "1": "Not",
         "2": "Position"
-      }
+      },
+      "min_safe_height": 5.0
     },
     "TL1": {
       "corners": {
@@ -1496,7 +1523,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL10": {
       "corners": {
@@ -1516,7 +1544,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL11": {
       "corners": {
@@ -1536,7 +1565,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL2": {
       "corners": {
@@ -1556,7 +1586,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL3": {
       "corners": {
@@ -1576,7 +1607,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL4": {
       "corners": {
@@ -1596,7 +1628,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL5": {
       "corners": {
@@ -1616,7 +1649,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TL6": {
       "corners": {
@@ -1636,7 +1670,8 @@
       "framed": {
         "1": "Position",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "TR1": {
       "corners": {
@@ -1656,7 +1691,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 0.1
     },
     "TR2": {
       "corners": {
@@ -1676,7 +1712,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 0.1
     },
     "W2": {
       "corners": {
@@ -1696,7 +1733,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 1.0
     },
     "W3": {
       "corners": {
@@ -1716,7 +1754,8 @@
       "framed": {
         "1": "Deck",
         "2": "Deck"
-      }
+      },
+      "min_safe_height": 2.0
     }
   },
   "deck_layout": [

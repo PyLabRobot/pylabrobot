@@ -119,7 +119,7 @@ class PipettesTipTests(PodMoveTest):
     pod = self.pod(driver, "right")
     d = pod.declared
     assert d is not None
-    ceilings = pod._traverse_ceilings()
+    ceilings = pod._max_traverse_heights()
     self.assertAlmostEqual(ceilings["Z6"], d.limits["Z6"][1] - d.settings["DiscardOffset"])
     rack = lh.deck.get_resource("Tips")
     self.sensor(driver, LOADED)

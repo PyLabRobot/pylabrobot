@@ -44,14 +44,15 @@ def position_correction(
   configuration: DeviceConfiguration,
   position: ResourceHolder,
   pod_number: int,
+  location: Optional[Coordinate] = None,
 ) -> Tuple[float, float, float]:
   """How far, cm, pod `pod_number`'s calibrated corner of `position` is from where the deck model
   puts the position's corner (its back left bottom corner, in Biomek's frame). Zero for a position
-  the configuration does not hold."""
+  the configuration does not hold. `location`: the position's on `deck`, when already known."""
   calibrated = configuration.deck_positions.get(position.name)
   if calibrated is None:
     return 0.0, 0.0, 0.0
-  loc = position.get_location_wrt(deck)
+  loc = position.get_location_wrt(deck) if location is None else location
   nominal = to_biomek(Coordinate(loc.x, loc.y + position.get_size_y(), loc.z))
   x, y, z = calibrated.corner(pod_number)
   return x - nominal.x, y - nominal.y, z - nominal.z

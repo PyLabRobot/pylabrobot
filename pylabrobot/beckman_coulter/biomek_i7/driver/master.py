@@ -49,6 +49,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import Gripper
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
 from pylabrobot.io.usb import USB
 
@@ -141,6 +142,9 @@ class BiomekI7Driver:
     self.motor_tables = self.declared.motor_tables
     # Called when a head's tips change; the device saves its heads' tips on it (`state_json`).
     self.on_tips_changed: Callable[[], None] = lambda: None
+    # What a pod's moves must clear besides itself and the other pod (`Obstacles`), by pod number;
+    # the device gives it from its resource tree (`BiomekI7Device.obstacles`). None: no deck check.
+    self.obstacles: Optional[Callable[[int], Obstacles]] = None
     self._given_boards = list(boards) if boards is not None else None
     self.boards: List[AceBoard] = []
     self._connected = False

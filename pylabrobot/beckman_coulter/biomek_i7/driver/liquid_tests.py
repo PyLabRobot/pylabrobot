@@ -47,6 +47,13 @@ class LiquidTests(PodMoveTest):
     right = self.pod(driver, "right")
     park = right.declared.park  # type: ignore[union-attr]
     await right.move_axes({a: right.declared.to_counts(a, park[a]) for a in ("GR", "GY")})  # type: ignore[union-attr]
+    # The 96-head brought forward, in line with P8's row, as after a tip load: the tests put long
+    # tips on it here, and from its home corner its way to P8 would cross the washer at W3, which
+    # 1025 uL tips cannot clear (the deck check refuses it).
+    left = self.pod(driver, "left")
+    park = left.declared.park  # type: ignore[union-attr]
+    await left.move_axes({a: left.declared.to_counts(a, park[a]) for a in ("GR", "GY")})  # type: ignore[union-attr]
+    await left.move_axes({"Y": left.declared.to_counts("Y", 37.45)})  # type: ignore[union-attr]
     return driver, lh
 
   def record(self, driver, side: str) -> List[Tuple[Dict[str, int], int]]:  # type: ignore[no-untyped-def]

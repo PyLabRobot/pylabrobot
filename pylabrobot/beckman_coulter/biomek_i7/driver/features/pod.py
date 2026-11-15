@@ -1,14 +1,17 @@
 """One pod: an arm on the shared X rail, its ACE module, and the axes that module drives."""
 
 import asyncio
+import contextlib
+import itertools
 import logging
-import math
 from dataclasses import dataclass, field
 from typing import (
   TYPE_CHECKING,
+  Any,
   Callable,
   Dict,
   Iterable,
+  Iterator,
   List,
   Literal,
   Mapping,
@@ -16,12 +19,12 @@ from typing import (
   Sequence,
   Set,
   Tuple,
+  Union,
   cast,
 )
 
-from pylabrobot.beckman_coulter.biomek_i7 import units
+from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import motion
-from pylabrobot.beckman_coulter.biomek_i7.driver import pod_collision as pc
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.board import AceBoard
@@ -38,13 +41,26 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.module import (
   read_module,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.motors import Axis, AxisMove, MotorTables
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import (
+  check,
+  destinations,
+  find_path,
+  merge,
+  obstacles,
+  pod_model,
+  traverse,
+)
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   ENABLE_ORDER,
   ENABLE_PREFIX,
   HOME_RECIPES,
   Homer,
 )
-from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
+from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import (
+  RailCollisionError,
+  RailPose,
+  XRail,
+)
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
@@ -67,9 +83,13 @@ MODULE_FEATURES: Dict[str, Tuple[str, ...]] = {
 # The axes that change what a pod takes up along the X rail.
 RAIL_AXES = ("X", "GR", "GG")
 # The gripper's axes; a move of these, or of the channels' Y or Z, is checked against the pod's own
-# parts (`pod_collision`).
+# parts (`planning.check`).
 OWN_COLLISION_AXES = {"GY", "GZ", "GR", "GG"}
-GRIPPER_HEIGHT_STEP = 0.1  # cm: how finely the gripper's travel height is searched
+
+
+# A planned move (axis targets, counts) and the deck positions it leaves straight up (its way out of
+# them, made with them exempt); nothing for every other move.
+PlanStep = Tuple[Dict[str, int], Tuple[str, ...]]
 
 # Get Homed State answers. 0x01 was read from every axis at a cold start, 0x00 from every axis of
 # both pods after Biomek's Home All (H1, 2026-10-24).
@@ -79,8 +99,10 @@ HOMED_STATES = {0x00: "homed", 0x01: "not_homed"}
 MOVE_TIMEOUT_MS = 30000
 MOVE_ALL_TIMEOUT_MS = 5000
 
-# Biomek's "Safe Height" (`GlobalMinSafeHeight`) at or below this is unset (it stores -100000).
-UNSET_SAFE_HEIGHT = -1000.0
+
+# Degrees within which GR is taken to be at an angle (`_at_angle`): well under a count's worth of
+# difference matters nowhere. A whole turn away is another angle, as Biomek's GR is a line.
+GR_SAME_ANGLE = 0.01
 
 # The arm board's analog input carrying the interlocked motor supply ("+36V Interlock").
 DRIVE_SUPPLY_INPUT = "+36V Interlock"
@@ -152,6 +174,15 @@ class Pod:
     # What the gripper holds, as the rail counts it: set through `gripper.set_held_labware`; the
     # pod cannot sense it.
     self._held_labware: Optional[g.HeldLabware] = None
+    # What it held at its last move checked on the rail: the first move after it takes or lets go
+    # of labware (its range changed with it) is checked there, whatever axes it moves.
+    self._rail_held: Optional[g.HeldLabware] = None
+    # The deck positions the operation under way works in (`working_at`): the deck check leaves
+    # their boxes out, whole, as Biomek's moves name their target position.
+    self._working_at: Tuple[str, ...] = ()
+    # Held for each move (`move_axes`): one move at a time on the pod's board, whichever task
+    # sends it.
+    self._motion = asyncio.Lock()
     # Where this driver last put each axis, as the Master Controller keeps it (`cpositions`):
     # (position, adjusted); position None until read. Starts as after homing.
     self._cpositions: Dict[str, motion.CPos] = {a.name: (None, a.home_position) for a in self.axes}
@@ -164,18 +195,21 @@ class Pod:
     # Set while the interlock is tripped, shared by the driver (`BiomekI7Driver.interlock_tripped`);
     # None for a pod used without one. Waits that the Master Controller abandons on a trip watch it.
     self.interlock_tripped: Optional[asyncio.Event] = None
-    # The height the channels rise to before traveling over the deck, mm of the channels' bottom
-    # above the deck: STAR's `default_minimum_traverse_height`. Seeded from Biomek's "Safe Height"
-    # (`GlobalMinSafeHeight`) when it is set; None, as on an instrument where it is not (-100000),
-    # means the top of travel less the park margin, which is what Biomek does with Safe Height set
-    # to the top.
-    self.default_minimum_traverse_height: Optional[float] = None
-    if declared is not None:
-      safe = declared.settings.get("GlobalMinSafeHeight")
-      if isinstance(safe, (int, float)) and safe > UNSET_SAFE_HEIGHT:
-        self.default_minimum_traverse_height = units.to_mm(float(safe))
+    # How each tool (the channels, the gripper) travels by default (`Head96`/`Pipettes`/`Gripper`
+    # `default_minimum_traverse_height`): "safe", Biomek's safe height over its way (`_safe_heights`);
+    # "max", as high as it goes; or a height, mm of its lowest point above the deck. From the
+    # pod's `AlwaysMaxZ`: "max" for every tool when set, else "safe".
+    start: traverse.TraverseDefault = (
+      "max" if declared is not None and declared.settings["AlwaysMaxZ"] else "safe"
+    )
+    self.traverse_defaults: Dict[str, traverse.TraverseDefault] = {
+      "channels": start,
+      "gripper": start,
+    }
     # Who follows the position record (`add_position_listener`).
     self._listeners: List[Callable[["Pod"], None]] = []
+    # Who follows the pod's motion (`add_motion_listener`).
+    self._motion_listeners: List[Callable[["Pod", str, Any], None]] = []
     # What the pod carries (STAR's arm features): what its module type has (`MODULE_FEATURES`), and
     # a gripper where the declared configuration describes one, as the rail counts one only then.
     features = MODULE_FEATURES.get(module_type, ())
@@ -360,33 +394,22 @@ class Pod:
 
   # -- the pod against itself ----------------------------------------------------
 
-  def _own_state(
+  def _pose(
     self, positions: Optional[Mapping[str, motion.CPos]] = None
-  ) -> Optional[Tuple[float, pc.GripperState, pc.PipettorState]]:
-    """The pose the pod's own collision check takes (`pod_collision`), in Biomek's units, from
-    `positions` (the position record by default); None while any of its axes is unknown."""
+  ) -> Optional[pod_model.PodState]:
+    """The pod's pose in Biomek's units from `positions` (the position record by default): X, the
+    gripper's (None on a pod without one) and the pipettor's; None while any axis is unknown."""
     d = self.declared
-    if d is None or not d.gripper_model:
+    if d is None:
       return None
     positions = self._cpositions if positions is None else positions
-    channels = self.channel_z_axes
-    ys = [f"Y{i}" for i in range(1, 9)] if self.module_type == "span8" else ["Y"]
-    names = ["X", "GY", "GZ", "GR", "GG", *ys, *channels]
-    counts = {n: positions[n][0] for n in names}
+    model = pod_model.PodModel.of(d)
+    counts = {n: positions[n][0] for n in model.pose_axes}
     if any(c is None for c in counts.values()):
       return None
-    v = {n: d.to_value("Y" if n in ys else n, c) for n, c in counts.items()}  # type: ignore[arg-type]
-    if self.module_type == "span8":
-      # Each probe's Y counts from its own narrowest place (`probe_y`), not probe 1's.
-      v.update({n: d.probe_y(i, counts[n]) for i, n in enumerate(ys, 1)})  # type: ignore[arg-type]
     lengths = self._carried_tip_lengths()
-    gripper = pc.GripperState(v["GY"], v["GZ"], v["GR"], v["GG"], self._held_labware)
-    pipettor = pc.PipettorState(
-      tuple(v[n] for n in ys),
-      tuple(v[z] for z in channels),
-      tuple(lengths.get(z, 0.0) for z in channels),
-    )
-    return v["X"], gripper, pipettor
+    block = self.head96._tip_block() if self.head96 is not None and lengths else None
+    return model.state(cast(Dict[str, int], counts), self._held_labware, lengths, block)
 
   def _check_own_collision(
     self,
@@ -401,75 +424,158 @@ class Pod:
     """
     if not moving & OWN_COLLISION_AXES and not any(a[:1] in "YZ" for a in moving):
       return
-    a, b = self._own_state(start), self._own_state(end)
+    a, b = self._pose(start), self._pose(end)
     if a is None or b is None or self.declared is None:
       return
-    found = pc.swept_collisions(self.declared, (a[0], b[0]), (a[1], b[1]), (a[2], b[2]))
+    found = check.own_collisions(self.declared, a, b)
     if found:
       parts = ", ".join(f"the {x} and {y}" for x, y in found[:3])
-      raise pc.PodCollisionError(f"{self}: the move would bring together {parts}")
+      raise check.PodCollisionError(f"{self}: the move would bring together {parts}")
 
-  def _gripper_traverse_height(self, gr: float) -> float:
-    """The GZ (cm) the gripper travels at to turn from where it is to GR `gr` (degrees): its
-    ceiling (`_traverse_ceilings`), or as far below it as keeps it (and what it holds) clear of the
-    pod's own pipettor at its traverse heights on the way, in steps of `GRIPPER_HEIGHT_STEP`.
+  # -- the pod against the deck and the instrument --------------------------------
+
+  @contextlib.contextmanager
+  def working_at(self, *positions: Union[str, "Resource"]) -> Iterator[None]:
+    """Within it, the deck check leaves the deck positions given (names, or resources on them)
+    out, whole: the ones the operation works in, whose labware it goes into by design, as each of
+    Biomek's moves names its target position. Their own obstacles (a trash's walls) stay in."""
+    names = []
+    for where in positions:
+      if isinstance(where, str):
+        names.append(where)
+        continue
+      deck = self.driver.deck if self.driver is not None else None
+      position = targeting.deck_position_of(deck, where) if deck is not None else None
+      if position is not None:
+        names.append(position.name)
+        continue
+      # On no position: the labware it is in has a box of its own (`obstacles` keeps only names
+      # that are boxes).
+      node: Optional["Resource"] = where
+      while node is not None:
+        names.append(node.name)
+        node = node.parent
+    before = self._working_at
+    self._working_at = (*before, *names)
+    try:
+      yield
+    finally:
+      self._working_at = before
+
+  def _check_world_collision(
+    self, start: Mapping[str, motion.CPos], end: Mapping[str, motion.CPos]
+  ) -> None:
+    """Refuse a move whose path brings any of the pod's parts (or what its gripper holds) into the
+    deck's positions, their obstacles or the instrument's structure (the driver's `obstacles`).
+    Nothing without them.
 
     Raises:
-      PodCollisionError: if no height down to the grip's travel limit is clear.
+      DeckCollisionError: naming the parts that would meet; nothing has been sent.
     """
-    d = self._require_declared()
-    state = self._own_state()
-    ceiling = self._traverse_ceilings()["GZ"]
-    if state is None:
-      return ceiling
-    x, gripper, pipettor = state
-    heights = self._traverse_heights()
-    raised = pc.PipettorState(
-      pipettor.ys,
-      tuple(max(z, heights[n]) for z, n in zip(pipettor.zs, self.channel_z_axes)),
-      pipettor.tips,
-    )
-    low = d.limits["GZ"][0]
-    gz = ceiling
-    while gz >= low:
-      a = pc.GripperState(gripper.gy, gz, gripper.gr, gripper.gg, gripper.held)
-      b = pc.GripperState(gripper.gy, gz, gr, gripper.gg, gripper.held)
-      if not pc.swept_collisions(d, (x, x), (a, b), (raised, raised)):
-        return gz
-      gz -= GRIPPER_HEIGHT_STEP
-    raise pc.PodCollisionError(f"{self}: no gripper height clears the pod's own parts at GR {gr}")
+    if self.declared is None:
+      return
+    a, b = self._pose(start), self._pose(end)
+    if a is None or b is None or a == b:
+      return  # unknown, or no part moves (a pump's stroke)
+    world = self._world(self.pod_number, self._working_at)
+    if world is None:
+      return
+    found = check.deck_collisions(self.declared, a, b, world)
+    if found:
+      parts = ", ".join(f"the {x} into {y}" for x, y in found[:3])
+      raise check.DeckCollisionError(f"{self}: the move would bring {parts}")
 
-  async def _make_room_for_gripper(self, targets: Mapping[str, int]) -> None:
-    """Before the gripper travels to `targets` (counts: X, GY, GR): on a Span-8 whose probes
-    would be in its way there, narrow them to the smallest span and move them to the end of their
-    Y travel away from the gripper (as Biomek's path search does when it minimises the pod's Y
-    span). Nothing on a 96-head pod, or with the probes already clear.
+  async def _minimize_span(self, speed: int = 1000) -> None:
+    """Before a gripper approach on a Span-8, as Biomek's: the probes' span to its minimum (probe
+    1's Y kept), a checked move; if it is not clear, the probes as high as they go first, then the
+    span again. Where the probes' Y goes is left to the planned approach. Nothing on a 96-head pod,
+    or with the span at its minimum.
 
     Raises:
-      PodCollisionError: if the probes cannot be moved clear.
+      PodCollisionError: if the span cannot be narrowed clear even with the probes at the top.
     """
     if self.module_type != "span8":
       return
     d = self._require_declared()
-    await self._read_unknown_positions()
-    state = self._own_state()
-    if state is None:
+    narrow = {"S": d.to_counts("S", d.limits["Span"][0])}
+    ys = [f"Y{i}" for i in range(1, 9)]
+    planned = self._planned(self._cpositions, narrow)
+    if all(planned[y] == self._cpositions[y] for y in ys):
       return
-    x, gripper, pipettor = state
-    gy = d.to_value("GY", targets.get("GY", self._cpositions["GY"][1]))
-    gr = d.to_value("GR", targets.get("GR", self._cpositions["GR"][1]))
-    gz = self._gripper_traverse_height(gr) if gr != gripper.gr else gripper.gz
-    end = pc.GripperState(gy, gz, gr, gripper.gg, gripper.held)
-    if not pc.collisions(d, x, end, pipettor):
-      return
-    low, high = d.limits["Y"]
-    span = d.limits["Span"][0]
-    y = low if gy >= (low + high) / 2 else high - span
-    ys = tuple(y + i * span / (len(pipettor.ys) - 1) for i in range(len(pipettor.ys)))
-    if pc.collisions(d, x, end, pc.PipettorState(ys, pipettor.zs, pipettor.tips)):
-      raise pc.PodCollisionError(f"{self}: the probes cannot be moved clear of the gripper")
-    await self._lift_channels()
-    await self.move_axes({"Y": d.to_counts("Y", y), "S": d.to_counts("S", span)})
+    if not self._clear([narrow]):
+      tops = self._max_traverse_heights()
+      await self._rise({n: tops[n] for n in self.channel_z_axes}, speed)
+      if not self._clear([narrow]):
+        raise check.PodCollisionError(
+          f"{self}: unable to narrow the probes' span for the gripper: it would collide"
+        )
+    await self.move_axes(narrow, speed)
+
+  async def _raise_gripper(self, speed: int = 1000) -> None:
+    """Raise the gripper to the height it travels at from here (`_traverse_heights`); nothing when
+    it is already there or above."""
+    d = self._require_declared()
+    gz = d.to_counts("GZ", self._traverse_heights()["GZ"])
+    if gz > self._cpositions["GZ"][1]:
+      await self.move_axes({"GZ": gz}, speed)
+
+  def _planned(
+    self, start: Mapping[str, motion.CPos], targets: Mapping[str, int]
+  ) -> Dict[str, motion.CPos]:
+    """Where every axis ends from `start` as a move to `targets` would plan it (a Span-8's probes
+    from its Y and span, as `move_axes` sets them)."""
+    wanted = dict(targets)
+    if self.module_type == "span8" and ("Y" in wanted or "S" in wanted):
+      y, span = wanted.pop("Y", None), wanted.pop("S", None)
+      wanted.update(motion.span_targets(start, y, span))
+    _, _, after = motion.plan_move(self.axes, start, wanted, 1000, self._cutoff_velocity)
+    return after
+
+  def _world(self, pod_number: int, exempt: Sequence[str] = ()) -> Optional[obstacles.Obstacles]:
+    """What pod `pod_number`'s moves must clear (the driver's `obstacles`, on that pod's
+    calibration of the deck) with the boxes of the `exempt` positions left out; None without a
+    device to give them."""
+    if self.driver is None or self.driver.obstacles is None:
+      return None
+    return self.driver.obstacles(pod_number).without(exempt)
+
+  def _planning_world(self) -> Optional[obstacles.Obstacles]:
+    """What a planned move is checked against: the deck's obstacles (`_world`), nothing exempt.
+    The other pod is the rail guard's (`XRail`)."""
+    return self._world(self.pod_number)
+
+  def _clear(
+    self,
+    moves: Sequence[merge.Move],
+    start: Optional[Mapping[str, motion.CPos]] = None,
+  ) -> bool:
+    """Whether each of `moves` (axis targets, counts), made in order from `start` (where the pod
+    is by default), passes the pod's own check and the deck check, as a sweep; planning exempts no
+    deck position, as Biomek's does (`_planning_world`). A move
+    whose start or end is not known is left to `move_axes`."""
+    d = self._require_declared()
+    world = self._planning_world()
+    positions: Dict[str, motion.CPos] = dict(self._cpositions if start is None else start)
+    for move in moves:
+      try:
+        after = self._planned(positions, move)
+      except ValueError:
+        return False
+      a, b = self._pose(positions), self._pose(after)
+      if a is None or b is None:
+        return True
+      if not check.move_clear(d, a, b, world):
+        return False
+      positions = after
+    return True
+
+  def _at_angle(self, counts: int) -> bool:
+    """Whether GR is at the angle of `counts` (not a whole turn away: Biomek's GR is a line)."""
+    d = self._require_declared()
+    now = self._cpositions["GR"][0]
+    if now is None:
+      return False
+    return abs(d.to_value("GR", now) - d.to_value("GR", counts)) < GR_SAME_ANGLE
 
   async def _travel_gripper(
     self,
@@ -477,30 +583,34 @@ class Pod:
     speed: int = 1000,
     minimum_traverse_height: Optional[float] = None,
   ) -> MoveResult:
-    """Take the gripper to `targets` (counts: X, GY, GR) clear of the deck and of the pod's own
-    pipettor: the channels raised (`_move_over`), the probes moved out of its way
-    (`_make_room_for_gripper`), the gripper at the highest height that clears the pod's own parts
-    for the turn (`_gripper_traverse_height`), lowered to it first if it is above."""
-    d = self._require_declared()
+    """Take the gripper to `targets` (counts: X, GY, GR) as Biomek's gripper approach does: on a
+    Span-8 the probes' span narrowed first (`_minimize_span`), then the planned travel
+    (`_move_over`): the channels and the gripper at their travel heights, the gripper turned to
+    the angle given. Planned: no deck position exempt (`_planning`)."""
     await self._read_unknown_positions()
-    await self._make_room_for_gripper(targets)
-    gr = d.to_value("GR", targets.get("GR", self._cpositions["GR"][1]))
-    gz = self._gripper_traverse_height(gr)
-    if d.to_counts("GZ", gz) < self._cpositions["GZ"][1]:
-      await self.move_axes({"GZ": d.to_counts("GZ", gz)}, speed)
-    return await self._move_over(
-      targets, speed, minimum_traverse_height=minimum_traverse_height, gripper_height=gz
-    )
+    with self._planning():
+      await self._minimize_span(speed)
+      return await self._move_over(targets, speed, minimum_traverse_height=minimum_traverse_height)
 
   # -- the shared X rail ---------------------------------------------------------
 
-  def _rail_pose(self, x: int, gr: Optional[int], gg: Optional[int]) -> PodPose:
-    """A pose in counts as the rail takes it: deck X, and the gripper in degrees and cm."""
+  def _rail_pose(
+    self,
+    x: int,
+    gr: Optional[int],
+    gg: Optional[int],
+    held: Union[g.HeldLabware, None, Literal["checked"]] = "checked",
+  ) -> RailPose:
+    """A pose in counts as the rail takes it: deck X, and the gripper in degrees and cm holding
+    `held`; by default ("checked") what it held at its last move checked on the rail
+    (`_rail_held`): what the other pod is checked against changes only through a checked move of
+    this one."""
     d = self._require_declared()
     gripper = None
     if gr is not None and gg is not None:
-      gripper = g.GripperPose(d.to_value("GR", gr), d.to_value("GG", gg), self._held_labware)
-    return PodPose(d.to_value("X", x), gripper)
+      what = self._rail_held if held == "checked" else held
+      gripper = g.GripperPose(d.to_value("GR", gr), d.to_value("GG", gg), what)
+    return RailPose(d.to_value("X", x), gripper)
 
   def _require_declared(self) -> PodConfiguration:
     if self.declared is None:
@@ -513,6 +623,21 @@ class Pod:
     model in a resource tree (`BiomekI7`); a listener that raises is logged and kept."""
     self._listeners.append(listener)
     return lambda: self._listeners.remove(listener)
+
+  def add_motion_listener(self, listener: Callable[["Pod", str, Any], None]) -> Callable[[], None]:
+    """Call `listener(pod, event, detail)` as the pod moves: `"move"` with (targets, speed) for each
+    `move_axes` (before it is checked), `"rise out of"` with the deck positions a planned
+    operation leaves straight up, `"step aside"` with the X zone (cm) the other pod's move needs.
+    Returns what removes it. A listener that raises is logged and kept."""
+    self._motion_listeners.append(listener)
+    return lambda: self._motion_listeners.remove(listener)
+
+  def _tell(self, event: str, detail: Any) -> None:
+    for listener in list(self._motion_listeners):
+      try:
+        listener(self, event, detail)
+      except Exception:
+        logger.exception("%s: motion listener %r failed", self, listener)
 
   def _positions_changed(self) -> None:
     self._tell_rail()
@@ -532,7 +657,7 @@ class Pod:
       pose = self._rail_pose(x, self._cpositions["GR"][0], self._cpositions["GG"][0])
     self.rail.update(self.side, pose)
 
-  async def request_rail_pose(self) -> PodPose:
+  async def request_rail_pose(self) -> RailPose:
     """Where the pod is along the rail, as its drives report X, GR and GG. Moves nothing."""
     axes = [self.axis(n) for n in ("X", "GR", "GG")]
     replies = await self.board.send_many([p.get_current_position(a.device, a.index) for a in axes])
@@ -555,10 +680,11 @@ class Pod:
     each was last set to (`pipettes.set_valves`), at the cutoff velocity last set (an aspirate's
     or dispense's `cutoff_velocity`), as the Master Controller carries both.
 
-    A move of X, GR or GG is checked against the other pod first (`driver/x_rail.py`). One that
-    would run into it is refused, and nothing is sent. One crossing only the path of the other
-    pod's move in flight waits for that move to finish. Whether the pod may move now (interlock
-    armed) is the caller's to decide.
+    A move of X, GR or GG, or the first move since the gripper took or let go of labware, is
+    checked against the other pod first (`driver/x_rail.py`). When it would run into the other
+    pod it is refused, and nothing is sent. One
+    crossing only the path of the other pod's move in flight waits for that move to finish.
+    Whether the pod may move now (interlock armed) is the caller's to decide.
 
     Args:
       targets: target per axis name. On a Span-8, also `Y` (channel 1) and `S` (the span from
@@ -584,8 +710,20 @@ class Pod:
       NotHomedError: if an axis has not been homed; its pending moves are dropped.
       RailCollisionError: if X, GR or GG would move into the other pod's range; nothing is sent.
       PodCollisionError: if the gripper (or what it holds) would meet the pod's own pipettor on
-        the way (`pod_collision`); nothing is sent.
+        the way (`planning.check`); nothing is sent.
     """
+    self._tell("move", (dict(targets), speed))
+    async with self._motion:  # one move at a time, whichever task sends it
+      return await self._move(targets, speed, forces, sensors)
+
+  async def _move(
+    self,
+    targets: Mapping[str, int],
+    speed: int,
+    forces: Optional[Mapping[str, float]],
+    sensors: Optional[Mapping[str, Tuple[int, int]]],
+  ) -> MoveResult:
+    """`move_axes`, under the pod's move lock (`_motion`)."""
     forces, sensors = dict(forces or {}), dict(sensors or {})
     given, targets = dict(targets), dict(targets)
     if self.module_type == "span8" and ("Y" in targets or "S" in targets):
@@ -630,17 +768,23 @@ class Pod:
       if not motions:
         return MoveResult()
       self._check_own_collision(self._cpositions, after, {m.axis for m in motions})
-      if self.rail is not None and any(m.axis in RAIL_AXES for m in motions):
-        start = self._rail_pose(*(self._cpositions[n][0] or 0 for n in RAIL_AXES))
-        end_counts = [after[n][0] or 0 for n in RAIL_AXES]
+      self._check_world_collision(self._cpositions, after)
+      held = self._held_labware
+      if self.rail is not None and (
+        any(m.axis in RAIL_AXES for m in motions) or held != self._rail_held
+      ):
+        x0, gr0, gg0 = (self._cpositions[n][0] or 0 for n in RAIL_AXES)
+        start = self._rail_pose(x0, gr0, gg0, held)
+        x1, gr1, gg1 = (after[n][0] or 0 for n in RAIL_AXES)
         if "GG" in forces:  # stops on what it grips, short of its target: count the wider end
-          end_counts[2] = max(end_counts[2], self._cpositions["GG"][0] or 0)
-        end = self._rail_pose(*end_counts)
+          gg1 = max(gg1, gg0)
+        end = self._rail_pose(x1, gr1, gg1, held)
         async with self.rail.moving(self.side, start, end):
           completions = await self._send_motions(motions, timeout_ms, forces, sensors)
+        self._rail_held = held
       else:
         completions = await self._send_motions(motions, timeout_ms, forces, sensors)
-    except (RailCollisionError, pc.PodCollisionError):
+    except (RailCollisionError, check.PodCollisionError):
       raise  # refused before anything was sent: every position is as it was
     except BaseException as e:
       # As the Master Controller after a failed command, and its reply, so a
@@ -675,33 +819,77 @@ class Pod:
       a.name for a in self.axes if a.name == "Z" or (a.name[0] == "Z" and a.name[1:].isdigit())
     ]
 
-  def _traverse_heights(self) -> Dict[str, float]:
-    """The height each Z-type axis (the channels' and the gripper's GZ) travels at by default, cm
-    of its bottom above the deck: its ceiling (`_traverse_ceilings`), or
-    `default_minimum_traverse_height` where that is lower."""
-    ceilings = self._traverse_ceilings()
-    wanted = units.optional_cm(self.default_minimum_traverse_height)
-    return {
-      name: top if wanted is None or name == "GZ" else min(wanted, top)
-      for name, top in ceilings.items()
-    }
+  def _traverse_heights(
+    self,
+    targets: Optional[Mapping[str, int]] = None,
+    tip_lengths: Optional[Mapping[str, float]] = None,
+  ) -> Dict[str, float]:
+    """The height each Z-type axis (the channels' and the gripper's GZ) travels at by default on
+    the way to `targets` (counts; None: where it stands), cm of its bottom above the deck: per
+    tool, its `traverse_defaults` ("safe": `_safe_heights`, and as high as it goes without a deck
+    to reckon from; "max": `_max_traverse_heights`; a height: its lowest point there), never above
+    its `_max_traverse_heights`. `tip_lengths`: per channel, cm; the pod's record when None."""
+    lengths = self._carried_tip_lengths() if tip_lengths is None else dict(tip_lengths)
+    tops = self._max_traverse_heights()
+    tools = {"channels": self.channel_z_axes, "gripper": [a for a in ("GZ",) if a in tops]}
+    safe: Optional[Dict[str, float]] = None
+    out: Dict[str, float] = {}
+    for tool, axes in tools.items():
+      mode = self.traverse_defaults[tool]
+      if mode == "safe" and safe is None:
+        safe = self._safe_heights(targets, lengths) or {}
+      for axis in axes:
+        if mode == "max":
+          height = tops[axis]
+        elif mode == "safe":
+          height = (safe or {}).get(axis, tops[axis])
+        else:
+          height = units.to_cm(float(mode)) + (
+            lengths.get(axis, 0.0) if axis != "GZ" else self._gripper_below()
+          )
+        out[axis] = min(height, tops[axis])
+    return out
 
-  def _traverse_ceilings(self) -> Dict[str, float]:
+  def _gripper_below(self) -> float:
+    """How far below GZ (cm) the gripper's lowest point is: its fingers, or what it holds."""
+    pose = self._pose()
+    if self.declared is None or pose is None or pose[1] is None:
+      return 0.0
+    return pod_model.gripper_below(self.declared, pose[0], pose[1])
+
+  def _safe_heights(
+    self,
+    targets: Optional[Mapping[str, int]] = None,
+    tip_lengths: Optional[Mapping[str, float]] = None,
+  ) -> Optional[Dict[str, float]]:
+    """Biomek's safe height for each Z-type axis on the way to `targets` (counts; None: where it
+    stands), cm: the tallest deck item (`traverse.deck_height`) under each tool's footprint swept
+    from here to there, floored by `GlobalMinSafeHeight` and the axis's lowest reach, plus the
+    tool's own: a channel's tip (or the 96-head's `SubMandrelSafeHeight` without one) and
+    `AdditionalSafeHeight`; the gripper's offset to its lowest point (what it holds included) and
+    `AdditionalSafeHeightGripper`; `AvoidanceMargin` on every one. None without a deck to reckon
+    from (no device, or an unknown position)."""
+    d = self.declared
+    own = self._world(self.pod_number)
+    start = self._pose()
+    if d is None or own is None or start is None:
+      return None
+    end = self._pose(self._planned(self._cpositions, targets or {}))
+    if end is None:
+      return None
+    # What the way covers, and how tall it is, from the deck check's own boxes for this pod (its
+    # own calibration of each position, the frame its parts are in), exempting none: a travel at
+    # this height is one the check passes.
+    lengths = self._carried_tip_lengths() if tip_lengths is None else tip_lengths
+    return traverse.safe_heights(d, start, end, own, lengths, self.channel_z_axes)
+
+  def _max_traverse_heights(self) -> Dict[str, float]:
     """The highest each Z-type axis travels, cm of its bottom above the deck: the top of travel less
     the park margin (`ParkLocation` `ZMargin`, `GZMargin`), as Biomek parks them (the
     Multichannel's rest Z, 39.763 cm, is -256 counts). A Span-8 probe goes no higher than its top
     less `DiscardOffset`: above that its stripper pushes a tip off (Biomek travels carrying probes
     there, as its logs show)."""
-    d = self._require_declared()
-    shuck = d.settings.get("DiscardOffset") if self.module_type == "span8" else None
-    ceilings = {}
-    for name in self.channel_z_axes + ["GZ"]:
-      top = d.limits[name][1]
-      ceiling = top + d.park.get("GZMargin" if name == "GZ" else "ZMargin", 0.0)
-      if shuck is not None and name != "GZ":
-        ceiling = min(ceiling, top - shuck)
-      ceilings[name] = ceiling
-    return ceilings
+    return traverse.max_traverse_heights(self._require_declared(), self.channel_z_axes)
 
   async def park(self) -> None:
     """Biomek's park (`_park`): the channels and the gripper raised, the pod to its park X and Y,
@@ -711,7 +899,7 @@ class Pod:
 
   async def _park(self, over: Optional[Mapping[str, int]] = None) -> None:
     """Biomek's park (`ParkLocation`): the channels and the gripper raised to their ceilings
-    (`_traverse_ceilings`), the pod to the park X (`XMargin` in from its own end of the rail) and
+    (`_max_traverse_heights`), the pod to the park X (`XMargin` in from its own end of the rail) and
     `Y`, the gripper turned and closed to its park (`GR`, `GY`, then `GG`). As logged after a
     prime (2026-10-09), to the count. `over`: X/Y targets (counts) for a pod whose park declares
     none; a Span-8 parks over its wash station (`pipettes.park`). Without either, it parks where
@@ -725,37 +913,35 @@ class Pod:
       raise RuntimeError(f"{self} needs a declared configuration")
     if self._held_labware is not None:
       raise RuntimeError(f"{self}: the gripper holds labware; place it before parking")
-    p = d.park
-    targets: Dict[str, int] = dict(over or {})
-    if "XMargin" in p and "X" not in targets:
-      low, high = d.limits["X"]
-      x = low + p["XMargin"] if self.side == "left" else high - p["XMargin"]
-      targets["X"] = d.to_counts("X", x)
-    if "Y" in p and "Y" not in targets:
-      targets["Y"] = d.to_counts("Y", p["Y"])
-    targets.update({a: d.to_counts(a, p[a]) for a in ("GR", "GY") if a in p})
+    targets = destinations.park_targets(d, self.side, over)
+    # Biomek's park raises the channels and the gripper as high as they go first, whatever the
+    # travel defaults (`traverse_defaults`): it is where the pod rests, not a travel.
+    await self._read_unknown_positions()
+    await self._rise(self._max_traverse_heights(), 1000)
     await self._move_over(targets)
-    # The channels rest at the top less the park margin, and on a Span-8 less `DiscardOffset` as
-    # well (39.1079 cm on Z1, 9029 counts: lower than the probes travel, `_traverse_ceilings`).
-    shuck = d.settings.get("DiscardOffset", 0.0) if self.module_type == "span8" else 0.0
-    rest = {
-      z: d.to_counts(z, d.limits[z][1] + p.get("ZMargin", 0.0) - shuck) for z in self.channel_z_axes
-    }
+    rest = destinations.rest_heights(d, self.channel_z_axes)
     if any(self.cpositions[z][1] != c for z, c in rest.items()):
       await self.move_axes(rest)
-    if "GG" in p:
-      # Closed under the grip force, as Biomek's park closes it (it may stop on its own fingers).
-      force = d.settings["GripperSqueezeForce"]
-      await self.move_axes({"GG": d.to_counts("GG", p["GG"])}, forces={"GG": force})
-      # The force leaves GG's position unknown, and the rail counts an unknown gripper as every
-      # pose it could take, in the other pod's way: read it back now.
-      await self._read_unknown_positions()
+    await self._close_gripper()
+
+  async def _close_gripper(self) -> None:
+    """Close the empty gripper to its park width (`GG`), under the grip force, as Biomek's park
+    closes it (it may stop on its own fingers). Nothing without a park width."""
+    d = self._require_declared()
+    if "GG" not in d.park:
+      return
+    force = d.settings["GripperSqueezeForce"]
+    await self.move_axes({"GG": d.to_counts("GG", d.park["GG"])}, forces={"GG": force})
+    # The force leaves GG's position unknown, and the rail counts an unknown gripper as every
+    # pose it could take, in the other pod's way: read it back now.
+    await self._read_unknown_positions()
 
   async def move_aside(self) -> None:
-    """Raise the pod and take it to the end of its X travel on its own side (the left pod to its
-    lowest X, the right pod to its highest), leaving the other pod the most of the rail. Biomek
-    moves a pod out of the way itself; the rail guard here refuses instead
-    (`x_rail.py`), so a caller makes room with this.
+    """Fold the gripper (drawn in to its park GY, then turned to its park GR with what it holds,
+    and closed to its park width when empty), then take the pod to the end of its X travel on its
+    own side (the left pod to its lowest X, the right pod to its highest), leaving the other pod
+    the most of the rail. Biomek moves a pod out of the way itself; the rail guard here refuses
+    instead (`x_rail.py`), so a caller makes room with this.
 
     Raises:
       RuntimeError: without a declared configuration.
@@ -763,6 +949,15 @@ class Pod:
     d = self.declared
     if d is None:
       raise RuntimeError(f"{self} needs a declared configuration")
+    # Drawn in first, so what it holds turns close to the pod.
+    for axis in ("GY", "GR"):
+      if d.gripper_model and axis in d.park:
+        target = d.to_counts(axis, d.park[axis])
+        if not (self._at_angle(target) if axis == "GR" else self._cpositions[axis][1] == target):
+          await self._travel_gripper({axis: target})
+    if self._held_labware is None and "GG" in d.park and d.gripper_model:
+      if self._cpositions["GG"][1] > d.to_counts("GG", d.park["GG"]):
+        await self._close_gripper()  # open fingers reach further: closed, as parked
     low, high = d.limits["X"]
     await self._move_over({"X": d.to_counts("X", low if self.side == "left" else high)})
 
@@ -772,8 +967,6 @@ class Pod:
     speed: int = 1000,
     minimum_traverse_height: Optional[float] = None,
     z_final: Optional[float] = None,
-    clearance: Optional[float] = None,
-    allow_below_clearance: bool = False,
     tip_lengths: Optional[Mapping[str, float]] = None,
     gripper_height: Optional[float] = None,
   ) -> MoveResult:
@@ -788,60 +981,77 @@ class Pod:
     Args:
       targets: the travel's targets; channel Z axes in them are refused (use `z_final`).
       speed: as `move_axes`, for every step.
-      minimum_traverse_height: the channels' lowest points while traveling. Default: each channel
-        at `_traverse_heights` (as high as it goes). The gripper travels at its default
-        always.
+      minimum_traverse_height: the channels' lowest points while traveling. Default: their tool's
+        `traverse_defaults` (`_traverse_heights`). The gripper travels at its own default.
       z_final: where to set the channels' bottoms once there; None leaves them at the traverse
         height.
-      clearance: the lowest height the deck under the path allows, from the deck model
-        (`BiomekI7._traverse_clearance`), if known.
-      allow_below_clearance: travel lower than `clearance` and the obstacles allow, deliberately.
       tip_lengths: per channel Z axis, how far below its bottom the tip it carries ends, cm. The
         pod's own record when None (`_carried_tip_lengths`).
-      gripper_height: GZ (cm) to travel at. Default: its traverse height, no higher than clears
-        the pod's own pipettor for the travel's GR (`_gripper_traverse_height`).
+      gripper_height: GZ (cm) to travel at, lowered to it first if it is above. Default: its
+        traverse height (`_traverse_heights`).
 
     Raises:
-      ValueError: for a channel Z axis in `targets`; for a path through a wall (a shield, a
-        tower, the light curtain); for a traverse height below what the path needs (unless
-        `allow_below_clearance`), a need above what the channels reach, or a height a channel
-        cannot lift its tip to (under its `_traverse_ceilings`). Nothing is sent.
+      ValueError: for a channel Z axis in `targets`, or a height a channel cannot lift its tip to
+        (under its `_max_traverse_heights`). Nothing is sent.
+      DeckCollisionError: for a travel the deck check refuses (too low over something, or through
+        a wall). Nothing is sent.
     """
-    d = self._require_declared()
-    channels = self.channel_z_axes
-    stray = sorted(set(targets) & set(channels))
+    self._require_declared()
+    stray = sorted(set(targets) & set(self.channel_z_axes))
     if stray:
       raise ValueError(f"{self}: {stray} in a travel's targets; use z_final")
     lengths = self._carried_tip_lengths() if tip_lengths is None else dict(tip_lengths)
     await self._read_unknown_positions()
-    area = self._travel_area(targets)
-    need = g.obstacle_clearance(d.obstacles, *area)
-    if need.walls:
-      raise ValueError(f"{self}: the travel would pass through {', '.join(need.walls)}")
-    required = max(need.height, -math.inf if clearance is None else clearance)
-    heights, reach, traverse = self._traverse_targets(minimum_traverse_height, lengths)
-    if required > reach:
-      raise ValueError(f"{self}: the path needs {required:.3f} cm, above what the channels reach")
-    if traverse < required and not allow_below_clearance:
-      raise ValueError(
-        f"{self}: traverse height {traverse:.3f} cm is below the {required:.3f} cm the path needs;"
-        " pass allow_below_clearance=True to travel lower deliberately"
-      )
-    if gripper_height is None:
-      # No higher than clears the pod's own pipettor for the gripper's angle, and its turn if the
-      # travel turns it; only that lowers it (an axis above its traverse height stays there).
-      gr = d.to_value("GR", targets.get("GR", self._cpositions["GR"][1]))
-      clear = self._gripper_traverse_height(gr)
-      if clear < heights["GZ"]:
-        gripper_height = clear
+    with self._planning():
+      return await self._travel_over(
+        targets, speed, minimum_traverse_height, z_final, lengths, gripper_height
+      )  # fmt: skip
+
+  async def _travel_over(
+    self,
+    targets: Mapping[str, int],
+    speed: int,
+    minimum_traverse_height: Optional[float],
+    z_final: Optional[float],
+    lengths: Mapping[str, float],
+    gripper_height: Optional[float],
+  ) -> MoveResult:
+    """`_move_over`'s travel: every stage planned (the gripper lowered to `gripper_height`, the way
+    out of any position the pod stands in, the rise, the travel (`_travel_moves`), the descent to
+    `z_final`), each move checked as `move_axes` checks it, then executed; a stage that is not
+    clear refuses the whole travel and nothing is sent. Returns the travel's last move's result."""
+    d = self._require_declared()
+    heights, _, _ = self._traverse_targets(minimum_traverse_height, lengths, targets)
+    at: Dict[str, motion.CPos] = dict(self._cpositions)
+    plan: List[PlanStep] = []
     if gripper_height is not None:
       heights["GZ"] = gripper_height
-      if d.to_counts("GZ", gripper_height) < self._cpositions["GZ"][1]:
-        await self.move_axes({"GZ": d.to_counts("GZ", gripper_height)}, speed)
-    await self._raise_to(heights, speed)
-    result = await self.move_axes(targets, speed)
+      lower = {"GZ": d.to_counts("GZ", gripper_height)}
+      if lower["GZ"] < at["GZ"][1]:
+        plan.append((lower, ()))
+        at = self._planned(at, lower)
+    escape, at = self._plan_escape(heights, at)
+    plan += escape
+    path = self._plan_lift(heights, at)
+    for move in path:
+      at = self._planned(at, move)
+    travel = self._travel_moves(targets, at)
+    for move in travel:
+      at = self._planned(at, move)
+    path += travel
     if z_final is not None:
-      await self.move_axes({n: d.to_counts(n, z_final) for n in channels}, speed)
+      final = {n: d.to_counts(n, z_final) for n in self.channel_z_axes}
+      path += self._direct(final, "the descent", at)
+    # The travel's result: its last move that moves a target's axis.
+    last_travel = max(
+      (len(plan) + i for i, move in enumerate(path) if set(move) & set(targets)), default=-1
+    )
+    plan += [(move, ()) for move in path]
+    result = MoveResult()
+    for i, step in enumerate(plan):
+      done = await self._run_step(step, speed)
+      if i == last_travel:
+        result = done
     return result
 
   async def move_over(
@@ -850,8 +1060,6 @@ class Pod:
     speed_fraction: float = 1.0,
     minimum_traverse_height: Optional[float] = None,
     z_final: Optional[float] = None,
-    clearance: Optional[float] = None,
-    allow_below_clearance: bool = False,
     tip_lengths: Optional[Mapping[str, float]] = None,
     gripper_height: Optional[float] = None,
   ) -> MoveResult:
@@ -871,12 +1079,10 @@ class Pod:
         `traverse_heights`.
       z_final: where to set the channels' bottoms once there, mm; None leaves them at the traverse
         height.
-      clearance: the lowest height the deck under the path allows, mm (`traverse_clearance`).
-      allow_below_clearance: travel lower than `clearance` and the obstacles allow, deliberately.
       tip_lengths: per channel Z axis, how far below its bottom the tip it carries ends, mm. The
         pod's own record when None (`carried_tip_lengths`).
-      gripper_height: GZ, mm, to travel at. Default: its traverse height, no higher than clears
-        the pod's own pipettor.
+      gripper_height: GZ, mm, to travel at, lowered to it first if it is above. Default: its
+        traverse height (`traverse_heights`).
 
     Raises:
       ValueError: as `_move_over`, its Biomek-unit counterpart; for a `speed_fraction` outside
@@ -887,8 +1093,6 @@ class Pod:
       units.fraction_to_field(speed_fraction),
       minimum_traverse_height=units.optional_cm(minimum_traverse_height),
       z_final=units.optional_cm(z_final),
-      clearance=units.optional_cm(clearance),
-      allow_below_clearance=allow_below_clearance,
       tip_lengths=(
         None if tip_lengths is None else {a: units.to_cm(v) for a, v in tip_lengths.items()}
       ),
@@ -904,14 +1108,15 @@ class Pod:
     return {axis: units.to_mm(v) for axis, v in self._carried_tip_lengths().items()}
 
   def traverse_heights(self) -> Dict[str, float]:
-    """The height each Z-type axis (the channels' and the gripper's GZ) travels at by default, mm
-    of its bottom above the deck: its ceiling (`traverse_ceilings`), or
-    `default_minimum_traverse_height` where that is lower."""
+    """The height each Z-type axis (the channels' and the gripper's GZ) travels at by default
+    where it stands, mm of its bottom above the deck: per tool, its `traverse_defaults`
+    (`_traverse_heights`)."""
     return {axis: units.to_mm(v) for axis, v in self._traverse_heights().items()}
 
-  def traverse_ceilings(self) -> Dict[str, float]:
-    """The highest each Z-type axis travels, mm of its bottom above the deck (`_traverse_ceilings`)."""
-    return {axis: units.to_mm(v) for axis, v in self._traverse_ceilings().items()}
+  def max_traverse_heights(self) -> Dict[str, float]:
+    """As high as each Z-type axis travels, mm of its bottom above the deck
+    (`_max_traverse_heights`)."""
+    return {axis: units.to_mm(v) for axis, v in self._max_traverse_heights().items()}
 
   def _carried_tip_lengths(self) -> Dict[str, float]:
     """Per channel Z axis carrying a tip, how far below the channel the tip ends, cm: from the
@@ -924,7 +1129,10 @@ class Pod:
     return {} if feature is None else feature._carried_tip_lengths()
 
   def _traverse_targets(
-    self, minimum_traverse_height: Optional[float], tip_lengths: Mapping[str, float]
+    self,
+    minimum_traverse_height: Optional[float],
+    tip_lengths: Mapping[str, float],
+    targets: Optional[Mapping[str, int]] = None,
   ) -> Tuple[Dict[str, float], float, float]:
     """Where each Z-type axis's bottom goes to travel, cm; the highest every channel's lowest point
     reaches; and how high the lowest one travels. By default each at `_traverse_heights`
@@ -936,8 +1144,8 @@ class Pod:
     """
     channels = self.channel_z_axes
     lengths = {n: tip_lengths.get(n, 0.0) for n in channels}
-    heights = self._traverse_heights()
-    ceilings = self._traverse_ceilings()
+    heights = self._traverse_heights(targets, lengths)
+    ceilings = self._max_traverse_heights()
     reach = min(ceilings[n] - lengths[n] for n in channels)
     if minimum_traverse_height is None:
       return heights, reach, min(heights[n] - lengths[n] for n in channels)
@@ -972,26 +1180,145 @@ class Pod:
     await self._raise_to({n: heights[n] for n in self.channel_z_axes}, speed)
 
   async def _raise_to(self, heights: Mapping[str, float], speed: int) -> None:
-    """Move the axes below their `heights` (cm) up to them, together."""
-    d = self._require_declared()
-    lift = {}
-    for name, height in heights.items():
-      counts = d.to_counts(name, height)
-      if self._cpositions[name][1] < counts:  # counts grow with height on every Z-type axis
-        lift[name] = counts
+    """Move the axes below their `heights` (cm) up to them, together: a direct, checked move (an
+    operation's own rise, out of the positions it works in)."""
+    lift = self._lift_targets(heights)
     if lift:
       await self.move_axes(lift, speed)
 
-  def _travel_area(self, targets: Mapping[str, int]) -> Tuple[g.Range, g.Range]:
-    """The X/Y area the pod's body covers from where it is to `targets`, cm."""
+  def _lift_targets(
+    self, heights: Mapping[str, float], at: Optional[Mapping[str, motion.CPos]] = None
+  ) -> Dict[str, int]:
+    """The axes below their `heights` (cm) in `at` (the position record by default), with those
+    heights in counts."""
     d = self._require_declared()
-    y_axis = "Y" if self.module_type == "multichannel" else "Y1"
-    x0 = d.to_value("X", self._cpositions["X"][1])
-    y0 = d.to_value("Y", self._cpositions[y_axis][1])
-    x1 = d.to_value("X", targets.get("X", self._cpositions["X"][1]))
-    y1 = d.to_value("Y", targets.get("Y", targets.get(y_axis, self._cpositions[y_axis][1])))
-    (ax, ay), (bx, by) = g.pod_xy_box(d.geometry, x0, y0), g.pod_xy_box(d.geometry, x1, y1)
-    return g.union(ax, bx), g.union(ay, by)
+    positions = self._cpositions if at is None else at
+    lift = {}
+    for name, height in heights.items():
+      counts = d.to_counts(name, height)
+      if positions[name][1] < counts:  # counts grow with height on every Z-type axis
+        lift[name] = counts
+    return lift
+
+  @contextlib.contextmanager
+  def _planning(self) -> Iterator[None]:
+    """Within it, a planned operation (a travel, an approach, a move to safe heights, park): no
+    deck position is exempt from the deck check, as Biomek's planner exempts none, whatever
+    operation it is part of."""
+    before = self._working_at
+    self._working_at = ()
+    try:
+      yield
+    finally:
+      self._working_at = before
+
+  async def _rise(self, heights: Mapping[str, float], speed: int) -> None:
+    """The planned move to safe heights: the way out of any position the pod stands in
+    (`_plan_escape`), then the axes below their `heights` (cm) up to them, planned whole then
+    executed, nothing exempt (`_planning`).
+
+    Raises:
+      DeckCollisionError: as `_plan_escape` and `_plan_lift`. Nothing is sent.
+    """
+    with self._planning():
+      plan, at = self._plan_escape(heights, self._cpositions)
+      plan += [(move, ()) for move in self._plan_lift(heights, at)]
+      for step in plan:
+        await self._run_step(step, speed)
+
+  def _plan_escape(
+    self, heights: Mapping[str, float], start: Mapping[str, motion.CPos]
+  ) -> Tuple[List[PlanStep], Dict[str, motion.CPos]]:
+    """The way out of the deck positions a pod at `start` stands in (left low in one by the
+    operation before), as Biomek's planner leaves them when its start is in collision; and where
+    it leaves the pod. Each part inside them (a channel, a Span-8's probes one by one, or the
+    gripper) straight up until its bottom is at their tops, or to its height in `heights` (cm) if
+    that is higher, the others staying; one step, checked against everything but those positions
+    (the step names them), its end clear of everything. None for a pod inside nothing.
+
+    Raises:
+      DeckCollisionError: if the pod stands inside something other than a deck position's box
+        (a trash's walls, the instrument), or cannot rise out within its axes' travel.
+    """
+    d = self._require_declared()
+    at: Dict[str, motion.CPos] = dict(start)
+    plan: List[PlanStep] = []
+    pose = self._pose(at)
+    world = self._planning_world()
+    if pose is not None and world is not None:
+      # The planner's model: the gripper padded below (`pod_model.planning_pad`).
+      pad = pod_model.planning_pad(d)
+      out = check.escape(d, pose, world, pad)
+      if out is None:
+        found = check.deck_collisions_at(d, pose, world, pad)
+        parts = ", ".join(f"the {x} in {y}" for x, y in found[:3])
+        raise check.DeckCollisionError(f"{self}: no way out planned for {parts}")
+      if out.holders:
+        targets = find_path.escape_targets(d, pose, out, heights, self.channel_z_axes)
+        beyond = [n for n, t in targets.items() if t > self.axis(n).limits.max_position]
+        if beyond:
+          raise check.DeckCollisionError(f"{self}: {beyond} cannot rise out of {list(out.holders)}")
+        after = self._planned(at, targets)
+        end = self._pose(after)
+        assert end is not None
+        if check.deck_collisions_at(d, end, world, pad):
+          raise check.DeckCollisionError(f"{self}: rising out of {list(out.holders)} is not clear")
+        plan.append((targets, out.holders))
+        at = after
+    return plan, at
+
+  def _plan_lift(
+    self, heights: Mapping[str, float], start: Mapping[str, motion.CPos]
+  ) -> List[merge.Move]:
+    """The rise from `start`: the axes below their `heights` (cm) up to them, straight up.
+
+    Raises:
+      DeckCollisionError: when that is not clear; nothing is sent.
+    """
+    lift = self._lift_targets(heights, start)
+    if not lift:
+      return []
+    return self._direct(lift, "the rise", start)
+
+  async def _run_step(self, step: PlanStep, speed: int) -> MoveResult:
+    """One planned move; one that leaves the positions it names (the way out of them) is made with
+    those positions exempt."""
+    move, leaving = step
+    if not leaving:
+      return await self.move_axes(move, speed)
+    self._tell("rise out of", leaving)
+    logger.info("%s leaves %s straight up", self.component, ", ".join(leaving))
+    with self.working_at(*leaving):
+      return await self.move_axes(move, speed)
+
+  def _travel_moves(
+    self, targets: Mapping[str, int], start: Mapping[str, motion.CPos]
+  ) -> List[merge.Move]:
+    """The travel to `targets` from `start`, the rise made: one move when it is clear; else
+    Biomek's direct candidate, one axis at a time (`merge.direct_candidate`), in the first order of
+    its moves that is clear (a gripper turned before it reaches out, say).
+
+    Raises:
+      DeckCollisionError: when no order is clear; nothing is sent.
+    """
+    if self._clear([dict(targets)], start):
+      return [dict(targets)]
+    for order in itertools.permutations(merge.direct_candidate(targets)):
+      if self._clear(order, start):
+        return list(order)
+    raise check.DeckCollisionError(f"{self}: no order of the travel's moves is clear")
+
+  def _direct(
+    self, move: merge.Move, what: str, start: Mapping[str, motion.CPos]
+  ) -> List[merge.Move]:
+    """`move` from `start`, when it is clear (`_clear`).
+
+    Raises:
+      DeckCollisionError: when it is not; nothing is sent.
+    """
+    if not self._clear([move], start):
+      raise check.DeckCollisionError(f"{self}: {what} is not clear")
+    return [move]
 
   async def _send_motions(
     self,

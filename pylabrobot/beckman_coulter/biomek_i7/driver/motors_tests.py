@@ -53,19 +53,22 @@ class PodAxesTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(ValueError, "has no axis 'Z8'"):
       left.axis("Z8")
 
-  async def test_the_traverse_default_follows_biomeks_safe_height(self) -> None:
-    driver = generic_driver()  # "Safe Height" unset (-100000), as on the instrument it came from
+  async def test_the_traverse_defaults_follow_biomeks_always_max_z(self) -> None:
+    driver = generic_driver()  # `AlwaysMaxZ` False on both pods, as on the instrument it came from
     self.addAsyncCleanup(driver.stop)
     await driver.discover()
-    assert driver.left_x_arm is not None
-    self.assertIsNone(driver.left_x_arm.default_minimum_traverse_height)
+    for pod in (driver.left_x_arm, driver.right_x_arm):
+      assert pod is not None
+      self.assertEqual(pod.traverse_defaults, {"channels": "safe", "gripper": "safe"})
     config = generic_configuration()
-    config.pods["left"].settings["GlobalMinSafeHeight"] = 30.0
+    for side in ("left", "right"):
+      config.pods[side].settings["AlwaysMaxZ"] = True
     driver = generic_driver(configuration=sealed(config))
     self.addAsyncCleanup(driver.stop)
     await driver.discover()
-    assert driver.left_x_arm is not None
-    self.assertEqual(driver.left_x_arm.default_minimum_traverse_height, 300.0)
+    assert driver.left_x_arm is not None and driver.right_x_arm is not None
+    for pod in (driver.left_x_arm, driver.right_x_arm):
+      self.assertEqual(pod.traverse_defaults, {"channels": "max", "gripper": "max"})
 
 
 if __name__ == "__main__":

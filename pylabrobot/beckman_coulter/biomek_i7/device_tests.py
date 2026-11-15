@@ -10,6 +10,7 @@ from unittest import mock
 from pylabrobot.beckman_coulter.biomek_i7.device import RAIL_TOP_Z, BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import RECORDING_ENV
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import alps
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_labware
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   as_instrument,
   configuration_file,
@@ -66,6 +67,38 @@ class BiomekI7Tests(unittest.TestCase):
         for axis in range(3):
           self.assertGreaterEqual(lo[axis], -1.0)
           self.assertLessEqual(hi[axis], size[axis] + 1.0)
+
+  def test_the_obstacles_follow_every_change_of_the_tree(self):
+    # Each pod's obstacles are built once and dropped when anything under the device is assigned
+    # or unassigned: after each change they equal a fresh build.
+    device = self.biomek
+    deck = device.deck
+    position = deck.get_position(deck.position_names[0])
+
+    def check() -> None:
+      for pod in (1, 2):
+        self.assertEqual(device.obstacles(pod), device._build_obstacles(pod))
+
+    check()
+    rack = biomek_labware("BC230", "rack")
+    position.assign_child_resource(rack)
+    check()
+    rack.get_item(0).unassign_tip()  # a tip taken: a child of its spot
+    check()
+    rack.unassign()
+    check()
+
+  def test_labware_on_no_position_is_an_obstacle_its_operation_may_work_in(self):
+    device = self.biomek
+    rack = biomek_labware("BC230", "loose")
+    device.deck.assign_child_resource(rack, location=device.deck.pin_location(30, 5))
+    for pod in (1, 2):
+      world = device.obstacles(pod)
+      with self.subTest(pod=pod):
+        box = next(p for p in world.deck if p.name == "loose")
+        top = (rack.get_highest_known_point() - device.deck.get_absolute_location().z) / 10
+        self.assertAlmostEqual(box.z_high, top)
+        self.assertNotIn("loose", {p.name for p in world.without(["loose"]).deck})
 
   def test_moving_a_bridge_carries_its_pod(self):
     before = self.biomek.pod_models["left"].get_location_wrt(self.biomek)
