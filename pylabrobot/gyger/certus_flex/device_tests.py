@@ -211,6 +211,28 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
       await valve.dispense(1)
     self.inco.call.assert_not_awaited()
 
+  async def test_corrected_volume_sends_vendor_open_time(self) -> None:
+    """A volume correction precedes interpolation and sends microseconds to Dispens."""
+    valve = self.device.valves[0]
+    valve.calibration = ValveCalibration(((0.5, 0.0005), (1.5, 0.00125)), pressure_bar=0.2)
+    self.numbers(
+      {path + ".Prop.State": [4.0] for path in (ROOT, POSITION, PRESSURE, HEAD, VALVE)}
+      | {
+        PRESSURE + ".Act.Pressure": [0.2],
+        PRESSURE + ".Prop.SetPressure": [0.2],
+        HEAD + ".Prop.SyncValves": [1.0],
+      }
+    )
+    await valve.dispense(1.0, correction_factor=1.25)
+    self.assertEqual(
+      self.inco.call.call_args_list,
+      [call(VALVE + ".Cmd.Dispens", 1062.5), call(HEAD + ".Cmd.SyncValves")],
+    )
+    self.inco.call.reset_mock()
+    with self.assertRaises(ValueError):
+      await valve.dispense(1.5, correction_factor=1.25)
+    self.inco.call.assert_not_awaited()
+
   async def test_pressure_check_and_pulse_share_operation_lock(self) -> None:
     valve = self.device.valves[0]
     valve.calibration = ValveCalibration(((1, 0.001), (2, 0.002)), pressure_bar=0.3)
@@ -496,3 +518,34 @@ class CalibrationTests(unittest.TestCase):
     ):
       with self.assertRaises(ValueError):
         ValveCalibration(points, pressure_bar=0.3)
+
+  def test_vendor_volume_conversion(self) -> None:
+    """Reference values from CERTUS CONTROL's volume correction and linear interpolation.
+
+    These synthetic points exercise the algorithm; they are not a measured valve
+    calibration. Reference methods: DispenseCalibration.CalculateValveOpenTime and
+    CalibrationUtils.InterpolateValveOpenTime in CERTUS CONTROL 2.1.17.2517.
+    """
+    calibration = ValveCalibration(((0.5, 0.0005), (1.5, 0.00125), (4.0, 0.003)), pressure_bar=0.2)
+    for volume, factor, expected_us in (
+      (0.5, 1.0, 500),
+      (1.0, 1.0, 875),
+      (1.5, 1.0, 1250),
+      (2.0, 1.0, 1600),
+      (4.0, 1.0, 3000),
+      (1.0, 0.5, 500),
+      (1.0, 1.25, 1062.5),
+      (1.0, 1.5, 1250),
+      (2.0, 1.25, 1950),
+    ):
+      with self.subTest(volume=volume, correction_factor=factor):
+        self.assertAlmostEqual(
+          calibration.duration_for_volume(volume, correction_factor=factor) * 1e6,
+          expected_us,
+        )
+    for factor in (0, 0.4999, 1.5001, True, float("nan"), float("inf")):
+      with self.subTest(correction_factor=factor), self.assertRaises(ValueError):
+        calibration.duration_for_volume(1.0, correction_factor=factor)
+    for volume, factor in ((0.5, 0.5), (4.0, 1.5)):
+      with self.subTest(volume=volume, correction_factor=factor), self.assertRaises(ValueError):
+        calibration.duration_for_volume(volume, correction_factor=factor)

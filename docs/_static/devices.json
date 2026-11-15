@@ -2188,6 +2188,6 @@
     "api_version": "v1",
     "code_slug": "gyger/certus_flex",
     "doc_slug": "gyger/certus_flex/hello-world",
-    "notes": "Direct UDP and INCO server TCP; motion, pressure, timed dispensing, and valve maintenance. Calibrated volumes need verification."
+    "notes": "Direct UDP and INCO server TCP; motion, pressure, timed and calibrated dispensing, and valve maintenance. Native maintenance commands need hardware verification."
   }
 ]

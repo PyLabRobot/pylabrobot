@@ -79,9 +79,17 @@ class ValveCalibration:
         raise ValueError("Calibration volumes and durations must be positive and increasing")
       previous = (volume, duration)
 
-  def duration_for_volume(self, volume: float) -> float:
-    """Interpolate the valve opening duration for a volume in µL."""
+  def duration_for_volume(self, volume: float, *, correction_factor: float = 1.0) -> float:
+    """Interpolate seconds for a volume in µL, after applying a volume correction.
+
+    The factor uses CERTUS CONTROL's supported range of 0.5–1.5. It multiplies
+    the requested volume before interpolation, not the resulting opening time.
+    The corrected volume must remain within the measured calibration range.
+    """
     _finite(volume, "volume")
+    if not 0.5 <= _finite(correction_factor, "correction_factor") <= 1.5:
+      raise ValueError("correction_factor must be between 0.5 and 1.5")
+    volume *= correction_factor
     if not self.points[0][0] <= volume <= self.points[-1][0]:
       raise ValueError("Volume is outside the measured calibration range")
     for (v0, t0), (v1, t1) in zip(self.points, self.points[1:]):
@@ -206,16 +214,18 @@ class CertusValve:
     async with self._device._operation_lock:
       await self._dispense_for(duration)
 
-  async def dispense(self, volume: float) -> None:
+  async def dispense(self, volume: float, *, correction_factor: float = 1.0) -> None:
     """Dispense a calibrated volume in µL at the current position.
 
     Attach a :class:`ValveCalibration` to ``calibration`` first. The pressure
     setpoint and actual pressure must match that calibration within 0.01 bar.
+    Supply the channel's CERTUS CONTROL volume correction factor when applicable;
+    the default 1.0 applies no correction. The factor is applied before interpolation.
     """
     if self.calibration is None:
       raise ValueError("Assign this valve's calibration before dispensing by volume")
     calibration = self.calibration
-    duration = calibration.duration_for_volume(volume)
+    duration = calibration.duration_for_volume(volume, correction_factor=correction_factor)
     async with self._device._operation_lock:
       pressure = await self._device.get_pressure()
       setpoint = await self._device._inco.get_number(_PRESSURE + ".Prop.SetPressure")
@@ -279,7 +289,9 @@ class CertusFlex:
 
   async def setup(self) -> None:
     """Connect and read identity without moving or pressurizing the machine."""
-    logger.warning("CERTUS FLEX calibrated volumes and clean cycles remain untested on hardware")
+    logger.warning(
+      "CERTUS FLEX native prime, purge, and clean-cycle commands are untested on hardware"
+    )
     await self._inco.setup()
     try:
       self.serial_number = await self._inco.get_string(_ROOT + ".Act.Serialnumber")

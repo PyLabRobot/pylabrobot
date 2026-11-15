@@ -17,11 +17,11 @@ angled FLEX8 head. The fixtures retain controller replies for regression testing
 | Timed valves | Water flow through channels 2/3; visible water in B2/C3 after 1 ms pulses |
 | INCO server TCP | Native request fixtures and simulated responses; no hardware verification |
 | Prime, purge, clean cycle | Command sequencing and failure tests; native maintenance commands unverified on hardware |
-| Calibrated volume | Interpolation and pressure checks tested offline; delivered volume unverified |
+| Volume-to-time conversion | Vendor-source reference cases cover interpolation, volume correction, units, and the valve command; physical volume accuracy depends on the supplied calibration |
 
 Reference-axis motion, the full travel envelope, other head types, and cleaning
-effectiveness remain unverified. The pressure range and volume accuracy must be
-validated for the installed valves and fluid.
+effectiveness remain unverified. Instrument calibration and cleaning effectiveness
+are separate from driver command verification and depend on the installed valves and fluid.
 
 ## Connection
 
@@ -214,8 +214,25 @@ A numeric mm/s command interface has not been verified.
 Durations use seconds at the Python API and microseconds on the controller. The
 protocol validator's minimum is 50 µs; individual valves may require longer.
 Volume dispensing requires a measured per-valve/per-fluid `ValveCalibration` in
-µL and seconds. Linear interpolation matches the vendor approach, while this
-driver rejects extrapolation. Setpoint and actual pressure must match calibration.
+µL and seconds. Setpoint and actual pressure must match that calibration.
+
+`dispense(volume, correction_factor=1.0)` follows CERTUS CONTROL's volume-to-time
+calculation: multiply the requested volume by the channel's correction factor,
+then linearly interpolate between the surrounding calibration points. The factor
+range is 0.5–1.5. The factor applies to volume, not opening duration. PLR converts
+the resulting seconds to microseconds for the same native `ValveN.Cmd.Dispens`
+command used by CERTUS CONTROL. It does not read a control PC's calibration files
+or correction factors automatically.
+
+Reference tests cover both interpolation segments, exact endpoints, factor limits,
+and the resulting microsecond command. Their synthetic data checks the calculations;
+it is not calibration data for an installed valve. For example, points of 0.5 µL
+at 500 µs and 1.5 µL at 1250 µs map a 1 µL request with factor 1.25 to 1062.5 µs.
+The reference methods are `DispenseCalibration.CalculateValveOpenTime` and
+`CalibrationUtils.InterpolateValveOpenTime` in CERTUS CONTROL 2.1.17.2517.
+Unlike the vendor's extrapolation, PLR rejects corrected volumes outside the
+measured range. This verifies the command calculation, not the actual dispensed
+mass or volume; those require measurements for the installed fluid and valve.
 
 Motion and valve operations share a lock. The calibration pressure check is held
 under that same lock. This does not prevent another application from controlling
