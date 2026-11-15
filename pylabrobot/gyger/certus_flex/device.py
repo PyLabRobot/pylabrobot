@@ -65,11 +65,11 @@ class ValveCalibration:
   """
 
   points: tuple[tuple[float, float], ...]
-  pressure_bar: float
+  pressure: float
 
   def __post_init__(self) -> None:
     """Validate the measured range and pressure."""
-    if not 0.051 <= _finite(self.pressure_bar, "pressure_bar") <= 1:
+    if not 0.051 <= _finite(self.pressure, "pressure") <= 1:
       raise ValueError("Calibration pressure must be between 0.051 and 1 bar")
     if len(self.points) < 2:
       raise ValueError("At least two calibration points are required")
@@ -229,10 +229,7 @@ class CertusValve:
     async with self._device._operation_lock:
       pressure = await self._device.get_pressure()
       setpoint = await self._device._inco.get_number(_PRESSURE + ".Prop.SetPressure")
-      if (
-        abs(pressure - calibration.pressure_bar) > 0.01
-        or abs(setpoint - calibration.pressure_bar) > 0.01
-      ):
+      if abs(pressure - calibration.pressure) > 0.01 or abs(setpoint - calibration.pressure) > 0.01:
         raise CertusFlexError("Current pressure does not match the valve calibration")
       await self._dispense_for(duration)
 
@@ -370,7 +367,7 @@ class CertusFlex:
     """Read actual dispensing pressure in bar."""
     return await self._inco.get_number(_PRESSURE + ".Act.Pressure")
 
-  async def _poll_pressure(self, pressure_bar: float) -> None:
+  async def _poll_pressure(self, pressure: float) -> None:
     """Wait for a charged regulator and the requested actual pressure."""
     while True:
       state = await self._state(_PRESSURE)
@@ -378,7 +375,7 @@ class CertusFlex:
       if state == "error" or charge in (0, 1, 2, 6):
         raise CertusFlexError(f"Pressure failed: module={state}, charge={charge}")
       actual = await self.get_pressure()
-      if state == "ready" and charge in (3, 7) and abs(actual - pressure_bar) <= 0.01:
+      if state == "ready" and charge in (3, 7) and abs(actual - pressure) <= 0.01:
         return
       await asyncio.sleep(self.poll_interval)
 
@@ -480,27 +477,27 @@ class CertusFlex:
       await self._move("MoveXYToPurge", profile)
       await self._move("MoveZToPurge", profile)
 
-  async def set_pressure(self, pressure_bar: float) -> None:
+  async def set_pressure(self, pressure: float) -> None:
     """Set dispensing pressure to 0.051–1 bar, or zero to discharge."""
-    _finite(pressure_bar, "pressure_bar")
-    if pressure_bar != 0 and not 0.051 <= pressure_bar <= 1:
-      raise ValueError("pressure_bar must be zero or between 0.051 and 1")
+    _finite(pressure, "pressure")
+    if pressure != 0 and not 0.051 <= pressure <= 1:
+      raise ValueError("pressure must be zero or between 0.051 and 1")
     async with self._operation_lock:
       state = await self._state(_PRESSURE)
       if state not in ("on", "ready"):
         raise CertusFlexError(f"Pressure regulator is {state}")
-      logger.info("Setting CERTUS FLEX pressure to %s bar", pressure_bar)
-      if pressure_bar == 0:
+      logger.info("Setting CERTUS FLEX pressure to %s bar", pressure)
+      if pressure == 0:
         await self._inco.call(_PRESSURE + ".Cmd.Discharge")
         await self._wait_state(_PRESSURE, ("busy", "on"))
         await self._inco.put_number(_PRESSURE + ".Prop.SetPressure", 0)
         await asyncio.wait_for(self._poll_discharged(), self.timeout)
         return
-      await self._inco.put_number(_PRESSURE + ".Prop.SetPressure", pressure_bar)
+      await self._inco.put_number(_PRESSURE + ".Prop.SetPressure", pressure)
       if state == "on":
         await self._inco.call(_PRESSURE + ".Cmd.Init")
         await self._wait_state(_PRESSURE, ("busy", "ready"))
-      await asyncio.wait_for(self._poll_pressure(pressure_bar), self.timeout)
+      await asyncio.wait_for(self._poll_pressure(pressure), self.timeout)
 
   async def clean_cycle(
     self,

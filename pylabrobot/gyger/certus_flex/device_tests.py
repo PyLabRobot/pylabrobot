@@ -205,7 +205,7 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
     valve = self.device.valves[0]
     with self.assertRaises(ValueError):
       await valve.dispense(1)
-    valve.calibration = ValveCalibration(((1, 0.001), (2, 0.002)), pressure_bar=0.3)
+    valve.calibration = ValveCalibration(((1, 0.001), (2, 0.002)), pressure=0.3)
     self.numbers({PRESSURE + ".Act.Pressure": [0.1], PRESSURE + ".Prop.SetPressure": [0.3]})
     with self.assertRaises(CertusFlexError):
       await valve.dispense(1)
@@ -214,7 +214,7 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
   async def test_corrected_volume_sends_vendor_open_time(self) -> None:
     """A volume correction precedes interpolation and sends microseconds to Dispens."""
     valve = self.device.valves[0]
-    valve.calibration = ValveCalibration(((0.5, 0.0005), (1.5, 0.00125)), pressure_bar=0.2)
+    valve.calibration = ValveCalibration(((0.5, 0.0005), (1.5, 0.00125)), pressure=0.2)
     self.numbers(
       {path + ".Prop.State": [4.0] for path in (ROOT, POSITION, PRESSURE, HEAD, VALVE)}
       | {
@@ -235,7 +235,7 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_pressure_check_and_pulse_share_operation_lock(self) -> None:
     valve = self.device.valves[0]
-    valve.calibration = ValveCalibration(((1, 0.001), (2, 0.002)), pressure_bar=0.3)
+    valve.calibration = ValveCalibration(((1, 0.001), (2, 0.002)), pressure=0.3)
     waiting, release = asyncio.Event(), asyncio.Event()
 
     async def read(path: str) -> float:
@@ -499,7 +499,7 @@ class CalibrationTests(unittest.TestCase):
   """Calibrations interpolate only within their measured range."""
 
   def test_interpolation_and_boundaries(self) -> None:
-    calibration = ValveCalibration(((1, 0.001), (3, 0.005)), pressure_bar=0.3)
+    calibration = ValveCalibration(((1, 0.001), (3, 0.005)), pressure=0.3)
     self.assertEqual(calibration.duration_for_volume(1), 0.001)
     self.assertEqual(calibration.duration_for_volume(2), 0.003)
     self.assertEqual(calibration.duration_for_volume(3), 0.005)
@@ -517,7 +517,7 @@ class CalibrationTests(unittest.TestCase):
       ((1, 1), (float("inf"), 2)),
     ):
       with self.assertRaises(ValueError):
-        ValveCalibration(points, pressure_bar=0.3)
+        ValveCalibration(points, pressure=0.3)
 
   def test_vendor_volume_conversion(self) -> None:
     """Reference values from CERTUS CONTROL's volume correction and linear interpolation.
@@ -526,7 +526,7 @@ class CalibrationTests(unittest.TestCase):
     calibration. Reference methods: DispenseCalibration.CalculateValveOpenTime and
     CalibrationUtils.InterpolateValveOpenTime in CERTUS CONTROL 2.1.17.2517.
     """
-    calibration = ValveCalibration(((0.5, 0.0005), (1.5, 0.00125), (4.0, 0.003)), pressure_bar=0.2)
+    calibration = ValveCalibration(((0.5, 0.0005), (1.5, 0.00125), (4.0, 0.003)), pressure=0.2)
     for volume, factor, expected_us in (
       (0.5, 1.0, 500),
       (1.0, 1.0, 875),

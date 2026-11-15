@@ -2,7 +2,7 @@
 
 The driver provides direct Ethernet and INCO server connections, motion, pressure
 control, timed or calibrated dispensing, and valve maintenance. The Python API
-uses millimetres, seconds, and microlitres; pressure is explicitly specified in bar.
+uses PLR's default units: millimetres, seconds, microlitres, and bar for pressure.
 
 ## Verification scope
 
@@ -22,6 +22,37 @@ angled FLEX8 head. The fixtures retain controller replies for regression testing
 Reference-axis motion, the full travel envelope, other head types, and cleaning
 effectiveness remain unverified. Instrument calibration and cleaning effectiveness
 are separate from driver command verification and depend on the installed valves and fluid.
+
+## Capability coverage
+
+The registry's **Basic** level describes the current feature coverage. **Mostly**
+means most capabilities are available, with some known commands still missing;
+see [support levels](../../machines.md#reading-the-table). Hardware verification
+for the implemented operations is listed above.
+
+| User workflow | Current API | Remaining capability |
+| --- | --- | --- |
+| Connect, initialize, move, park, regulate pressure | Implemented | Installed-head detection/validation and detailed fault reporting |
+| Dispense at a well | Machine coordinates and per-valve dispensing | PLR `Plate`/`Well` registration, channel offsets, dispense height, and travel/plate bounds |
+| Fill a plate or selected region | User-written loops | A prevalidated per-well volume plan, row/column ordering, repeats, and progress |
+| Use several reagents efficiently | Channels are independently addressable; operations are serialized | Geometrically compatible channel groups queued before one completion barrier |
+| Reuse calibration | `ValveCalibration` points, pressure checks, and volume correction | Import/export of vendor calibration data with valve/fluid/pressure metadata; repeat-shot measurement workflow |
+| Prepare lines and clean | Timed prime, purge, and clean cycle | Controlled flush start/stop, volume-based maintenance, and scheduled idle purging |
+| Interrupt and recover a run | Fault detection; clean-cycle abort on failure | Public abort/close-all, detailed faults, and host-side pause/resume at confirmed completion boundaries |
+
+The manufacturer describes independent channel calibration, parallel dispensing,
+and multiple plate formats in its [technical specifications](https://www.fgyger.ch/certus-flex/technical-specifications/?lang=en).
+The [user manual](https://downloads.fgyger.ch/certus/Doc/User%20Manual/User%20Manual%20CERTUS%20FLEX%20EN%20V011.pdf)
+documents regions, variable-volume patterns, maintenance, and interval purging.
+Thermo Fisher's [Certus automation interface](https://apps.thermofisher.com/apps/lahr/LA_Online_Help_Resource/en-us/Content/Topics/Drivers/Dispensers/DRVR%20Certus%20Flex.htm)
+also exposes plate access, dispense tables, and head configuration.
+
+For routine plate workflows, the largest gaps are well-aware volume plans,
+coordinated channels, reusable calibration/configuration, and controllable run
+execution. These can be built in Python on the controller primitives. Vendor
+protocol-file execution, evaporation-curtain support, standby, and device-network
+configuration are additional capabilities outside this API. A numeric speed
+interface still requires protocol evidence; firmware profile names remain explicit.
 
 ## Connection
 
