@@ -25,7 +25,7 @@ class DispenseStep:
   channel: int
   volume: Optional[float] = None
   duration: Optional[float] = None
-  correction_factor: float = 1.0
+  correction_factor: Optional[float] = None
 
   def __post_init__(self) -> None:
     """Reject ambiguous requests and nonfinite or negative quantities."""
@@ -34,9 +34,11 @@ class DispenseStep:
     value = self.volume if self.volume is not None else self.duration
     if value is None or isinstance(value, bool) or not math.isfinite(value) or value < 0:
       raise ValueError("Dispense quantity must be finite and nonnegative")
-    if not math.isfinite(self.correction_factor) or not 0.5 <= self.correction_factor <= 1.5:
+    if self.correction_factor is not None and (
+      not math.isfinite(self.correction_factor) or not 0.5 <= self.correction_factor <= 1.5
+    ):
       raise ValueError("correction_factor must be between 0.5 and 1.5")
-    if self.duration is not None and self.correction_factor != 1:
+    if self.duration is not None and self.correction_factor not in (None, 1):
       raise ValueError("A correction factor applies only to volume requests")
 
   @staticmethod
@@ -65,7 +67,9 @@ class DispenseStep:
           plate.get_item(row["well"]),
           int(row["channel"]),
           volume=float(row["volume"]),
-          correction_factor=float(row.get("correction_factor") or 1),
+          correction_factor=float(row["correction_factor"])
+          if row.get("correction_factor")
+          else None,
         )
         for row in reader
       )

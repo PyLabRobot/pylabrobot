@@ -317,8 +317,8 @@ positions and pressure with CERTUS CONTROL. After those match, verify reference
 and park motions with a clear workspace, then a short water pulse into waste.
 Measure delivered volume separately before supplying a calibration. Preserve
 the PLR capture and record firmware, head, valve, pressure, pulse duration, and
-observations. Automatic plate-to-well coordinate conversion is not implemented;
-motion methods currently take controller coordinates.
+observations. Use registered PLR wells for plate protocols and explicit controller
+coordinates for commissioning.
 
 ## PLR plate and well operations
 
@@ -358,3 +358,34 @@ are explicit. A failed group is stopped best-effort and never automatically repe
 For commissioning, steps may specify `duration` instead of `volume`; these timed
 plans cannot check physical filled volume. Do not supply both quantities. Rebuild
 plans after changing calibration or plate geometry.
+
+## Calibration and configuration files
+
+`ValveCalibration.from_vendor_xml(text, calibration_id=...)` imports one CERTUS
+CONTROL calibration map. It converts explicit units to µL, seconds, and bar,
+excludes disabled points, and preserves the source metadata and disabled points
+for `to_vendor_xml()`. Stored volume is already per shot; shot count must not
+divide it again. Ambiguous maps, missing units, and nonmonotonic curves are rejected.
+`save(path)` and `load(path)` provide versioned PLR JSON for measured curves.
+
+```python
+from pathlib import Path
+from pylabrobot.gyger import ValveCalibration
+
+calibration = ValveCalibration.from_vendor_xml(Path("water-calibration.xml").read_text())
+await certus.configure_channel(
+  1, calibration=calibration, fluid="Water", valve_serial="INSTALLED-VALVE-SERIAL",
+  correction_factor=1.0,
+)
+certus.save_configuration("certus-water.json")
+# In another session, after setup():
+await certus.load_configuration("certus-water.json")
+```
+
+Configuration files bind to the controller serial and installed head. Every channel
+entry is validated before any is applied. Fluid and valve serial are operator
+declarations: the controller does not identify the liquid or the individual valve.
+Volume operations inherit the configured correction factor unless explicitly
+overridden, and check actual pressure and setpoint against the calibration.
+Imported curves establish the command calculation; measured accuracy still depends
+on the installed valve, liquid, pressure, and the quality of those measurements.

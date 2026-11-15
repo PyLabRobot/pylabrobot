@@ -2,15 +2,17 @@
 
 import asyncio
 import logging
+import json
+from pathlib import Path
 import math
 import time
-from dataclasses import dataclass
 from typing import Literal, Optional, Sequence, Union
 
 from pylabrobot.resources import Plate, Well
 
 from .geometry import MotionBounds, PlateRegistration, Position
 from .plans import DispensePlan, DispenseStep, Order, PreparedDispense, ordered_steps
+from .calibration import ValveCalibration
 from ._inco import Argument, Inco
 from ._inco_udp import IncoUDP
 
@@ -61,49 +63,6 @@ class CertusFlexError(RuntimeError):
   """The dispenser reported a fault or cannot perform the requested operation."""
 
 
-@dataclass(frozen=True)
-class ValveCalibration:
-  """Measured (volume in µL, opening duration in seconds) points at a given pressure.
-
-  Points must increase in both volume and duration. Interpolation is linear, as in
-  CERTUS CONTROL. Extrapolation is rejected. Use the calibration for the installed
-  valve and fluid, at the stated pressure in bar.
-  """
-
-  points: tuple[tuple[float, float], ...]
-  pressure: float
-
-  def __post_init__(self) -> None:
-    """Validate the measured range and pressure."""
-    if not 0.051 <= _finite(self.pressure, "pressure") <= 1:
-      raise ValueError("Calibration pressure must be between 0.051 and 1 bar")
-    if len(self.points) < 2:
-      raise ValueError("At least two calibration points are required")
-    previous = (0.0, 0.0)
-    for volume, duration in self.points:
-      if _finite(volume, "volume") <= previous[0] or _finite(duration, "duration") <= previous[1]:
-        raise ValueError("Calibration volumes and durations must be positive and increasing")
-      previous = (volume, duration)
-
-  def duration_for_volume(self, volume: float, *, correction_factor: float = 1.0) -> float:
-    """Interpolate seconds for a volume in µL, after applying a volume correction.
-
-    The factor uses CERTUS CONTROL's supported range of 0.5–1.5. It multiplies
-    the requested volume before interpolation, not the resulting opening time.
-    The corrected volume must remain within the measured calibration range.
-    """
-    _finite(volume, "volume")
-    if not 0.5 <= _finite(correction_factor, "correction_factor") <= 1.5:
-      raise ValueError("correction_factor must be between 0.5 and 1.5")
-    volume *= correction_factor
-    if not self.points[0][0] <= volume <= self.points[-1][0]:
-      raise ValueError("Volume is outside the measured calibration range")
-    for (v0, t0), (v1, t1) in zip(self.points, self.points[1:]):
-      if v0 <= volume <= v1:
-        return t0 + (volume - v0) * (t1 - t0) / (v1 - v0)
-    raise ValueError("Volume is outside the measured calibration range")
-
-
 class CertusValve:
   """One valve, addressed by its physical controller output."""
 
@@ -113,6 +72,9 @@ class CertusValve:
     self.output_id = output_id
     self._path = _MODULE + f"Valve{output_id}"
     self.calibration: Optional[ValveCalibration] = None
+    self.correction_factor = 1.0
+    self.fluid: Optional[str] = None
+    self.valve_serial: Optional[str] = None
 
   async def get_state(self) -> str:
     """Read this valve's module state."""
@@ -220,18 +182,21 @@ class CertusValve:
     async with self._device._operation_lock:
       await self._dispense_for(duration)
 
-  async def dispense(self, volume: float, *, correction_factor: float = 1.0) -> None:
+  async def dispense(self, volume: float, *, correction_factor: Optional[float] = None) -> None:
     """Dispense a calibrated volume in µL at the current position.
 
     Attach a :class:`ValveCalibration` to ``calibration`` first. The pressure
     setpoint and actual pressure must match that calibration within 0.01 bar.
     Supply the channel's CERTUS CONTROL volume correction factor when applicable;
-    the default 1.0 applies no correction. The factor is applied before interpolation.
+    omitting it uses the configured channel factor (initially 1.0). The factor is applied before interpolation.
     """
     if self.calibration is None:
       raise ValueError("Assign this valve's calibration before dispensing by volume")
     calibration = self.calibration
-    duration = calibration.duration_for_volume(volume, correction_factor=correction_factor)
+    duration = calibration.duration_for_volume(
+      volume,
+      correction_factor=self.correction_factor if correction_factor is None else correction_factor,
+    )
     async with self._device._operation_lock:
       pressure = await self._device.get_pressure()
       setpoint = await self._device._inco.get_number(_PRESSURE + ".Prop.SetPressure")
@@ -455,6 +420,114 @@ class CertusFlex:
     if actual != _HEAD_IDS[self.head]:
       raise CertusFlexError(f"Installed head ID {actual} does not match {self.head}")
 
+  async def configure_channel(
+    self,
+    channel: int,
+    *,
+    calibration: ValveCalibration,
+    fluid: str,
+    valve_serial: str,
+    correction_factor: float = 1.0,
+  ) -> None:
+    """Validate declared fluid/valve identity and installed head, then bind calibration.
+
+    Fluid and valve serial are operator declarations; the controller does not
+    independently identify the liquid or individual valve serial numbers.
+    """
+    if (
+      isinstance(channel, bool)
+      or not isinstance(channel, int)
+      or not 0 <= channel < len(self.valves)
+    ):
+      raise ValueError("Invalid channel")
+    calibration.validate_for(fluid=fluid, valve_serial=valve_serial)
+    if not 0.5 <= _finite(correction_factor, "correction_factor") <= 1.5:
+      raise ValueError("correction_factor must be between 0.5 and 1.5")
+    async with self._operation_lock:
+      await self.validate_head()
+      valve = self.valves[channel]
+      valve.calibration = calibration
+      valve.fluid, valve.valve_serial = fluid.strip(), valve_serial.strip()
+      valve.correction_factor = correction_factor
+
+  def save_configuration(self, path: str | Path) -> None:
+    """Save declared channel identities, correction factors, and curves for this device/head."""
+    if self.serial_number is None:
+      raise RuntimeError("Call setup before saving configuration")
+    channels = []
+    for index, valve in enumerate(self.valves):
+      if valve.calibration is not None:
+        if not valve.fluid or not valve.valve_serial:
+          raise ValueError("Use configure_channel before saving a reusable channel configuration")
+        valve.calibration.validate_for(fluid=valve.fluid, valve_serial=valve.valve_serial)
+        channels.append(
+          {
+            "channel": index,
+            "fluid": valve.fluid,
+            "valve_serial": valve.valve_serial,
+            "correction_factor": valve.correction_factor,
+            "calibration": valve.calibration.to_dict(),
+          }
+        )
+    Path(path).write_text(
+      json.dumps(
+        {
+          "version": 1,
+          "serial_number": self.serial_number,
+          "head": self.head,
+          "channels": channels,
+        },
+        indent=2,
+        allow_nan=False,
+      )
+      + "\n"
+    )
+
+  async def load_configuration(self, path: str | Path) -> None:
+    """Atomically load declared channel configuration after identity and head checks.
+
+    Loading makes no physical changes and does not set pressure. Channels absent
+    from the file are cleared so old calibration is not silently retained.
+    """
+    data = json.loads(Path(path).read_text())
+    if (
+      data.get("version") != 1
+      or self.serial_number is None
+      or data.get("serial_number") != self.serial_number
+      or data.get("head") != self.head
+    ):
+      raise ValueError("Configuration version, device serial, or head does not match")
+    prepared = {}
+    for entry in data["channels"]:
+      channel = entry["channel"]
+      if (
+        isinstance(channel, bool)
+        or not isinstance(channel, int)
+        or not 0 <= channel < len(self.valves)
+        or channel in prepared
+      ):
+        raise ValueError("Invalid or duplicated configured channel")
+      calibration = ValveCalibration.from_dict(entry["calibration"])
+      calibration.validate_for(fluid=entry["fluid"], valve_serial=entry["valve_serial"])
+      factor = entry["correction_factor"]
+      if not 0.5 <= _finite(factor, "correction_factor") <= 1.5:
+        raise ValueError("Invalid correction factor")
+      prepared[channel] = (calibration, entry["fluid"], entry["valve_serial"], factor)
+    async with self._operation_lock:
+      await self.validate_head()
+      for index, valve in enumerate(self.valves):
+        if index in prepared:
+          valve.calibration, valve.fluid, valve.valve_serial, valve.correction_factor = prepared[
+            index
+          ]
+        else:
+          valve.calibration, valve.fluid, valve.valve_serial, valve.correction_factor = (
+            None,
+            None,
+            None,
+            1.0,
+          )
+
   async def read_plate_registration(
     self,
     plate: Plate,
@@ -556,7 +629,7 @@ class CertusFlex:
     volume: float,
     *,
     channel: int,
-    correction_factor: float = 1.0,
+    correction_factor: Optional[float] = None,
     speed: Speed = "slow",
   ) -> None:
     """Move to a PLR well and deliver a calibrated volume in µL.
@@ -569,7 +642,10 @@ class CertusFlex:
     valve = self.valves[channel]
     if valve.calibration is None:
       raise ValueError("Assign the selected valve's calibration before dispensing")
-    duration = valve.calibration.duration_for_volume(volume, correction_factor=correction_factor)
+    duration = valve.calibration.duration_for_volume(
+      volume,
+      correction_factor=valve.correction_factor if correction_factor is None else correction_factor,
+    )
     valve._validate_duration(duration)
     if volume + well.tracker.get_used_volume() > well.max_volume:
       raise ValueError("Dispense would exceed the well capacity")
@@ -622,7 +698,10 @@ class CertusFlex:
           if calibration is None:
             raise ValueError(f"Channel {step.channel} needs a calibration")
           duration = calibration.duration_for_volume(
-            step.volume, correction_factor=step.correction_factor
+            step.volume,
+            correction_factor=self.valves[step.channel].correction_factor
+            if step.correction_factor is None
+            else step.correction_factor,
           )
           pressure = calibration.pressure
           total = totals.get(id(step.well), step.well.tracker.get_used_volume()) + step.volume
