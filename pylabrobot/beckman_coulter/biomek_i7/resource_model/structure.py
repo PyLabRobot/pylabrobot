@@ -41,7 +41,7 @@ class BiomekObstacle(Resource):
     y2: Optional[float] = None,
     z1: Optional[float] = None,
     z2: Optional[float] = None,
-    category: str = "instrument_structure",
+    category: str = "boundary",
     model: Optional[str] = None,
   ):
     super().__init__(
