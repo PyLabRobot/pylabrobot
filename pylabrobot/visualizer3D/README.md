@@ -359,6 +359,7 @@ The sets in `constants.js`, and `GROUND` in `drawn.js`:
 | set | categories | where it matters |
 |---|---|---|
 | `MOVING_PARTS` | `x_arm`, `arm`, `gripper`, `head`, `channel` | drawn as an open frame with a reference line in a group of its own (`marks.js`); no box fill or generic outline (`boxes.js`); `MOVING_OPACITY`, and the carried layer in a plan (`appearance.js`); `tracker.x` and `locations` glide it (`live.js`); takes a click on its rim (`tools.js`); everything under it travels (`drawn.js`) |
+| `BOUNDARIES` | `boundary` | a collision box with no shape of its own: outline only, no fill, in both views (`boxes.js`, `appearance.js`); the tree's dot is the outline's grey |
 | `PICKABLE_PARTS` | `pipette_channel` | a click selects it although it has children |
 | `NO_REFERENCE_MARK` | `pipette_channel` | its `reference_point` gets no mark |
 | `TREE_HIDDEN` | `well`, `tip_spot`, `tube` | no tree row; the parent's row counts them |
@@ -367,7 +368,7 @@ The sets in `constants.js`, and `GROUND` in `drawn.js`:
 | `SEARCH_CONTAINERS` | `well`, `tube`, `trough`, `container`, `petri_dish` | the search "Wells" filter |
 | `CONTAINERS` | `plate`, `tip_rack`, `tube_rack`, `plate_adapter`, `plate_holder`, `resource_holder`, `trough`, `trash` | keep their walls at `SHELL_OPACITY` while their contents are drawn |
 | `CATEGORY_OPACITY` | `tip_rack` 0.7, `plate` 0.25 | the box's own opacity |
-| `RESOURCE_COLORS` | 31 categories and `default` | the box colour and the tree's dot |
+| `RESOURCE_COLORS` | 32 categories and `default` | the box colour and the tree's dot |
 | `GROUND` | `facility`, `deck` | `SPACE_OPACITY`, out of the depth buffer |
 
 Categories named directly in the code:
