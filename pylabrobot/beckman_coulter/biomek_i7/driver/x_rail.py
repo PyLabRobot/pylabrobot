@@ -7,9 +7,10 @@ range; if it does not, the other pod is moved out of the way first and the mover
 range counts its bridge, its pipettor and its gripper, turned and opened as it is, with what it
 holds (`driver/pod_geometry.py`).
 
-`XRail` applies the same rule. It differs in three ways:
-- **It refuses** a move into where the other pod stands, or will stand once its move ends,
-  rather than moving the other pod out of the way.
+`XRail` applies the same rule; the pod moves an idle other pod out of the way first, as Biomek's
+clearing of the way (`Pod._make_way`). The rail itself differs in three ways:
+- **It refuses** a move into where the other pod stands, or will stand once its move ends: when
+  the other pod is busy (a move, a step or a travel of its own), or clearing the way is off.
 - **It waits** when a move conflicts only with a move of the other pod still running, then
   checks again: the other pod is passing through, not staying (Biomek runs such moves together).
 - **It reserves** every move in flight, so two moves started together cannot pass through each

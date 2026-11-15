@@ -87,6 +87,12 @@ RAIL_AXES = ("X", "GR", "GG")
 # parts (`planning.check`).
 OWN_COLLISION_AXES = {"GY", "GZ", "GR", "GG"}
 
+# How far (cm) Biomek's planner keeps a pod's bridge from the other pod's: one 1/16 cm grid cell
+# and 1/64 cm.
+OTHER_POD_GAP = 1 / 16 + 1 / 64
+
+# Where the other pod's wall is open (cm): Biomek's boxes stand for unbounded at 500 cm.
+WALL_OPEN = 500.0
 
 # A planned move (axis targets, counts) and the deck positions it leaves straight up (its way out of
 # them, made with them exempt); nothing for every other move.
@@ -183,8 +189,11 @@ class Pod:
     # The deck positions the operation under way works in (`working_at`): the deck check leaves
     # their boxes out, whole, as Biomek's moves name their target position.
     self._working_at: Tuple[str, ...] = ()
+    # How many operations are under way on the pod (a planned one, `_planning`, or a step's own
+    # moves, `working_at`): while any is, the other pod's clearing of its way does not move it.
+    self._busy = 0
     # Held for each move (`move_axes`): one move at a time on the pod's board, whichever task
-    # sends it.
+    # sends it (the other pod's clearing of its way moves this one from its own).
     self._motion = asyncio.Lock()
     # Where this driver last put each axis, as the Master Controller keeps it (`cpositions`):
     # (position, adjusted); position None until read. Starts as after homing.
@@ -460,10 +469,12 @@ class Pod:
         node = node.parent
     before = self._working_at
     self._working_at = (*before, *names)
+    self._busy += 1
     try:
       yield
     finally:
       self._working_at = before
+      self._busy -= 1
 
   def _check_world_collision(
     self, start: Mapping[str, motion.CPos], end: Mapping[str, motion.CPos]
@@ -590,26 +601,55 @@ class Pod:
       return None
     return other
 
+  def _pushable(self, other: "Pod") -> bool:
+    """Whether planning may count on moving `other` out of the way: clearing the way on, and
+    `other` neither in an operation nor moving (a busy pod is planned around where it stands)."""
+    assert self.driver is not None
+    return self.driver.make_way and not other._busy and not other._motion.locked()
+
+  def _range_at_limit(self, x: float) -> g.Range:
+    """The X this pod takes up with X at `x`, its gripper at GR 0 and GG 0 holding what it holds,
+    as Biomek's planner takes it at its X limit."""
+    assert self.rail is not None
+    gripper = g.GripperPose(0.0, 0.0, self._held_labware) if self.gripper is not None else None
+    return self.rail.range_at(self.side, RailPose(x, gripper))
+
   def _other_pod_wall(self) -> Optional[g.Range]:
-    """The other pod as Biomek's planner walls it off (deck X, cm): its whole range where it
-    stands, as the rail guard counts it. None without another pod, or with its position not
-    known."""
+    """The other pod as Biomek's planner walls it off (deck X, cm; open beyond its far side): when
+    it can be moved out of the way (`_pushable`), its bridge at the end of its travel, 1/16 + 1/64
+    cm off, or this pod's range at its own X limit if that comes first; otherwise its whole range
+    where it stands. None without another pod, or with its position not known."""
     other = self._other_pod()
     if other is None:
       return None
-    assert self.rail is not None
-    return self.rail.occupied(other.side)
+    assert self.rail is not None and other.declared is not None
+    if not self._pushable(other):
+      return self.rail.occupied(other.side)
+    d, od = self._require_declared(), other.declared
+    if self.side == "left":
+      edge = g.bridge_x_range(od.geometry, od.limits["X"][1])[0] - OTHER_POD_GAP
+      return min(edge, self._range_at_limit(d.limits["X"][1])[1]), WALL_OPEN
+    edge = g.bridge_x_range(od.geometry, od.limits["X"][0])[1] + OTHER_POD_GAP
+    return -WALL_OPEN, max(edge, self._range_at_limit(d.limits["X"][0])[0])
 
   def _planning_x_limits(self) -> Optional[Tuple[float, float]]:
-    """Where Biomek's planner lets X go (cm), from the other pod: as far as touching the other
-    pod's range where it stands (this pod's gripper fully closed, turned towards it), never less
-    than where this pod is. None: its travel."""
+    """Where Biomek's planner lets X go (cm), from the other pod: when it can be moved out of the
+    way, this pod's bridge stays 1/16 + 1/64 cm from the other's at the end of its travel;
+    otherwise as far as touching the other pod's range where it stands (this pod's gripper fully
+    closed, turned towards it), never less than where this pod is. None: its travel."""
     other = self._other_pod()
     if other is None:
       return None
-    assert self.rail is not None
-    d = self._require_declared()
+    assert self.rail is not None and other.declared is not None
+    d, od = self._require_declared(), other.declared
     low, high = d.limits["X"]
+    reach = d.geometry.bridge_to_head_x_offset + d.geometry.mandrel1_x_offset
+    if self._pushable(other):
+      if self.side == "left":
+        edge = g.bridge_x_range(od.geometry, od.limits["X"][1])[0]
+        return low, min(high, edge + reach - d.geometry.bridge_x_span - OTHER_POD_GAP)
+      edge = g.bridge_x_range(od.geometry, od.limits["X"][0])[1]
+      return max(low, edge + reach + OTHER_POD_GAP), high
     taken = self.rail.occupied(other.side)
     counts = self._cpositions["X"][0]
     if taken is None or counts is None:
@@ -713,6 +753,94 @@ class Pod:
       gripper = g.GripperPose(d.to_value("GR", gr), d.to_value("GG", gg), what)
     return RailPose(d.to_value("X", x), gripper)
 
+  async def _make_way(self, start: RailPose, end: RailPose) -> None:
+    """Biomek's clearing of the way, before a move that changes what the pod takes up along the rail: when
+    the X it sweeps from `start` to `end` meets the other pod's range (edges on the 1/16 cm grid,
+    as the rail guard has them), the other pod moves away on its own first (`_step_aside`). Only an
+    idle other pod moves (`_idle`); otherwise, or with the driver's `make_way` off, the rail
+    guard decides (it waits for a move in flight to end, else refuses).
+
+    Raises:
+      RailCollisionError: if the other pod has no way out of the zone; nothing of this move is
+        sent.
+    """
+    driver, rail, other = self.driver, self.rail, self._other_pod()
+    if driver is None or rail is None or other is None or not driver.make_way:
+      return
+    await rail.ensure_known(other.side)  # as the rail guard reads it: no motion
+    taken = rail.occupied(other.side)
+    zone = rail.swept(self.side, start, end)
+    if taken is None or not g.grid_overlap(zone, taken) or other._busy or other._motion.locked():
+      return
+    async with other._motion:  # as before any move of it: what it has not read yet, read
+      await other._read_unknown_positions()
+    if other._idle():
+      await other._step_aside(zone)
+
+  def _idle(self) -> bool:
+    """Whether the other pod's clearing of its way may move this pod: no move of its own running or waiting
+    (`_motion`), no operation under way (`_busy`: a travel, a step), no prime running, nothing in
+    flight on the rail, its pose known and clear of every deck position (not down in a well or a
+    wash station)."""
+    if self._motion.locked() or self._busy or self.declared is None:
+      return False
+    if self.pipettes is not None and self.pipettes._priming is not None:
+      return False
+    if self.rail is not None and self.rail.in_flight(self.side):
+      return False
+    pose = self._pose()
+    if pose is None:
+      return False
+    world = self._world(self.pod_number)
+    if world is None:
+      return True  # no deck to be in: the move aside rises as high as it goes first
+    out = check.escape(self.declared, pose, world)
+    return out is not None and not out.holders
+
+  async def _step_aside(self, zone: g.Range) -> None:
+    """Move this pod out of the X `zone` the other pod's move needs, as Biomek's clearing of the way moves it:
+    away from the other pod, so that its near edge is at the next 1/16 cm grid line past the zone
+    plus 1/64 cm, its gripper turned to the nearest quarter turn; if that has no path, once more
+    with the gripper at 0 degrees (90 if the nearest quarter was 0). A planned move (`_move_over`)
+    whose X stays on this pod's side of where it stands; what it holds moves at its labware
+    speed.
+
+    Raises:
+      RailCollisionError: if neither way out has a path; the pod may have risen.
+    """
+    self._tell("step aside", zone)
+    d = self._require_declared()
+    rail = self.rail
+    assert rail is not None
+    counts = {n: self._cpositions[n][0] for n in RAIL_AXES}
+    if any(c is None for c in counts.values()):
+      raise RailCollisionError(f"{self}: its position is not known, so it cannot move aside")
+    x, gr, gg = (d.to_value(n, cast(int, counts[n])) for n in RAIL_AXES)
+    speed = 1000
+    if self.gripper is not None and self.gripper._held is not None:
+      speed = self.gripper._held_speed
+    refused: List[str] = []
+    ways = destinations.step_aside(
+      d, self.side, x, gr, gg, self._held_labware, zone,
+      lambda at, gripper: rail.range_at(self.side, RailPose(at, gripper)),
+    )  # fmt: skip
+    for turn, target, bounds in ways:
+      if not bounds[0] <= target <= bounds[1]:
+        refused.append(f"GR {turn:g}: X {target:.3f} is beyond its travel")
+        continue
+      targets = {"X": d.to_counts("X", target)}
+      if d.gripper_model:
+        targets["GR"] = d.to_counts("GR", turn)
+      logger.info(
+        "%s moves aside to X %.3f, GR %g (clearing the way)", self.component, target, turn
+      )
+      try:
+        await self._move_over(targets, speed, x_bounds=bounds)
+        return
+      except (RailCollisionError, check.PodCollisionError) as e:
+        refused.append(f"GR {turn:g}: {e}")
+    raise RailCollisionError(f"{self} cannot move out of the other pod's way: {'; '.join(refused)}")
+
   def _require_declared(self) -> PodConfiguration:
     if self.declared is None:
       raise RuntimeError(f"{self} has no declared configuration")
@@ -783,7 +911,8 @@ class Pod:
 
     A move of X, GR or GG, or the first move since the gripper took or let go of labware, is
     checked against the other pod first (`driver/x_rail.py`). When it would run into the other
-    pod it is refused, and nothing is sent. One
+    pod and that pod is idle, the other pod moves aside first, as Biomek's clearing of the way
+    (`_make_way`; the driver's `make_way`); otherwise it is refused, and nothing is sent. One
     crossing only the path of the other pod's move in flight waits for that move to finish.
     Whether the pod may move now (interlock armed) is the caller's to decide.
 
@@ -851,6 +980,7 @@ class Pod:
           f"{self}: force {force} on {name}: not a motor, or outside 0..{p.MAX_FORCE}"
         )
     uses_pumps = any(self.axis(n).is_pump for n in targets)
+    pushing = False  # while the other pod moves aside: what fails there is not this pod's move
     try:
       await self._read_unknown_positions(pumps=uses_pumps)
       motions, timeout_ms, after = motion.plan_move(
@@ -880,6 +1010,9 @@ class Pod:
         if "GG" in forces:  # stops on what it grips, short of its target: count the wider end
           gg1 = max(gg1, gg0)
         end = self._rail_pose(x1, gr1, gg1, held)
+        pushing = True
+        await self._make_way(start, end)
+        pushing = False
         async with self.rail.moving(self.side, start, end):
           completions = await self._send_motions(motions, timeout_ms, forces, sensors)
         self._rail_held = held
@@ -888,6 +1021,8 @@ class Pod:
     except (RailCollisionError, check.PodCollisionError):
       raise  # refused before anything was sent: every position is as it was
     except BaseException as e:
+      if pushing:
+        raise  # the other pod's move aside failed (it says so itself); this pod sent nothing
       # As the Master Controller after a failed command, and its reply, so a
       # session's log reads as Biomek's: "#AM The left X motion failed: ...".
       self._forget_positions()
@@ -1038,11 +1173,10 @@ class Pod:
     await self._read_unknown_positions()
 
   async def move_aside(self) -> None:
-    """Fold the gripper (drawn in to its park GY, then turned to its park GR with what it holds,
-    and closed to its park width when empty), then take the pod to the end of its X travel on its
-    own side (the left pod to its lowest X, the right pod to its highest), leaving the other pod
-    the most of the rail. Biomek moves a pod out of the way itself; the rail guard here refuses
-    instead (`x_rail.py`), so a caller makes room with this.
+    """Fold the gripper where the pod stands: drawn in to its park GY, then turned to its park GR
+    (with what it holds), and closed to its park width when empty. Its range along the rail is
+    then its smallest; the X room another pod's move needs is made by clearing the way (`_make_way`), which moves an
+    idle pod aside on its own (`_make_way`).
 
     Raises:
       RuntimeError: without a declared configuration.
@@ -1059,8 +1193,6 @@ class Pod:
     if self._held_labware is None and "GG" in d.park and d.gripper_model:
       if self._cpositions["GG"][1] > d.to_counts("GG", d.park["GG"]):
         await self._close_gripper()  # open fingers reach further: closed, as parked
-    low, high = d.limits["X"]
-    await self._move_over({"X": d.to_counts("X", low if self.side == "left" else high)})
 
   async def _move_over(
     self,
@@ -1322,10 +1454,12 @@ class Pod:
     operation it is part of."""
     before = self._working_at
     self._working_at = ()
+    self._busy += 1
     try:
       yield
     finally:
       self._working_at = before
+      self._busy -= 1
 
   async def _rise(self, heights: Mapping[str, float], speed: int) -> None:
     """Biomek's planned move to safe heights: the axes below their `heights` (cm) up to them,

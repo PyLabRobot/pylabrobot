@@ -30,13 +30,14 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     pipettes._set_tips({2: biomek_tip("T230", "t")})
     self.assertEqual((await pipettes.sense_tip_presence())[:3], ["unloaded", "loaded", "unloaded"])
 
-  async def test_move_aside_folds_the_gripper_and_leaves_the_rail(self) -> None:
+  async def test_move_aside_folds_the_gripper_where_the_pod_stands(self) -> None:
     pod = self.biomek.left_x_arm
     assert pod is not None and pod.declared is not None
     d = pod.declared
     await pod.move_axes({"GR": d.to_counts("GR", 0.0), "GY": d.to_counts("GY", 40.0)})
+    x = pod.cpositions["X"][1]
     await pod.move_aside()
-    self.assertEqual(pod.cpositions["X"][1], d.to_counts("X", d.limits["X"][0]))
+    self.assertEqual(pod.cpositions["X"][1], x)  # the X room is made by clearing the way
     self.assertEqual(pod.cpositions["GY"][1], d.to_counts("GY", d.park["GY"]))
     self.assertEqual(pod.cpositions["GR"][1], d.to_counts("GR", d.park["GR"]))
 

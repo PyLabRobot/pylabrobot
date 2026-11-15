@@ -69,8 +69,11 @@ the MC's recipe (`driver/recipes/homing.py`), its targets from the motor record.
 **I7. Pod against pod is the driver's job.** Nothing below the driver stops the pods colliding.
 Before a pod moves, its swept X range (bridge, pipettor and gripper as posed, with what it holds)
 must clear the other pod's range and any move it has in flight, or the move is refused before
-anything is sent (`driver/x_rail.py`, Biomek's own rule, on its 1/16 cm grid). The guard uses
-the configuration only, so it holds without a deck.
+anything is sent (`driver/x_rail.py`, Biomek's own rule, on its 1/16 cm grid). Before that check, as
+Biomek clears the way, an idle other pod moves aside just far enough: its near edge to the next
+grid line past the zone the move needs, plus 1/64 cm, its gripper turned to a quarter turn. A busy
+one is not moved, and the move is refused. The guard uses the configuration only, so it holds
+without a deck.
 
 ## The deck and the device
 

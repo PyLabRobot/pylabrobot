@@ -199,17 +199,21 @@ class OffQuarterTests(PodMoveTest):
 class OtherPodTests(PodMoveTest):
   """The other pod in planning (Biomek's planner, spec §6.2): a wall over all Y and Z."""
 
-  async def test_the_other_pod_is_walled_where_it_stands(self) -> None:
+  async def test_a_busy_pod_is_walled_where_it_stands(self) -> None:
     driver = await self.homed()
     left, right = self.pod(driver, "left"), self.pod(driver, "right")
+    driver.make_way = True
     await right._read_unknown_positions()
     assert left.rail is not None
+    with right.working_at("P1"):  # in an operation: not to be moved
+      self.assertEqual(left._other_pod_wall(), left.rail.occupied("right"))
+    driver.make_way = False  # clearing the way off: the same
     self.assertEqual(left._other_pod_wall(), left.rail.occupied("right"))
 
   async def test_the_wall_is_in_the_planning_world_only(self) -> None:
     driver = await self.homed()
     left = self.pod(driver, "left")
-    await self.pod(driver, "right")._read_unknown_positions()
+    driver.make_way = True
     driver.obstacles = lambda pod: obstacles.Obstacles()
     world = left._planning_world()
     assert world is not None

@@ -183,10 +183,11 @@ class RailTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RailOnTheInstrumentTests(SimulatedRunTest):
-  """The rail guard on the instrument: a move into the other pod is refused."""
+  """The rail guard on its own: with clearing the way off, a move into the other pod is refused."""
 
   async def test_a_move_into_the_other_pod_sends_no_motion(self) -> None:
     driver = await self.start(True)
+    driver.make_way = False
     await driver.home()
     assert driver.left_x_arm and driver.right_x_arm
     await driver.right_x_arm.move_axes({"X": -100000})
@@ -201,6 +202,7 @@ class RailOnTheInstrumentTests(SimulatedRunTest):
 
   async def test_turning_a_gripper_into_the_other_pod_sends_no_motion(self) -> None:
     driver = await self.start(True)
+    driver.make_way = False
     await driver.home()
     assert driver.left_x_arm and driver.right_x_arm
     left, right = driver.left_x_arm, driver.right_x_arm
@@ -231,6 +233,94 @@ class RailOnTheInstrumentTests(SimulatedRunTest):
     left, right = driver.rail.occupied("left"), driver.rail.occupied("right")
     assert left is not None and right is not None
     self.assertLess(left[1], right[0])
+
+
+class ClearTheWayTests(SimulatedRunTest):
+  """Biomek's clearing of the way: an idle other pod in a move's way moves aside on its own first, to the
+  next 1/16 cm grid line past the move's zone plus 1/64 cm, its gripper turned to the nearest
+  quarter."""
+
+  async def pods(self):  # type: ignore[no-untyped-def]
+    driver = await self.start(True)
+    await driver.home()
+    assert driver.left_x_arm and driver.right_x_arm and driver.rail
+    return driver, driver.left_x_arm, driver.right_x_arm, driver.rail
+
+  async def test_the_other_pod_moves_to_the_grid_edge_of_the_zone(self) -> None:
+    driver, left, right, rail = await self.pods()
+    await right.move_axes({"X": -100000})
+    start = rail.occupied("left")
+    await left.move_axes({"X": 200000})
+    assert start is not None
+    zone = g.union(start, rail.occupied("left") or start)
+    edge = (g.grid_cell(zone[1]) + 1) / 16 + 1 / 64
+    low = rail.occupied("right")
+    assert low is not None
+    self.assertAlmostEqual(low[0], edge, delta=1 / 2560)  # within a count of X
+    self.assertEqual(left.cpositions["X"][1], 200000)
+    self.assertFalse(g.grid_overlap(rail.occupied("left") or zone, low))
+
+  async def test_a_turn_towards_the_other_pod_moves_it_aside(self) -> None:
+    driver, left, right, rail = await self.pods()
+    await left.move_axes({"X": int((70 - 10.519) * 2560)})
+    await right.move_axes({"X": int((110 - 146.40669375) * 2560)})
+    before = left.cpositions["X"][1]
+    await right.move_axes({"GR": RIGHT.to_counts("GR", 180.0)})
+    self.assertLess(left.cpositions["X"][1], before)  # the left pod went left, out of the turn
+    left_range, right_range = rail.occupied("left"), rail.occupied("right")
+    assert left_range is not None and right_range is not None
+    self.assertFalse(g.grid_overlap(left_range, right_range))
+
+  async def test_the_other_pods_gripper_turns_to_the_nearest_quarter(self) -> None:
+    driver, left, right, rail = await self.pods()
+    await right.move_axes({"X": -100000, "GR": RIGHT.to_counts("GR", 100.0)})
+    await left.move_axes({"X": 200000})
+    self.assertAlmostEqual(RIGHT.to_value("GR", right.cpositions["GR"][1]), 90.0, delta=0.01)
+
+  async def test_a_busy_pod_is_not_moved(self) -> None:
+    driver, left, right, rail = await self.pods()
+    await right.move_axes({"X": -100000})
+    with right.working_at("P1"):  # a step of its own under way
+      with self.assertRaises(RailCollisionError):
+        await left.move_axes({"X": 200000})
+    self.assertEqual(right.cpositions["X"][1], -100000)
+
+  async def test_no_way_out_is_refused(self) -> None:
+    driver, left, right, rail = await self.pods()
+    self.mark(driver)
+    with self.assertRaisesRegex(RailCollisionError, "cannot move out of the other pod's way"):
+      await left.move_axes({"X": LEFT.to_counts("X", LEFT.limits["X"][1])})
+    sent = {m[4] for m in self.usb(driver, "multichannel").requests[self.marks["multichannel"] :]}
+    self.assertNotIn(0x50, sent)  # the left pod sent no Move All
+
+  async def test_labware_taken_counts_from_the_next_move_on(self) -> None:
+    # What the gripper takes changes the pod's range: the rail counts it only once a move with
+    # it is checked (the grip's close, or the first move after), which moves the other pod aside.
+    driver, left, right, rail = await self.pods()
+    await left.move_axes({"X": int((70 - 10.519) * 2560), "GR": LEFT.to_counts("GR", 0.0)})
+    await right.move_axes(
+      {"X": int((112 - 146.40669375) * 2560), "GR": RIGHT.to_counts("GR", 180.0)}
+    )
+    before, left_x = rail.occupied("right"), left.cpositions["X"][1]
+    assert right.gripper is not None
+    right.gripper.set_held_labware(g.HeldLabware(length=12.776, width=8.548, height=0.9))
+    self.assertEqual(rail.occupied("right"), before)  # not yet: no move has been checked with it
+    await right.move_axes({"GZ": right.cpositions["GZ"][1] - 100})
+    grown = rail.occupied("right")
+    assert before is not None and grown is not None
+    self.assertLess(grown[0], before[0])  # the lid reaches further left
+    self.assertLess(left.cpositions["X"][1], left_x)  # and the left pod moved aside for it
+    left_range = rail.occupied("left")
+    assert left_range is not None
+    self.assertFalse(g.grid_overlap(left_range, grown))
+
+  async def test_off_it_is_the_rail_guards_refusal(self) -> None:
+    driver, left, right, rail = await self.pods()
+    driver.make_way = False
+    await right.move_axes({"X": -100000})
+    with self.assertRaises(RailCollisionError):
+      await left.move_axes({"X": 200000})
+    self.assertEqual(right.cpositions["X"][1], -100000)
 
 
 if __name__ == "__main__":

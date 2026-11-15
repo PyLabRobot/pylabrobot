@@ -162,6 +162,10 @@ class BiomekI7Driver:
     self.chassis: Optional[Chassis] = None
     # The shared X rail (design.md I7), built at discovery from the declared pod geometry.
     self.rail: Optional[XRail] = None
+    # Biomek's clearing of the way (`Pod._make_way`): before a pod's move along the rail, an idle other pod
+    # in its way moves aside on its own, as Biomek's default. Off: such a move is refused by the
+    # rail guard instead.
+    self.make_way = True
     # The pods, named as STAR names its X-arms: each fills an X-arm's slot (design.md, The pods).
     self.left_x_arm: Optional[Pod] = None
     self.right_x_arm: Optional[Pod] = None
