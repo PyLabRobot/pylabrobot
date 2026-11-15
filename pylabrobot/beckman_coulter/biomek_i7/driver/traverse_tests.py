@@ -2,35 +2,17 @@
 keeps per pod, and the deck model's clearance."""
 
 import unittest
+from typing import List
 
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   generic_configuration,
   generic_deck,
 )
-from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
-
-
-class ObstacleTests(unittest.TestCase):
-  def setUp(self) -> None:
-    self.obstacles = generic_configuration().pod("left").obstacles
-
-  def test_the_pump_bank_is_cleared_from_above(self) -> None:
-    # The pump bank: X from 121.044, Y to 13.447 cm, up to Z 37.069, buffer 0.2.
-    self.assertAlmostEqual(g.obstacle_clearance(self.obstacles, (125, 130), (5, 12)).height, 37.269)
-    # Elsewhere only the floor (Z to 0, buffer 0.2).
-    self.assertAlmostEqual(g.obstacle_clearance(self.obstacles, (50, 60), (30, 40)).height, 0.2)
-
-  def test_walls_and_ceilings_are_not_cleared(self) -> None:
-    self.assertEqual(
-      g.obstacle_clearance(self.obstacles, (157, 160), (30, 40)).walls, ("RightShield",)
-    )
-    # The I-beam (from Z 37.069 behind Y 11.092) bounds the pod's body: under it is refused.
-    self.assertEqual(g.obstacle_clearance(self.obstacles, (50, 60), (5, 10)).walls, ("IBeam",))
-    # Just clear of it, with its 0.2 cm buffer.
-    self.assertEqual(g.obstacle_clearance(self.obstacles, (50, 60), (11.3, 20)).walls, ())
 
 
 class MoveOverTests(PodMoveTest):
@@ -62,58 +44,127 @@ class MoveOverTests(PodMoveTest):
     pod = self.pod(driver, "left")
     d = pod.declared
     assert d is not None
-    self.mark(driver)
-    with self.assertRaisesRegex(ValueError, "below"):
-      await pod._move_over({"X": 100000}, minimum_traverse_height=25.0, clearance=30.0)
-    self.assertNotIn("Move All", [n for n, _ in self.sent(driver, "multichannel")])
-    await pod._move_over(
-      {"X": 100000},
-      minimum_traverse_height=25.0,
-      clearance=30.0,
-      allow_below_clearance=True,
-      z_final=20.0,
-    )
+    await pod._move_over({"X": 100000}, minimum_traverse_height=25.0, z_final=20.0)
     self.assertEqual(pod.cpositions["Z"][1], d.to_counts("Z", 20.0))
     with self.assertRaisesRegex(ValueError, "z_final"):
       await pod._move_over({"Z": 0})
 
-  async def test_the_default_is_biomeks_safe_height_when_set(self) -> None:
+  async def test_a_tools_default_is_safe_max_or_a_height(self) -> None:
+    driver = await self.homed()
+    pod = self.pod(driver, "left")
+    d = pod.declared
+    assert d is not None and pod.head96 is not None and pod.gripper is not None
+    # From the instrument's `AlwaysMaxZ` (unset here): Biomek's safe height for both tools.
+    self.assertEqual(pod.head96.default_minimum_traverse_height, "safe")
+    self.assertEqual(pod.gripper.default_minimum_traverse_height, "safe")
+    # With no deck to reckon from (no device), "safe" travels as high as it goes.
+    self.assertEqual(pod._traverse_heights()["Z"], pod._max_traverse_heights()["Z"])
+    pod.head96.default_minimum_traverse_height = 350.0  # mm of the head's lowest point
+    await pod.move_axes({"Z": -20000})
+    await pod._move_over({"X": 100000})
+    self.assertEqual(pod.cpositions["Z"][1], d.to_counts("Z", 35.0))
+    pod.head96.default_minimum_traverse_height = 990.0  # above the top: kept to the top of travel
+    self.assertEqual(pod._traverse_heights()["Z"], pod._max_traverse_heights()["Z"])
+    pod.head96.default_minimum_traverse_height = "max"
+    self.assertEqual(pod._traverse_heights()["Z"], pod._max_traverse_heights()["Z"])
+    with self.assertRaises(ValueError):
+      pod.head96.default_minimum_traverse_height = "low"  # type: ignore[assignment]
+
+
+def record(pod) -> List[dict]:  # type: ignore[no-untyped-def]
+  """The targets of each move `pod` makes from now on."""
+  moves: List[dict] = []
+  original = pod.move_axes
+
+  async def move_axes(targets, speed=1000, **kwargs):  # type: ignore[no-untyped-def]
+    moves.append(dict(targets))
+    return await original(targets, speed, **kwargs)
+
+  pod.move_axes = move_axes
+  return moves
+
+
+class TurnTests(PodMoveTest):
+  """The gripper's turn: to the angle given, as Biomek's GR is a line (no whole-turn twin)."""
+
+  async def test_a_turn_goes_to_the_angle_given(self) -> None:
     driver = await self.homed()
     pod = self.pod(driver, "left")
     d = pod.declared
     assert d is not None
-    self.assertIsNone(pod.default_minimum_traverse_height)  # this instrument: -100000, unset
-    pod.default_minimum_traverse_height = 350.0  # mm
-    await pod.move_axes({"Z": -20000})
-    await pod._move_over({"X": 100000})
-    self.assertEqual(pod.cpositions["Z"][1], d.to_counts("Z", 35.0))
-    pod.default_minimum_traverse_height = 990.0  # mm, above the top: kept to the top of travel
-    self.assertEqual(pod._traverse_heights()["Z"], d.limits["Z"][1] - 0.1)
+    await pod.move_axes({"GR": d.to_counts("GR", 90.0)})
+    moves = record(pod)
+    # To -180: three quarters the long way round, not 180 a quarter turn away.
+    await pod._travel_gripper({"GR": d.to_counts("GR", -180.0)})
+    self.assertEqual([m["GR"] for m in moves if "GR" in m], [d.to_counts("GR", -180.0)])
 
-
-class DeckClearanceTests(PodMoveTest):
-  async def test_the_tallest_labware_under_the_path(self) -> None:
+  async def test_a_whole_turn_apart_is_another_angle(self) -> None:
     driver = await self.homed()
-    lh = BiomekI7(driver=driver, deck=generic_deck())
-    site = lh.deck.get_position("P6")
-    plate = cor_96_wellplate_360uL_Fb("plate")
-    site.assign_child_resource(plate)
-    left = self.pod(driver, "left")
-    assert left.declared is not None
-    loc = site.get_location_wrt(lh.deck)
-    # Biomek X/Y of the position's middle, cm.
-    x = (loc.x + site.get_size_x() / 2 - 100.0) / 10  # deck x = Biomek X + FRAME_X (10 cm)
-    y = (700.0 - (loc.y + site.get_size_y() / 2)) / 10  # deck y = FRAME_Y (70 cm) - Biomek Y
-    top = (loc.z + plate.get_size_z()) / 10
-    safe = left.declared.geometry.additional_safe_height
-    self.assertAlmostEqual(
-      lh._traverse_clearance("left", (x - 1, x + 1), (y - 1, y + 1)), top + safe, places=4
+    pod = self.pod(driver, "left")
+    d = pod.declared
+    assert d is not None
+    await pod.move_axes({"GR": d.to_counts("GR", -270.0)})
+    self.assertTrue(pod._at_angle(d.to_counts("GR", -270.0)))
+    self.assertFalse(pod._at_angle(d.to_counts("GR", 90.0)))
+
+
+class SpanTests(PodMoveTest):
+  """Before a gripper approach a Span-8 narrows its probes' span, as Biomek's: to its minimum,
+  with the probes raised first only when that is not clear."""
+
+  async def test_the_span_is_narrowed_before_the_gripper_travels(self) -> None:
+    driver = await self.homed()
+    pod = self.pod(driver, "right")
+    d = pod.declared
+    assert d is not None
+    await pod.move_axes({"S": d.to_counts("S", 20.0)})
+    moves = record(pod)
+    await pod._travel_gripper({"GY": d.to_counts("GY", 50.0)})
+    self.assertEqual(moves[0], {"S": d.to_counts("S", d.limits["Span"][0])})
+    self.assertEqual(set(moves[-1]), {"GY"})
+    moves.clear()
+    await pod._travel_gripper({"GY": d.to_counts("GY", 52.0)})  # at its minimum already
+    self.assertFalse(any("S" in m for m in moves))
+
+  async def test_the_probes_rise_first_when_narrowing_is_not_clear(self) -> None:
+    driver = await self.homed()
+    pod = self.pod(driver, "right")
+    d = pod.declared
+    assert d is not None
+    await pod.move_axes({"S": d.to_counts("S", 20.0), "Z1": d.to_counts("Z1", 20.0)})
+    tops = pod._max_traverse_heights()
+    clear = pod._clear
+    # Narrowing is not clear until the probes are at the top.
+    pod._clear = lambda moves, start=None: (
+      (  # type: ignore[method-assign]
+        "S" not in moves[0] or pod.cpositions["Z1"][1] >= d.to_counts("Z1", tops["Z1"])
+      )
+      and clear(moves, start)
     )
-    self.assertAlmostEqual(
-      lh._traverse_clearance("left", (x - 1, x + 1), (y - 1, y + 1), tip_length=9.0),
-      top + safe + 9.0,
-      places=4,
-    )
+    moves = record(pod)
+    await pod._travel_gripper({"GY": d.to_counts("GY", 50.0)})
+    self.assertEqual(moves[0], {"Z1": d.to_counts("Z1", tops["Z1"])})  # the one below the top
+    self.assertEqual(moves[1], {"S": d.to_counts("S", d.limits["Span"][0])})
+
+
+class SafeHeightTests(unittest.TestCase):
+  """Biomek's travel height: the tallest deck item under the swept footprint (`travel`)."""
+
+  def test_a_move_in_y_covers_its_bounding_box(self) -> None:
+    item = ((10.0, 11.0, 30.0, 31.0), 7.0)
+    self.assertEqual(traverse.covered((0, 2, 0, 2), (0, 2, 40, 42), [item]), [])
+    self.assertEqual(traverse.covered((9, 11, 0, 2), (9, 11, 40, 42), [item]), [7.0])
+
+  def test_a_diagonal_covers_its_band_not_its_bounding_box(self) -> None:
+    # From (0..2, 0..2) to (40..42, 40..42): a box in the bounding box's far corner is off the band.
+    off, on = ((35.0, 36.0, 0.0, 1.0), 5.0), ((20.0, 21.0, 20.0, 21.0), 6.0)
+    self.assertEqual(traverse.covered((0, 2, 0, 2), (40, 42, 40, 42), [off, on]), [6.0])
+
+  def test_touching_counts(self) -> None:
+    # The footprint grows by 1-3 mm (its spans + 2 mm, rounded): an item 1 mm off still counts.
+    self.assertEqual(traverse.covered((0, 2, 0, 2), (0, 2, 0, 2), [((2.1, 3, 0, 2), 4.0)]), [4.0])
+    self.assertEqual(traverse.covered((0, 2, 0, 2), (0, 2, 0, 2), [((2.5, 3, 0, 2), 4.0)]), [])
+    self.assertEqual(traverse.deck_height((0, 2, 0, 2), (0, 2, 0, 2), []), float("-inf"))
 
 
 class PublicTravelInMillimetresTests(PodMoveTest):
@@ -142,7 +193,7 @@ class PublicTravelInMillimetresTests(PodMoveTest):
     pod = self.pod(await self.homed(), "left")
     for axis, cm_value in pod._traverse_heights().items():
       self.assertAlmostEqual(pod.traverse_heights()[axis], cm_value * 10)
-    for axis, cm_value in pod._traverse_ceilings().items():
-      self.assertAlmostEqual(pod.traverse_ceilings()[axis], cm_value * 10)
+    for axis, cm_value in pod._max_traverse_heights().items():
+      self.assertAlmostEqual(pod.max_traverse_heights()[axis], cm_value * 10)
     with self.assertRaises(ValueError):
       await pod.move_over({"X": 500.0}, speed_fraction=1.5)

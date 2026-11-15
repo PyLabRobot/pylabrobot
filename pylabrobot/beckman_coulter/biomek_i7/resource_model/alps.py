@@ -42,6 +42,11 @@ class Site(NamedTuple):
     size_x: its width.
     size_y: its depth.
     adaptor_z: where labware sits from its floor (`AdaptorPlate.Z`).
+    min_safe_height: the least height above its floor a pod's parts stay over it, empty or not
+      (`MinSafeHeight`).
+    obstacles: fixed parts of the ALP around it, as Biomek lists them per position (`Obstacles`):
+      (name, `XOffset`, `XSpan`, `YOffset`, `YSpan`, `ZOffset`), from its back left corner and its
+      floor; each stands from below the deck up to its top.
     tip_disposal: where the pods discard tips, for a trash.
     head96_tip_loading: whether the 96-head may load tips here (the position's characteristic
       "Multichannel Can Load Tips": only the tip-loading ALP's, built to take the press).
@@ -55,6 +60,8 @@ class Site(NamedTuple):
   size_x: float
   size_y: float
   adaptor_z: float = 0.0
+  min_safe_height: float = 1.0
+  obstacles: Tuple[Tuple[str, float, float, float, float, float], ...] = ()
   tip_disposal: Optional["TipDisposal"] = None
   head96_tip_loading: bool = False
 
@@ -80,6 +87,19 @@ class TipDisposal(NamedTuple):
   span8_y: float
 
 
+class PositionObstacle(NamedTuple):
+  """A fixed part beside a deck position (a trash bin's wall), in the position's frame (mm): `x0`..
+  `x1`, `y0`..`y1` from its front left corner, standing from below the deck up to `top` above its
+  floor."""
+
+  name: str
+  x0: float
+  x1: float
+  y0: float
+  y1: float
+  top: float
+
+
 class BiomekPosition(ResourceHolder):
   """A deck position on an ALP. Biomek centres the labware in it: a position is a little larger
   than the labware (12.819 x 8.59 cm against a tip box's 12.79 x 8.54), and Biomek's targets are the
@@ -88,6 +108,10 @@ class BiomekPosition(ResourceHolder):
 
   Attributes:
     labware_z: where labware sits from the position's floor, mm (`Site.adaptor_z`).
+    min_safe_height: the least height (mm above its floor) a pod's parts stay over it, empty or
+      not: the deck check's box for it reaches at least this high.
+    obstacles: fixed parts of its ALP beside it (`PositionObstacle`), which stay in the deck check
+      even when the position itself is an operation's target.
     tip_disposal: for a trash, where the pods discard tips.
     head96_tip_loading: whether the 96-head may load tips here (`Site.head96_tip_loading`).
   """
@@ -99,6 +123,8 @@ class BiomekPosition(ResourceHolder):
     size_y: float,
     size_z: float,
     labware_z: float = 0.0,
+    min_safe_height: float = 10.0,
+    obstacles: Sequence[Sequence[Any]] = (),
     tip_disposal: Optional[Sequence[float]] = None,
     head96_tip_loading: bool = False,
     **kwargs: Any,
@@ -106,6 +132,10 @@ class BiomekPosition(ResourceHolder):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, **kwargs)
     self.head96_tip_loading = head96_tip_loading
     self.labware_z = labware_z
+    self.min_safe_height = min_safe_height
+    self.obstacles: Tuple[PositionObstacle, ...] = tuple(
+      PositionObstacle(str(o[0]), *(float(v) for v in o[1:])) for o in obstacles
+    )
     self.tip_disposal = None if tip_disposal is None else TipDisposal(*tip_disposal)
 
   def get_default_child_location(self, resource) -> Coordinate:  # type: ignore[no-untyped-def]
@@ -120,9 +150,27 @@ class BiomekPosition(ResourceHolder):
     return {
       **super().serialize(),
       "labware_z": self.labware_z,
+      "min_safe_height": self.min_safe_height,
+      "obstacles": [list(o) for o in self.obstacles],
       "tip_disposal": None if self.tip_disposal is None else list(self.tip_disposal),
       "head96_tip_loading": self.head96_tip_loading,
     }
+
+
+def _position_obstacle(
+  o: Tuple[str, float, float, float, float, float], size_y: float
+) -> PositionObstacle:
+  """A Biomek position obstacle (offsets from the position's back left corner, Y forward, cm) in
+  the position's frame (from its front left corner, mm)."""
+  name, x_offset, x_span, y_offset, y_span, z_offset = o
+  return PositionObstacle(
+    name,
+    cm(x_offset),
+    cm(x_offset + x_span),
+    size_y - cm(y_offset + y_span),
+    size_y - cm(y_offset),
+    cm(z_offset),
+  )
 
 
 def alp_model(alp_type: str) -> str:
@@ -224,6 +272,8 @@ def _alp(
       size_y=cm(site.size_y),
       size_z=0,
       labware_z=cm(site.adaptor_z),
+      min_safe_height=cm(site.min_safe_height),
+      obstacles=[_position_obstacle(o, cm(site.size_y)) for o in site.obstacles],
       tip_disposal=site.tip_disposal,
       head96_tip_loading=site.head96_tip_loading,
     )
@@ -319,6 +369,7 @@ def _trash(
   pin_offset_x: float,
   site_x: float,
   tip_disposal: TipDisposal,
+  walls: Tuple[Tuple[str, float, float, float, float, float], ...],
   names: Names,
 ) -> BiomekALP:
   return _alp(
@@ -328,7 +379,19 @@ def _trash(
     pin_count=(7, 7),
     pin_offset=(pin_offset_x, 0.961),
     # The chute's opening sits 6.896 cm below the top.
-    sites=[Site("A1", "TR", site_x, 2.9351, -6.896, *_PLATE_SITE, tip_disposal=tip_disposal)],
+    sites=[
+      Site(
+        "A1",
+        "TR",
+        site_x,
+        2.9351,
+        -6.896,
+        *_PLATE_SITE,
+        min_safe_height=0.1,
+        obstacles=walls,
+        tip_disposal=tip_disposal,
+      )
+    ],
     position_names=names,
   )
 
@@ -341,6 +404,12 @@ def biomek_trash_left_bin(name: str, position_names: Names = None) -> BiomekALP:
     pin_offset_x=18.997,
     site_x=18.527,
     tip_disposal=TipDisposal(0.0, 1.124, 5.896, span8_x=-4.2186, span8_y=0.0),  # CustomData
+    walls=(  # Positions[A1].Obstacles
+      ("Back", -18.527, 32.446, -2.9351, 1.4, 6.896),
+      ("Front", -18.527, 32.446, 10.0829, 1.4, 6.896),
+      ("Left", -18.527, 9.859, -2.9351, 14.418, 6.3755),
+      ("Right", 13.577, 0.342, -2.9351, 14.418, 6.3755),
+    ),
     names=position_names,
   )
 
@@ -353,6 +422,12 @@ def biomek_trash_right_bin(name: str, position_names: Names = None) -> BiomekALP
     pin_offset_x=0.953,
     site_x=1.1,
     tip_disposal=TipDisposal(5.9995, 1.124, 5.896, span8_x=4.561, span8_y=0.0),  # CustomData
+    walls=(  # Positions[A1].Obstacles
+      ("Back", -1.1, 32.446, -2.9351, 1.4, 6.896),
+      ("Front", -1.1, 32.446, 10.0829, 1.4, 6.896),
+      ("Left", -1.1, 0.342, -2.9351, 14.418, 6.3755),
+      ("Right", 21.381, 9.965, -2.9351, 14.418, 6.3755),
+    ),
     names=position_names,
   )
 
@@ -378,7 +453,7 @@ def biomek_orbital_shaker(name: str, position_names: Names = None) -> BiomekALP:
     size=(14.802, 10.16, 16.134),
     pin_count=(7, 5),
     pin_offset=(1.118, 0.914),
-    sites=[Site("A1", "Orbital", 0.815, 0.851, 0.0, *_PLATE_SITE)],
+    sites=[Site("A1", "Orbital", 0.815, 0.851, 0.0, *_PLATE_SITE, min_safe_height=2.1)],
     position_names=position_names,
   )
 
@@ -391,7 +466,7 @@ def biomek_bioshake(name: str, position_names: Names = None) -> BiomekALP:
     size=(14.21, 10.0, 17.13),
     pin_count=(5, 5),
     pin_offset=(2.934, 0.834),
-    sites=[Site("A1", "BS", 0.696, 0.705, 0.0, *_PLATE_SITE)],
+    sites=[Site("A1", "BS", 0.696, 0.705, 0.0, *_PLATE_SITE, min_safe_height=2.1)],
     position_names=position_names,
   )
 
@@ -404,7 +479,7 @@ def biomek_cold_plate(name: str, position_names: Names = None) -> BiomekALP:
     size=(14.21, 10.0, 16.057),
     pin_count=(5, 5),
     pin_offset=(2.934, 0.834),
-    sites=[Site("A1", "CP", 0.696, 0.705, 0.0, *_PLATE_SITE)],
+    sites=[Site("A1", "CP", 0.696, 0.705, 0.0, *_PLATE_SITE, min_safe_height=5.0)],
     position_names=position_names,
   )
 
@@ -430,7 +505,7 @@ def biomek_tilting_alp(name: str, position_names: Names = None) -> BiomekALP:
     size=(15.2, 10.1, 15.87),
     pin_count=(7, 5),
     pin_offset=(1.35, 1.09),
-    sites=[Site("A1", "TA", 1.19, 0.755, 0.0, *_PLATE_SITE)],
+    sites=[Site("A1", "TA", 1.19, 0.755, 0.0, *_PLATE_SITE, min_safe_height=11.0)],
     position_names=position_names,
   )
 
@@ -447,7 +522,21 @@ def biomek_elx405dw(name: str, position_names: Names = None) -> BiomekALP:
     size=(41.1, 42.6, 10.6),
     pin_count=(11, 2),
     pin_offset=(10.713, 38.375),
-    sites=[Site("A1", "W", 23.77, 28.76, 0.0, *_PLATE_SITE)],
+    sites=[
+      Site(
+        "A1",
+        "W",
+        23.77,
+        28.76,
+        0.0,
+        *_PLATE_SITE,
+        min_safe_height=2.0,
+        obstacles=(  # Positions[A1].Obstacles
+          ("BackObstacle", -25.5, 42.3, -28.8, 25.9, 21.7),
+          ("LeftObstacle", -23.8, 19.0, -3.0, 15.0, 19.9),
+        ),
+      )
+    ],
     position_names=position_names,
   )
 

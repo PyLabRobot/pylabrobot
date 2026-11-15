@@ -11,12 +11,14 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import (
   Y_CLEARANCE,
   Gripper,
   biomek_grip_direction,
+  held_labware_of,
 )
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_labware
+from pylabrobot.resources import Plate, beckman_coulter_biomek_96_wellplate_vb
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   generic_biomek,
 )
-from pylabrobot.resources import Plate, beckman_coulter_biomek_96_wellplate_vb
 
 # Biomek's TiterplateLid widths (open 9.401 cm, close 7.592 cm) on the lid, which PyLabRobot sizes
 # to its plate's 8.56 cm: per call, as the gripper's defaults are Biomek's margins for labware.
@@ -107,10 +109,13 @@ class GripperTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(close["GG"], logged["GG close"])
     self.assertEqual(moves[i - 1][0], {"GZ": logged["GZ"]})
     self.assertEqual(moves[i - 2][0], {"GG": logged["GG open"]})
-    travel = moves[i - 3][0]
+    # Where the travel leaves the gripper (in one move or several, as the planner merges it).
+    at: Dict[str, int] = {}
+    for targets, _ in moves[: i - 2]:
+      at.update(targets)
     for axis in ("X", "GY", "GR"):
       if axis in logged:
-        self.assertAlmostEqual(travel[axis], logged[axis], delta=3, msg=axis)
+        self.assertAlmostEqual(at[axis], logged[axis], delta=3, msg=axis)
 
   async def test_the_left_pod_takes_the_lid_as_logged_without_checks(self) -> None:
     moves, checks = await self.lid_off_and_on("left")
@@ -156,6 +161,7 @@ class GripperTests(unittest.IsolatedAsyncioTestCase):
       await gripper.pick_up_resource(
         self.lid, y_clearance=LID_Y_CLEARANCE, squeeze_mm=LID_SQUEEZE_MM
       )
+    self.assertIsNone(gripper._pod._held_labware)  # counted from the close, dropped with the grip
 
   async def test_a_plate_moves_between_positions(self) -> None:
     place_labware(self.biomek.deck, [{"position": "P16", "class": "Thermo96VB_PP", "name": "p2"}])
@@ -173,6 +179,16 @@ class GripDefaultsTests(unittest.TestCase):
     plate = beckman_coulter_biomek_96_wellplate_vb("plate")
     self.assertAlmostEqual(plate.get_size_y() + 2 * Y_CLEARANCE, 97.06)
     self.assertAlmostEqual(plate.get_size_y() - 2 * SQUEEZE_MM, 78.97)
+
+  def test_what_is_held_records_the_definitions_it_was_sized_from(self) -> None:
+    plate = biomek_labware("Thermo96VB_PP", "plate", lid="default")
+    held = held_labware_of(plate)
+    self.assertEqual(
+      held.source,
+      "beckman_coulter_biomek_96_wellplate_vb 127.8 x 85.6 x 14.1 mm; "
+      f"lid beckman_coulter_biomek_lid_titerplatelid {plate.lid.get_size_x():g} x "
+      f"{plate.lid.get_size_y():g} x {plate.lid.get_size_z():g} mm",
+    )
 
   def test_grip_sides_follow_a1(self) -> None:
     plate = beckman_coulter_biomek_96_wellplate_vb("plate")

@@ -121,6 +121,13 @@ class LiquidTests(PodMoveTest):
     right = self.pod(driver, "right")
     park = right.declared.park  # type: ignore[union-attr]
     await right.move_axes({a: right.declared.to_counts(a, park[a]) for a in ("GR", "GY")})  # type: ignore[union-attr]
+    # The 96-head brought forward, in line with P8's row, as after a tip load: the tests put long
+    # tips on it here, and from its home corner its way to P8 would cross the washer at W3, which
+    # 1025 uL tips cannot clear (the deck check refuses it).
+    left = self.pod(driver, "left")
+    park = left.declared.park  # type: ignore[union-attr]
+    await left.move_axes({a: left.declared.to_counts(a, park[a]) for a in ("GR", "GY")})  # type: ignore[union-attr]
+    await left.move_axes({"Y": left.declared.to_counts("Y", 37.45)})  # type: ignore[union-attr]
     return driver, lh
 
   def record(self, driver, side: str) -> List[Tuple[Dict[str, int], int]]:  # type: ignore[no-untyped-def]
@@ -274,6 +281,26 @@ class LiquidTests(PodMoveTest):
     self.assertGreater(mixed_shape.wall_distance(0.5, 0.0), 0.0)
     self.assertLessEqual(mixed_shape.wall_distance(0.4, 0.0), 0.85 + 1e-6)
     self.assertAlmostEqual(mixed_shape.wall_distance(2.0, 0.0), 0.85, delta=0.001)
+
+  async def test_a_blocked_travel_takes_biomeks_search(self) -> None:
+    # From the home corner's Y with 1025 uL tips, X then Y would cross the washer at W3, which no
+    # such tip clears: the direct travel is not clear, and the search goes Y first, then X.
+    driver, lh = await self.setup_deck()
+    left = self.pod(driver, "left")
+    d = left.declared
+    assert d is not None
+    await left.move_axes({"Y": d.to_counts("Y", 14.45)})
+    lh.head96._set_tips(
+      {
+        mandrel_name(r, c): biomek_tip("T1025F", f"t_{r}_{c}")
+        for r in range(ROWS)
+        for c in range(COLUMNS)
+      }
+    )
+    moves = self.record(driver, "left")
+    await lh.head96.aspirate(lh.deck.get_resource("Reservoir"), 100, liquid_height=2.0)
+    travel = [sorted(t) for t, _ in moves if set(t) & {"X", "Y"}][:2]
+    self.assertEqual(travel, [["Y"], ["X"]])
 
   async def test_pylabrobots_own_labware(self) -> None:
     # A plate defined by PyLabRobot: heights from its cavity bottom, the level from its own

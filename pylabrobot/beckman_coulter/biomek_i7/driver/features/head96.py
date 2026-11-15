@@ -59,6 +59,7 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
@@ -101,6 +102,8 @@ class HeadPlan:
   y: float
   z: float
   pairs: Tuple[Tuple[str, TipSpot], ...] = ()
+  # What it works in besides the spots (the trash), for the deck check.
+  where: Tuple[Resource, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,11 @@ class LiquidPlan:
   channels: Tuple[liquid.Channel, ...]
   steps: Tuple[liquid.Step, ...]
   pairs: Tuple[Tuple[str, Container], ...]
+
+
+def _plan_places(plan: HeadPlan) -> Tuple[Resource, ...]:
+  """What a tip plan works in, for the deck check: its spots, and the trash."""
+  return (*plan.where, *(s for _, s in plan.pairs))
 
 
 class Head96:
@@ -131,6 +139,19 @@ class Head96:
     # The head in the resource tree, as the STAR's `head96.resource`: its shafts carry the tips.
     # Set by the device that models it (`BiomekI7Device`); None when nothing models it.
     self.resource: Optional[NChannelPipette] = None
+
+  @property
+  def default_minimum_traverse_height(self) -> traverse.TraverseDefault:
+    """How the head travels by default: "safe", Biomek's safe height over the way (the tallest
+    thing under it, plus Biomek's margins); "max", as high as it goes; or a height, mm of
+    its lowest point above the deck. A call's `minimum_traverse_height_start` / `_end` overrides
+    it. It starts as Biomek's setting for the pod (`AlwaysMaxZ`); the deck check refuses any travel
+    too low, whatever the height."""
+    return self._pod.traverse_defaults["channels"]
+
+  @default_minimum_traverse_height.setter
+  def default_minimum_traverse_height(self, value: traverse.TraverseDefault) -> None:
+    self._pod.traverse_defaults["channels"] = traverse.traverse_default(value)
 
   def __str__(self) -> str:
     return f"{self._pod}'s 96-channel head"
@@ -323,7 +344,7 @@ class Head96:
       deck, configuration, self._pod.pod_number, position, x="l", y="b", z="b"
     )
     z = corner.z + tip_length + disposal.z
-    return HeadPlan(corner.x + disposal.x, corner.y + disposal.y, z)
+    return HeadPlan(corner.x + disposal.x, corner.y + disposal.y, z, where=(position,))
 
   def _tip_length(self, mandrels: List[str]) -> float:
     """The longest carried tip's effective length, cm (`_carried_tip`)."""
@@ -349,6 +370,19 @@ class Head96:
       mandrel_name(i // COLUMNS, i % COLUMNS) for i, t in enumerate(self.tips) if t is not None
     ]
     return {"Z": self._tip_length(carried)} if carried else {}
+
+  def _tip_block(self) -> Optional[Tuple[int, int, int, int]]:
+    """The block of mandrels carrying tips: (first column, last column, first row, last row), from
+    0; None without tips."""
+    at = [(i % COLUMNS, i // COLUMNS) for i, t in enumerate(self.tips) if t is not None]
+    if not at:
+      return None
+    return (
+      min(c for c, _ in at),
+      max(c for c, _ in at),
+      min(r for _, r in at),
+      max(r for _, r in at),
+    )
 
   async def pick_up_tips(
     self,
@@ -376,12 +410,13 @@ class Head96:
     pod = self._pod
     logger.info("%s pick up %d tips from %s", pod.component, len(plan.pairs), tip_rack.name)
     await self._clear_gripper()
-    await pod._move_over(
+    await pod._move_over(  # the approach: planned, nothing exempt
       {"X": declared.to_counts("X", plan.x), "Y": declared.to_counts("Y", plan.y)},
       minimum_traverse_height=_cm(minimum_traverse_height_start),
     )
-    await pod.move_axes({"Z": declared.to_counts("Z", plan.z)}, 1000)
-    await self.load_tips(load)
+    with pod.working_at(tip_rack):
+      await pod.move_axes({"Z": declared.to_counts("Z", plan.z)}, 1000)
+      await self.load_tips(load)
     picked: Dict[str, Optional[Tip]] = {}
     for mandrel, spot in plan.pairs:
       tip = spot.tip_for_pickup()
@@ -390,7 +425,8 @@ class Head96:
       self._tips[mandrel] = tip
       picked[mandrel] = tip
     self._set_tips(picked)
-    await pod._lift_channels(_cm(minimum_traverse_height_end))
+    with pod.working_at(tip_rack):  # the rise out of it is the load's own
+      await pod._lift_channels(_cm(minimum_traverse_height_end))
 
   async def drop_tips(
     self,
@@ -423,7 +459,8 @@ class Head96:
       if spot.tracks_tips:
         spot.assign_tip(tip if tip is not None else spot.make_tip())
     self._set_tips({m: None for m in carried})
-    await self._pod._lift_channels(_cm(minimum_traverse_height_end))
+    with self._pod.working_at(*_plan_places(plan)):  # the rise out of it is the eject's own
+      await self._pod._lift_channels(_cm(minimum_traverse_height_end))
 
   async def discard_tips(
     self,
@@ -443,7 +480,8 @@ class Head96:
     for mandrel in carried:
       self._tips.pop(mandrel, None)
     self._set_tips({m: None for m in carried})
-    await self._pod._lift_channels(_cm(minimum_traverse_height_end))
+    with self._pod.working_at(*_plan_places(plan)):  # the rise out of it is the eject's own
+      await self._pod._lift_channels(_cm(minimum_traverse_height_end))
 
   async def discard_any_tips(self, trash: Optional[Resource] = None) -> None:
     """Eject into the trash (`TR1` by default) whatever tips the head may carry, recorded or not:
@@ -468,7 +506,8 @@ class Head96:
     )
     plan = self.plan_discard(length, trash)
     await self._eject_at(plan, None, tip_length=length)
-    await self._pod._lift_channels(None, tip_lengths={"Z": length})
+    with self._pod.working_at(*_plan_places(plan)):
+      await self._pod._lift_channels(None, tip_lengths={"Z": length})
 
   def _carried(self) -> List[str]:
     carried = [
@@ -487,13 +526,14 @@ class Head96:
     pod = self._pod
     logger.info("%s eject tips at X %.3f Y %.3f Z %.3f cm", pod.component, plan.x, plan.y, plan.z)
     await self._clear_gripper()
-    await pod._move_over(
+    await pod._move_over(  # the approach: planned, nothing exempt
       {"X": declared.to_counts("X", plan.x), "Y": declared.to_counts("Y", plan.y)},
       minimum_traverse_height=_cm(start),
       tip_lengths=None if tip_length is None else {"Z": tip_length},
     )
-    await pod.move_axes({"Z": declared.to_counts("Z", plan.z)}, 1000)
-    await self.eject()
+    with pod.working_at(*_plan_places(plan)):
+      await pod.move_axes({"Z": declared.to_counts("Z", plan.z)}, 1000)
+      await self.eject()
 
   async def eject(self) -> None:
     """Push the tips off the mandrels where the head is: the plunger to the bottom of its travel
@@ -512,16 +552,12 @@ class Head96:
       await pod.move_axes({"D": target}, speed)
 
   async def _clear_gripper(self) -> None:
-    """Turn the gripper to its park angle (GR), as Biomek does before the head works the deck.
-
-    Raises:
-      RuntimeError: while the gripper holds labware (turning would swing it).
-    """
-    if self._pod._held_labware is not None:
-      raise RuntimeError(f"{self}: the gripper holds labware; place it before the head works")
+    """Turn the gripper to its park angle (GR), as Biomek does before the head works the deck,
+    with whatever it holds: the deck check decides whether the turn, and the head's moves after
+    it, are clear."""
     _, _, declared = self._context()
     gr = declared.to_counts("GR", declared.park["GR"])
-    if self._pod.cpositions["GR"][1] != gr:
+    if not self._pod._at_angle(gr):
       await self._pod.move_axes({"GR": gr})
 
   # -- aspirate and dispense ----------------------------------------------------------------------
@@ -672,15 +708,16 @@ class Head96:
     if below:
       await pod.move_axes({"D": declared.to_counts("D", 0.0)})
     await self._clear_gripper()
-    await pod._move_over(
+    await pod._move_over(  # the approach: planned, nothing exempt
       {"X": declared.to_counts("X", plan.x), "Y": declared.to_counts("Y", plan.y)},
       minimum_traverse_height=_cm(minimum_traverse_height_start),
     )
-    for targets, speed, delay in moves:
-      await pod.move_axes({a: declared.to_counts(a, v) for a, v in targets.items()}, speed)
-      if delay > 0:
-        await asyncio.sleep(delay)
-    await pod._lift_channels(_cm(minimum_traverse_height_end))
+    with pod.working_at(*(c for _, c in plan.pairs)):
+      for targets, speed, delay in moves:
+        await pod.move_axes({a: declared.to_counts(a, v) for a, v in targets.items()}, speed)
+        if delay > 0:
+          await asyncio.sleep(delay)
+      await pod._lift_channels(_cm(minimum_traverse_height_end))  # out of it: the step's own
 
   def _book(self, plan: LiquidPlan, volume: float, aspirate: bool) -> List[Any]:
     """Move `volume` per mandrel between the containers' and the tips' trackers (pending, to commit

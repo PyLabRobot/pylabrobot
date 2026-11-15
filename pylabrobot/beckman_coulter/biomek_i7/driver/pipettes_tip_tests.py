@@ -108,6 +108,10 @@ class PipettesTipTests(PodMoveTest):
     self.assertEqual(
       self.from_travel(moves)[: len(LOGGED_DISCARD)], [parse(c) for c in LOGGED_DISCARD]
     )
+    # It travels at Biomek's safe height: the trash's walls under the way + the tip +
+    # `AdditionalSafeHeight` + `AvoidanceMargin`. Biomek logged Z1 -19588 for this discard.
+    lift = next(t for t, _ in moves if "Z1" in t)
+    self.assertAlmostEqual(lift["Z1"], -19588, delta=40)
     self.assertEqual(pipettes.tips, [None] * 8)
     self.assertFalse(any(shaft_of(c).has_tip() for c in pipettes.resources))
     with self.assertRaises(RuntimeError):
@@ -155,7 +159,7 @@ class PipettesTipTests(PodMoveTest):
     pod = self.pod(driver, "right")
     d = pod.declared
     assert d is not None
-    ceilings = pod._traverse_ceilings()
+    ceilings = pod._max_traverse_heights()
     self.assertAlmostEqual(ceilings["Z6"], d.limits["Z6"][1] - d.settings["DiscardOffset"])
     rack = lh.deck.get_resource("Tips")
     self.sensor(driver, LOADED)

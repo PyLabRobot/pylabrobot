@@ -79,8 +79,9 @@ class DeviceModelTests(PodMoveTest):
     assert d is not None
     # Homed, GR is at -16 degrees: the fingers under the head. Turn them out first, as the park does.
     await left.move_axes({"GR": d.to_counts("GR", d.park["GR"])})
-    await left.move_axes({"Y": 50000, "Z": -60000})
-    y, z = d.to_value("Y", 50000), d.to_value("Z", -60000)
+    # Above the trash walls at TR1 under it (the deck check refuses lower).
+    await left.move_axes({"Y": 50000, "Z": -20000})
+    y, z = d.to_value("Y", 50000), d.to_value("Z", -20000)
     pod = lh.pod_models["left"]
     back = pod.get_location_wrt(lh).y - DECK_Y + pod.get_size_y()  # deck y grows to the back
     self.assertAlmostEqual(biomek_y(back) / MM_PER_CM, y - d.geometry.mandrel1_y_offset, delta=1e-4)

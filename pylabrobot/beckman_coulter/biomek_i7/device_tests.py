@@ -7,9 +7,11 @@ import unittest
 from typing import Dict
 from unittest import mock
 
+from pylabrobot.beckman_coulter.biomek_i7 import targeting
 from pylabrobot.beckman_coulter.biomek_i7.device import DECK_Z, RAIL_TOP_Z, BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import RECORDING_ENV
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import alps
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_labware
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   as_instrument,
   configuration_file,
@@ -81,6 +83,44 @@ class BiomekI7Tests(unittest.TestCase):
         self.assertGreaterEqual(loc.y, 0)
         self.assertLessEqual(loc.y + alp.get_size_y(), self.biomek.get_size_y())
         self.assertAlmostEqual(loc.z, DECK_Z)
+
+  def test_the_obstacles_follow_every_change_of_the_tree(self):
+    # Each pod's obstacles are built once and dropped when anything under the device is assigned
+    # or unassigned: after each change they equal a fresh build.
+    device = self.biomek
+    deck = device.deck
+    position = deck.get_position(deck.position_names[0])
+
+    def check() -> None:
+      for pod in (1, 2):
+        self.assertEqual(device.obstacles(pod), device._build_obstacles(pod))
+
+    check()
+    rack = biomek_labware("BC230", "rack")
+    position.assign_child_resource(rack)
+    check()
+    rack.get_item(0).unassign_tip()  # a tip taken: a child of its spot
+    check()
+    rack.unassign()
+    check()
+
+  def test_each_pods_boxes_are_on_its_own_calibration(self):
+    # A position's box for pod n is where pod n's calibration puts the position: the boxes of the
+    # two pods differ by the difference of their corrections (Biomek's cache takes pod 1's for both).
+    device = self.biomek
+    boxes = {pod: {p.name: p for p in device.obstacles(pod).deck} for pod in (1, 2)}
+    for name in device.deck.position_names:
+      position = device.deck.get_position(name)
+      c1, c2 = (
+        targeting.position_correction(device.deck, device.driver.declared, position, pod)
+        for pod in (1, 2)
+      )
+      (x1, _, y1, _), (x2, _, y2, _) = (boxes[pod][name].extent for pod in (1, 2))
+      self.assertAlmostEqual(x2 - x1, c2[0] - c1[0], places=9, msg=name)
+      self.assertAlmostEqual(y2 - y1, c2[1] - c1[1], places=9, msg=name)
+      self.assertAlmostEqual(
+        boxes[2][name].z_high - boxes[1][name].z_high, c2[2] - c1[2], places=9, msg=name
+      )
 
   def test_moving_a_bridge_carries_its_pod(self):
     before = self.biomek.pod_models["left"].get_location_wrt(self.biomek)

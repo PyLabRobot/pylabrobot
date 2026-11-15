@@ -159,6 +159,7 @@ def instrument_file_tree(configuration: DeviceConfiguration, deck: str = "Deck1"
       "XSpan": p["x_span"],
       "YSpan": p["y_span"],
       **{f"Framed{n}": how for n, how in p["framed"].items()},
+      **({"MinSafeHeight": p["min_safe_height"]} if "min_safe_height" in p else {}),
     }
     for name, p in data["deck_positions"].items()
   }

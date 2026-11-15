@@ -51,6 +51,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipett
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
 from pylabrobot.io.usb import USB
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
@@ -141,6 +142,9 @@ class BiomekI7Driver:
     self.motor_tables = self.declared.motor_tables
     # Called when a head's tips change; the device saves its heads' tips on it (`state_json`).
     self.on_tips_changed: Callable[[], None] = lambda: None
+    # What a pod's moves must clear besides itself and the other pod (`Obstacles`), by pod number;
+    # the device gives it from its resource tree (`BiomekI7Device.obstacles`). None: no deck check.
+    self.obstacles: Optional[Callable[[int], Obstacles]] = None
     self._given_boards = list(boards) if boards is not None else None
     self.boards: List[AceBoard] = []
     self._connected = False
@@ -158,6 +162,10 @@ class BiomekI7Driver:
     self.chassis: Optional[Chassis] = None
     # The shared X rail (design.md I7), built at discovery from the declared pod geometry.
     self.rail: Optional[XRail] = None
+    # Biomek's clearing of the way (`Pod._make_way`): before a pod's move along the rail, an idle other pod
+    # in its way moves aside on its own, as Biomek's default. Off: such a move is refused by the
+    # rail guard instead.
+    self.make_way = True
     # The pods, named as STAR names its X-arms: each fills an X-arm's slot (design.md, The pods).
     self.left_x_arm: Optional[Pod] = None
     self.right_x_arm: Optional[Pod] = None

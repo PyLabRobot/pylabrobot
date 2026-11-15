@@ -31,9 +31,9 @@ Where this differs from Biomek, it says so:
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import Obstacle, PodGeometry
+from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import PodGeometry
 
 Range = Tuple[float, float]
 """An X interval in deck cm, `(lowest, highest)`."""
@@ -109,7 +109,8 @@ class HeldLabware:
   pads less `GrippedLabwareOffsets`, each layer above sits at its offset from the corner of the
   one below, and the footprint is every layer's box). The grip width is the bottom layer's.
   `height` is the stack's, from its bottom to its top; `grip_offset` how far above its bottom the
-  fingertips are (negative below it)."""
+  fingertips are (negative below it). `source`: the labware definitions the sizes were taken from,
+  with their dimensions, so a refusal or a replay can say what was counted."""
 
   length: float
   width: float
@@ -118,6 +119,7 @@ class HeldLabware:
   layers: Tuple[StackedLayer, ...] = ()
   height: float = 0.0
   grip_offset: float = 0.0
+  source: str = ""
 
 
 @dataclass(frozen=True)
@@ -331,41 +333,3 @@ def pod_xy_box(geometry: PodGeometry, x: float, y: float) -> Tuple[Range, Range]
   `Mandrel1XOffset` / `Mandrel1YOffset` back from that."""
   x0, y0 = x - geometry.mandrel1_x_offset, y - geometry.mandrel1_y_offset
   return (x0, x0 + geometry.pod_x_span), (y0, y0 + geometry.pod_y_span)
-
-
-def _open_overlap(low: Optional[float], high: Optional[float], span: Range, buffer: float) -> bool:
-  lo = -math.inf if low is None else low - buffer
-  hi = math.inf if high is None else high + buffer
-  return lo < span[1] and span[0] < hi
-
-
-@dataclass(frozen=True)
-class Clearance:
-  """What a pod's travel over an X/Y area must clear: the lowest height (cm) its channels may
-  travel at, and the obstacles in the way that no height clears (walls)."""
-
-  height: float
-  walls: Tuple[str, ...]
-
-
-def obstacle_clearance(obstacles: Sequence[Obstacle], x: Range, y: Range) -> Clearance:
-  """Over the area `x` by `y` (cm): the top (plus buffer) of every obstacle there with a top and
-  no floor (the pump bank), and every obstacle there with no top (a wall, or a ceiling).
-
-  Ceilings (a bottom and no top: the I-beam from Z 37.069 behind Y 11.092, the cameras from Z 32.078
-  at the front corners) count as walls. Biomek makes every obstacle a box (an open top at 1e10,
-  each face widened by its buffer) and checks the pod's whole part model against
-  them, the carriage above the channels included, so a ceiling bounds the pod's body, not its
-  channels' bottom; with the channels at a traverse height the body is above every ceiling. None of
-  the 12,321 X/Y moves Biomek logged put a pod's body under one (the furthest back was Y 14.27 cm),
-  so blocking them refuses nothing Biomek did."""
-  height = -math.inf
-  walls = []
-  for o in obstacles:
-    if not (_open_overlap(o.x1, o.x2, x, o.buffer) and _open_overlap(o.y1, o.y2, y, o.buffer)):
-      continue
-    if o.z2 is None:
-      walls.append(o.name)
-    elif o.z2 is not None and (o.z1 is None or o.z1 < 0):
-      height = max(height, o.z2 + o.buffer)
-  return Clearance(height, tuple(walls))

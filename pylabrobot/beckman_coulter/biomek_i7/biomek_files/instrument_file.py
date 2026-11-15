@@ -180,6 +180,7 @@ def _positions(tree: Tree) -> Dict[str, Dict[str, Any]]:
       "x_span": e["XSpan"],
       "y_span": e["YSpan"],
       "framed": {str(n): e[f"Framed{n}"] for n in (1, 2) if f"Framed{n}" in e},
+      **({"min_safe_height": e["MinSafeHeight"]} if "MinSafeHeight" in e else {}),
     }
   return dict(sorted(positions.items()))
 
