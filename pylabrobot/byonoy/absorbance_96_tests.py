@@ -116,10 +116,13 @@ class TestByonoyAbsorbanceProtocol(AnyioTestBase):
     ],
   )
   async def test_malformed_chunks_raise(self, chunks: list[bytes], message: str) -> None:
-    reader, _ = make_reader(chunks)
+    reader, fake = make_reader(chunks)
 
     with pytest.raises(RuntimeError, match=message):
       await reader._run_abs_measurement(450, 0, False)
+
+    assert report_ids(fake.writes) == [0x0010, 0x0200, 0x0320, 0x0060]
+    assert fake.writes[-1][2:4] == b"\x20\x03"
 
   @pytest.mark.parametrize("seq_len", [7, 9])
   @pytest.mark.parametrize("is_reference", [False, True])
@@ -127,10 +130,13 @@ class TestByonoyAbsorbanceProtocol(AnyioTestBase):
     self, seq_len: int, is_reference: bool
   ) -> None:
     chunks = [absorbance_chunk(seq, seq_len, [0.0] * 12) for seq in range(seq_len)]
-    reader, _ = make_reader(chunks + [status_report()])
+    reader, fake = make_reader(chunks + [status_report()])
 
     with pytest.raises(RuntimeError, match="expected exactly 8 chunks"):
       await reader._run_abs_measurement(450, 0, is_reference)
+
+    assert report_ids(fake.writes) == [0x0010, 0x0200, 0x0320, 0x0060]
+    assert fake.writes[-1][2:4] == b"\x20\x03"
 
   async def test_firmware_error_uses_absorbance_name_and_flags(self) -> None:
     rows = [[0.0] * 12 for _ in range(8)]

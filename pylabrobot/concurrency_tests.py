@@ -19,6 +19,7 @@ from pylabrobot.concurrency import (
   SiblingTaskErrors,
   non_cancelling_task_group,
 )
+from pylabrobot.resources import Coordinate, Resource
 
 if sys.version_info >= (3, 11):
   from builtins import BaseExceptionGroup, ExceptionGroup
@@ -1585,3 +1586,100 @@ async def test_interactive_stop_all_keeps_every_exit_failure_visible() -> None:
   assert len(errors) == 1
   reported = _formatted_failure(errors[0])
   assert [failure for failure in failures if failure in reported] == failures
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("anyio_backend", ["asyncio"])
+async def test_interactive_setup_tracks_resource_across_location_hash_changes() -> None:
+  """Moving a Resource after interactive entry does not orphan its lifespan."""
+
+  class _MovableDevice(Resource, HasLifespan):
+    """Resource-backed lifespan owner whose hash changes when moved."""
+
+    def __init__(self, name: str, events: List[str]) -> None:
+      """Initialize a movable resource lifespan owner."""
+      Resource.__init__(self, name=name, size_x=10, size_y=10, size_z=10)
+      HasLifespan.__init__(self)
+      self._events = events
+
+    async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+      """Record entry and register an exit event."""
+      self._events.append(f"enter:{self.name}")
+      stack.callback(self._events.append, f"exit:{self.name}")
+
+  events: List[str] = []
+  deck = Resource("deck", size_x=500, size_y=500, size_z=10)
+  first = _MovableDevice("reader_one", events)
+  manager = concurrency.GlobalManager()
+
+  await manager.manage_context(first)
+  initial_hash = hash(first)
+  # Pick a coordinate that changes both the full hash and its 8-slot dict bucket.
+  for x in range(1, 64):
+    deck.assign_child_resource(first, location=Coordinate(float(x), 50.0, 0.0))
+    if hash(first) != initial_hash and (hash(first) & 7) != (initial_hash & 7):
+      break
+    deck.unassign_child_resource(first)
+  assert hash(first) != initial_hash
+
+  await manager.release_context(first)
+  assert not first.is_active
+  assert manager._contexts == {}
+  assert events == ["enter:reader_one", "exit:reader_one"]
+
+  second = _MovableDevice("reader_two", events)
+  await manager.manage_context(second)
+  second_initial_hash = hash(second)
+  for x in range(1, 64):
+    deck.assign_child_resource(second, location=Coordinate(float(x), 80.0, 0.0))
+    if hash(second) != second_initial_hash and (hash(second) & 7) != (second_initial_hash & 7):
+      break
+    deck.unassign_child_resource(second)
+
+  await manager.stop_all()
+  assert not second.is_active
+  assert manager._contexts == {}
+  assert events == ["enter:reader_one", "exit:reader_one", "enter:reader_two", "exit:reader_two"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("anyio_backend", ["asyncio"])
+async def test_interactive_setup_allows_distinct_equal_resources() -> None:
+  """Two distinct Resource instances that compare equal have independent lifespans."""
+
+  class _EqualDevice(Resource, HasLifespan):
+    """Resource-backed lifespan owner with value-based equality."""
+
+    def __init__(self, name: str, events: List[str], tag: str) -> None:
+      """Initialize an equal-by-value resource lifespan owner."""
+      Resource.__init__(self, name=name, size_x=10, size_y=10, size_z=10)
+      HasLifespan.__init__(self)
+      self._events = events
+      self._tag = tag
+
+    async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+      """Record entry and register an exit event for this instance."""
+      self._events.append(f"enter:{self._tag}")
+      stack.callback(self._events.append, f"exit:{self._tag}")
+
+  events: List[str] = []
+  first = _EqualDevice("same_name", events, "first")
+  second = _EqualDevice("same_name", events, "second")
+  assert first is not second
+  assert first == second
+  assert hash(first) == hash(second)
+
+  manager = concurrency.GlobalManager()
+  await manager.manage_context(first)
+  await manager.manage_context(second)
+  assert first.is_active
+  assert second.is_active
+
+  await manager.release_context(second)
+  assert first.is_active
+  assert not second.is_active
+
+  await manager.release_context(first)
+  assert not first.is_active
+  assert manager._contexts == {}
+  assert events == ["enter:first", "enter:second", "exit:second", "exit:first"]

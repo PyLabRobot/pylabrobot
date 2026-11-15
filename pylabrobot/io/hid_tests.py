@@ -73,26 +73,33 @@ def _fake_hid_api(
   device: _FakeDevice,
   calls: list[Any],
   before_open: Optional[Callable[[], None]] = None,
+  enumerated_devices: Optional[Callable[[], list[dict[str, object]]]] = None,
 ) -> Iterator[None]:
-  def enumerate_devices() -> list[dict[str, object]]:
+  default_entry: dict[str, object] = {
+    "path": b"fake-path",
+    "vendor_id": 0x1234,
+    "product_id": 0x5678,
+    "serial_number": "serial",
+    "release_number": 0,
+    "manufacturer_string": "PyLabRobot",
+    "product_string": "Fake HID",
+    "usage_page": 0,
+    "usage": 0,
+    "interface_number": 0,
+  }
+
+  def enumerate_devices(vid: int = 0, pid: int = 0) -> list[dict[str, object]]:
     calls.append(("enumerate", threading.get_ident()))
+    entries = [dict(default_entry)] if enumerated_devices is None else enumerated_devices()
     return [
-      {
-        "path": b"fake-path",
-        "vendor_id": 0x1234,
-        "product_id": 0x5678,
-        "serial_number": "serial",
-        "release_number": 0,
-        "manufacturer_string": "PyLabRobot",
-        "product_string": "Fake HID",
-        "usage_page": 0,
-        "usage": 0,
-        "interface_number": 0,
-      }
+      entry
+      for entry in entries
+      if (vid == 0 or entry.get("vendor_id") == vid)
+      and (pid == 0 or entry.get("product_id") == pid)
     ]
 
   def open_device(*, path: bytes) -> _FakeDevice:
-    assert path == b"fake-path"
+    assert path in (b"fake-path", b"replugged-path")
     calls.append(("open", threading.get_ident()))
     if before_open is not None:
       before_open()
@@ -384,6 +391,159 @@ class TestHIDLifespan(AnyioTestBase):
     with _fake_hid_api(device, calls):
       async with io:
         assert await io.read(8) == b"reply"
+    assert [call[0] for call in calls] == ["enumerate", "open", "read", "read", "close"]
+
+  @pytest.mark.parametrize(
+    "disconnected_entry",
+    [
+      {"path": b"other-path", "vendor_id": 0x1234, "product_id": 0x5678, "serial_number": "serial"},
+      {"path": b"fake-path", "vendor_id": 0x9999, "product_id": 0x5678, "serial_number": "serial"},
+      {"path": b"fake-path", "vendor_id": 0x1234, "product_id": 0x9999, "serial_number": "serial"},
+      {"path": b"fake-path", "vendor_id": 0x1234, "product_id": 0x5678, "serial_number": "other"},
+    ],
+  )
+  async def test_mid_read_disconnect_via_hid_success_exception_latches_connection_lost(
+    self,
+    disconnected_entry: dict[str, object],
+  ) -> None:
+    """hid 1.0.9 surfaces hidapi >= 0.15 read disconnects as HIDException('Success') on every poll."""
+    calls: list[Any] = []
+    connected = True
+    device = _FakeDevice(calls)
+    io = _new_hid()
+
+    def read_while_disconnected(size: int, timeout: int) -> bytes:
+      assert not device.closed
+      calls.append(("read", size, timeout, threading.get_ident()))
+      raise _FakeHIDException("Success")
+
+    device.read = read_while_disconnected  # type: ignore[method-assign]
+
+    def current_devices() -> list[dict[str, object]]:
+      if not connected:
+        return [dict(disconnected_entry)]
+      return [
+        {
+          "path": b"fake-path",
+          "vendor_id": 0x1234,
+          "product_id": 0x5678,
+          "serial_number": "serial",
+        }
+      ]
+
+    def enumerate_devices(vid: int = 0, pid: int = 0) -> list[dict[str, object]]:
+      calls.append(("enumerate", vid, pid, threading.get_ident()))
+      return current_devices()
+
+    def open_device(*, path: bytes) -> _FakeDevice:
+      calls.append(("open", path, threading.get_ident()))
+      return device
+
+    with (
+      mock.patch.object(hid_module, "USE_HID", True),
+      mock.patch.object(
+        hid_module,
+        "hid",
+        SimpleNamespace(enumerate=enumerate_devices, Device=open_device),
+        create=True,
+      ),
+      mock.patch.object(hid_module, "HIDException", _FakeHIDException, create=True),
+    ):
+      async with io:
+        connected = False
+        with anyio.fail_after(0.1):
+          with pytest.raises(_FakeHIDException, match="disconnected"):
+            await io.read_to_boundary()
+        with pytest.raises(ConnectionError, match="connection lost"):
+          await io.read(4)
+
+    assert [call[0] for call in calls].count("read") == 1
+    assert device.closed
+    assert io._device_path is None
+    assert len({call[-1] for call in calls}) == 1
+
+    replacement = _FakeDevice(calls, reads=[b"recovered"])
+    with _fake_hid_api(
+      replacement,
+      calls,
+      enumerated_devices=lambda: [
+        {
+          "path": b"replugged-path",
+          "vendor_id": 0x1234,
+          "product_id": 0x5678,
+          "serial_number": "serial",
+        }
+      ],
+    ):
+      async with io:
+        assert (await io.read_to_boundary()).data == b"recovered"
+    assert replacement.closed
+    assert io._device_path is None
+
+  async def test_hid_without_serial_filter_ignores_enumerated_serial_until_unplugged(self) -> None:
+    """Devices opened with serial_number=None stay alive across empty polls while enumerated."""
+    calls: list[Any] = []
+    connected = True
+    device = _FakeDevice(
+      calls,
+      reads=[_FakeHIDException("Success"), b"report", _FakeHIDException("Success")],
+    )
+    io = HID("fake HID", vid=0x1234, pid=0x5678, serial_number=None, max_input_report_size=64)
+
+    def current_devices() -> list[dict[str, object]]:
+      if not connected:
+        return []
+      return [
+        {
+          "path": b"fake-path",
+          "vendor_id": 0x1234,
+          "product_id": 0x5678,
+          "serial_number": "BYO-12345",
+        }
+      ]
+
+    with _fake_hid_api(device, calls, enumerated_devices=current_devices):
+      async with io:
+        assert (await io.read_to_boundary()).data == b"report"
+        connected = False
+        with anyio.fail_after(1):
+          with pytest.raises(_FakeHIDException, match="disconnected"):
+            await io.read_to_boundary()
+        with pytest.raises(ConnectionError, match="connection lost"):
+          await io.read(4)
+
+    assert device.closed
+    assert io._device_path is None
+
+  async def test_mid_read_disconnect_during_empty_polls_latches_connection_lost(self) -> None:
+    """Empty read polls detect when the opened HID device path disappears or changes."""
+    calls: list[Any] = []
+    active_path = b"fake-path"
+    device = _FakeDevice(calls)
+    io = _new_hid()
+    io._presence_check_interval = 0.01
+
+    def current_devices() -> list[dict[str, object]]:
+      return [
+        {
+          "path": active_path,
+          "vendor_id": 0x1234,
+          "product_id": 0x5678,
+          "serial_number": "serial",
+        }
+      ]
+
+    with _fake_hid_api(device, calls, enumerated_devices=current_devices):
+      async with io:
+        active_path = b"replugged-path"
+        with anyio.fail_after(1):
+          with pytest.raises(_FakeHIDException, match="disconnected"):
+            await io.read_to_boundary()
+        with pytest.raises(ConnectionError, match="connection lost"):
+          await io.write(b"after-disconnect")
+
+    assert device.closed
+    assert len({call[-1] for call in calls}) == 1
 
   async def test_write_checks_report_id_in_short_write_count(self) -> None:
     """HIDAPI counts the report ID as part of a submitted report."""

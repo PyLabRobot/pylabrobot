@@ -702,8 +702,9 @@ class HasLifespan(metaclass=_HasLifespanMeta):
 class _ManagedContext:
   """Signals and failure state for one interactively managed lifespan."""
 
-  def __init__(self) -> None:
-    """Initialize lifecycle synchronization signals."""
+  def __init__(self, owner: HasLifespan) -> None:
+    """Initialize lifecycle synchronization signals and retain the owner."""
+    self.owner = owner
     self.started = anyio.Event()
     self.stop = anyio.Event()
     self.exited = anyio.Event()
@@ -720,7 +721,7 @@ class GlobalManager:
     self._runner_started: Optional[anyio.Event] = None
     self._runner_stop: Optional[anyio.Event] = None
     self._runner_lock = asyncio.Lock()
-    self._contexts: Dict[HasLifespan, _ManagedContext] = {}
+    self._contexts: Dict[int, _ManagedContext] = {}
 
   def _check_backend(self) -> None:
     """Reject interactive ownership outside asyncio before creating tasks."""
@@ -779,8 +780,9 @@ class GlobalManager:
 
   def _remove_context(self, owner: HasLifespan, managed: _ManagedContext) -> None:
     """Remove a managed context if it is still the owner's current entry."""
-    if self._contexts.get(owner) is managed:
-      self._contexts.pop(owner)
+    key = id(owner)
+    if self._contexts.get(key) is managed:
+      self._contexts.pop(key)
 
   async def _stop_runner_if_idle(self) -> None:
     """Stop and clear the shared runner after its last owner exits."""
@@ -811,11 +813,12 @@ class GlobalManager:
       BaseException: If lifespan entry fails.
     """
     self._check_backend()
-    if owner in self._contexts:
+    key = id(owner)
+    if key in self._contexts:
       raise RuntimeError("This object already has an active lifespan")
 
-    managed = _ManagedContext()
-    self._contexts[owner] = managed
+    managed = _ManagedContext(owner)
+    self._contexts[key] = managed
     scheduled = False
     try:
       task_group = await self._ensure_runner()
@@ -853,7 +856,7 @@ class GlobalManager:
       BaseException: If lifespan exit fails or the caller is cancelled.
     """
     self._check_backend()
-    managed = self._contexts.get(owner)
+    managed = self._contexts.get(id(owner))
     if managed is None:
       return
 
@@ -871,7 +874,7 @@ class GlobalManager:
 
   async def stop_all(self) -> None:
     """Exit every managed lifespan simultaneously and surface failures."""
-    owners = tuple(self._contexts)
+    owners = tuple(managed.owner for managed in self._contexts.values())
     async with anyio.create_task_group() as task_group:
       for owner in owners:
         task_group.start_soon(self.release_context, owner)

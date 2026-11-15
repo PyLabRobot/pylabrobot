@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -151,6 +152,7 @@ class HID(ContinuousConnectionIO):
     self.pid = pid
     self.serial_number = serial_number
     self.device: Optional[hid.Device] = None
+    self._device_path: Optional[bytes] = None
     self._unique_id = f"{vid}:{pid}:{serial_number}"
     self._executor: Optional[ThreadPoolExecutor] = None
     self._connection_lost = False
@@ -159,6 +161,8 @@ class HID(ContinuousConnectionIO):
     self._cursor = BoundaryCursor(frozenset({"report"}))
     self._oversized_report = False
     self._poll_timeout = 20  # milliseconds; HIDAPI calls must stay finite
+    self._presence_check_interval = 0.2  # seconds between presence checks during empty polls
+    self._last_presence_check = 0.0
 
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new HID object while capture or validation is active")
@@ -210,15 +214,31 @@ class HID(ContinuousConnectionIO):
       chosen = candidates[0]
 
     # --- 5. Open the device ---
+    device_path = chosen["path"]
     self.device = hid.Device(
-      path=chosen["path"]  # safer than vid/pid/serial triple
+      path=device_path  # safer than vid/pid/serial triple
     )
+    self._device_path = device_path
+    self._last_presence_check = time.monotonic()
     if self.max_input_report_size is None:
       try:
         descriptor = self.device.get_report_descriptor()
       except AttributeError as exc:
         raise ValueError("HID report descriptor unavailable; supply max_input_report_size") from exc
       self.max_input_report_size = maximum_input_report_size(bytes(descriptor))
+
+  def _is_device_present_sync(self) -> bool:
+    """Report whether the opened HID device path is still enumerated.
+
+    Runs on the executor that owns all device calls.
+    """
+    return self._device_path is not None and any(
+      candidate.get("path") == self._device_path
+      and candidate.get("vendor_id") == self.vid
+      and candidate.get("product_id") == self.pid
+      and (self.serial_number is None or candidate.get("serial_number") == self.serial_number)
+      for candidate in hid.enumerate(self.vid, self.pid)
+    )
 
   async def _run_on_worker(self, func: Callable[..., _T], *args: Any) -> _T:
     """Run one HIDAPI call on the device's affinity-preserving worker thread."""
@@ -274,6 +294,7 @@ class HID(ContinuousConnectionIO):
         await self._run_on_worker(device.close)
     finally:
       self.device = None
+      self._device_path = None
       self._cursor = BoundaryCursor(frozenset({"report"}))
       self._oversized_report = False
     if record:
@@ -443,15 +464,25 @@ class HID(ContinuousConnectionIO):
     if maximum is None:
       raise RuntimeError("HID input report maximum is not known")
 
-    def _read():
+    def _read() -> bytes:
       if self.device is None:
         raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       try:
-        return self.device.read(maximum + 1, timeout=self._poll_timeout)
+        data = bytes(self.device.read(maximum + 1, timeout=self._poll_timeout))
       except HIDException as e:
         if str(e) == "Success":
+          self._last_presence_check = time.monotonic()
+          if not self._is_device_present_sync():
+            raise HIDException(
+              f"HID device '{self.human_readable_device_name}' disconnected"
+            ) from e
           return b""
         raise
+      if not data and time.monotonic() - self._last_presence_check >= self._presence_check_interval:
+        self._last_presence_check = time.monotonic()
+        if not self._is_device_present_sync():
+          raise HIDException(f"HID device '{self.human_readable_device_name}' disconnected")
+      return data
 
     try:
       with anyio.CancelScope(shield=True):

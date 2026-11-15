@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dynamic = ["version"]
-dependencies = ["anyio>=4.7", "sniffio", "typing_extensions", "websockets>=14"]
+dependencies = ["anyio>=4.11", "sniffio", "typing_extensions", "websockets>=14"]
 
 [project.scripts]
 plr = "pylabrobot.cli:main"

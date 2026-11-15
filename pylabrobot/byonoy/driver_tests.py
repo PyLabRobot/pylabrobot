@@ -626,6 +626,35 @@ class TestByonoyDriverProtocol(AnyioTestBase):
 
     assert report_ids(fake.writes) == [trigger_report, 0x0060]
 
+  @pytest.mark.parametrize("error_cls", [RuntimeError, KeyboardInterrupt])
+  async def test_non_timeout_error_after_trigger_aborts_and_reraises_original_error(
+    self, error_cls: type[BaseException]
+  ) -> None:
+    driver, fake = make_driver()
+    failure = error_cls("mid-stream failure")
+
+    with pytest.raises(error_cls) as exc_info:
+      async with driver._measurement_transaction(0x0340):
+        await driver._send_command_locked(0x0340, b"\x00" * 60, wait_for_response=False)
+        raise failure
+
+    assert exc_info.value is failure
+    assert report_ids(fake.writes) == [0x0340, 0x0060]
+    assert fake.writes[-1][2:4] == b"\x40\x03"
+    assert driver._in_flight_trigger is None
+
+  async def test_non_timeout_error_before_trigger_does_not_abort(self) -> None:
+    driver, fake = make_driver()
+    failure = RuntimeError("preflight failure")
+
+    with pytest.raises(RuntimeError) as exc_info:
+      async with driver._measurement_transaction(0x0340):
+        await driver._send_command_locked(0x0010, b"\x00" * 60, wait_for_response=False)
+        raise failure
+
+    assert exc_info.value is failure
+    assert report_ids(fake.writes) == [0x0010]
+
   async def test_concurrent_cancel_emits_abort_once(self) -> None:
     abort_started = anyio.Event()
     release_abort = anyio.Event()

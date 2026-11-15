@@ -514,11 +514,7 @@ class ByonoyDriver(HasLifespan):
         async with self._transaction_lock:
           try:
             yield
-          except anyio.get_cancelled_exc_class():
-            if self._measurement_trigger_committed:
-              await self._abort_active_measurement()
-            raise
-          except TimeoutError:
+          except BaseException:
             if self._measurement_trigger_committed:
               await self._abort_active_measurement()
             raise

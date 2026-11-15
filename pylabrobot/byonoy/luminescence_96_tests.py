@@ -96,23 +96,66 @@ class TestByonoyLuminescenceProtocol(AnyioTestBase):
       await reader.read_luminescence(plate, plate.get_all_items())
 
   @pytest.mark.parametrize(
-    "chunks, message",
+    "chunks, message, expected_writes",
     [
-      ([luminescence_chunk(0, 0, [0.0] * 12)], "seq_len=0"),
+      ([luminescence_chunk(0, 0, [0.0] * 12)], "seq_len=0", [0x0010, 0x0200, 0x0340, 0x0060]),
       (
         [luminescence_chunk(0, 2, [0.0] * 12), luminescence_chunk(1, 3, [0.0] * 12)],
         "changed seq_len",
+        [0x0010, 0x0200, 0x0340, 0x0060],
       ),
-      ([luminescence_chunk(2, 2, [0.0] * 12)], "sent seq=2"),
-      ([luminescence_chunk(0, 1, [0.0] * 12)], "positive multiple of 96"),
+      ([luminescence_chunk(2, 2, [0.0] * 12)], "sent seq=2", [0x0010, 0x0200, 0x0340, 0x0060]),
+      (
+        [luminescence_chunk(0, 1, [0.0] * 12)],
+        "positive multiple of 96",
+        [0x0010, 0x0200, 0x0340, 0x0300],
+      ),
     ],
   )
-  async def test_malformed_results_raise(self, chunks: list[bytes], message: str) -> None:
-    reader, _ = make_reader(chunks + ([status_report()] if "positive" in message else []))
+  async def test_malformed_results_raise(
+    self, chunks: list[bytes], message: str, expected_writes: list[int]
+  ) -> None:
+    reader, fake = make_reader(chunks + ([status_report()] if "positive" in message else []))
     plate = cellvis_96_wellplate_350uL_Fb(name="plate")
 
     with pytest.raises(RuntimeError, match=message):
       await reader.read_luminescence(plate, plate.get_all_items())
+
+    assert report_ids(fake.writes) == expected_writes
+
+  async def test_mid_stream_error_aborts_before_admitting_next_read(self) -> None:
+    async def fail_mid_stream() -> bytes:
+      raise RuntimeError("injected mid-stream failure")
+
+    next_rows = [[float(row * 12 + col + 1) for col in range(12)] for row in range(8)]
+    replies: list[ReadEffect] = [
+      luminescence_chunk(0, 8, [999.0] * 12),
+      fail_mid_stream,
+      *[luminescence_chunk(seq, 8, next_rows[seq]) for seq in range(8)],
+      status_report(),
+    ]
+    reader, fake = make_reader(replies)
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
+
+    with pytest.raises(RuntimeError, match="injected mid-stream failure"):
+      await reader.read_luminescence(plate, plate.get_all_items(), mode="rapid")
+
+    assert report_ids(fake.writes) == [0x0010, 0x0200, 0x0340, 0x0060]
+    assert fake.writes[-1][2:4] == b"\x40\x03"
+
+    result = await reader.read_luminescence(plate, plate.get_all_items(), mode="rapid")
+    assert result[0].data[0][0] == 1.0
+    assert result[0].data[7][11] == 96.0
+    assert report_ids(fake.writes) == [
+      0x0010,
+      0x0200,
+      0x0340,
+      0x0060,
+      0x0010,
+      0x0200,
+      0x0340,
+      0x0300,
+    ]
 
   async def test_explicit_cancel_interrupts_blocked_read_and_raises_measurement_cancelled_error(
     self,
