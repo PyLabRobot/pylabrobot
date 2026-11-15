@@ -148,3 +148,59 @@ refused. A pod's own gripper and pipettor are kept apart (`driver/planning/check
 **I15. Biomek's techniques are a translation, not a mode.** `techniques.py` turns a Biomek technique
 and liquid type into the features' keyword arguments, which a caller splats and overrides. There is
 no `technique=` argument and no selection by rank.
+
+## Where Biomek and the shared interface part
+
+- The Span-8's probes share X and are spread evenly in Y by one span value (`motion.span_targets`),
+  so one move reaches only collinear, evenly spaced targets; other `use_channels` / well sets are
+  split into several moves (as STAR splits by X). Results are the same; timing is not.
+- The 96-head has no liquid-level sensing and one plunger: `lld_mode` None or OFF only, and one
+  volume, as STAR's head.
+- Pipetting templates (a step's choreography: approach, touch-off, the small Z moves around a
+  dispense) have no PyLabRobot counterpart. The standard ones are what `aspirate` / `dispense` do
+  (`driver/liquid.py`); the reservoir variants are `offset` + `approach_height`.
+- Heights from the liquid need the well's contents: PyLabRobot's volume trackers (on), as Biomek
+  needs known amounts. The 96-head has one Z: the lowest any mandrel needs.
+- Geometry comes through PyLabRobot only. The features take any PyLabRobot container and tip: the
+  cavity bottom (`material_z_thickness`), depth, size and cross-section, `compute_height_from_volume`,
+  the tip's length, fitting depth and diameter. Biomek's labware is a converter into those
+  (`pylabrobot.resources.beckman_coulter`, with Biomek's height <-> volume as `height_volume_data`).
+- Biomek's heights are in mm, its positions in cm: the API takes PyLabRobot's mm throughout.
+
+Parameters are keyword arguments defaulted from `default_*` class attributes (STAR P6, P18); what
+the instrument fixes (the tip loading, the gripper's squeeze) comes from its instrument file.
+Positions come from the deck through the configuration's conversions; every move passes the rail
+guard (I7) and the move check (I12).
+
+## Not in this driver
+
+The deck's devices (shakers, Peltiers, the tilting ALP, the washer, the camera) are separate
+devices, or chassis features once their protocol is known. Liquid-level sensing, prewetting, clot
+detection and Biomek's volume calibration are not built: the Span-8 refuses liquid-level sensing,
+and a Biomek technique that turns any of them on is refused (`techniques.py`).
+
+## Rules the operations keep that are not PyLabRobot's own
+
+- **The 96-head loads tips only on a tip-loading position.** Its `LT` presses the whole box, which
+  Biomek allows only where the position's ALP can load tips (`BiomekPosition.head96_tip_loading`);
+  `plan_pick_up` refuses elsewhere.
+- **Setup takes off tips left on**, as the STAR's does: the Span-8's by its tip sensor; the
+  96-head, which has no tip sensor, by the session state, and by default it ejects over its trash
+  even when none are recorded (`BiomekI7.setup(discard_tips=, precautionary_discard=)`).
+- **Biomek labware saves and loads as plain PyLabRobot data**: a well built from a Biomek class
+  carries its height <-> volume as `height_volume_data`, and the deck, its ALPs and positions
+  deserialize, so a deck file stands in for the code that built it.
+
+## Where the API keeps Biomek's own shape
+
+- **`home`, not `initialize`, on the parts.** `pod.home()`, `head96.home_plunger()`,
+  `pipettes.home_pumps()` keep Biomek's words; the driver's `initialize` is STAR's bring-up (what
+  `setup` does after discovery).
+- **`stop()` moves nothing.** STAR's raises its channels and parks. Biomek stops without moving and
+  rests the arms by tripping the interlock; after a fault, a move at stop is what is not wanted.
+- **No `driver.configuration`.** The device answers per module (`chassis.configuration`, each
+  pod's `configuration`); what describes the instrument is the declared configuration
+  (`driver.declared`).
+- **The door only reports.** The door has no interlock (only the light curtain and the host trip
+  it), so `front_cover` has no `disable_control`.
+- **Axis states are names** (`"enabled"`, `"disabled"`, `"not_configured"`, `"fault"`).
