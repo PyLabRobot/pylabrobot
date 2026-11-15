@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import itertools
 import logging
 from dataclasses import dataclass, field
 from typing import (
@@ -48,6 +47,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.planning import (
   merge,
   obstacles,
   pod_model,
+  search,
   traverse,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
@@ -57,6 +57,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   Homer,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import (
+  OTHER,
   RailCollisionError,
   RailPose,
   XRail,
@@ -174,6 +175,8 @@ class Pod:
     # What the gripper holds, as the rail counts it: set through `gripper.set_held_labware`; the
     # pod cannot sense it.
     self._held_labware: Optional[g.HeldLabware] = None
+    # The last planning world built (`_planning_world`), with what it was built from.
+    self._planning_cache: Optional[Tuple[Tuple[int, g.Range], obstacles.Obstacles]] = None
     # What it held at its last move checked on the rail: the first move after it takes or lets go
     # of labware (its range changed with it) is checked there, whatever axes it moves.
     self._rail_held: Optional[g.HeldLabware] = None
@@ -531,6 +534,44 @@ class Pod:
     _, _, after = motion.plan_move(self.axes, start, wanted, 1000, self._cutoff_velocity)
     return after
 
+  def _search(
+    self,
+    targets: Mapping[str, int],
+    x_bounds: Optional[Tuple[float, float]] = None,
+    start: Optional[Mapping[str, motion.CPos]] = None,
+  ) -> List[merge.Move]:
+    """Biomek's search (`search.search`) from `start` (where the pod is by default) to `targets`
+    (counts), for a planned
+    move whose direct way is not clear. Each step moves one axis of one part to its next contact
+    or its destination coordinate (`search.contact_stop`): X carries both parts, Y moves the
+    pipettor (only with GR on a multiple of 90 degrees), GY the gripper, GR turns the gripper a
+    quarter turn (to the bracketing quarters off them, straight to an off-quarter destination
+    within one). Channel Z axes and GZ in `targets` join the search: up to the part's next contact
+    above (its bottom at an obstacle's top) or its target, down only near the destination (within
+    twice the part's footprint of its X and Y) to the next top below or its target; without them
+    the heights are kept (Biomek's travel stage). Every step is checked as `_clear` checks it,
+    and its stops come from the same boxes; cost its length + 1 per moving part,
+    + `RotationPenalty` per turn or per move on an axis the destination leaves free; at most
+    `AStarSearchLimit` expansions; ties to the first found. A Span-8's span is set first, as
+    Biomek sets it before planning. `x_bounds` (cm): where X may go, within its travel (a pod
+    moving aside keeps to its side); by default the planner's X limits (`_planning_x_limits`).
+    Against the planning world (`_planning_world`).
+
+    Raises:
+      search.NoPathError: as `search.search`.
+    """
+    return search.pod_search(
+      self._require_declared(),
+      self._cpositions if start is None else start,
+      targets,
+      self._planning_world(),
+      self._pose,
+      self._planned,
+      self._clear,
+      self.channel_z_axes,
+      self._planning_x_limits() if x_bounds is None else x_bounds,
+    )
+
   def _world(self, pod_number: int, exempt: Sequence[str] = ()) -> Optional[obstacles.Obstacles]:
     """What pod `pod_number`'s moves must clear (the driver's `obstacles`, on that pod's
     calibration of the deck) with the boxes of the `exempt` positions left out; None without a
@@ -539,10 +580,69 @@ class Pod:
       return None
     return self.driver.obstacles(pod_number).without(exempt)
 
+  def _other_pod(self) -> Optional["Pod"]:
+    """The other pod on this pod's rail; None without one."""
+    driver = self.driver
+    if driver is None or self.rail is None:
+      return None
+    other = driver.right_x_arm if self.side == "left" else driver.left_x_arm
+    if other is None or other is self or other.rail is not self.rail or other.declared is None:
+      return None
+    return other
+
+  def _other_pod_wall(self) -> Optional[g.Range]:
+    """The other pod as Biomek's planner walls it off (deck X, cm): its whole range where it
+    stands, as the rail guard counts it. None without another pod, or with its position not
+    known."""
+    other = self._other_pod()
+    if other is None:
+      return None
+    assert self.rail is not None
+    return self.rail.occupied(other.side)
+
+  def _planning_x_limits(self) -> Optional[Tuple[float, float]]:
+    """Where Biomek's planner lets X go (cm), from the other pod: as far as touching the other
+    pod's range where it stands (this pod's gripper fully closed, turned towards it), never less
+    than where this pod is. None: its travel."""
+    other = self._other_pod()
+    if other is None:
+      return None
+    assert self.rail is not None
+    d = self._require_declared()
+    low, high = d.limits["X"]
+    taken = self.rail.occupied(other.side)
+    counts = self._cpositions["X"][0]
+    if taken is None or counts is None:
+      return None
+    x = d.to_value("X", counts)
+    closed = d.limits["GG"][0]
+    held = self._held_labware
+    if self.side == "left":
+      pose = g.GripperPose(180.0, closed, held) if self.gripper is not None else None
+      own = self.rail.range_at(self.side, RailPose(x, pose))
+      return low, max(x, x + (taken[0] - own[1]))
+    pose = g.GripperPose(0.0, closed, held) if self.gripper is not None else None
+    own = self.rail.range_at(self.side, RailPose(x, pose))
+    return min(x, x + (taken[1] - own[0])), high
+
   def _planning_world(self) -> Optional[obstacles.Obstacles]:
-    """What a planned move is checked against: the deck's obstacles (`_world`), nothing exempt.
-    The other pod is the rail guard's (`XRail`)."""
-    return self._world(self.pod_number)
+    """What Biomek's planner plans this pod against: the deck's obstacles (`_world`, nothing
+    exempt) and the other pod as a wall over all Y and Z (`_other_pod_wall`). The move checks
+    leave the other pod to the rail (`XRail`)."""
+    world = self._world(self.pod_number)
+    wall = self._other_pod_wall()
+    if world is None or wall is None:
+      return world
+    key = (id(world), wall)
+    if self._planning_cache is None or self._planning_cache[0] != key:
+      part = obstacles.obstacle_part(
+        f"the {OTHER[self.side]} pod", wall, (None, None), (None, None)
+      )
+      self._planning_cache = (
+        key,
+        obstacles.Obstacles((*world.structure, part), world.deck, world.holders),
+      )
+    return self._planning_cache[1]
 
   def _clear(
     self,
@@ -551,7 +651,7 @@ class Pod:
   ) -> bool:
     """Whether each of `moves` (axis targets, counts), made in order from `start` (where the pod
     is by default), passes the pod's own check and the deck check, as a sweep; planning exempts no
-    deck position, as Biomek's does (`_planning_world`). A move
+    deck position, as Biomek's does, and plans around the other pod (`_planning_world`). A move
     whose start or end is not known is left to `move_axes`."""
     d = self._require_declared()
     world = self._planning_world()
@@ -586,7 +686,8 @@ class Pod:
     """Take the gripper to `targets` (counts: X, GY, GR) as Biomek's gripper approach does: on a
     Span-8 the probes' span narrowed first (`_minimize_span`), then the planned travel
     (`_move_over`): the channels and the gripper at their travel heights, the gripper turned to
-    the angle given. Planned: no deck position exempt (`_planning`)."""
+    the angle given, Biomek's search where the direct way is not clear. Planned: no deck position
+    exempt (`_planning`)."""
     await self._read_unknown_positions()
     with self._planning():
       await self._minimize_span(speed)
@@ -969,6 +1070,7 @@ class Pod:
     z_final: Optional[float] = None,
     tip_lengths: Optional[Mapping[str, float]] = None,
     gripper_height: Optional[float] = None,
+    x_bounds: Optional[Tuple[float, float]] = None,
   ) -> MoveResult:
     """Travel to `targets` (X, Y and the like, in counts, as `move_axes` takes them) clear of the
     deck: lift the channels and the gripper to a traverse height, move, then optionally set the
@@ -989,6 +1091,7 @@ class Pod:
         pod's own record when None (`_carried_tip_lengths`).
       gripper_height: GZ (cm) to travel at, lowered to it first if it is above. Default: its
         traverse height (`_traverse_heights`).
+      x_bounds: where X may go on the way (cm), within its travel; None: anywhere.
 
     Raises:
       ValueError: for a channel Z axis in `targets`, or a height a channel cannot lift its tip to
@@ -1003,9 +1106,8 @@ class Pod:
     lengths = self._carried_tip_lengths() if tip_lengths is None else dict(tip_lengths)
     await self._read_unknown_positions()
     with self._planning():
-      return await self._travel_over(
-        targets, speed, minimum_traverse_height, z_final, lengths, gripper_height
-      )  # fmt: skip
+      return await self._travel_over(targets, speed, minimum_traverse_height, z_final, lengths,
+                                gripper_height, x_bounds)  # fmt: skip
 
   async def _travel_over(
     self,
@@ -1015,11 +1117,12 @@ class Pod:
     z_final: Optional[float],
     lengths: Mapping[str, float],
     gripper_height: Optional[float],
+    x_bounds: Optional[Tuple[float, float]] = None,
   ) -> MoveResult:
-    """`_move_over`'s travel: every stage planned (the gripper lowered to `gripper_height`, the way
-    out of any position the pod stands in, the rise, the travel (`_travel_moves`), the descent to
-    `z_final`), each move checked as `move_axes` checks it, then executed; a stage that is not
-    clear refuses the whole travel and nothing is sent. Returns the travel's last move's result."""
+    """`_move_over`'s travel: every stage planned (the gripper lowered to `gripper_height`, the rise
+    with the way out of any position the pod stands in, the travel, the descent to `z_final`), as
+    Biomek plans a call whole, then executed; a stage with no path refuses the whole travel and
+    nothing is sent. Returns the travel's last move's result."""
     d = self._require_declared()
     heights, _, _ = self._traverse_targets(minimum_traverse_height, lengths, targets)
     at: Dict[str, motion.CPos] = dict(self._cpositions)
@@ -1032,21 +1135,33 @@ class Pod:
         at = self._planned(at, lower)
     escape, at = self._plan_escape(heights, at)
     plan += escape
+    # The rise, the travel and the descent, each planned from where the one before leaves the pod,
+    # then merged as one path (`_merged`), as Biomek concatenates and merges its stages.
+    merged_from = at
     path = self._plan_lift(heights, at)
     for move in path:
       at = self._planned(at, move)
-    travel = self._travel_moves(targets, at)
+    # Biomek's direct candidate; when one of its own moves is not clear, Biomek's search.
+    try:
+      travel = find_path.travel(
+        targets, self._clear_from(at), lambda to: self._search(to, x_bounds, at)
+      )
+    except search.NoPathError as e:
+      raise check.DeckCollisionError(f"{self}: no clear path for the travel: {e}") from e
     for move in travel:
       at = self._planned(at, move)
     path += travel
     if z_final is not None:
+      # Straight down; when that is not clear, Biomek's descent stage: the search to the whole
+      # destination, down only near it.
       final = {n: d.to_counts(n, z_final) for n in self.channel_z_axes}
-      path += self._direct(final, "the descent", at)
+      path += self._direct_or_searched(final, {**targets, **final}, "the descent", x_bounds, at)
+    merged = self._merged(path, merged_from)
     # The travel's result: its last move that moves a target's axis.
     last_travel = max(
-      (len(plan) + i for i, move in enumerate(path) if set(move) & set(targets)), default=-1
+      (len(plan) + i for i, move in enumerate(merged) if set(move) & set(targets)), default=-1
     )
-    plan += [(move, ()) for move in path]
+    plan += [(move, ()) for move in merged]
     result = MoveResult()
     for i, step in enumerate(plan):
       done = await self._run_step(step, speed)
@@ -1213,16 +1328,16 @@ class Pod:
       self._working_at = before
 
   async def _rise(self, heights: Mapping[str, float], speed: int) -> None:
-    """The planned move to safe heights: the way out of any position the pod stands in
-    (`_plan_escape`), then the axes below their `heights` (cm) up to them, planned whole then
-    executed, nothing exempt (`_planning`).
+    """Biomek's planned move to safe heights: the axes below their `heights` (cm) up to them,
+    planned whole (the way out of any position, `_plan_escape`; the rise, `_plan_lift`, merged)
+    then executed, nothing exempt (`_planning`).
 
     Raises:
       DeckCollisionError: as `_plan_escape` and `_plan_lift`. Nothing is sent.
     """
     with self._planning():
       plan, at = self._plan_escape(heights, self._cpositions)
-      plan += [(move, ()) for move in self._plan_lift(heights, at)]
+      plan += [(move, ()) for move in self._merged(self._plan_lift(heights, at), at)]
       for step in plan:
         await self._run_step(step, speed)
 
@@ -1270,15 +1385,28 @@ class Pod:
   def _plan_lift(
     self, heights: Mapping[str, float], start: Mapping[str, motion.CPos]
   ) -> List[merge.Move]:
-    """The rise from `start`: the axes below their `heights` (cm) up to them, straight up.
+    """The rise from `start`: the axes below their `heights` (cm) up to them, straight up, or
+    Biomek's rise stage (the search to the heights) when that is not clear; unmerged.
 
     Raises:
-      DeckCollisionError: when that is not clear; nothing is sent.
+      DeckCollisionError: when the search finds no path up.
     """
     lift = self._lift_targets(heights, start)
     if not lift:
       return []
-    return self._direct(lift, "the rise", start)
+    return self._direct_or_searched(lift, lift, "the rise", None, start)
+
+  def _merged(
+    self, path: Sequence[merge.Move], start: Mapping[str, motion.CPos]
+  ) -> List[merge.Move]:
+    """`path` from `start` merged as Biomek merges a planned path (`merge.merge_path`), every
+    change checked as `_clear` checks it."""
+    counts = {name: c for name, (_, c) in start.items()}
+    if self.module_type == "span8":
+      # A Span-8's Y names probe 1 and S is the span, as `motion.span_targets` reads them.
+      counts["Y"] = counts["Y1"]
+      counts["S"] = max(counts["Y8"] - counts["Y1"], 0)
+    return merge.merge_path(path, counts, self._clear_from(start))
 
   async def _run_step(self, step: PlanStep, speed: int) -> MoveResult:
     """One planned move; one that leaves the positions it names (the way out of them) is made with
@@ -1291,34 +1419,31 @@ class Pod:
     with self.working_at(*leaving):
       return await self.move_axes(move, speed)
 
-  def _travel_moves(
-    self, targets: Mapping[str, int], start: Mapping[str, motion.CPos]
+  def _clear_from(self, start: Mapping[str, motion.CPos]) -> Callable[..., bool]:
+    """`_clear` with its moves made from `start` unless a call gives its own."""
+    return lambda moves, at=None: self._clear(moves, start if at is None else at)
+
+  def _direct_or_searched(
+    self,
+    move: merge.Move,
+    destination: Mapping[str, int],
+    what: str,
+    x_bounds: Optional[Tuple[float, float]] = None,
+    start: Optional[Mapping[str, motion.CPos]] = None,
   ) -> List[merge.Move]:
-    """The travel to `targets` from `start`, the rise made: one move when it is clear; else
-    Biomek's direct candidate, one axis at a time (`merge.direct_candidate`), in the first order of
-    its moves that is clear (a gripper turned before it reaches out, say).
+    """`move` alone from `start` (where the pod is by default) when it is clear (`_clear`); else
+    Biomek's search's path to `destination` (`_search`), unmerged.
 
     Raises:
-      DeckCollisionError: when no order is clear; nothing is sent.
+      DeckCollisionError: when the search finds no path; nothing is sent.
     """
-    if self._clear([dict(targets)], start):
-      return [dict(targets)]
-    for order in itertools.permutations(merge.direct_candidate(targets)):
-      if self._clear(order, start):
-        return list(order)
-    raise check.DeckCollisionError(f"{self}: no order of the travel's moves is clear")
-
-  def _direct(
-    self, move: merge.Move, what: str, start: Mapping[str, motion.CPos]
-  ) -> List[merge.Move]:
-    """`move` from `start`, when it is clear (`_clear`).
-
-    Raises:
-      DeckCollisionError: when it is not; nothing is sent.
-    """
-    if not self._clear([move], start):
-      raise check.DeckCollisionError(f"{self}: {what} is not clear")
-    return [move]
+    at = self._cpositions if start is None else start
+    try:
+      return find_path.direct_or_searched(
+        move, destination, self._clear_from(at), lambda to: self._search(to, x_bounds, at)
+      )
+    except search.NoPathError as e:
+      raise check.DeckCollisionError(f"{self}: no clear path for {what}: {e}") from e
 
   async def _send_motions(
     self,

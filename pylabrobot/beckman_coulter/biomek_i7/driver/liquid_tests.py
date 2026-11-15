@@ -133,6 +133,26 @@ class LiquidTests(PodMoveTest):
     self.assertLessEqual(mixed_shape.wall_distance(0.4, 0.0), 0.85 + 1e-6)
     self.assertAlmostEqual(mixed_shape.wall_distance(2.0, 0.0), 0.85, delta=0.001)
 
+  async def test_a_blocked_travel_takes_biomeks_search(self) -> None:
+    # From the home corner's Y with 1025 uL tips, X then Y would cross the washer at W3, which no
+    # such tip clears: the direct travel is not clear, and the search goes Y first, then X.
+    driver, lh = await self.setup_deck()
+    left = self.pod(driver, "left")
+    d = left.declared
+    assert d is not None
+    await left.move_axes({"Y": d.to_counts("Y", 14.45)})
+    lh.head96._set_tips(
+      {
+        mandrel_name(r, c): biomek_tip("T1025F", f"t_{r}_{c}")
+        for r in range(ROWS)
+        for c in range(COLUMNS)
+      }
+    )
+    moves = self.record(driver, "left")
+    await lh.head96.aspirate(lh.deck.get_resource("Reservoir"), 100, liquid_height=2.0)
+    travel = [sorted(t) for t, _ in moves if set(t) & {"X", "Y"}][:2]
+    self.assertEqual(travel, [["Y"], ["X"]])
+
   async def test_pylabrobots_own_labware(self) -> None:
     # A plate defined by PyLabRobot: heights from its cavity bottom, the level from its own
     # height <-> volume function, the touch-off to its outline less the tip's radius.

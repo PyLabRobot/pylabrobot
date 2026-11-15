@@ -6,8 +6,9 @@ Biomek models each part of a pod as a box in 3D and refuses a move whose sweep o
 gripper's boxes and its pipettor's (`own_collisions`), or any part and the deck's boxes, their
 own obstacles and the instrument's structure (`deck_collisions`), overlaps up to
 `DECK_TOLERANCE` allowed. Every move whose path would overlap is refused before anything is sent
-(`Pod.move_axes`); a planned call's moves are checked first with the same check on a larger model
-(the gripper padded below, `pod_model.planning_pad`). The parts are the pod model's (`pod_model`).
+(`Pod.move_axes`); the planner plans around them with the same check on a larger model (the
+gripper padded below, `pod_model.planning_pad`; the other pod as a wall). The parts are the pod
+model's (`pod_model`).
 """
 
 import math

@@ -2,7 +2,7 @@
 
 `PodModel` holds one pod's configuration and builds its parts (the gripper's, what it holds, the
 pipettor's, the pod's body) at a pose (`PodState`), each set of parts built once per pose: a
-planned path's checks ask for the same poses many times. The parts, in Biomek's frame (cm;
+planner's sweeps and searches ask for the same poses many times. The parts, in Biomek's frame (cm;
 X along the rail, Y towards the front, Z up from the deck):
 
 - the gripper, about its rotation centre (`pod_geometry`: the pod's X + `GripperXOffset` -

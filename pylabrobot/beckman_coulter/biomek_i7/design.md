@@ -104,17 +104,18 @@ the 96-head cannot sense tips, so that is how they are known across sessions.
   from one quarter turn to another, the box over each corner's arc; any other turn, sampled),
   against the deck (the operation's own position left out) and the pod's other tool, and the rail
   (I7). Not clear: refused, nothing sent.
-- *A planned call is checked whole* (`features/pod.py`, `find_path.py`): out of any position the
-  pod stands in, straight up, part by part; up to the safe heights (the tallest thing under each
-  tool's footprint, plus margins); the travel one axis at a time in Biomek's order (`merge.py`);
-  down. Every move is checked before anything moves: one that is not clear refuses the call, and
-  nothing moves.
-- *Two models.* Planned moves are checked with more than the move check checks (the gripper
-  padded by `AdditionalSafeHeightGripper`), so they pass it; the check stands alone for every
-  other move.
+- *One planner per planned call* (`features/pod.py`, `find_path.py`): out of any position the pod
+  stands in, straight up, part by part; the safe heights (the tallest thing under each tool's
+  footprint, plus margins); the direct way, or else Biomek's search (one axis of one part at a
+  time, to the next contact); merged as Biomek merges (`merge.py`). The whole call is planned
+  before anything moves: with no path, nothing moves.
+- *Two models.* The planner plans with more than the check checks (the gripper padded by
+  `AdditionalSafeHeightGripper`, the other pod as a wall at the end of its travel), so its plans
+  pass the check; the check stands alone for every other move.
 
 A call may give its traverse height (STAR's `minimum_traverse_height_*`); the travel at it is
-checked like any other, and refused when it is not clear.
+planned like any other: straight when clear, else searched around what it would meet at that
+height, else refused.
 
 ## Operation features
 
