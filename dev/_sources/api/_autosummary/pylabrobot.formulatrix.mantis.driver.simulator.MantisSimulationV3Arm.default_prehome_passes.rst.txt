@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationV3Arm.default\_prehome\_passes
+=============================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoattribute:: MantisSimulationV3Arm.default_prehome_passes

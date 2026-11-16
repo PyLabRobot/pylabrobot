@@ -7,7 +7,7 @@
    "source": [
     "# Formulatrix Mantis\n",
     "\n",
-    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, brings the arm and Z up and parks them at stop (v4), locks and unlocks the plate clamp, reads which chip sits in each input slot, and shows colours on a v4's LED bar. Nothing else in this driver moves the device, switches the pump on or opens a valve."
+    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks the v4 plate clamp, reads chip tags, and shows colours on a v4's LED bar. Moving to arbitrary positions and dispensing are not supported yet."
    ]
   },
   {
@@ -25,7 +25,9 @@
    "metadata": {},
    "source": [
     "```{warning}\n",
-    "This driver has run on one Mantis v4, on macOS and on Windows; no v3 has run it yet. The arm's bring-up and the stop that parks it have not yet run on a device through this driver; run them with the head clear and someone at the power switch. `setup()` logs a warning on a firmware set not seen on a Mantis yet, which includes every v3. If you run this guide on a Mantis, please [report the result](../../needs-testing.md).\n",
+    "V3 arm initialization and stop have run on one Mantis on Linux. Two consecutive setups completed with all three motors homed and no final fault bits; the operator confirmed normal arm and Z movement and the idle position. The firmware set was motion 4.20.6 and pressure 1.0.5, with boards 11 and 12 absent. The [recorded replies and command sequence](https://github.com/PyLabRobot/pylabrobot/blob/16b62b1e409e566d37d5748405ae233cde9405c4/pylabrobot/formulatrix/mantis/driver/features/arm_v3_tests.py) are covered by regression tests.\n",
+    "\n",
+    "The driver has also run on one v4 on macOS and Windows, but its arm initialization and parking remain unverified. Keep the head clear during setup. `setup()` warns on firmware sets not seen on a Mantis yet. Please [report results](../../needs-testing.md) from other units.\n",
     "```"
    ]
   },
@@ -42,6 +44,7 @@
     "| Reads | firmware versions, device name, motor limits and state, the arm's absolute encoders (v4), line pressures and the pressure board's state |\n",
     "| Interface | USB, an FTDI bridge (VID 0x0403 / PID 0x6010): interface B for commands, interface A for the RFID reader |\n",
     "| Sequencer | queues PPI writes and moves of the three motors, and waits until each is played; internal, for the features that act |\n",
+    "| Arm (v3) | homed at setup using the unit's calibration and route to idle; stopped in place at shutdown |\n",
     "| Arm (v4) | brought up at setup from where its absolute encoders read; Z homed; parked at idle at stop |\n",
     "| Plate clamp | lock at one of the unit's levels, waiting for clamping done; unlock |\n",
     "| RFID | the chip in each input slot: serial, chip type, date of manufacture |\n",
@@ -69,9 +72,9 @@
    "source": [
     "## Physical setup\n",
     "\n",
-    "1. Connect the Mantis to the computer with its USB cable and switch it on.\n",
+    "1. Connect the **main Mantis USB cable** to the computer and switch the Mantis on. Its USB product name is `Mantis`. The LC3 carousel has a separate connection named `LC3`; it cannot control the arm, even though it shares the same USB VID/PID. The driver filters for `Mantis`.\n",
     "2. Install the FTDI dependencies: `pip install \"pylabrobot[ftdi]\"` (see [Installation](../../getting-started/installation.md)).\n",
-    "3. Close any other software connected to the Mantis."
+    "3. Close any other software connected to the Mantis. If several Mantis units are connected, pass the main controller's serial number as `device_id`."
    ]
   },
   {
@@ -81,9 +84,9 @@
    "source": [
     "## Unit configuration\n",
     "\n",
-    "Some of a Mantis's values are set per unit and cannot be read off the device; they sit in the unit's `.config` files, in `Data/Device/Configs`. Give setup that folder once, then save the configuration: the saved file carries the unit's values from then on, and the folder is no longer needed. So far these are the plate clamp's lock levels, each input slot's RFID antenna and, on a v4, the arm's calibration: each arm motor's offset, absolute encoder reference and encoder correction.\n",
+    "Some values are set per unit and cannot be read off the device; they sit in its `.config` files, in `Data/Device/Configs`. Give setup that folder once, then save the configuration. The saved file carries the unit's values from then on, and the folder is no longer needed. These include the plate clamp's lock levels, RFID antenna mapping and arm calibration. A v3 needs its offsets, home positions, flag-search settings and post-home route from `RobotArm.config`. A v4 needs its offsets, absolute encoder references and encoder correction files.\n",
     "\n",
-    "Without the clamp's levels or the antennas, a recording of a unit of the same generation supplies them, with a warning: the Mantis runs, less accurately. The arm's calibration never comes from a recording: without it the arm is not brought up and setup refuses. Where the folder and a saved file both hold a value, they must agree, or setup refuses. A file saved by an earlier version still loads: a value it lacks comes from the folder, else the recording, with one warning naming it."
+    "Without clamp levels or antennas, a recording of the same generation supplies them with a warning. **Arm calibration must come from this unit**: setup refuses without it unless `skip_arm=True`. Where the folder and a saved file both hold a value, they must agree. Older saved files can obtain missing arm calibration from the unit's folder."
    ]
   },
   {
@@ -105,7 +108,12 @@
    "source": [
     "## Setup\n",
     "\n",
-    "`setup()` opens both links, reads the firmware versions, the motor limits and the pressure sensors' calibration, takes the unit's values and sets up the RFID reader. On a v4 it then brings the arm and Z up, as in the recorded v4 startup: it energises the arm motors, declares them where their absolute encoders read, moves them to idle, homes Z, and moves to idle again. It does so only if the head stands near idle, in front of or behind it; from anywhere else it refuses, the arm unpowered: park the arm at idle first. `setup(skip_arm=True)` reads only and moves nothing. On a v4 the LED bar shows the setup, the arm's bring-up with it, green for a second at its end, then the idle animation."
+    "`setup()` opens both links, reads firmware versions, motor limits and pressure sensor calibration, loads the unit's configuration and sets up the RFID reader. It then initializes the arm and Z:\n",
+    "\n",
+    "- **V3:** seats the arms against their stops, backs off relative to their live positions, and homes Z; repeats that sequence; homes both arm motors together, starting motor 1 before motor 0; declares the calibrated home frame and follows the unit's route to idle. Following errors during seating and homing are expected; all three motors must finish homed and fault-free. A failure or cancellation stops every motor.\n",
+    "- **V4:** energises the arm motors, declares them where their absolute encoders read, moves them to idle and homes Z. It requires the head to start near idle; otherwise it refuses with the arms unpowered. The LED bar shows setup, then green and the idle animation.\n",
+    "\n",
+    "`setup(skip_arm=True)` discovers the device without initializing or moving the arm. On a v3, the head pose is unavailable until initialization establishes its reference frame."
    ]
   },
   {
@@ -146,7 +154,9 @@
    "source": [
     "### Simulation\n",
     "\n",
-    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its arm stands at idle, with no offsets unless the file declares the arm's calibration, and setup brings it up at once; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated."
+    "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its arm stands at idle, with no offsets unless the file declares the arm's calibration, and setup brings it up at once; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated.\n",
+    "\n",
+    "For a v3 simulation, pass a saved v3 configuration containing its `arm` block. It simulates seating, homing and the declared route without opening USB; no default v3 motion calibration is supplied."
    ]
   },
   {
@@ -365,7 +375,8 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "await mantis.driver.request_absolute_encoder_position(motor=0)"
+    "if mantis.driver.configuration.generation == \"v4\":\n",
+    "  await mantis.driver.request_absolute_encoder_position(motor=0)"
    ]
   },
   {
@@ -373,9 +384,9 @@
    "id": "mantis-arm-1",
    "metadata": {},
    "source": [
-    "## Arm (v4)\n",
+    "## Arm\n",
     "\n",
-    "Motors 0 and 1 each turn a pair of links; the two long links meet at the head. The arm frame has its origin where motor 0 turns its links, in mm; at idle the head stands at about (15.0, 31.2). Each motor's position, as the controller holds it: the arm motors in degrees, Z in mm down from its home flag."
+    "Motors 0 and 1 each turn a pair of links; the two long links meet at the head. The arm frame has its origin where motor 0 turns its links, in mm; at idle the head stands at about (15.0, 31.2). After initialization, motor positions are in degrees for the arm joints and mm down from the home flag for Z."
    ]
   },
   {
@@ -393,7 +404,7 @@
    "id": "mantis-arm-3",
    "metadata": {},
    "source": [
-    "Each arm motor's angle from its absolute encoder, corrected with the unit's calibration, and where the head is:"
+    "Each arm motor's angle from its absolute encoder, corrected with the unit's calibration (**v4 only**):"
    ]
   },
   {
@@ -403,7 +414,16 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "await mantis.arm.request_absolute_joint_position()"
+    "if mantis.driver.configuration.generation == \"v4\":\n",
+    "  await mantis.arm.request_absolute_joint_position()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "v3-head-position",
+   "metadata": {},
+   "source": [
+    "The head position after initialization, on either generation:"
    ]
   },
   {
@@ -421,7 +441,7 @@
    "id": "mantis-arm-6",
    "metadata": {},
    "source": [
-    "Whether the head can reach a point, in the arm frame; nothing is clamped. The bring-up and the stop move at the arm's defaults, in degrees/s and mm/s:"
+    "Whether the head can reach a point in the arm frame; nothing is clamped. A v3 initializes using the rates in its unit configuration. The v4 initialization and parking use the arm's defaults, in degrees/s and mm/s:"
    ]
   },
   {
@@ -826,7 +846,7 @@
    "source": [
     "## Stop\n",
     "\n",
-    "Stop the visualizer and close the link. On a v4, `stop()` first aborts the sequencer and stops every motor; an arm brought up is then parked at idle and Z lowered to 20 mm, as in the recorded close, unless the head is away from idle. Then the plate clamp is released."
+    "Stop the visualizer and close the links. `stop()` aborts the sequencer and stops every motor. A v3 stays where it stopped; it does not perform the v4 park move and must initialize again after reconnecting. On a v4, an initialized arm is parked at idle and Z lowered to 20 mm, unless the head is away from idle. The plate clamp is then released."
    ]
   },
   {

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationV3Arm.is\_xy\_reachable
+======================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. automethod:: MantisSimulationV3Arm.is_xy_reachable

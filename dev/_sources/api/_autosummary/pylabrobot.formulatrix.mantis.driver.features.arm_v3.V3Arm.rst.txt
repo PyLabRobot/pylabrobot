@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.arm\_v3.V3Arm
+===========================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm_v3
+
+.. autoclass:: V3Arm
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~V3Arm.default_arm_acceleration
+      ~V3Arm.default_arm_speed
+      ~V3Arm.default_prehome_passes
+      ~V3Arm.default_z_acceleration
+      ~V3Arm.default_z_speed
+      ~V3Arm.is_initialized
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~V3Arm.__init__
+      ~V3Arm.initialize
+      ~V3Arm.is_xy_reachable
+      ~V3Arm.request_absolute_joint_position
+      ~V3Arm.request_head_position
+      ~V3Arm.request_joint_position
+      ~V3Arm.request_link_angles
+   
+   
