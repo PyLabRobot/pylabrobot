@@ -13,4 +13,5 @@ Unless otherwise specified, these are the units used in PyLabRobot:
 | Flow Rate                    | microliters/second (µL/s)           |
 | Temperature                  | degrees Celsius (°C)                |
 | Force                        | Newtons (N)                         |
+| Pressure                     | bar                                 |
 | Relative centrifugal force   | multiples of standard gravity (× g) |
