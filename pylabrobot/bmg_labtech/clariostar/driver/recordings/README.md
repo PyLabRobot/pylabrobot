@@ -19,6 +19,7 @@ of the same build.
 | file | reader |
 |---|---|
 | `clariostar_plus_1_35_temperature_controller.json` | CLARIOstar Plus, firmware 1.35. Decoded from the INIT and stored-parameters replies of one reader; the default for a simulated `CLARIOstarPlus`. |
+| `clariostar_1_20_temperature_controller_pumps_2.json` | CLARIOstar (original, main board revision 1), firmware 1.20 compiled 2017-04-27, two XCalibur injector pumps. Decoded from the INIT and stored-parameters replies of one reader. |
 
 ## What is not in one
 
