@@ -22,7 +22,6 @@ from typing import (
   Optional,
   Set,
   Tuple,
-  Union,
 )
 
 from pylabrobot.io.ftdi import FTDI
@@ -61,10 +60,8 @@ from .events import (
   describe_event,
 )
 from .features.arm import Arm, MantisArmConfiguration
-from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
-from .features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .features.pump import Pump
 from .features.rfid import RFID_BAUD_RATE, RFID_FTDI_INTERFACE, Rfid, _initialize_rfid_module
 from .framing import (
@@ -197,7 +194,7 @@ class MantisDriver:
       if rfid_io is not None or io is not None
       else self._build_rfid_io(device_id=device_id, ftdi_library=ftdi_library)
     )
-    self.plate_clamp: Optional[Union[PlateClamp, PneumaticPlateClamp]] = None
+    self.plate_clamp: Optional[PlateClamp] = None
     self.pump: Optional[Pump] = None
     self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
@@ -998,22 +995,33 @@ class MantisDriver:
     if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
       self.pump = Pump(driver=self)
     block = self._unit_blocks.get("plate_clamp")
-    if block is not None and block.get("controller") == "pressure_regulator":
+    lc3_answered = self.configuration.firmware_versions.get(LC3_BOARD) is not None
+    pneumatic = block is not None and block.get("controller") == "pressure_regulator"
+    # A clamp on a pressure-board output where board 12 answers, or with levels where it does not.
+    if pneumatic and lc3_answered:
+      raise MantisConfigurationError(
+        f"{self.name}: the plate_clamp block names a pressure-board output, but board 12 answers"
+      )
+    if (
+      block is not None
+      and not pneumatic
+      and not lc3_answered
+      and "plate_clamp" not in self._unit_blocks_from_recording
+    ):
+      raise MantisConfigurationError(
+        f"{self.name}: the plate_clamp block has lock levels, but board 12 does not answer"
+      )
+    if pneumatic and block is not None:
       if self.pump is not None and self.plate_clamp is None:
         try:
           output = block["auxiliary_output"]
-          self.plate_clamp = PneumaticPlateClamp(
-            driver=self, pump=self.pump, auxiliary_output=output
-          )
+          self.plate_clamp = PlateClamp(driver=self, auxiliary_output=output, pump=self.pump)
         except (KeyError, TypeError, ValueError) as error:
           raise MantisConfigurationError(
             f"malformed pneumatic plate_clamp block: {error}"
           ) from error
-    elif (
-      self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None
-    ):
+    elif lc3_answered and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
-      block = self._unit_blocks.get("plate_clamp")
       if block is not None:
         try:
           levels = {
@@ -1041,8 +1049,7 @@ class MantisDriver:
       self.led_bar = LedBar(
         driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
       )
-    sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
-    if self.arm is None and sensor_board is not None:
+    if self.arm is None and self.configuration.generation == "v4":
       self.arm = Arm(
         driver=self,
         configuration=MantisArmConfiguration(
@@ -1052,7 +1059,7 @@ class MantisDriver:
           **self._get_stage_calibration(),
         ),
       )
-    elif self.arm is None:
+    elif self.arm is None and self.configuration.generation == "v3":
       block = self._unit_blocks.get("arm")
       # Absolute-encoder references are a v4's: never seat a v4's arms against their stops.
       if block is not None and ("homing_position_a" in block or "encoder_correction" in block):
@@ -1060,14 +1067,16 @@ class MantisDriver:
           f"{self.name}: board 11 did not answer, but the arm block has absolute-encoder "
           "references, as a v4's has; refusing to treat this unit as a v3"
         )
-      v3_arm_configuration = V3ArmConfiguration.from_block(block) if block is not None else None
-      self.arm = V3Arm(
+      v3_arm_configuration = (
+        V3ArmConfiguration.from_block(block=block) if block is not None else None
+      )
+      self.arm = Arm(
         driver=self,
         configuration=MantisArmConfiguration(
           motor_limits=motor_limits,
           offsets=v3_arm_configuration.offsets if v3_arm_configuration is not None else None,
+          v3_arm_configuration=v3_arm_configuration,
         ),
-        v3_arm_configuration=v3_arm_configuration,
       )
 
   def _show_action(
@@ -1349,7 +1358,7 @@ class MantisDriver:
 
   async def setup(self, *, skip_arm: bool = False) -> None:
     """Open the link if it is not open, read the device's configuration and check it, then bring
-    the arm and Z up (``Arm.initialize`` or ``V3Arm.initialize``). This moves the device.
+    the arm and Z up (``Arm.initialize``). This moves the device.
 
     On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
     ``SETUP_DONE_HOLD``, then idle.

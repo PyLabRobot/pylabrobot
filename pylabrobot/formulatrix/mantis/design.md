@@ -65,19 +65,19 @@ logged and recorded as `None`. Board 11 answering means v4; absent means v3. A u
 has absolute-encoder references is refused as a v3, so a v4's arms are never seated against their
 stops. Board 0's version string and the serial number decide nothing.
 
-**M3. Nothing exists until the device says it is fitted.** (STAR P2.) `discover` reads the
-configuration (`_request_configuration`), checks it against a declared one, then
-`_discover_features` builds the features it lists; a refused setup builds none. The RFID reader
-is the exception: `discover` builds it when it answers its ping on interface A, after every
-opening of the link.
-Each feature is an `Optional` attribute of the driver, `None` until `_discover_features` builds
-it: a pneumatic `plate_clamp` requires a declared pressure-board output and board 10;
-the motor clamp requires board 12. The controller choice is made during discovery;
-`pump` only when board 10 answered; `arm` is `Arm` when board 11 answered (v4), otherwise
-`V3Arm`, which homes against flags. `led_bar` is gated
-by the generation: built only on a v4 whose board 12 answered, never on a v3, whose install sets
-no LED count. A difference between v3 and v4 is expressed there, by which feature is built, never
-by a branch on the generation inside a command.
+**M3. Nothing exists until the device says it is fitted; one class per feature.** (STAR P2.)
+`discover` reads the configuration (`_request_configuration`), checks it against a declared one,
+then `_discover_features` builds the features it lists; a refused setup builds none. The RFID
+reader is the exception: `discover` builds it when it answers its ping on interface A, after every
+opening of the link. Each feature is an `Optional` attribute of the driver, `None` until built:
+`plate_clamp` from the unit's `plate_clamp` block, its `controller` key matching the boards (a
+pressure-board output and board 10, or levels and board 12); `pump` when board 10 answered; `arm`
+on every unit; `led_bar` only on a v4 whose board 12 answered. Every feature is one class on both
+generations, with the same public methods. The generation selects only private plumbing, in the
+fork points listed in M6, each written `== "v3"` / `== "v4"` and refusing any other value. Where a
+v3 lacks the hardware (absolute encoders, a motor clamp state) the method raises
+`MantisConfigurationError`; where a v3 path has not run on a device it raises
+`NotImplementedError`.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
 what the device answered: generation, firmware versions and the pressure board's sensor
@@ -202,6 +202,24 @@ the holder, its edges included (`_get_deck_to_arm_transform`): one turn and shif
 model places the arm by the manufacturer's model and each unit's differs by millimetres. A height is
 always the stage's, its tilt extended past the holder.
 
+The arm's generation fork points (`Arm._get_generation`):
+
+- `Arm.__init__`: a v4 refuses a v3 `arm` block.
+- `_check_calibrated`: a v4 needs `offsets`, `homing_position_a` and `encoder_correction`; a v3
+  its v3 block (`_get_v3_arm_configuration`).
+- `initialize`: `_initialize_v4` on a v4, `_initialize_v3` on a v3.
+- `_request_absolute_device_position`: a v3 raises `MantisConfigurationError`, and so
+  `request_absolute_joint_state`: a v3 has no absolute encoders.
+- `_request_arm_joint_state`, where the arms are for zones, routes, parking and the parked read: a
+  v4's absolute encoders, a v3's motor positions (command 27).
+- `request_joint_state`: a v3 raises `MantisMotionError` before this connection's bring-up, so
+  does every read above on a v3.
+- `_check_initialized`: a v3 raises `NotImplementedError` after its bring-up, until a v3 has run
+  its moves; so park, the waste, the washes and recovery too.
+- `recover_from_fault`: a v4 recovers to idle from its absolute encoders, a v3 runs its bring-up
+  again.
+- `_halt`: a v3 stops its motors and is not parked until a v3 has run its moves.
+
 **M7. A range is checked before anything is sent.** (STAR P5.) A read accepts only the indices
 seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CONTROLLERS`);
 `_check_index`, and the pump's `_get_controller_index`, raise `ValueError` before a frame is built.
@@ -258,18 +276,24 @@ item each; a line naming the arms and Z moves both
 in one item. Every other move, and `park`, from a pose on a path first goes back along it to its
 start.
 
-`V3Arm.initialize` seats and backs off the arms using live demand positions, homes Z, repeats
-seating and Z homing, starts arm homing in order 1 then 0, declares the calibrated home frame and
-follows the unit's route to idle. Expected following errors are tolerated during these phases;
-other fault bits fail immediately. Each home must finish with its homed bit, and initialization
-ends with a strict fault check. Failure or cancellation stops all three motors. A v3 stop sends
-no park move.
+On a v3, `Arm.initialize` (`_initialize_v3`) follows the captured cold start: it seats the arms
+against their stops (`_seat_arm_motors`, at most `SEAT_PASSES` passes) and backs them off from
+where command 27 reads them, homes Z with the unit's Z values (`_home_z`, its following-error
+check and home-done wait as on a v4), repeats both, homes the arms in order 1 then 0
+(`_home_motors`, each waiting for its home-done event), declares the home frame
+(`_declare_home_frame`, at `HOME_FRAME_DEVICE_*`) and follows the unit's route to idle at motor
+0's homing speed. Following errors are tolerated while seating and homing; other fault bits fail
+at once, and the bring-up ends with a strict status check. Failure or cancellation stops all three
+motors and logs where they stopped. A v3 stop sends no park move.
 
-`PneumaticPlateClamp.lock` engages its declared auxiliary output and starts the air pump if
-needed. Readbacks confirm both control states; they do not measure plate contact or pressure.
-Unlock and shutdown release the valve and restore a pump started by the clamp. A pump already
-running stays on. The clamp serializes its operations, owns a pump change before sending it,
-and attempts valve release and pump restoration independently on failure or cancellation.
+`PlateClamp` forks on `auxiliary_output is None` in `lock`, `unlock`, `request_locked`,
+`request_state` and `_release`: board 12 without one, a pressure-board output with one. On an
+output, `lock` takes no level, switches the valve on and starts the air pump if needed; readbacks
+confirm both control states, never plate contact or pressure, and `request_state` raises
+`MantisConfigurationError`. Unlock and shutdown release the valve and restore a pump started by the
+clamp; a pump already running stays on. The clamp serializes these operations, owns a pump change
+before sending it, and attempts valve release and pump restoration independently on failure or
+cancellation.
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
@@ -324,12 +348,15 @@ feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and
 above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
 unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` starts off,
 reads every line at 0 with the recorded calibration, and follows clamp commands for its air-pump
-state; `MantisSimulationPneumaticPlateClamp` holds the valve state; `MantisSimulationLedBar` takes every command and
+state; `MantisSimulationPlateClamp` also holds a valve's state; `MantisSimulationLedBar` takes
+every command and
 waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
 needs no encoder correction; its offsets are the declared ones, else 0, and its zones, approach paths and
-stage the declared ones, else none. A v3 uses `MantisSimulationV3Arm`, which requires the unit's
-homing block and simulates seating against the stops, the flags and the route to idle. Each command moves it at once, and the motor reads answer from
-it; without it the motors read idle at 0, as after power-on. A motor read the configuration does
+stage the declared ones, else none. On a v3 it runs the bring-up below the `_unchecked_fw_*`
+calls: a retract seats an arm against its stop (status 0x100, 0x104 once homed), the unit's Z
+values reach the home command, and every awaited event comes at once. Each command moves it at
+once, and the motor reads answer from it; without it the motors read idle at 0, as after
+power-on. A motor read the configuration does
 not hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items,
 stopped and empty after setup, and once started plays each item at once, a queued move moving the
 simulated arm; stop and abort keep what is queued.
@@ -480,7 +507,7 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 38. **The waste's approach path is the generation's own file.** Every unit seen has both
     `MoveToWasteStation` and `MoveToWasteStation_Adapter`, two different routes: a unit with zones
     (a v4) reads the first, which a v4 played on the wire; one without them (a v3) reads the
-    second, not seen played, and a v3 builds no arm. The wash paths are
+    second, not seen played; a v3's arm plays it once a v3 has run its moves. The wash paths are
     `MoveToWashStation1` and `2`; their `Lc3` variants are not read.
 39. **The resource model draws the arm where the manufacturer's model places it,** not where the
     fit puts it: on the unit the fit was checked on, about 2 mm off.

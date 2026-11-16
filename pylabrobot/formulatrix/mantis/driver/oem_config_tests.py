@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
-from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 from pylabrobot.formulatrix.mantis.driver.oem_config import (
   COMMON_SEQUENCE_DIRECTORY,
@@ -142,6 +141,40 @@ SYNTHETIC_V3_ROBOT_ARM_CONFIG = (
   )
   + TAIL
 )
+# The arm block the synthetic v3 RobotArm.config gives.
+SYNTHETIC_V3_ARM_BLOCK = {
+  "offsets": {"0": 0.0, "1": 0.0},
+  "homing_position_n": {"0": -90.0, "1": 216.0},
+  "motors": {
+    "0": {
+      "method": 3,
+      "positive_edge": True,
+      "positive_direction": False,
+      "speed": 100.0,
+      "acceleration": 2500.0,
+    },
+    "1": {
+      "method": 3,
+      "positive_edge": True,
+      "positive_direction": True,
+      "speed": 100.0,
+      "acceleration": 2500.0,
+    },
+    "2": {
+      "method": 0,
+      "positive_edge": True,
+      "positive_direction": False,
+      "speed": 15.0,
+      "acceleration": 400.0,
+    },
+  },
+  "retract": -50.0,
+  "backoff": 20.0,
+  "jog_speed": 10000.0,
+  "jog_acceleration": 1500.0,
+  "motor_xy_homing_delay": 0.2,
+  "post_homing_positions": [[-38.403, 11.677], [-45.77, 47.82], [15.0, 31.177]],
+}
 # A synthetic encoder correction in the files' layout: ideal, measured, measured.
 SYNTHETIC_CORRECTION_ROWS = [(row, row - 0.25) for row in range(1, 201)]
 SYNTHETIC_CORRECTION_CSV = "\ufeff" + "".join(

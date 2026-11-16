@@ -319,7 +319,7 @@ def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
       route.append([x, y])
     block = {
       "offsets": {str(motor): number(f"Motor.{motor + 1}.Offset") for motor in (0, 1)},
-      "home_positions": {
+      "homing_position_n": {
         str(motor): compute_position(
           motor=motor, device_position=number(f"Motor.{motor + 1}.HomingPositionN")
         )
@@ -339,10 +339,10 @@ def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
       "backoff": number("Arm.PreHomingMovement.EnforceStep"),
       "jog_speed": number("Motor.1.DefaultVelocity"),
       "jog_acceleration": number("Motor.1.DefaultAcceleration"),
-      "motor_delay": number("MotorXYHomingDelay") / 1000.0,
-      "post_home_positions": route,
+      "motor_xy_homing_delay": number("MotorXYHomingDelay") / 1000.0,
+      "post_homing_positions": route,
     }
-    V3ArmConfiguration.from_block(block)
+    V3ArmConfiguration.from_block(block=block)
     return block
   except (KeyError, TypeError, ValueError) as error:
     raise MantisConfigurationError(f"invalid v3 RobotArm.config: {error}") from error

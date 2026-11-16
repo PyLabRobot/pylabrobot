@@ -4,6 +4,9 @@ On a v4, board 11 reads each arm motor's absolute encoder, so where the arm stan
 power-on: the arms are declared there, never homed. Z homes on its flag. Every bring-up step and
 its order matches the recorded v4 startup.
 
+A v3 has no absolute encoders: its bring-up seats the arms against their stops, homes every motor
+on its flag and follows the unit's route to idle, as captured on a v3.
+
 The head goes to idle along the unit's routes: the zone it stands in names a route to a safe XY
 and one to idle. Without them, only from near idle. The nozzle moves in the deck frame, through
 the unit's stage transform over the plate holder and the arm frame fitted to it elsewhere.
@@ -11,10 +14,11 @@ the unit's stage transform over the plate holder and the arm frame fitted to it 
 
 import asyncio
 import dataclasses
+import functools
 import logging
 import math
 import struct
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Sequence, Tuple
 
 from pylabrobot.resources import Coordinate
 
@@ -56,6 +60,7 @@ from ..oem_config import (
 )
 from ..sequence_files import RouteLine
 from ..stage_transform import compute_arm_frame_position
+from ..v3_arm_configuration import V3ArmConfiguration
 
 if TYPE_CHECKING:
   from ..master import MantisDriver
@@ -112,6 +117,11 @@ Z_TRAVERSE_TOLERANCE = 0.1
 MOTOR_STATUS_POLL_INTERVAL = 0.02
 MOVE_TIMEOUT = 30.0
 HOME_TIMEOUT = 30.0
+# PyLabRobot design choice: how often a v3 bring-up drives the arms toward their stops, at most.
+SEAT_PASSES = 8
+# A v3's move of each arm motor to 0 before its home frame is declared, in device units.
+HOME_FRAME_DEVICE_SPEED = 500.0
+HOME_FRAME_DEVICE_ACCELERATION = 100.0
 # The safe height, mm above Z's flag: the routes' Z -1.570.
 SAFE_HEIGHT = 1.57
 # PyLabRobot design choice: the plate holder is sampled every 5 mm to fit the deck frame to the arm
@@ -167,6 +177,8 @@ class MantisArmConfiguration:
   """The arm type's translation, (x, y, z), mm."""
   stage_reference_height: Optional[float] = None
   """The wellplate frame's z origin above the plate holder, mm (``StageTuning.config``)."""
+  v3_arm_configuration: Optional[V3ArmConfiguration] = None
+  """A v3 unit's ``arm`` block: its homing settings, home frame and route to idle."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -190,11 +202,14 @@ class MantisPose:
 
 
 class Arm:
-  """The arm and Z, built when board 11 answers (a v4).
+  """The arm and Z, built on every unit; the generation selects only private plumbing.
 
-  Bringing it up needs the unit's ``arm`` block: each arm motor's offset, encoder reference and
-  encoder correction. Without it nothing is sent and ``initialize`` refuses; it never falls back to
-  another unit's values. The ``zones`` and ``approach_paths`` blocks give the routes; without them
+  Bringing it up needs the unit's ``arm`` block: on a v4 each arm motor's offset, encoder reference
+  and encoder correction; on a v3 its homing settings, home frame and route to idle. Without it
+  nothing is sent and ``initialize`` refuses; it never falls back to another unit's values. A v3
+  has no absolute encoders: what needs them raises ``MantisConfigurationError``, and its moves
+  after the bring-up raise ``NotImplementedError`` until one has run on a v3.
+  The ``zones`` and ``approach_paths`` blocks give the routes; without them
   the head is moved to idle only from near it, and the waste and the washes refuse. Without the ``stage`` block the
   deck-frame moves and ``request_pose`` refuse. Routes (bring-up, park, the approach paths, stop) move at the
   ``ROUTE_*`` profile; the other moves take the arms at it unless an xy speed is given.
@@ -214,6 +229,19 @@ class Arm:
   _default_z_acceleration: float = ROUTE_Z_ACCELERATION
   _default_minimum_traverse_height: Optional[float] = None
 
+  def _get_generation(self) -> Literal["v3", "v4"]:
+    """The device's generation, as discovery read it.
+
+    Raises:
+      MantisConfigurationError: if it is neither "v3" nor "v4".
+    """
+    generation = self._driver.configuration.generation
+    if generation == "v3":
+      return "v3"
+    if generation == "v4":
+      return "v4"
+    raise MantisConfigurationError(f"{self._driver.name}: unknown generation {generation!r}")
+
   def __init__(self, *, driver: "MantisDriver", configuration: MantisArmConfiguration):
     """
     Args:
@@ -225,11 +253,26 @@ class Arm:
     self._initialized = False
     self._pose_observer: Optional[Callable[..., None]] = None
     self._deck_to_arm_transform: Optional[Tuple[float, float, float]] = None
+    if configuration.v3_arm_configuration is not None and self._get_generation() == "v4":
+      raise MantisConfigurationError(f"{driver.name}: a v4 takes no v3 arm block")
 
   @property
   def is_initialized(self) -> bool:
     """Whether ``initialize`` brought the arm up since the link opened."""
     return self._initialized
+
+  def _get_v3_arm_configuration(self) -> V3ArmConfiguration:
+    """The v3 unit's ``arm`` block.
+
+    Raises:
+      MantisConfigurationError: without it; nothing is sent.
+    """
+    if self.configuration.v3_arm_configuration is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no v3 arm calibration for this unit; give its configuration folder "
+        "(oem_config_directory) or a configuration saved with it, or set up with skip_arm=True"
+      )
+    return self.configuration.v3_arm_configuration
 
   @staticmethod
   def _check_positive(*, name: str, value: float) -> None:
@@ -383,6 +426,9 @@ class Arm:
 
   def _check_calibrated(self) -> None:
     """Raise ``MantisConfigurationError`` unless the unit's ``arm`` block was given."""
+    if self._get_generation() == "v3":
+      self._get_v3_arm_configuration()
+      return
     if (
       self.configuration.offsets is None
       or self.configuration.homing_position_a is None
@@ -394,9 +440,15 @@ class Arm:
       )
 
   def _check_initialized(self) -> None:
-    """Raise ``MantisMotionError`` unless the arm was brought up: where it is is not known."""
+    """Raise ``MantisMotionError`` unless the arm was brought up: where it is is not known.
+
+    Raises:
+      NotImplementedError: on a v3 after its bring-up: no move after it has run on a v3.
+    """
     if not self._initialized:
       raise MantisMotionError(f"{self._driver.name}: the arm is not brought up; call setup()")
+    if self._get_generation() == "v3":
+      raise NotImplementedError(f"{self._driver.name}: a v3 arm moves only in its bring-up for now")
 
   # -- raw firmware calls ----------------------------------------------------
 
@@ -490,8 +542,11 @@ class Arm:
     """An arm motor's position from its absolute encoder, in device units.
 
     Raises:
-      MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
+      MantisConfigurationError: on a v3, which has no absolute encoders, or without the unit's
+        ``arm`` block; nothing is sent.
     """
+    if self._get_generation() == "v3":
+      raise MantisConfigurationError(f"{self._driver.name}: a v3 has no absolute arm encoders")
     self._check_calibrated()
     assert (
       self.configuration.encoder_correction is not None
@@ -511,7 +566,7 @@ class Arm:
     Kept across power-off, unlike ``request_joint_state`` before the arms are declared.
 
     Raises:
-      MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
+      MantisConfigurationError: on a v3, or without the unit's ``arm`` block; nothing is sent.
     """
     return {
       motor: compute_position(
@@ -521,13 +576,35 @@ class Arm:
     }
 
   async def request_joint_state(self) -> JointState:
-    """Where the controller holds each motor: 0 and 1 in degrees, 2 (Z) in mm down from its flag."""
+    """Where the controller holds each motor: 0 and 1 in degrees, 2 (Z) in mm down from its flag.
+
+    Raises:
+      MantisMotionError: on a v3 before this connection's bring-up declared where it is.
+    """
+    if self._get_generation() == "v3" and not self._initialized:
+      raise MantisMotionError(
+        f"{self._driver.name}: the v3 arm must be initialized before its pose is known"
+      )
     return {
       motor: compute_position(
         motor=motor, device_position=await self._driver.request_motor_position(motor=motor)
       )
       for motor in (*ARM_MOTORS, Z_MOTOR)
     }
+
+  async def _request_arm_joint_state(self) -> JointState:
+    """Where the arm motors are, by the device: a v4's absolute encoders, a v3's motor positions.
+
+    A v3 knows where its arms are only after this connection's bring-up homed them.
+
+    Raises:
+      MantisConfigurationError: on a v4 without the unit's ``arm`` block; nothing is sent.
+      MantisMotionError: on a v3 before this connection's bring-up; nothing is sent.
+    """
+    if self._get_generation() == "v4":
+      return await self.request_absolute_joint_state()
+    joint_state = await self.request_joint_state()
+    return {motor: joint_state[motor] for motor in ARM_MOTORS}
 
   async def _request_measured_position(self, *, motor: int) -> float:
     """Where a motor is by its servo encoder (command 84), measured: an arm motor in degrees, Z in
@@ -827,10 +904,11 @@ class Arm:
 
     Raises:
       MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
+      MantisMotionError: on a v3 before this connection's bring-up; nothing is sent.
     """
     self._check_calibrated()
     idle_targets = self._get_idle_targets()
-    absolute = await self.request_absolute_joint_state()
+    absolute = await self._request_arm_joint_state()
     z = await self._request_measured_position(motor=Z_MOTOR)
     return z <= tolerance and all(
       abs(absolute[motor] - compute_position(motor=motor, device_position=idle_targets[motor]))
@@ -920,8 +998,19 @@ class Arm:
         status=status,
       )
 
-  async def _wait_for_motors_idle(self, *, timeout: float) -> None:
-    """Read each motor's status until none moves or homes.
+  async def _wait_for_motors_idle(
+    self,
+    *,
+    timeout: float,
+    motors: Tuple[int, ...] = (*ARM_MOTORS, Z_MOTOR),
+    expected_following_error: bool = False,
+  ) -> Dict[int, int]:
+    """Read each motor's status until none moves or homes; return the last read, by motor.
+
+    Args:
+      timeout: seconds.
+      motors: the motors read, in order.
+      expected_following_error: tolerate a following error, as a seat against a stop sets it.
 
     Raises:
       MantisMotionError: if a motor reports a fault.
@@ -929,27 +1018,37 @@ class Arm:
     """
     deadline = asyncio.get_running_loop().time() + timeout
     while True:
+      statuses: Dict[int, int] = {}
       busy = []
-      for motor in (*ARM_MOTORS, Z_MOTOR):
+      for motor in motors:
         status = await self._driver.request_motor_status(motor=motor)
         try:
-          self._check_status(motor=motor, status=status)
+          self._check_status(
+            motor=motor,
+            status=status & ~MOTOR_FOLLOWING_ERROR if expected_following_error else status,
+          )
         except MantisMotionError:
           await self._log_where_it_stopped()
           raise
+        statuses[motor] = status
         if status & (MOTOR_MOVING | MOTOR_HOMING):
           busy.append(motor)
       if not busy:
-        return
+        return statuses
       if asyncio.get_running_loop().time() >= deadline:
         await self._log_where_it_stopped()
         raise MantisTimeoutError(f"{self._driver.name}: motors {busy} still move after {timeout} s")
       await asyncio.sleep(MOTOR_STATUS_POLL_INTERVAL)
 
   async def _move_motors(
-    self, *, targets: Dict[int, float], profiles: Dict[int, Tuple[float, float]]
-  ) -> None:
-    """Move each motor to its target, in device units, then wait.
+    self,
+    *,
+    targets: Dict[int, float],
+    profiles: Dict[int, Tuple[float, float]],
+    expected_following_error: bool = False,
+  ) -> Dict[int, int]:
+    """Move each motor to its target, in device units, then wait; return each motor's last
+    status, by motor.
 
     Each move's reply is checked and its motor read once as it starts, as recorded, then every
     motor until all stop. On any failure the motors sent a move are stopped and where they stopped
@@ -958,6 +1057,7 @@ class Arm:
     Args:
       targets: device units, by motor, sent in motor order.
       profiles: each motor's (speed, acceleration) in device units, by motor.
+      expected_following_error: tolerate a following error, as a seat against a stop sets it.
 
     Raises:
       MantisMotionError: if a motor answers its move with an error code, or reports a fault.
@@ -978,8 +1078,13 @@ class Arm:
             code=code,
           )
         status = await self._driver.request_motor_status(motor=motor)
-        self._check_status(motor=motor, status=status)
-      await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT)
+        self._check_status(
+          motor=motor,
+          status=status & ~MOTOR_FOLLOWING_ERROR if expected_following_error else status,
+        )
+      return await self._wait_for_motors_idle(
+        timeout=MOVE_TIMEOUT, expected_following_error=expected_following_error
+      )
     except BaseException:
       await self._stop_motors(
         motors=tuple(sent),
@@ -1011,14 +1116,22 @@ class Arm:
     """
     return [self._get_route_line_targets(route_line=route_line) for route_line in route]
 
-  async def _move_along_route(self, *, steps: List[Dict[int, float]]) -> None:
-    """Move to each step's targets in turn at the route profile, each motor on its own (command
-    22), as in the recorded recoveries.
+  async def _move_along_route(
+    self,
+    *,
+    steps: List[Dict[int, float]],
+    profiles: Optional[Dict[int, Tuple[float, float]]] = None,
+  ) -> None:
+    """Move to each step's targets in turn, each motor on its own (command 22), as in the
+    recorded recoveries.
 
     Args:
       steps: each route line's targets, from ``_get_route_targets``.
+      profiles: each motor's (speed, acceleration) in device units, by motor; None the route
+        profile.
     """
-    profiles = self._get_route_profiles()
+    if profiles is None:
+      profiles = self._get_route_profiles()
     for targets in steps:
       if targets:
         await self._move_motors(targets=targets, profiles=profiles)
@@ -1145,8 +1258,14 @@ class Arm:
     )
     return self.configuration.safe_xy_routes[zone], self.configuration.idle_routes[zone]
 
-  async def _home_z(self) -> None:
+  async def _home_z(
+    self, *, speed: float = Z_HOMING_SPEED, acceleration: float = Z_HOMING_ACCELERATION
+  ) -> None:
     """Home Z on its flag, as recorded: check no motor slipped, clear Z's faults, search, wait.
+
+    Args:
+      speed: the fast search, mm/s; the slow search at a tenth of it.
+      acceleration: mm/s².
 
     Raises:
       MantisMotionError: if a motor reports a following error first, or Z does not read homed.
@@ -1168,7 +1287,7 @@ class Arm:
       code=HOME_DONE_EVENT,
       match=lambda payload: decode_home_done(payload=payload)[0] == Z_MOTOR,
     )
-    fast_speed = compute_device_rate(motor=Z_MOTOR, rate=Z_HOMING_SPEED)
+    fast_speed = compute_device_rate(motor=Z_MOTOR, rate=speed)
     try:
       await self._unchecked_fw_home(
         motor=Z_MOTOR,
@@ -1177,7 +1296,7 @@ class Arm:
         positive_direction=False,
         slow_speed=fast_speed / 10,
         fast_speed=fast_speed,
-        acceleration=compute_device_rate(motor=Z_MOTOR, rate=Z_HOMING_ACCELERATION),
+        acceleration=compute_device_rate(motor=Z_MOTOR, rate=acceleration),
       )
     except BaseException:
       waiter.cancel()
@@ -1216,19 +1335,13 @@ class Arm:
       except Exception:
         logger.warning("[%s] could not unpower motor %d", self._driver.name, motor, exc_info=True)
 
-  async def initialize(self) -> None:
-    """Bring the arm and Z up from power-on, as in the recorded v4 startup.
+  async def _initialize_v4(self) -> None:
+    """Bring a v4's arm and Z up from power-on, as in the recorded v4 startup.
 
     Energise the arm motors, declare them where their absolute encoders read, set their following
     error, then recover to idle: along the zone's routes, or without the unit's zones from near
     idle only. A failure from energising on leaves the arm motors unpowered again.
-
-    Raises:
-      MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
-      MantisMotionError: if the head is not where it is moved to idle from, or a motor faults.
-      MantisTimeoutError: if a move or the home does not end in time.
     """
-    self._check_calibrated()
     self._initialized = False
     try:
       for motor in ARM_MOTORS:
@@ -1245,17 +1358,206 @@ class Arm:
       raise
     self._initialized = True
 
+  async def _seat_arm_motors(self) -> None:
+    """Drive the coupled arms toward their stops until they seat twice, then back them off from
+    where command 27 reads them and declare them at 0.
+
+    Raises:
+      MantisMotionError: if they do not seat in ``SEAT_PASSES`` passes, or a motor faults.
+      ValueError: if a backoff target is outside its motor's limits.
+    """
+    configuration = self._get_v3_arm_configuration()
+    profiles = {
+      motor: (
+        compute_device_rate(motor=motor, rate=configuration.jog_speed),
+        compute_device_rate(motor=motor, rate=configuration.jog_acceleration),
+      )
+      for motor in ARM_MOTORS
+    }
+    retract_targets = {
+      motor: compute_device_position(motor=motor, position=configuration.retract)
+      for motor in ARM_MOTORS
+    }
+    for motor in ARM_MOTORS:
+      await self._unchecked_fw_clear_motor_faults(motor=motor)
+    seated_once = False
+    for _ in range(SEAT_PASSES):
+      for motor in ARM_MOTORS:
+        await self._unchecked_fw_set_motor_position(motor=motor, position=0.0)
+      statuses = await self._move_motors(
+        targets=retract_targets, profiles=profiles, expected_following_error=True
+      )
+      if any(statuses[motor] & MOTOR_FOLLOWING_ERROR for motor in ARM_MOTORS):
+        if seated_once:
+          break
+        seated_once = True
+        for motor in ARM_MOTORS:
+          await self._unchecked_fw_clear_motor_faults(motor=motor)
+    else:
+      raise MantisMotionError(f"{self._driver.name}: the arms did not seat in {SEAT_PASSES} passes")
+    for motor in ARM_MOTORS:
+      await self._unchecked_fw_clear_motor_faults(motor=motor)
+    backoff_targets = {
+      motor: await self._driver.request_motor_position(motor=motor)
+      + compute_device_position(motor=motor, position=configuration.backoff)
+      for motor in ARM_MOTORS
+    }
+    for motor, target in backoff_targets.items():
+      self._check_reachable(motor=motor, position=target)
+    await self._move_motors(targets=backoff_targets, profiles=profiles)
+    for motor in ARM_MOTORS:
+      await self._unchecked_fw_set_motor_position(motor=motor, position=0.0)
+
+  async def _home_motors(self, *, motors: Tuple[int, ...]) -> None:
+    """Start each motor's flag search in turn, as the v3 unit's ``arm`` block sets it, then wait
+    for each one's homing done and require its homed bit.
+
+    An arm motor's search is followed by the block's ``motor_xy_homing_delay``.
+
+    Args:
+      motors: the motors, in the order their searches start.
+
+    Raises:
+      MantisMotionError: if a motor faults, or does not read homed.
+      MantisTimeoutError: if a motor does not report homing done within ``HOME_TIMEOUT``.
+    """
+    configuration = self._get_v3_arm_configuration()
+    waiters: Dict[int, "asyncio.Future[bytes]"] = {}
+    try:
+      for motor in motors:
+        homing = configuration.motors[motor]
+        await self._unchecked_fw_clear_motor_faults(motor=motor)
+        # Bound now: each waiter matches its own motor's homing done.
+        waiters[motor] = self._driver._expect_event(
+          board=MOTION_BOARD,
+          code=HOME_DONE_EVENT,
+          match=functools.partial(
+            lambda payload, motor: decode_home_done(payload=payload)[0] == motor, motor=motor
+          ),
+        )
+        fast_speed = compute_device_rate(motor=motor, rate=homing.speed)
+        await self._unchecked_fw_home(
+          motor=motor,
+          method=homing.method,
+          positive_edge=homing.positive_edge,
+          positive_direction=homing.positive_direction,
+          slow_speed=fast_speed / 10,
+          fast_speed=fast_speed,
+          acceleration=compute_device_rate(motor=motor, rate=homing.acceleration),
+        )
+        if motor in ARM_MOTORS:
+          await asyncio.sleep(configuration.motor_xy_homing_delay)
+      for motor in motors:
+        await self._driver._wait_for_event(waiter=waiters[motor], timeout=HOME_TIMEOUT)
+    except BaseException:
+      for waiter in waiters.values():
+        waiter.cancel()
+      raise
+    for motor in motors:
+      status = await self._driver.request_motor_status(motor=motor)
+      self._check_status(motor=motor, status=status & ~MOTOR_FOLLOWING_ERROR)
+      if not status & MOTOR_HOMED:
+        raise MantisMotionError(
+          f"{self._driver.name}: motor {motor} did not home (status 0x{status:04x})",
+          motor=motor,
+          status=status,
+        )
+
+  async def _declare_home_frame(self) -> None:
+    """Move each arm motor to 0 at the ``HOME_FRAME_DEVICE_*`` profile, then declare it at the v3
+    unit's ``homing_position_n``."""
+    configuration = self._get_v3_arm_configuration()
+    for motor in ARM_MOTORS:
+      await self._move_motors(
+        targets={motor: 0.0},
+        profiles={motor: (HOME_FRAME_DEVICE_SPEED, HOME_FRAME_DEVICE_ACCELERATION)},
+        expected_following_error=True,
+      )
+      await self._unchecked_fw_set_motor_position(
+        motor=motor,
+        position=compute_device_position(
+          motor=motor, position=configuration.homing_position_n[motor]
+        ),
+      )
+
+  async def _initialize_v3(self) -> None:
+    """Bring a v3's arm and Z up, as captured: seat the arms and home Z twice, home the arms,
+    declare the home frame, then follow the unit's route to idle.
+
+    Every target is checked against its motor's limits before anything is sent. A failure or
+    cancellation stops all three motors and logs where they stopped before it raises.
+    """
+    configuration = self._get_v3_arm_configuration()
+    self._initialized = False
+    route: List[RouteLine] = []
+    for x, y in configuration.post_homing_positions:
+      route += [(None, None, 0.0), (x, y, None)]
+    steps = self._get_route_targets(route=route)
+    for motor in ARM_MOTORS:
+      for position in (configuration.homing_position_n[motor], configuration.retract, 0.0):
+        self._check_reachable(
+          motor=motor, position=compute_device_position(motor=motor, position=position)
+        )
+    homing = configuration.motors
+    # The route at motor 0's homing speed, the arms at its acceleration and Z at its own.
+    profiles = {
+      motor: (
+        compute_device_rate(motor=motor, rate=homing[0].speed),
+        compute_device_rate(
+          motor=motor, rate=homing[Z_MOTOR if motor == Z_MOTOR else 0].acceleration
+        ),
+      )
+      for motor in (*ARM_MOTORS, Z_MOTOR)
+    }
+    try:
+      await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT, expected_following_error=True)
+      for pass_index in range(2):
+        logger.info("[%s] seating the arms, pass %d", self._driver.name, pass_index + 1)
+        await self._seat_arm_motors()
+        logger.info("[%s] homing Z", self._driver.name)
+        await self._home_z(speed=homing[Z_MOTOR].speed, acceleration=homing[Z_MOTOR].acceleration)
+      logger.info("[%s] homing arm motors together, motor 1 then motor 0", self._driver.name)
+      await self._home_motors(motors=(1, 0))
+      logger.info("[%s] declaring the calibrated home frame", self._driver.name)
+      await self._declare_home_frame()
+      logger.info("[%s] following the calibrated route to idle", self._driver.name)
+      await self._move_along_route(steps=steps, profiles=profiles)
+      await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT)
+    except BaseException:
+      await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR))
+      await self._log_where_it_stopped()
+      raise
+    self._initialized = True
+
+  async def initialize(self) -> None:
+    """Bring the arm and Z up from power-on: a v4 from where its absolute encoders read, a v3 from
+    its stops and flags.
+
+    Raises:
+      MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
+      MantisMotionError: if the head is not where it is moved to idle from, or a motor faults.
+      MantisTimeoutError: if a move or a home does not end in time.
+      ValueError: on a v3, if a target is outside its motor's limits; nothing is sent.
+    """
+    self._check_calibrated()
+    if self._get_generation() == "v4":
+      await self._initialize_v4()
+    elif self._get_generation() == "v3":
+      await self._initialize_v3()
+
   async def recover_from_fault(self) -> None:
     """Recover from a motor fault as recorded: stop every motor, clear Z's faults then the arms',
-    and recover to idle as ``initialize`` does. This moves the arm.
+    and recover to idle as ``initialize`` does: a v4 from its absolute encoders, a v3 by its whole
+    bring-up again. This moves the arm.
 
-    A failure leaves the arm motors unpowered; set up again.
+    A failure leaves a v4's arm motors unpowered, a v3's stopped; set up again.
 
     Raises:
       MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
       MantisMotionError: if the arm is not brought up, the head is not where it is moved to idle
         from, or a motor faults.
       MantisTimeoutError: if a move or the home does not end in time.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
     """
     self._check_calibrated()
     self._check_initialized()
@@ -1267,9 +1569,13 @@ class Arm:
         )
       for motor in (Z_MOTOR, *ARM_MOTORS):
         await self._unchecked_fw_clear_motor_faults(motor=motor)
-      await self._recover_to_idle()
+      if self._get_generation() == "v4":
+        await self._recover_to_idle()
+      elif self._get_generation() == "v3":
+        await self._initialize_v3()
     except BaseException:
-      await self._unpower_arm_motors()
+      if self._get_generation() == "v4":
+        await self._unpower_arm_motors()
       raise
     self._initialized = True
     await self._report_pose()
@@ -1721,7 +2027,7 @@ class Arm:
         where the head is is not known, or without the unit's zones it is not near idle.
     """
     await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT)
-    _, idle_route = self._get_routes(joint_state=await self.request_absolute_joint_state())
+    _, idle_route = self._get_routes(joint_state=await self._request_arm_joint_state())
     steps = self._get_route_targets(route=idle_route)
     await self._rise_to_traverse_height(
       z_joint_position=z_joint_position, profiles=self._get_route_profiles()
@@ -1740,9 +2046,11 @@ class Arm:
         ``default_minimum_traverse_height`` when None.
 
     Raises:
-      MantisConfigurationError: for a height in the deck frame without the unit's ``stage`` block.
+      MantisConfigurationError: for a height in the deck frame without the unit's ``stage`` block;
+        nothing is sent.
       MantisMotionError: if the arm is not brought up, a motor faults, Z does not read at the
         traverse height after rising, or without the unit's zones the head is not near idle.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
       ValueError: if the traverse height is outside Z's limits.
     """
     self._check_initialized()
@@ -1767,6 +2075,7 @@ class Arm:
       MantisConfigurationError: without the path; nothing moves.
       MantisMotionError: if the arm is not brought up, a motor faults, or Z does not read at the
         traverse height after rising.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
     """
     self._check_initialized()
     paths = self.configuration.approach_paths or {}
@@ -1849,7 +2158,7 @@ class Arm:
     await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT)
     await self._leave_approach_path_if_on_one(joint_state=await self.request_joint_state())
     try:
-      self._check_near_idle(joint_state=await self.request_absolute_joint_state())
+      self._check_near_idle(joint_state=await self._request_arm_joint_state())
     except MantisMotionError:
       if self.configuration.zone_rectangles is None:
         raise
@@ -1875,13 +2184,16 @@ class Arm:
     await self._report_pose()
 
   async def _halt(self) -> None:
-    """Stop every motor at its default deceleration, then park the arm if it was brought up and
-    every motor stopped.
+    """Stop every motor at its default deceleration, then park a v4 arm if it was brought up and
+    every motor stopped; a v3 arm is not parked until a v3 has run its moves.
 
     Each stop runs whether or not the one before it succeeded, its failure logged; the arm is no
     longer brought up after it.
     """
     initialized, self._initialized = self._initialized, False
+    if self._get_generation() == "v3":
+      await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR))
+      return
     if not await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR)):
       if initialized:
         logger.warning("[%s] a motor did not stop; the arm is not parked", self._driver.name)

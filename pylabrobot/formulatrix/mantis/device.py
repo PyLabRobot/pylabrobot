@@ -2,7 +2,7 @@
 
 import math
 import os
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Deck, Resource
@@ -19,7 +19,6 @@ from .driver.configuration import RECORDING_MANTIS_V4
 from .driver.features.arm import Arm
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
-from .driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
@@ -196,8 +195,9 @@ class MantisDevice(Resource):
     self._update_arm_model(theta_1=0.0, theta_2=0.0, z=0.0)
 
   @property
-  def plate_clamp(self) -> Optional[Union[PlateClamp, PneumaticPlateClamp]]:
-    """The discovered motor or pneumatic plate clamp; None before discovery or without one."""
+  def plate_clamp(self) -> Optional[PlateClamp]:
+    """The plate clamp, on board 12 or on a pressure-board output; None before discovery or
+    without one."""
     return self.driver.plate_clamp
 
   @property

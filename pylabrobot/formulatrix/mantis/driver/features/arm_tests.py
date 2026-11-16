@@ -5,6 +5,7 @@ declare it with a synthetic correction, so only those values differ from what wa
 offsets declared are the ones the recorded idle targets imply, so the moves are sent as recorded.
 """
 
+import asyncio
 import json
 import math
 import os
@@ -35,7 +36,6 @@ from pylabrobot.formulatrix.mantis.driver.features.arm import (
   Arm,
   MantisArmConfiguration,
 )
-from pylabrobot.formulatrix.mantis.driver.features.arm_v3 import V3Arm
 from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   BLUE,
   GREEN,
@@ -48,7 +48,7 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   led_bar_frames,
   make_led_bar_answers,
 )
-from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
+from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   RECORDED_MOTOR_ERROR_EVENTS,
   DriverTestCase,
@@ -60,10 +60,12 @@ from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
   SYNTHETIC_IDLE_ROUTES,
   SYNTHETIC_SAFE_XY,
   SYNTHETIC_STAGE_BLOCK,
+  SYNTHETIC_V3_ARM_BLOCK,
   SYNTHETIC_WASH_ROUTE,
   SYNTHETIC_WASTE_ROUTE,
   SYNTHETIC_ZONES_BLOCK,
 )
+from pylabrobot.formulatrix.mantis.driver.v3_arm_configuration import V3ArmConfiguration
 from pylabrobot.formulatrix.mantis.resource_model import (
   PLATE_HOLDER_LOCATION,
   PLATE_HOLDER_SIZE_Y,
@@ -482,7 +484,7 @@ class IdleTargetTests(unittest.TestCase):
     for offsets in ({0: 0.0, 1: 0.0}, {0: 1.0, 1: -2.0}):
       with self.subTest(offsets=offsets):
         arm = Arm(
-          driver=mock.Mock(),
+          driver=mock.Mock(**{"configuration.generation": "v4"}),
           configuration=MantisArmConfiguration(
             offsets=offsets,
             homing_position_a=SYNTHETIC_HOMING_POSITION_A,
@@ -495,7 +497,7 @@ class IdleTargetTests(unittest.TestCase):
 
   def test_the_implied_offsets_give_the_recorded_idle_targets(self):
     arm = Arm(
-      driver=mock.Mock(),
+      driver=mock.Mock(**{"configuration.generation": "v4"}),
       configuration=MantisArmConfiguration(
         offsets=SYNTHETIC_OFFSETS,
         homing_position_a=SYNTHETIC_HOMING_POSITION_A,
@@ -507,14 +509,18 @@ class IdleTargetTests(unittest.TestCase):
     self.assertEqual(targets[1], RECORDED_IDLE_TARGETS[1])
 
   def test_without_the_arm_block_there_are_no_idle_targets(self):
-    arm = Arm(driver=mock.Mock(), configuration=MantisArmConfiguration())
+    arm = Arm(
+      driver=mock.Mock(**{"configuration.generation": "v4"}), configuration=MantisArmConfiguration()
+    )
     with self.assertRaises(MantisConfigurationError):
       arm._get_idle_targets()
 
 
 class DefaultTests(unittest.TestCase):
   def test_defaults_are_checked_when_assigned(self):
-    arm = Arm(driver=mock.Mock(), configuration=MantisArmConfiguration())
+    arm = Arm(
+      driver=mock.Mock(**{"configuration.generation": "v4"}), configuration=MantisArmConfiguration()
+    )
     for name in ("default_xy_speed", "default_xy_acceleration", "default_z_speed"):
       with self.subTest(name=name):
         with self.assertRaises(ValueError):
@@ -713,13 +719,15 @@ class MoveFailureTests(ArmTestCase):
 
 class DiscoveryTests(ArmTestCase):
   async def test_board_11_selects_the_arm_implementation(self):
-    for absent_boards, arm_class in (((), Arm), ((11,), V3Arm)):
+    for absent_boards, generation in (((), "v4"), ((11,), "v3")):
       with self.subTest(absent_boards=absent_boards):
         self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
-        self.assertIs(type(driver.arm), arm_class)
+        assert driver.arm is not None
+        self.assertIs(type(driver.arm), Arm)
+        self.assertEqual(driver.arm._get_generation(), generation)
 
   async def test_the_arm_block_is_never_taken_from_a_recording(self):
     path = os.path.join(self.directory, "recording.json")
@@ -1142,7 +1150,7 @@ class MoveTests(ArmTestCase):
 def make_staged_arm(*, stage: Dict, **kwargs) -> Arm:
   """An arm with a mocked driver and a stage block, as a driver builds it."""
   return Arm(
-    driver=mock.Mock(),
+    driver=mock.Mock(**{"configuration.generation": "v4"}),
     configuration=MantisArmConfiguration(
       offsets=kwargs.get("offsets"),
       homing_position_a=kwargs.get("homing_position_a"),
@@ -1203,7 +1211,7 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
     # 100 mm/s and 500 mm/s² over the straight line: each motor at its turn over the distance, so
     # both end together; the motor that does not turn keeps the route profile.
     arm = Arm(
-      driver=mock.Mock(),
+      driver=mock.Mock(**{"configuration.generation": "v4"}),
       configuration=MantisArmConfiguration(
         offsets={0: 0.0, 1: 0.0},
         homing_position_a=SYNTHETIC_HOMING_POSITION_A,
@@ -1520,7 +1528,7 @@ class ApproachPathTests(ArmTestCase):
 
   def test_the_head_is_placed_on_a_path_by_where_it_stands(self):
     arm = Arm(
-      driver=mock.Mock(),
+      driver=mock.Mock(**{"configuration.generation": "v4"}),
       configuration=MantisArmConfiguration(
         offsets={0: 0.0, 1: 0.0},
         homing_position_a=SYNTHETIC_HOMING_POSITION_A,
@@ -1620,6 +1628,437 @@ class RouteDiscoveryTests(ArmTestCase):
         )
         with self.assertRaises(MantisConfigurationError):
           await driver.setup(skip_arm=True)
+
+
+# Replies from a complete v3 setup and stop, by motor; a repeated status word as (word, count). The
+# words are the captured cold start's, in its order, one per read of each phase.
+CAPTURED_STATUS_RUNS = {
+  0: [
+    ("0000", 1),
+    ("0100", 2),
+    ("0001", 1),
+    ("0100", 2),
+    ("0001", 1),
+    ("0100", 2),
+    ("0000", 2),
+    ("0100", 2),
+    ("0001", 1),
+    ("0100", 2),
+    ("0001", 1),
+    ("0100", 2),
+    ("0000", 2),
+    ("0400", 1),
+    ("0500", 2),
+    ("0400", 4),
+    ("0500", 2),
+    ("0400", 2),
+    ("0500", 2),
+    ("0400", 2),
+    ("0500", 2),
+    ("0400", 2),
+  ],
+  1: [
+    ("0000", 1),
+    ("0100", 2),
+    ("0000", 1),
+    ("0100", 2),
+    ("0000", 1),
+    ("0100", 2),
+    ("0000", 2),
+    ("0100", 2),
+    ("0000", 1),
+    ("0100", 2),
+    ("0000", 1),
+    ("0100", 2),
+    ("0000", 2),
+    ("0400", 3),
+    ("0500", 2),
+    ("0400", 2),
+    ("0500", 2),
+    ("0400", 2),
+    ("0500", 1),
+    ("0400", 3),
+    ("0500", 2),
+    ("0400", 2),
+  ],
+  2: [("0000", 8), ("0400", 13), ("0500", 1), ("0400", 12)],
+}
+# board, command, request payload, reply payload; "-" is an empty payload. Each following-error
+# configuration read (command 82) answers as captured: enabled, at most 4.0.
+CAPTURED_EXCHANGES = """
+0:1:-:34002e00320030002e0036000000
+10:1:-:31002e0030002e0035000000
+0:10:0000:000000000040afc0000000000040af40
+0:10:0100:000000000040afc0000000000040af40
+0:10:0200:00000000004055c000000000008aa140
+10:20:0000:00000040ed05873f000000a0aaa62ac0
+10:20:0100:00000040ed05873f000000a0aaa62ac0
+10:20:0200:00000000d432833f00000020af8741c0
+0:82:0000:01000000000000001040
+0:82:0100:01000000000000001040
+0:82:0200:01000000000000001040
+0:17:0000:-
+0:17:0100:-
+0:28:00000000000000000000:-
+0:28:01000000000000000000:-
+0:22:0000721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:22:0100721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:17:0000:-
+0:17:0100:-
+0:28:00000000000000000000:-
+0:28:01000000000000000000:-
+0:22:0000721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:22:0100721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:17:0000:-
+0:17:0100:-
+0:27:0000:0000000000c03940000000000000000000000000000000000000000000c039400000000000000000000000000088c340
+0:22:0000e4388ee3386e4240b4a291808fb3b540814e1be8b40a8a40:0000
+0:27:0100:000000a01cc73bc000000000000000000000000000000000000000a01cc73bc0000000808fb3b540000000e0b40a8a40
+0:22:0100398ee3d8aaaa30c0b4a291808fb3b540814e1be8b40a8a40:0000
+0:28:00000000000000000000:-
+0:28:01000000000000000000:-
+0:17:0200:-
+0:21:0200000001000000d343867e1e874d4064ea130f737482407d2ae7ab04c2ce40:0000
+0:17:0000:-
+0:17:0100:-
+0:28:00000000000000000000:-
+0:28:01000000000000000000:-
+0:22:0000721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:22:0100721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:17:0000:-
+0:17:0100:-
+0:28:00000000000000000000:-
+0:28:01000000000000000000:-
+0:22:0000721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:22:0100721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40:0000
+0:17:0000:-
+0:17:0100:-
+0:27:0000:000000000000f83f00000000000000000000000000000000000000000000f83f0000000000000000000000000088c340
+0:22:00008ee3388ee3382940b4a291808fb3b540814e1be8b40a8a40:0000
+0:27:0100:000000000000f8bf00000000000000000000000000000000000000000000f8bf0000000000000000000000000088c340
+0:22:01008ee3388ee3382340b4a291808fb3b540814e1be8b40a8a40:0000
+0:28:00000000000000000000:-
+0:28:01000000000000000000:-
+0:17:0200:-
+0:21:0200000001000000d343867e1e874d4064ea130f737482407d2ae7ab04c2ce40:0000
+0:17:0100:-
+0:21:01000300010001001c7ba7a066391640e359d148c0c74b4025e09b5793b39540:0000
+0:17:0000:-
+0:21:00000300010000001c7ba7a066391640e359d148c0c74b4025e09b5793b39540:0000
+0:22:000000000000000000000000000000407f400000000000005940:0000
+0:28:000000000000000049c0:-
+0:22:010000000000000000000000000000407f400000000000005940:0000
+0:28:01000000000000005e40:-
+0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
+0:22:000040877b10d60349c0e359d148c0c74b4025e09b5793b39540:0000
+0:22:0100545f88b1d4794940e359d148c0c74b4025e09b5793b39540:0000
+0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
+0:22:0000042e990e845733c0e359d148c0c74b4025e09b5793b39540:0000
+0:22:0100ff8a9491d13f4740e359d148c0c74b4025e09b5793b39540:0000
+0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
+0:22:0000aaaaea83a1a3063fe359d148c0c74b4025e09b5793b39540:0000
+0:22:01008ee3d883a1a3063fe359d148c0c74b4025e09b5793b39540:0000
+0:27:0000:000000000000073f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
+0:27:0100:000000000000083f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
+0:27:0200:0000000000000000000000000000000000000000000000000000000000000000000000a006c2ae40000000a004c2ce40
+0:27:0000:000000000000073f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
+0:84:0000:000000008099a93f
+0:27:0100:000000000000083f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
+0:84:0100:00000000a047d1bf
+0:27:0200:0000000000000000000000000000000000000000000000000000000000000000000000a006c2ae40000000a004c2ce40
+0:84:0200:000000000000d0bf
+0:64:-:0000
+0:24:0000814e1be8b40a8a40:0000
+0:24:0100814e1be8b40a8a40:0000
+0:24:0200bb34be4f05c2be40:0000
+""".split()
+
+
+def make_v3_answers():
+  """Play each captured reply list in order, repeating its final reply."""
+  answers: Dict[Tuple[int, int, bytes], List[bytes]] = {}
+  for exchange in CAPTURED_EXCHANGES:
+    board, command, request, reply = exchange.split(":")
+    key = int(board), int(command), bytes.fromhex(request.replace("-", ""))
+    answers.setdefault(key, []).append(bytes.fromhex(reply.replace("-", "")))
+  for motor, runs in CAPTURED_STATUS_RUNS.items():
+    answers[0, 20, struct.pack("<h", motor)] = [
+      bytes.fromhex(word) for word, count in runs for _ in range(count)
+    ]
+  return answers
+
+
+def get_motion_commands(*, link: FakeLink) -> List[Tuple[int, str]]:
+  """Commands that change a motor, leaving status polling out of comparisons."""
+  return [
+    (command, payload.hex())
+    for _, board, command, payload in (parse_frame(frame=frame) for frame in link.written)
+    if board == 0 and command in (17, 21, 22, 24, 28)
+  ]
+
+
+class V3Link(FakeLink):
+  """The v3 link; boards 11 and 12, which a v3 lacks, refuse at once instead of timing out, so the
+  tests keep the default read timeout. Each home answers with its captured homing done."""
+
+  def __init__(self, *, answers: Dict[Tuple[int, int, bytes], List[bytes]]):
+    """
+    Args:
+      answers: as for ``FakeLink``.
+    """
+    # Each home's request, and the homing done the captured cold start reported for its motor.
+    home_done = {
+      "0200000001000000d343867e1e874d4064ea130f737482407d2ae7ab04c2ce40": (
+        81,
+        "020000000000af90ebbf00000000f470c0bf",
+      ),
+      "01000300010001001c7ba7a066391640e359d148c0c74b4025e09b5793b39540": (
+        174,
+        "0100000000000040614000000000c01a0840",
+      ),
+      "00000300010000001c7ba7a066391640e359d148c0c74b4025e09b5793b39540": (
+        174,
+        "000000000000000060c00000000028170ac0",
+      ),
+    }
+    super().__init__(
+      answers=answers,
+      events={
+        (0, 21, bytes.fromhex(request)): [
+          build_frame(
+            packet_number=packet_number, board=0, command=0x0202, payload=bytes.fromhex(payload)
+          )
+        ]
+        for request, (packet_number, payload) in home_done.items()
+      },
+    )
+
+  async def write(self, data: bytes) -> int:
+    packet_number, board, _, _ = parse_frame(frame=data)
+    if board not in (11, 12):
+      return await super().write(data)
+    self.written.append(data)
+    self.incoming.extend(build_frame(packet_number=packet_number, board=board, command=0xFFFF))
+    return len(data)
+
+
+class V3ArmTests(DriverTestCase):
+  def setUp(self):
+    """Keep the status polls, without waiting between them."""
+    super().setUp()
+    patcher = mock.patch.object(arm_module, "MOTOR_STATUS_POLL_INTERVAL", 0)
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    self.directory = tempfile.TemporaryDirectory()
+    self.addCleanup(self.directory.cleanup)
+    self.path = os.path.join(self.directory.name, "unit.json")
+    with open(self.path, "w", encoding="utf-8") as file:
+      json.dump({"arm": SYNTHETIC_V3_ARM_BLOCK}, file)
+
+  async def make_arm(self, *, answers=None, calibrated=True):
+    """Discover through the v3 link, leaving the bring-up to the test."""
+    link = V3Link(answers=make_v3_answers() if answers is None else answers)
+    driver = await self.set_up_driver(
+      link=link, declared_configuration_json=self.path if calibrated else None
+    )
+    assert driver.arm is not None
+    self.assertEqual(driver.arm._get_generation(), "v3")
+    return driver, link
+
+  async def set_up_arm(self):
+    """Bring the v3 arm up through the v3 link."""
+    link = V3Link(answers=make_v3_answers())
+    driver = await self.set_up_driver(
+      link=link, skip_arm=False, declared_configuration_json=self.path
+    )
+    assert driver.arm is not None
+    return driver, link
+
+  async def test_setup_and_stop_follow_the_captured_v3_sequence(self):
+    """Seat twice, back off from live positions, home Z twice, then arms 1/0, and walk to idle."""
+    driver, link = await self.set_up_arm()
+    self.assertTrue(driver.arm.is_initialized)
+    joint_state = await driver.arm.request_joint_state()
+    x, y = driver.arm._get_head_position(joint_state=joint_state)
+    self.assertAlmostEqual(x, 15.0, places=3)
+    self.assertAlmostEqual(y, 31.177, places=3)
+    self.assertAlmostEqual(joint_state[2], 0.0, places=3)
+    with self.assertRaisesRegex(MantisConfigurationError, "no absolute"):
+      await driver.arm.request_absolute_joint_state()
+    await driver.stop()
+    expected = []
+    for exchange in CAPTURED_EXCHANGES:
+      board, command, request, _ = exchange.split(":")
+      if int(board) == 0 and int(command) in (17, 21, 22, 24, 28):
+        expected.append((int(command), request))
+    self.assertEqual(get_motion_commands(link=link), expected)
+    self.assertFalse(driver.arm.is_initialized)
+    # Each Z home follows a following-error check of every motor, as captured.
+    homes = [
+      (command, payload[:2].hex())
+      for _, board, command, payload in (parse_frame(frame=frame) for frame in link.written)
+      if board == 0 and command in (82, 21)
+    ]
+    precheck = [(82, "0000"), (82, "0100"), (82, "0200")]
+    self.assertEqual(
+      homes, precheck + [(21, "0200")] + precheck + [(21, "0200"), (21, "0100"), (21, "0000")]
+    )
+
+  async def test_stop_sends_three_stops_and_no_park(self):
+    driver, link = await self.set_up_arm()
+    sent = len(link.written)
+    await driver.stop()
+    stops = [
+      payload
+      for _, board, command, payload in (parse_frame(frame=frame) for frame in link.written[sent:])
+      if (board, command) == (0, 24)
+    ]
+    self.assertEqual([payload[:2].hex() for payload in stops], ["0000", "0100", "0200"])
+    self.assertNotIn(
+      22, [command for _, _, command, _ in map(lambda f: parse_frame(frame=f), link.written[sent:])]
+    )
+
+  async def test_missing_calibration_refuses_motion_and_pose(self):
+    """Discovery remains usable without another unit's calibration being substituted."""
+    driver, link = await self.make_arm(calibrated=False)
+    with self.assertRaisesRegex(MantisConfigurationError, "no v3 arm calibration"):
+      await driver.arm.initialize()
+    self.assertEqual(get_motion_commands(link=link), [])
+    with self.assertRaisesRegex(MantisMotionError, "must be initialized"):
+      await driver.arm.request_joint_state()
+
+  async def test_invalid_route_refuses_before_any_motor_command(self):
+    """A calibrated route outside a discovered motor limit is rejected before retracting."""
+    driver, link = await self.make_arm()
+    driver.arm.configuration.motor_limits[0] = (-1.0, 1.0)
+    with self.assertRaisesRegex(ValueError, "outside its limits"):
+      await driver.arm.initialize()
+    self.assertEqual(get_motion_commands(link=link), [])
+
+  async def test_failure_to_seat_stops_every_motor(self):
+    """A retract that never meets a stop must not go on to home Z."""
+    answers = make_v3_answers()
+    for motor in range(3):
+      answers[0, 20, struct.pack("<h", motor)] = [bytes.fromhex("0000")]
+    driver, link = await self.make_arm(answers=answers)
+    with mock.patch.object(arm_module, "SEAT_PASSES", 2):
+      with self.assertRaisesRegex(MantisMotionError, "did not seat"):
+        await driver.arm.initialize()
+    commands = get_motion_commands(link=link)
+    self.assertNotIn(21, [command for command, _ in commands])
+    self.assertEqual(
+      [payload[:4] for command, payload in commands if command == 24], ["0000", "0100", "0200"]
+    )
+    self.assertFalse(driver.arm.is_initialized)
+
+  async def test_missing_homed_flag_stops_before_homing_the_arms(self):
+    """An accepted home command alone is not proof that Z homed."""
+    answers = make_v3_answers()
+    answers[0, 20, bytes.fromhex("0200")] = [bytes.fromhex("0000")]
+    driver, link = await self.make_arm(answers=answers)
+    with self.assertRaisesRegex(MantisMotionError, "Z does not read homed"):
+      await driver.arm.initialize()
+    commands = get_motion_commands(link=link)
+    self.assertEqual([payload[:4] for command, payload in commands if command == 21], ["0200"])
+    self.assertEqual(
+      [payload[:4] for command, payload in commands if command == 24], ["0000", "0100", "0200"]
+    )
+    self.assertFalse(driver.arm.is_initialized)
+
+  async def test_cancellation_after_seating_stops_every_motor(self):
+    """Cancellation after moving propagates only after all three stops have been sent."""
+    driver, link = await self.make_arm()
+    with mock.patch.object(driver.arm, "_home_motors", side_effect=asyncio.CancelledError):
+      with self.assertRaises(asyncio.CancelledError):
+        await driver.arm.initialize()
+    commands = get_motion_commands(link=link)
+    self.assertEqual(
+      [payload[:4] for command, payload in commands if command == 24], ["0000", "0100", "0200"]
+    )
+    self.assertFalse(driver.arm.is_initialized)
+
+  async def test_a_failed_seat_move_stops_all_three_motors(self):
+    """No captured move answered an error code; a send that fails stands in for one."""
+    driver, link = await self.make_arm()
+    seat = bytes.fromhex("0000721cc7711cc73bc0b4a291808fb3b540814e1be8b40a8a40")
+    write = link.write
+
+    async def write_or_fail_the_seat(data: bytes) -> int:
+      if parse_frame(frame=data)[1:] == (0, 22, seat):
+        link.written.append(data)
+        raise OSError("device unplugged")
+      return int(await write(data))
+
+    link.io.write.side_effect = write_or_fail_the_seat
+    with self.assertRaisesRegex(OSError, "device unplugged"):
+      await driver.arm.initialize()
+    stopped = {payload[:4] for command, payload in get_motion_commands(link=link) if command == 24}
+    self.assertEqual(stopped, {"0000", "0100", "0200"})
+    self.assertFalse(driver.arm.is_initialized)
+
+  async def test_moves_after_the_bring_up_are_not_implemented(self):
+    """No v3 has run a move after its bring-up: each refuses before sending anything."""
+    driver, link = await self.set_up_arm()
+    arm = driver.arm
+    moves = {
+      "move_to_joint_state": lambda: arm.move_to_joint_state(joint_state={2: 1.0}),
+      "move_to_z_position": lambda: arm.move_to_z_position(z=1.0),
+      "move_to_xy_position": lambda: arm.move_to_xy_position(x=15.0, y=40.0),
+      "move_to_location": lambda: arm.move_to_location(location=Coordinate(x=1.0, y=1.0, z=1.0)),
+    }
+    sent = len(link.written)
+    for name, move in moves.items():
+      with self.subTest(move=name):
+        with self.assertRaisesRegex(NotImplementedError, "only in its bring-up"):
+          await move()
+    self.assertEqual(len(link.written), sent)
+
+  async def test_park_and_recovery_wait_for_bring_up_then_for_a_v3_run(self):
+    """Before bring-up nothing is known; after it, every move refuses until a v3 has run it."""
+    for set_up, error in ((False, MantisMotionError), (True, NotImplementedError)):
+      driver, link = await (self.set_up_arm() if set_up else self.make_arm())
+      arm = driver.arm
+      calls = {
+        "park": lambda: arm.park(),
+        "move_to_waste": lambda: arm.move_to_waste(),
+        "recover_from_fault": lambda: arm.recover_from_fault(),
+      }
+      sent = len(link.written)
+      for name, call in calls.items():
+        with self.subTest(call=name, set_up=set_up):
+          with self.assertRaises(error):
+            await call()
+      self.assertEqual(len(link.written), sent)
+
+  async def test_parked_is_read_from_the_motors_after_bring_up(self):
+    """A v3 has no absolute encoders: before bring-up nothing is sent; after it, the motors."""
+    driver, link = await self.make_arm()
+    sent = len(link.written)
+    with self.assertRaises(MantisMotionError):
+      await driver.arm.request_is_parked()
+    self.assertEqual(len(link.written), sent)
+    driver, _ = await self.set_up_arm()
+    self.assertTrue(await driver.arm.request_is_parked())
+    with self.assertRaises(MantisConfigurationError):
+      await driver.arm.request_absolute_joint_state()
+
+  async def test_a_v3_block_on_a_v4_is_refused(self):
+    driver = mock.Mock(**{"configuration.generation": "v4", "name": "Mantis"})
+    with self.assertRaisesRegex(MantisConfigurationError, "takes no v3 arm block"):
+      Arm(
+        driver=driver,
+        configuration=MantisArmConfiguration(
+          v3_arm_configuration=V3ArmConfiguration.from_block(block=SYNTHETIC_V3_ARM_BLOCK)
+        ),
+      )
+
+  async def test_saved_configuration_keeps_the_v3_calibration(self):
+    """A saved configuration carries the complete home frame and route into another setup."""
+    driver, _ = await self.make_arm()
+    saved = os.path.join(self.directory.name, "saved.json")
+    driver.save_configuration(path=saved)
+    with open(saved, encoding="utf-8") as file:
+      self.assertEqual(json.load(file)["arm"], SYNTHETIC_V3_ARM_BLOCK)
 
 
 if __name__ == "__main__":

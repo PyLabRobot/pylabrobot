@@ -11,6 +11,7 @@ from pylabrobot.formulatrix.mantis import Mantis
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
   compute_device_position,
+  compute_device_rate,
   compute_joint_angles,
 )
 from pylabrobot.formulatrix.mantis.driver.errors import (
@@ -18,13 +19,12 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisTimeoutError,
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
-from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
 from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
-from pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
   SYNTHETIC_APPROACH_PATHS_BLOCK,
   SYNTHETIC_STAGE_BLOCK,
+  SYNTHETIC_V3_ARM_BLOCK,
   SYNTHETIC_WASH_2_ROUTE,
   SYNTHETIC_WASH_ROUTE,
   SYNTHETIC_WASTE_ROUTE,
@@ -82,7 +82,8 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
       mantis = Mantis(simulation=True, declared_configuration_json=path)
       await mantis.setup(skip_arm=True)
       self.addAsyncCleanup(mantis.stop)
-      assert isinstance(mantis.plate_clamp, PneumaticPlateClamp) and mantis.pump is not None
+      assert isinstance(mantis.plate_clamp, PlateClamp) and mantis.pump is not None
+      self.assertEqual(mantis.plate_clamp.auxiliary_output, 2)
       await mantis.plate_clamp.lock()
       self.assertTrue(await mantis.plate_clamp.request_locked())
       self.assertTrue(await mantis.pump.request_pump_on())
@@ -140,6 +141,38 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
         await mantis.stop()
         self.assertFalse(mantis.arm.is_initialized)
         self.assertEqual(await mantis.driver.request_motor_position(motor=2), 0.0)
+
+  async def test_v3_initialization_runs_below_the_firmware_calls(self):
+    """The unit's Z homing values reach the home command; a retract seats the arm against its
+    stop, read as a following error, with the homed bit once homed."""
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      recording = json.load(file)
+    recording["device"]["firmware_versions"]["11"] = None
+    recording["device"]["generation"] = "v3"
+    block = json.loads(json.dumps(SYNTHETIC_V3_ARM_BLOCK))
+    block["motors"]["2"].update({"speed": 10.0, "acceleration": 300.0})
+    recording["arm"] = block
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "v3.json")
+      with open(path, "w", encoding="utf-8") as file:
+        json.dump(recording, file)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      self.addAsyncCleanup(mantis.stop)
+      await mantis.setup(skip_arm=True)
+    arm = mantis.arm
+    assert arm is not None
+    retract = compute_device_position(motor=0, position=block["retract"])
+    await arm._unchecked_fw_move_absolute(motor=0, position=retract, speed=1.0, acceleration=1.0)
+    self.assertEqual(await mantis.driver.request_motor_status(motor=0), 0x100)
+    with mock.patch.object(arm, "_unchecked_fw_home", wraps=arm._unchecked_fw_home) as home:
+      await arm.initialize()
+    z_homes = [call.kwargs for call in home.call_args_list if call.kwargs["motor"] == 2]
+    self.assertEqual(len(z_homes), 2)
+    for z_home in z_homes:
+      self.assertEqual(z_home["fast_speed"], compute_device_rate(motor=2, rate=10.0))
+      self.assertEqual(z_home["acceleration"], compute_device_rate(motor=2, rate=300.0))
+    await arm._unchecked_fw_move_absolute(motor=0, position=retract, speed=1.0, acceleration=1.0)
+    self.assertEqual(await mantis.driver.request_motor_status(motor=0), 0x104)
 
   async def test_rfid_reads_every_declared_slot_empty(self):
     rfid = self.mantis.rfid
