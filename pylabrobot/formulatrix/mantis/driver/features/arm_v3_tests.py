@@ -5,12 +5,13 @@ import json
 import os
 import struct
 import tempfile
+from typing import Dict, List, Tuple
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError, MantisMotionError
 from pylabrobot.formulatrix.mantis.driver.features import arm_v3 as arm_v3_module
 from pylabrobot.formulatrix.mantis.driver.features.arm_v3 import V3Arm
-from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
+from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink
 
 SYNTHETIC_V3_ARM_BLOCK = {
@@ -191,7 +192,7 @@ RECORDED_EXCHANGES = """
 
 def make_v3_answers():
   """Play each recorded reply list in order, repeating its final reply."""
-  answers = {}
+  answers: Dict[Tuple[int, int, bytes], List[bytes]] = {}
   for exchange in RECORDED_EXCHANGES:
     board, command, request, reply = exchange.split(":")
     key = int(board), int(command), bytes.fromhex(request.replace("-", ""))
@@ -212,9 +213,20 @@ def motion_commands(link):
   ]
 
 
-class V3ArmTests(DriverTestCase):
-  default_read_timeout = 0.1
+class V3Link(FakeLink):
+  """The recorded v3 link; boards 11 and 12, which a v3 lacks, refuse at once instead of timing
+  out, so the tests keep the default read timeout."""
 
+  async def write(self, data: bytes) -> int:
+    packet_number, board, _, _ = parse_frame(frame=data)
+    if board not in (11, 12):
+      return await super().write(data)
+    self.written.append(data)
+    self.incoming.extend(build_frame(packet_number=packet_number, board=board, command=0xFFFF))
+    return len(data)
+
+
+class V3ArmTests(DriverTestCase):
   def setUp(self):
     """Keep recorded status polls, without waiting between them."""
     super().setUp()
@@ -229,7 +241,7 @@ class V3ArmTests(DriverTestCase):
 
   async def make_arm(self, *, answers=None, calibrated=True):
     """Discover through the recorded transport, deferring initialization for the test."""
-    link = FakeLink(answers=make_v3_answers() if answers is None else answers)
+    link = V3Link(answers=make_v3_answers() if answers is None else answers)
     driver = await self.set_up_driver(
       link=link, declared_configuration_json=self.path if calibrated else None
     )
@@ -238,10 +250,11 @@ class V3ArmTests(DriverTestCase):
 
   async def test_setup_and_stop_follow_the_recorded_v3_sequence(self):
     """Seat twice, use live backoffs, home Z twice, then arms 1/0, and walk to idle."""
-    link = FakeLink(answers=make_v3_answers())
+    link = V3Link(answers=make_v3_answers())
     driver = await self.set_up_driver(
       link=link, skip_arm=False, declared_configuration_json=self.path
     )
+    assert driver.arm is not None
     self.assertTrue(driver.arm.is_initialized)
     position = await driver.arm.request_head_position()
     self.assertAlmostEqual(position.x, 15.0, places=3)
