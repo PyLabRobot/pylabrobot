@@ -374,9 +374,8 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 3. **Three link values are ours, not the vendor's.** The latency timer (2 ms), the read poll
    (10 ms) and the reply timeout (5 s). A frame whose reserved word is not zero is logged, not
    refused.
-4. **The arm model is partial.** The links are drawn as boxes: the manufacturer's link models are
-   compressed in a form not converted yet. The Z column is drawn where it stands with Z at 0 and
-   moved by Z's height; that the drawn pose is Z at 0 is not measured. Which side of the device motor 0's links sit on is taken from the name
+4. **The arm model is partial.** The Z column is drawn where it stands with Z at 0 and moved by
+   Z's height; that the drawn pose is Z at 0 is not measured. Which side of the device motor 0's links sit on is taken from the name
    of a link length in the unit's files, not seen on a device. The motor reads stay on the driver
    in the device's units; the arm converts them.
 5. **Whether motor limits differ between devices of one generation** is unknown; one unit of each

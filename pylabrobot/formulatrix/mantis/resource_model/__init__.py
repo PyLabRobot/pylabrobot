@@ -1,8 +1,7 @@
 """The Mantis's parts, as resources, from the manufacturer's model.
 
 Sizes and positions come from ``manifest.json``. Each part's ``mesh`` is its ``.glb``: mm, Z up,
-in the part's own frame; the base's is the main box's frame. An arm link has no model file and is
-drawn as its box.
+in the part's own frame; the base's is the main box's frame.
 """
 
 import json
@@ -75,7 +74,7 @@ def z_column(name: str) -> Resource:
 
 
 def arm_link(name: str, *, link: str) -> LinkBody:
-  """One of the arm's four links, drawn as its box. Motor 0 turns the right pair, motor 1 the left.
+  """One of the arm's four links. Motor 0 turns the right pair, motor 1 the left.
 
   Args:
     name: the resource name.
@@ -84,7 +83,7 @@ def arm_link(name: str, *, link: str) -> LinkBody:
   """
   part = MANIFEST["arm_links"][link]
   size_x, size_y, size_z = part["size"]
-  return LinkBody(
+  body = LinkBody(
     name=name,
     size_x=size_x,
     size_y=size_y,
@@ -92,8 +91,10 @@ def arm_link(name: str, *, link: str) -> LinkBody:
     proximal_joint=Coordinate(*part["proximal_joint"]),
     distal_joint=Coordinate(*part["distal_joint"]),
     category="mantis_arm_link",
-    model=f"formulatrix_mantis_{link}",
+    model=part["file"][: -len(".glb")],
   )
+  body.mesh = _mesh(file=part["file"])  # type: ignore[attr-defined]
+  return body
 
 
 __all__ = [
