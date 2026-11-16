@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.CarouselConfiguration.slot\_one\_position
+=======================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoattribute:: CarouselConfiguration.slot_one_position

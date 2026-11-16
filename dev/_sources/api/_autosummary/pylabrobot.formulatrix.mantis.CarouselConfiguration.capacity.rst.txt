@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.CarouselConfiguration.capacity
+============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoattribute:: CarouselConfiguration.capacity

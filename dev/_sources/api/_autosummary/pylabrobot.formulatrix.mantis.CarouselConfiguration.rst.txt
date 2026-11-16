@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.CarouselConfiguration
+===================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoclass:: CarouselConfiguration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CarouselConfiguration.device_id
+      ~CarouselConfiguration.capacity
+      ~CarouselConfiguration.steps_per_revolution
+      ~CarouselConfiguration.slot_one_position
+      ~CarouselConfiguration.idle_position
+      ~CarouselConfiguration.preposition
+      ~CarouselConfiguration.homing_slow_speed
+      ~CarouselConfiguration.homing_fast_speed
+      ~CarouselConfiguration.homing_acceleration
+      ~CarouselConfiguration.default_speed
+      ~CarouselConfiguration.default_acceleration
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CarouselConfiguration.__init__
+      ~CarouselConfiguration.from_oem_database
+   
+   

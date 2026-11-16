@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisCarousel.home
+=================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisCarousel.home
