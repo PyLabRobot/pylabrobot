@@ -17,6 +17,7 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
 from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
+from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
 from pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.simulator import (
@@ -35,7 +36,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_clamp_starts_idle_then_locks_and_unlocks(self):
     clamp = self.mantis.plate_clamp
-    assert clamp is not None
+    assert isinstance(clamp, PlateClamp)
     self.assertEqual(await clamp.request_state(), 0)
     await clamp.lock(level=3)
     self.assertEqual(await clamp.request_state(), 3)
@@ -66,7 +67,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_stop_releases_a_locked_clamp(self):
     clamp = self.mantis.plate_clamp
-    assert clamp is not None
+    assert isinstance(clamp, PlateClamp)
     await clamp.lock(level=3)
     await self.mantis.stop()
     await self.mantis.setup()

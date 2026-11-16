@@ -10,6 +10,7 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisTimeoutError,
 )
 from pylabrobot.formulatrix.mantis.driver.features import plate_clamp
+from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 
@@ -55,7 +56,7 @@ class PlateClampTests(DriverTestCase):
     self.driver = await self.set_up_driver(
       link=self.link, declared_configuration_json=RECORDING_MANTIS_V4
     )
-    assert self.driver.plate_clamp is not None
+    assert isinstance(self.driver.plate_clamp, PlateClamp)
     self.clamp = self.driver.plate_clamp
     self.sent_before = len(self.link.written)
 
@@ -141,7 +142,7 @@ class PlateClampDiscoveryTests(DriverTestCase):
   async def test_lock_with_no_levels_sends_nothing(self):
     link = FakeLink(answers=make_answers())
     driver = await self.set_up_driver(link=link)
-    assert driver.plate_clamp is not None
+    assert isinstance(driver.plate_clamp, PlateClamp)
     driver.plate_clamp.levels = None  # a unit whose folder, declared file and recording have none
     sent_before = len(link.written)
     with self.assertRaisesRegex(MantisConfigurationError, "no clamp levels"):

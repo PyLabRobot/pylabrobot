@@ -8,7 +8,7 @@ from typing import List, Tuple
 
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError, MantisTimeoutError
 from pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
-from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
+from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 
 PNEUMATIC_CLAMP_BLOCK = {"controller": "pressure_regulator", "auxiliary_output": 2}
@@ -23,11 +23,13 @@ REPLY_OFF, REPLY_ON, REPLY_SET = bytes.fromhex("0000"), bytes.fromhex("0100"), b
 
 
 class ClampLink(FakeLink):
-  """Answer with recorded readbacks for the states selected by accepted commands."""
+  """Answer with recorded readbacks for the states selected by accepted commands; an absent
+  board refuses at once instead of timing out, so the tests keep the default read timeout."""
 
   def __init__(self, *, absent_boards=(11, 12), pump_on=False):
     """Start released, with the specified air-pump state."""
     super().__init__(answers=make_answers(absent_boards=absent_boards))
+    self.absent_boards = absent_boards
     self.answers.update(
       {command: [REPLY_SET] for command in (VALVE_ON, VALVE_OFF, PUMP_ON, PUMP_OFF)}
     )
@@ -36,6 +38,11 @@ class ClampLink(FakeLink):
 
   async def write(self, data: bytes) -> int:
     """Apply the accepted write and expose its control state through the corresponding read."""
+    packet_number, board, _, _ = parse_frame(frame=data)
+    if board in self.absent_boards:
+      self.written.append(data)
+      self.incoming.extend(build_frame(packet_number=packet_number, board=board, command=0xFFFF))
+      return len(data)
     command = parse_frame(frame=data)[1:]
     for change, read, reply in (
       (VALVE_ON, VALVE_READ, REPLY_ON),
@@ -59,8 +66,6 @@ def pressure_commands(link: ClampLink) -> List[Tuple[int, int, bytes]]:
 
 
 class PneumaticPlateClampTests(DriverTestCase):
-  default_read_timeout = 0.1
-
   def setUp(self):
     """Declare the unit's pneumatic output without substituting another unit's clamp levels."""
     super().setUp()
@@ -150,7 +155,8 @@ class PneumaticPlateClampTests(DriverTestCase):
 
   async def test_unanswered_pump_write_is_not_retried_and_is_restored(self):
     """A missing acknowledgement does not mean the pump stayed off."""
-    _, link, clamp = await self.make_clamp()
+    driver, link, clamp = await self.make_clamp()
+    driver.default_read_timeout = 0.25  # the pump-on write is never answered
     del link.answers[PUMP_ON]
     with self.assertRaises(MantisTimeoutError):
       await clamp.lock()
