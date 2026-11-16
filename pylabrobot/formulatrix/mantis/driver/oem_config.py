@@ -9,8 +9,10 @@ import re
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Dict, List, Optional
 
+from .arm_kinematics import MICROSTEPS, PITCH, STEPS_PER_REVOLUTION, compute_position
 from .errors import MantisConfigurationError
 from .sequence_files import RouteLine, parse_move_sequence
+from .v3_arm_configuration import V3ArmConfiguration
 
 # Where a v4 install keeps each arm motor's absolute encoder correction, from its ``Data`` folder.
 ENCODER_CORRECTION_DIRECTORY = os.path.join("System", "Encoder Correction", "Sampling File")
@@ -284,17 +286,81 @@ def _load_approach_paths(*, sequence_directory: str, waste_file: str) -> Dict[st
   return paths
 
 
+def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
+  """Read the v3 home frame and search settings, converting vendor units at the boundary."""
+  try:
+
+    def number(key: str) -> float:
+      """Read one required vendor setting."""
+      return float(values[key])
+
+    def flag(key: str) -> bool:
+      """Read a boolean flag without accepting an unknown encoding."""
+      if values[key] not in ("0", "1"):
+        raise ValueError(f"{key} must be 0 or 1")
+      return values[key] == "1"
+
+    for motor in (0, 1, 2):
+      prefix = f"Motor.{motor + 1}."
+      if (
+        number(prefix + "StepsPerRevolution") != STEPS_PER_REVOLUTION
+        or number(prefix + "MicroSteps") != MICROSTEPS
+        or number(prefix + "PositionMapper.Pitch") != PITCH[motor]
+      ):
+        raise ValueError(f"motor {motor}'s unit conversion is unsupported")
+    count = number("Arm.PostHomingPosition.Count")
+    if count != int(count) or count < 1:
+      raise ValueError("Arm.PostHomingPosition.Count must be a positive integer")
+    route = []
+    for index in range(1, int(count) + 1):
+      x, y, z = map(float, values[f"Arm.PostHomingPosition.{index}"].split(","))
+      if z != 0:
+        raise ValueError("the v3 post-home route requires Z at its home flag")
+      route.append([x, y])
+    block = {
+      "offsets": {str(motor): number(f"Motor.{motor + 1}.Offset") for motor in (0, 1)},
+      "home_positions": {
+        str(motor): compute_position(
+          motor=motor, device_position=number(f"Motor.{motor + 1}.HomingPositionN")
+        )
+        for motor in (0, 1)
+      },
+      "motors": {
+        str(motor): {
+          "method": number(f"Motor.{motor + 1}.HomingPin"),
+          "positive_edge": flag(f"Motor.{motor + 1}.HomingPinActiveState"),
+          "positive_direction": flag(f"Motor.{motor + 1}.HomingDirection"),
+          "speed": number(f"Motor.{motor + 1}.HomingVelocity"),
+          "acceleration": number(f"Motor.{motor + 1}.HomingAcceleration"),
+        }
+        for motor in (0, 1, 2)
+      },
+      "retract": number("Arm.PreHomingMovement.RetractStep"),
+      "backoff": number("Arm.PreHomingMovement.EnforceStep"),
+      "jog_speed": number("Motor.1.DefaultVelocity"),
+      "jog_acceleration": number("Motor.1.DefaultAcceleration"),
+      "motor_delay": number("MotorXYHomingDelay") / 1000.0,
+      "post_home_positions": route,
+    }
+    V3ArmConfiguration.from_block(block)
+    return block
+  except (KeyError, TypeError, ValueError) as error:
+    raise MantisConfigurationError(f"invalid v3 RobotArm.config: {error}") from error
+
+
 def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   """The unit's blocks, as declared configurations hold them, from its vendor ``.config`` files.
 
   ``plate_clamp``: the lock levels, from ``Device.config`` (``PlateClampInisiatePWM``,
   ``PlateClampTimer``), only for a clamp driven as a DC motor (``PlateClampController``).
+  A pneumatic clamp controlled by the pressure board instead uses ``PlateClampAuxId``.
   ``rfid``: each input slot's antenna, from every ``RFIDAntennaId.ACC<n>`` of ``RFID.config``, only
   when it exists; with ``Device.config``'s ``RfidMultiplexerDelay`` as written.
   ``led_bar``: the LED count, from ``Device.config``'s ``NumberOfLed``, only where it is set.
   ``arm``: each arm motor's ``Offset`` and ``HomingPositionA`` from ``RobotArm.config`` and its
   encoder correction file from the ``Data`` folder two levels up, only where ``HomingPositionA``
-  is set (a v4). Motor 0 is ``Motor.1`` there.
+  is set (a v4); otherwise the v3's offsets, home positions, flag searches, retract and backoff
+  settings and post-home route. Motor 0 is ``Motor.1`` there.
   ``zones``: ``DeviceZone.config``'s rectangles and each zone's routes to safe XY and to idle,
   from the unit's ``System/Sequences/Common``, only where that file exists (a v4).
   ``approach_paths``: the unit's paths from idle to the waste and to wash positions 1 and 2, from
@@ -318,6 +384,16 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   values = _parse_config_entries(path=device_config)
 
   blocks: Dict[str, Any] = {}
+  if values.get("PlateClampController") == "PressureRegulator":
+    key = "PlateClampAuxId"
+    output = _get_number(
+      path=device_config, key=key, text=_get_setting(path=device_config, settings=values, key=key)
+    )
+    if output != 2:
+      raise MantisConfigurationError(
+        f"{device_config}: unsupported pneumatic clamp output {output}"
+      )
+    blocks["plate_clamp"] = {"controller": "pressure_regulator", "auxiliary_output": int(output)}
   if values.get("PlateClampController") == "MotorDC":
     pwms = [
       _get_number(path=device_config, key="PlateClampInisiatePWM", text=text)
@@ -410,6 +486,8 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
       for field, key in (("offsets", "Offset"), ("homing_position_a", "HomingPositionA"))
     }
     blocks["arm"]["encoder_correction"] = correction
+  elif arm_values:
+    blocks["arm"] = _load_v3_arm_configuration(values=arm_values)
 
   # The routes, from the unit's sequences: the zones only where DeviceZone.config exists (a v4).
   sequence_directory = os.path.join(

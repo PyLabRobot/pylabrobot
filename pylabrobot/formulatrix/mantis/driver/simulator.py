@@ -2,7 +2,7 @@
 
 import dataclasses
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -16,12 +16,15 @@ from .configuration import (
 )
 from .errors import MantisConfigurationError, MantisTimeoutError
 from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm, MantisArmConfiguration
+from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
+from .features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .features.pump import PressureController, Pump
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
 from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, SEQUENCER_QUEUE_SIZE, MantisDriver
+from .v3_arm_configuration import V3ArmConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +62,15 @@ class MantisSimulationPump(Pump):
   Off, its controllers off and disabled, every line at 0, with the recorded sensor calibration.
   """
 
+  def __init__(self, *, driver: "MantisSimulationDriver"):
+    """Start with the simulated air pump off."""
+    super().__init__(driver=driver)
+    self._on = False
+
+  async def _unchecked_fw_set_pump_on(self, *, on: bool) -> None:
+    """Set the simulated pump's control state at once."""
+    self._on = on
+
   async def measure_pressure(self, *, controller: PressureController) -> float:
     """0: no line holds pressure."""
     self._get_controller_index(controller=controller)
@@ -92,8 +104,8 @@ class MantisSimulationPump(Pump):
     return False
 
   async def request_pump_on(self) -> bool:
-    """False: the pump is off."""
-    return False
+    """The simulated pump's control state."""
+    return self._on
 
   async def _request_calibration(self) -> Dict[PressureController, Tuple[float, float]]:
     """The generation's recording's calibration; none recorded is none."""
@@ -103,6 +115,23 @@ class MantisSimulationPump(Pump):
     return {
       controller: (float(scale), float(offset)) for controller, (scale, offset) in recorded.items()
     }
+
+
+class MantisSimulationPneumaticPlateClamp(PneumaticPlateClamp):
+  """A pneumatic clamp whose valve changes state immediately, without reaching a wire."""
+
+  def __init__(self, *, driver: "MantisSimulationDriver", pump: Pump, auxiliary_output: int):
+    """Use the simulated pressure-board pump and the declared clamp output."""
+    super().__init__(driver=driver, pump=pump, auxiliary_output=auxiliary_output)
+    self._locked = False
+
+  async def _unchecked_fw_set_locked(self, *, locked: bool) -> None:
+    """Set the simulated valve's control state."""
+    self._locked = locked
+
+  async def request_locked(self, *, attempts: int = 3) -> bool:
+    """The simulated valve's control state."""
+    return self._locked
 
 
 class MantisSimulationRfid(Rfid):
@@ -230,6 +259,67 @@ class MantisSimulationArm(Arm):
     )
 
 
+class MantisSimulationV3Arm(V3Arm):
+  """A v3 arm simulated above the wire, with flags and following errors at the stops."""
+
+  def __init__(
+    self,
+    *,
+    driver: "MantisSimulationDriver",
+    configuration: MantisArmConfiguration,
+    v3_arm_configuration: Optional[V3ArmConfiguration],
+  ):
+    """Use the declared route; simulation also requires a v3 homing calibration."""
+    super().__init__(
+      driver=driver, configuration=configuration, v3_arm_configuration=v3_arm_configuration
+    )
+    self._positions = {0: 0.0, 1: 0.0, 2: 0.0}
+    self._statuses = {0: 0, 1: 0, 2: 0}
+    self._homed: Set[int] = set()
+
+  async def _unchecked_fw_clear_motor_faults(self, *, motor: int) -> None:
+    """Clear the simulated fault, keeping the home state."""
+    self._statuses[motor] = MOTOR_HOMED if motor in self._homed else 0
+
+  async def _unchecked_fw_move_absolute(
+    self, *, motor: int, position: float, speed: float, acceleration: float
+  ) -> int:
+    """Move at once, answering no motor error; a retract of an unhomed arm seats against its
+    stop."""
+    if motor in ARM_MOTORS and motor not in self._homed and position < self._positions[motor]:
+      self._statuses[motor] = 128
+    self._positions[motor] = position
+    return 0
+
+  async def _unchecked_fw_set_motor_position(self, *, motor: int, position: float) -> None:
+    """Declare the simulated controller's position."""
+    self._positions[motor] = position
+
+  async def _unchecked_fw_home(
+    self,
+    *,
+    motor: int,
+    method: int,
+    positive_edge: bool,
+    positive_direction: bool,
+    slow_speed: float,
+    fast_speed: float,
+    acceleration: float,
+  ) -> None:
+    """Find the flag immediately."""
+    self._positions[motor] = 0.0
+    self._homed.add(motor)
+    self._statuses[motor] = MOTOR_HOMED
+
+  async def _unchecked_fw_stop(self, *, motor: int, deceleration: float) -> None:
+    """Do nothing: a simulated move has already finished."""
+
+  async def initialize(self) -> None:
+    """Establish the simulated home frame from an unhomed state."""
+    self._homed.clear()
+    await super().initialize()
+
+
 class MantisSimulationDriver(MantisDriver):
   """A Mantis driver with no device behind it.
 
@@ -316,6 +406,8 @@ class MantisSimulationDriver(MantisDriver):
   async def request_motor_limits(self, *, motor: int) -> Tuple[float, float]:
     """A motor's (lower, upper) limit as its generation's recording holds it."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
+    if motor not in self._simulated_motor_limits:
+      raise MantisTimeoutError(f"{self.name}: no motor {motor} limits are recorded to answer with")
     return self._simulated_motor_limits[motor]
 
   async def request_motor_currents(self, *, motor: int) -> Tuple[float, float, float]:
@@ -333,6 +425,8 @@ class MantisSimulationDriver(MantisDriver):
   async def request_motor_status(self, *, motor: int) -> int:
     """Idle, no fault; Z homed once the simulated arm homed it."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
+    if isinstance(self.arm, MantisSimulationV3Arm):
+      return self.arm._statuses[motor]
     if isinstance(self.arm, MantisSimulationArm) and motor == Z_MOTOR and self.arm._z_homed:
       return MOTOR_HOMED
     return 0
@@ -340,7 +434,7 @@ class MantisSimulationDriver(MantisDriver):
   async def request_motor_position(self, *, motor: int) -> float:
     """Where the simulated arm's controller holds the motor; 0 without one, as after power-on."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
-    if isinstance(self.arm, MantisSimulationArm):
+    if isinstance(self.arm, (MantisSimulationArm, MantisSimulationV3Arm)):
       return self.arm._positions[motor]
     return 0.0
 
@@ -433,11 +527,12 @@ class MantisSimulationDriver(MantisDriver):
     configuration = configuration_from_json(fields=values["device"])
     configuration.generation = generation
     recording = RECORDING_MANTIS_V4 if generation == "v4" else RECORDING_MANTIS_V3
+    # The declared file's limits, else the generation's recording's: the v3 recording holds none.
+    limits = values["device"].get("motor_limits") or read_configuration(path=recording)[
+      "device"
+    ].get("motor_limits", {})
     self._simulated_motor_limits = {
-      int(motor): (float(lower), float(upper))
-      for motor, (lower, upper) in read_configuration(path=recording)["device"]
-      .get("motor_limits", {})
-      .items()
+      int(motor): (float(lower), float(upper)) for motor, (lower, upper) in limits.items()
     }
     return configuration
 
@@ -451,19 +546,32 @@ class MantisSimulationDriver(MantisDriver):
       MantisConfigurationError: if a declared block is malformed.
     """
     super()._discover_features(motor_limits=motor_limits)
-    if self.plate_clamp is not None and not isinstance(
+    if self.pump is not None and not isinstance(self.pump, MantisSimulationPump):
+      self.pump = MantisSimulationPump(driver=self)
+    if isinstance(self.plate_clamp, PneumaticPlateClamp):
+      if not isinstance(self.plate_clamp, MantisSimulationPneumaticPlateClamp):
+        assert self.pump is not None
+        self.plate_clamp = MantisSimulationPneumaticPlateClamp(
+          driver=self, pump=self.pump, auxiliary_output=self.plate_clamp.auxiliary_output
+        )
+    elif self.plate_clamp is not None and not isinstance(
       self.plate_clamp, MantisSimulationPlateClamp
     ):
       self.plate_clamp = MantisSimulationPlateClamp(driver=self, levels=self.plate_clamp.levels)
-    if self.pump is not None and not isinstance(self.pump, MantisSimulationPump):
-      self.pump = MantisSimulationPump(driver=self)
     if self.led_bar is not None and not isinstance(self.led_bar, MantisSimulationLedBar):
       self.led_bar = MantisSimulationLedBar(
         driver=self,
         number_of_leds=self.led_bar.number_of_leds,
         show_actions=self.led_bar.show_actions,
       )
-    if self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
+    if isinstance(self.arm, V3Arm):
+      if not isinstance(self.arm, MantisSimulationV3Arm):
+        self.arm = MantisSimulationV3Arm(
+          driver=self,
+          configuration=self.arm.configuration,
+          v3_arm_configuration=self.arm.v3_arm_configuration,
+        )
+    elif self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
       self.arm = MantisSimulationArm(driver=self, configuration=self.arm.configuration)
     if self.rfid is None:
       rfid_block = self._unit_blocks.get("rfid")

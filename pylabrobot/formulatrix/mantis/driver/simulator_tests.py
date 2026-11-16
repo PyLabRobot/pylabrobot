@@ -18,6 +18,9 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisTimeoutError,
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
+from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
+from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
+from pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
   SYNTHETIC_APPROACH_PATHS_BLOCK,
@@ -58,16 +61,38 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_clamp_starts_idle_then_locks_and_unlocks(self):
     clamp = self.mantis.plate_clamp
-    assert clamp is not None
+    assert isinstance(clamp, PlateClamp)
     self.assertEqual(await clamp.request_state(), 0)
     await clamp.lock(level=3)
     self.assertEqual(await clamp.request_state(), 3)
     await clamp.unlock()
     self.assertEqual(await clamp.request_state(), 6)
 
+  async def test_pneumatic_clamp_uses_and_restores_the_simulated_pump(self):
+    """Pneumatic simulation follows the valve and pump lifecycle without any USB link."""
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      recording = json.load(file)
+    recording["device"]["generation"] = "v3"
+    recording["device"]["firmware_versions"].update({"11": None, "12": None})
+    recording["plate_clamp"] = {"controller": "pressure_regulator", "auxiliary_output": 2}
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "pneumatic.json")
+      with open(path, "w", encoding="utf-8") as file:
+        json.dump(recording, file)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      await mantis.setup(skip_arm=True)
+      self.addAsyncCleanup(mantis.stop)
+      assert isinstance(mantis.plate_clamp, PneumaticPlateClamp) and mantis.pump is not None
+      await mantis.plate_clamp.lock()
+      self.assertTrue(await mantis.plate_clamp.request_locked())
+      self.assertTrue(await mantis.pump.request_pump_on())
+      await mantis.stop()
+      self.assertFalse(await mantis.plate_clamp.request_locked())
+      self.assertFalse(await mantis.pump.request_pump_on())
+
   async def test_stop_releases_a_locked_clamp(self):
     clamp = self.mantis.plate_clamp
-    assert clamp is not None
+    assert isinstance(clamp, PlateClamp)
     await clamp.lock(level=3)
     await self.mantis.stop()
     await self.mantis.setup()
@@ -83,12 +108,38 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
       with open(path, "w", encoding="utf-8") as f:
         json.dump(recording, f)
       mantis = Mantis(simulation=True, declared_configuration_json=path)
-      await mantis.setup()
+      await mantis.setup(skip_arm=True)
       self.addAsyncCleanup(mantis.stop)
     self.assertEqual(mantis.driver.configuration.generation, "v3")
     self.assertIsNone(mantis.led_bar)
     with self.assertRaises(MantisTimeoutError):
       await mantis.driver.request_firmware_version(board=11)
+
+  async def test_v3_initialization_uses_the_declared_route_and_can_repeat(self):
+    """A v3 simulation homes every axis and stops without the v4 park move."""
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      recording = json.load(file)
+    recording["device"]["firmware_versions"]["11"] = None
+    recording["device"]["generation"] = "v3"
+    recording["arm"] = SYNTHETIC_V3_ARM_BLOCK
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "v3.json")
+      with open(path, "w", encoding="utf-8") as file:
+        json.dump(recording, file)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      self.addAsyncCleanup(mantis.stop)
+      for _ in range(2):
+        await mantis.setup()
+        assert mantis.arm is not None
+        self.assertTrue(mantis.arm.is_initialized)
+        head_x, head_y, _ = await request_head_position(arm=mantis.arm)
+        self.assertAlmostEqual(head_x, 15.0)
+        self.assertAlmostEqual(head_y, 31.177)
+        for motor in (0, 1, 2):
+          self.assertEqual(await mantis.driver.request_motor_status(motor=motor), 4)
+        await mantis.stop()
+        self.assertFalse(mantis.arm.is_initialized)
+        self.assertEqual(await mantis.driver.request_motor_position(motor=2), 0.0)
 
   async def test_rfid_reads_every_declared_slot_empty(self):
     rfid = self.mantis.rfid

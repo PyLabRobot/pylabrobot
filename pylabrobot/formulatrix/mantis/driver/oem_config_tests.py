@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
+from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 from pylabrobot.formulatrix.mantis.driver.oem_config import (
   COMMON_SEQUENCE_DIRECTORY,
@@ -115,6 +116,29 @@ SYNTHETIC_V3_ROBOT_ARM_CONFIG = (
     '    <add key="Motor.1.HomingPositionN" value="-50.0" />\r\n'
     '    <add key="Motor.2.Offset" value="0" />\r\n'
     '    <add key="Motor.2.HomingPositionN" value="120.0" />\r\n'
+    '    <add key="Arm.PreHomingMovement.RetractStep" value="-50" />\r\n'
+    '    <add key="Arm.PreHomingMovement.EnforceStep" value="20" />\r\n'
+    '    <add key="Motor.1.DefaultVelocity" value="10000" />\r\n'
+    '    <add key="Motor.1.DefaultAcceleration" value="1500" />\r\n'
+    '    <add key="MotorXYHomingDelay" value="200" />\r\n'
+    '    <add key="Arm.PostHomingPosition.Count" value="3" />\r\n'
+    '    <add key="Arm.PostHomingPosition.1" value="-38.403,11.677,0" />\r\n'
+    '    <add key="Arm.PostHomingPosition.2" value="-45.77,47.82,0" />\r\n'
+    '    <add key="Arm.PostHomingPosition.3" value="15,31.177,0" />\r\n'
+  )
+  + "".join(
+    f'    <add key="Motor.{motor}.{key}" value="{value}" />\r\n'
+    for motor in (1, 2, 3)
+    for key, value in {
+      "StepsPerRevolution": 20000,
+      "MicroSteps": 100,
+      "PositionMapper.Pitch": 5.08 if motor == 3 else 360,
+      "HomingPin": 0 if motor == 3 else 3,
+      "HomingPinActiveState": 1,
+      "HomingDirection": 1 if motor == 2 else 0,
+      "HomingVelocity": 15 if motor == 3 else 100,
+      "HomingAcceleration": 400 if motor == 3 else 2500,
+    }.items()
   )
   + TAIL
 )
@@ -264,13 +288,25 @@ class LoadUnitConfigurationTests(unittest.TestCase):
       blocks, {block: RECORDING[block] for block in ("plate_clamp", "rfid", "led_bar")}
     )
 
-  def test_a_v3_folder_gives_neither(self):
+  def test_a_v3_folder_gives_the_pneumatic_clamp_output(self):
     with tempfile.TemporaryDirectory() as directory:
       files = {"Device.config": V3_DEVICE_CONFIG}
       blocks = _load_unit_configuration(
         oem_config_directory=write_files(directory=directory, files=files)
       )
-    self.assertEqual(blocks, {})
+    self.assertEqual(
+      blocks, {"plate_clamp": {"controller": "pressure_regulator", "auxiliary_output": 2}}
+    )
+
+  def test_missing_or_unsupported_pneumatic_output_refuses(self):
+    """The unit must explicitly map the supported clamp output."""
+    for replacement in ('key="MissingAux" value="2"', 'key="PlateClampAuxId" value="1"'):
+      with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
+        config = V3_DEVICE_CONFIG.replace('key="PlateClampAuxId" value="2"', replacement)
+        with self.assertRaises(MantisConfigurationError):
+          _load_unit_configuration(
+            oem_config_directory=write_files(directory=directory, files={"Device.config": config})
+          )
 
   def test_keys_with_spaces_before_the_equals_sign_are_read(self):
     with tempfile.TemporaryDirectory() as directory:
@@ -326,12 +362,31 @@ class ArmBlockTests(unittest.TestCase):
       },
     )
 
-  def test_a_v3_install_gives_no_arm_block(self):
+  def test_a_v3_install_gives_its_home_frame_rates_and_route(self):
     blocks = self.load(
       configs={"Device.config": V3_DEVICE_CONFIG, "RobotArm.config": SYNTHETIC_V3_ROBOT_ARM_CONFIG},
       corrections={},
     )
-    self.assertNotIn("arm", blocks)
+    self.assertEqual(blocks["arm"], SYNTHETIC_V3_ARM_BLOCK)
+
+  def test_incomplete_or_incompatible_v3_calibration_refuses(self):
+    """Do not substitute motion settings when the unit's file cannot be used."""
+    for original, replacement in (
+      ('key="Motor.1.HomingPin"', 'key="MissingPin"'),
+      (
+        'key="Motor.3.PositionMapper.Pitch" value="5.08"',
+        'key="Motor.3.PositionMapper.Pitch" value="10"',
+      ),
+      ('value="15,31.177,0"', 'value="15,31.177,5"'),
+    ):
+      with self.subTest(original=original), self.assertRaises(MantisConfigurationError):
+        self.load(
+          configs={
+            "Device.config": V3_DEVICE_CONFIG,
+            "RobotArm.config": SYNTHETIC_V3_ROBOT_ARM_CONFIG.replace(original, replacement),
+          },
+          corrections={},
+        )
 
   def test_a_missing_correction_refuses(self):
     with self.assertRaisesRegex(

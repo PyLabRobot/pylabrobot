@@ -58,6 +58,8 @@ metalness = "metalness"
 unparseable = "unparseable"
 
 [default.extend-identifiers]
+# Exact symbol from the vendor INCO library.
+ConvertFromClasicFrame = "ConvertFromClasicFrame"
 # Prep firmware interface names, spelled as its firmware trees name them.
 IYAxis = "IYAxis"
 IYDrive = "IYDrive"
