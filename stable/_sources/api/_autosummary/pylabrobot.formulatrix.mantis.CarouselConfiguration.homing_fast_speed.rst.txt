@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.CarouselConfiguration.homing\_fast\_speed
+=======================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoattribute:: CarouselConfiguration.homing_fast_speed

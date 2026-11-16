@@ -1,0 +1,31 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.MantisCarousel
+============================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoclass:: MantisCarousel
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisCarousel.__init__
+      ~MantisCarousel.home
+      ~MantisCarousel.move_to
+      ~MantisCarousel.move_to_slot
+      ~MantisCarousel.request_position
+      ~MantisCarousel.request_status
+      ~MantisCarousel.setup
+      ~MantisCarousel.stop
+   
+   

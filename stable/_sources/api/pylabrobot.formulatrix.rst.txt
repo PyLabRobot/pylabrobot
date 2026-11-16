@@ -13,6 +13,8 @@ Mantis
 
    Mantis
    MantisDevice
+   MantisCarousel
+   CarouselConfiguration
    driver.master.MantisDriver
    driver.simulator.MantisSimulationDriver
    driver.simulator.MantisSimulationArm

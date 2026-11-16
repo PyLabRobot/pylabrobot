@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisCarousel.request\_position
+==============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisCarousel.request_position

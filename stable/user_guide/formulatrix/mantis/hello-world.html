@@ -811,7 +811,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="formulatrix-mantis">
 <h1>Formulatrix Mantis<a class="headerlink" href="#formulatrix-mantis" title="Link to this heading">#</a></h1>
-<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks pneumatic and motor plate clamps, reads chip tags, and shows colours on a v4’s LED bar. Moving to arbitrary positions and dispensing are not supported yet.</p>
+<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks pneumatic and motor plate clamps, reads chip tags, and shows colours on a v4’s LED bar. The separate LC3 carousel supports homing, absolute rotation and calibrated chip-slot selection. Moving the arm to arbitrary positions and dispensing are not supported.</p>
 <div class="plr-device-card" id="device-formulatrix-mantis">
   <div class="plr-device-card__head">
     <div>
@@ -823,7 +823,7 @@
   <div class="plr-device-card__kind">bulk dispenser</div>
   <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 201">dispensing</span></div>
   <div class="plr-device-card__models-scroll" role="region" tabindex="0" aria-label="Formulatrix Mantis models"><table class="plr-device-card__models"><caption>Models</caption><thead><tr><th scope="col">Model</th><th scope="col">Support</th></tr></thead><tbody><tr><th scope="row">v3</th><td><span class="plr-device-status plr-device-status--wip">WIP</span></td></tr><tr><th scope="row">v4</th><td><span class="plr-device-status plr-device-status--wip">WIP</span></td></tr></tbody></table></div>
-  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.formulatrix.Mantis</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Notes</span><span class="plr-device-card__value">V3 arm initialization and pneumatic plate clamping; dispensing is not supported.</span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.formulatrix.Mantis</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Notes</span><span class="plr-device-card__value">V3 arm initialization, pneumatic plate clamping and LC3 carousel positioning; dispensing is not supported.</span></div>
   <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/formulatrix/mantis"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
 </div><div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -860,16 +860,19 @@
 <tr class="row-even"><td><p>Plate clamp</p></td>
 <td><p>v3 pneumatic lock/release with air-pump restoration; v4 motor clamp with adjustable levels</p></td>
 </tr>
-<tr class="row-odd"><td><p>RFID</p></td>
+<tr class="row-odd"><td><p>LC3 carousel</p></td>
+<td><p>separate USB controller; home, rotate to an angle, select a calibrated chip slot</p></td>
+</tr>
+<tr class="row-even"><td><p>RFID</p></td>
 <td><p>the chip in each input slot: serial, chip type, date of manufacture</p></td>
 </tr>
-<tr class="row-even"><td><p>LED bar (v4)</p></td>
+<tr class="row-odd"><td><p>LED bar (v4)</p></td>
 <td><p>one colour, one per LED, or an animation; shows setup, with the arm’s bring-up; off at stop</p></td>
 </tr>
-<tr class="row-odd"><td><p>Unit configuration</p></td>
+<tr class="row-even"><td><p>Unit configuration</p></td>
 <td><p>the clamp’s lock levels, each slot’s RFID antenna and the arm’s calibration, from the unit’s configuration folder or a saved file; the first two else from a recording of its generation</p></td>
 </tr>
-<tr class="row-even"><td><p>Not supported yet</p></td>
+<tr class="row-odd"><td><p>Not supported yet</p></td>
 <td><p>moving the arm to a position, switching the pump or a pressure controller, chips, dispensing</p></td>
 </tr>
 </tbody>
@@ -1174,6 +1177,79 @@
 </div>
 </div>
 </section>
+<section id="lc3-carousel">
+<h2>LC3 carousel<a class="headerlink" href="#lc3-carousel" title="Link to this heading">#</a></h2>
+<p>The LC3 chip carousel has its own USB cable and power supply. Connect it, close other software using it, and keep the Mantis head clear of its rotating area. <code class="docutils literal notranslate"><span class="pre">MantisCarousel</span></code> selects USB product <code class="docutils literal notranslate"><span class="pre">LC3</span></code> with the configured serial; it operates independently of the main Mantis. It positions the carousel but does not attach chips or coordinate the arm.</p>
+<p>Read this unit’s <code class="docutils literal notranslate"><span class="pre">Data/System/data.db</span></code>. The loader matches the serial number, saved mounting location and fitted carousel, and reads their calibration without changing the database. Supply your LC3 serial below. Missing calibration or motion settings are errors.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.formulatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">CarouselConfiguration</span><span class="p">,</span> <span class="n">MantisCarousel</span>
+
+<span class="n">carousel_config</span> <span class="o">=</span> <span class="n">CarouselConfiguration</span><span class="o">.</span><span class="n">from_oem_database</span><span class="p">(</span>
+  <span class="n">path</span><span class="o">=</span><span class="s2">"path/to/Data/System/data.db"</span><span class="p">,</span> <span class="n">device_id</span><span class="o">=</span><span class="s2">"L-000143"</span>
+<span class="p">)</span>
+<span class="n">carousel</span> <span class="o">=</span> <span class="n">MantisCarousel</span><span class="p">(</span><span class="n">configuration</span><span class="o">=</span><span class="n">carousel_config</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Connect and read the firmware and travel limits. Setup does not move the carousel.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Home the carousel before positioning it. <code class="docutils literal notranslate"><span class="pre">home()</span></code> does nothing when it is already homed without faults. Homing and positioning stop the motor on failure or cancellation.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">home</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Select a chip slot, numbered from 1 through <code class="docutils literal notranslate"><span class="pre">carousel_config.capacity</span></code>. The angle includes the calibrated offset for slot 1. Speed is in degrees/s; omitted speed and acceleration use the unit’s configured rates.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">move_to_slot</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Rotate to an absolute angle in degrees. Equivalent angles use the nearest permitted route, with the configured backlash compensation when approaching from a decreasing angle. Repeating the same position sends no movement command.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Read the controller’s position in degrees, normalized to [0, 360). This is the commanded motor position, not an independent measurement of chip alignment.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">request_position</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Return to the unit’s configured idle angle.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">move_to</span><span class="p">(</span><span class="n">carousel_config</span><span class="o">.</span><span class="n">idle_position</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Close the carousel link. <code class="docutils literal notranslate"><span class="pre">stop()</span></code> stops any motion and leaves it at its current angle. The main Mantis has a separate lifecycle.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">carousel</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
 <section id="rfid">
 <h2>RFID<a class="headerlink" href="#rfid" title="Link to this heading">#</a></h2>
 <p>The RFID reader reads the tag of the chip in each input slot, through that slot’s antenna. A slot with no chip reads None. It exists only when the reader answered on interface A at setup; a reader that does not answer leaves setup working, without it. Each slot’s antenna, as declared:</p>
@@ -1370,6 +1446,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arm">Arm</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pressure">Pressure</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-clamp">Plate clamp</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lc3-carousel">LC3 carousel</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rfid">RFID</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#led-bar">LED bar</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#events-and-the-sequencer">Events and the sequencer</a></li>

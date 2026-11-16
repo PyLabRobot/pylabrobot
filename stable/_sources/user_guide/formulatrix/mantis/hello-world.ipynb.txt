@@ -7,7 +7,7 @@
    "source": [
     "# Formulatrix Mantis\n",
     "\n",
-    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks pneumatic and motor plate clamps, reads chip tags, and shows colours on a v4's LED bar. Moving to arbitrary positions and dispensing are not supported yet."
+    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks pneumatic and motor plate clamps, reads chip tags, and shows colours on a v4's LED bar. The separate LC3 carousel supports homing, absolute rotation and calibrated chip-slot selection. Moving the arm to arbitrary positions and dispensing are not supported."
    ]
   },
   {
@@ -47,6 +47,7 @@
     "| Arm (v3) | homed at setup using the unit's calibration and route to idle; stopped in place at shutdown |\n",
     "| Arm (v4) | brought up at setup from where its absolute encoders read; Z homed; parked at idle at stop |\n",
     "| Plate clamp | v3 pneumatic lock/release with air-pump restoration; v4 motor clamp with adjustable levels |\n",
+    "| LC3 carousel | separate USB controller; home, rotate to an angle, select a calibrated chip slot |\n",
     "| RFID | the chip in each input slot: serial, chip type, date of manufacture |\n",
     "| LED bar (v4) | one colour, one per LED, or an animation; shows setup, with the arm's bring-up; off at stop |\n",
     "| Unit configuration | the clamp's lock levels, each slot's RFID antenna and the arm's calibration, from the unit's configuration folder or a saved file; the first two else from a recording of its generation |\n",
@@ -601,6 +602,159 @@
    ],
    "execution_count": null,
    "outputs": []
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-overview",
+   "metadata": {},
+   "source": [
+    "## LC3 carousel\n",
+    "\n",
+    "The LC3 chip carousel has its own USB cable and power supply. Connect it, close other software using it, and keep the Mantis head clear of its rotating area. `MantisCarousel` selects USB product `LC3` with the configured serial; it operates independently of the main Mantis. It positions the carousel but does not attach chips or coordinate the arm.\n",
+    "\n",
+    "Read this unit's `Data/System/data.db`. The loader matches the serial number, saved mounting location and fitted carousel, and reads their calibration without changing the database. Supply your LC3 serial below. Missing calibration or motion settings are errors."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-configuration",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.formulatrix import CarouselConfiguration, MantisCarousel\n",
+    "\n",
+    "carousel_config = CarouselConfiguration.from_oem_database(\n",
+    "  path=\"path/to/Data/System/data.db\", device_id=\"L-000143\"\n",
+    ")\n",
+    "carousel = MantisCarousel(configuration=carousel_config)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-connect",
+   "metadata": {},
+   "source": [
+    "Connect and read the firmware and travel limits. Setup does not move the carousel."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-setup",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-home-text",
+   "metadata": {},
+   "source": [
+    "Home the carousel before positioning it. `home()` does nothing when it is already homed without faults. Homing and positioning stop the motor on failure or cancellation."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-home",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.home()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-slot-text",
+   "metadata": {},
+   "source": [
+    "Select a chip slot, numbered from 1 through `carousel_config.capacity`. The angle includes the calibrated offset for slot 1. Speed is in degrees/s; omitted speed and acceleration use the unit's configured rates."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-slot",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.move_to_slot(1, speed=30)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-angle-text",
+   "metadata": {},
+   "source": [
+    "Rotate to an absolute angle in degrees. Equivalent angles use the nearest permitted route, with the configured backlash compensation when approaching from a decreasing angle. Repeating the same position sends no movement command."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-angle",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.move_to(15, speed=30)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-read-text",
+   "metadata": {},
+   "source": [
+    "Read the controller's position in degrees, normalized to [0, 360). This is the commanded motor position, not an independent measurement of chip alignment."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-read",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.request_position()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-idle-text",
+   "metadata": {},
+   "source": [
+    "Return to the unit's configured idle angle."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-idle",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.move_to(carousel_config.idle_position, speed=30)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "lc3-stop-text",
+   "metadata": {},
+   "source": [
+    "Close the carousel link. `stop()` stops any motion and leaves it at its current angle. The main Mantis has a separate lifecycle."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "lc3-stop",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await carousel.stop()"
+   ]
   },
   {
    "cell_type": "markdown",

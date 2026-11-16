@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.CarouselConfiguration.device\_id
+==============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoattribute:: CarouselConfiguration.device_id

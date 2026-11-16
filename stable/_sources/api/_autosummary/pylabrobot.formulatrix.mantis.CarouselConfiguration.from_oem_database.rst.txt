@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.CarouselConfiguration.from\_oem\_database
+=======================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: CarouselConfiguration.from_oem_database
