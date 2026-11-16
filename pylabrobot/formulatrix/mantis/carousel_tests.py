@@ -5,6 +5,7 @@ import json
 import struct
 import unittest
 from pathlib import Path
+from typing import Any, Tuple
 from unittest import mock
 
 from .carousel import MantisCarousel
@@ -200,7 +201,8 @@ class CarouselTests(unittest.IsolatedAsyncioTestCase):
   async def test_invalid_slots_send_nothing(self):
     """Reject invalid indices before contacting the controller."""
     before = len(self.link.written)
-    for slot in (0, 25, True, 1.5):
+    invalid_slots: Tuple[Any, ...] = (0, 25, True, 1.5)
+    for slot in invalid_slots:
       with self.subTest(slot=slot), self.assertRaises(ValueError):
         await self.carousel.move_to_slot(slot)
     self.assertEqual(len(self.link.written), before)
