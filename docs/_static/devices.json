@@ -451,7 +451,7 @@
     "doc_slug": "formulatrix/mantis/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/",
-    "notes": "V3 arm initialization and pneumatic plate clamping; dispensing is not supported."
+    "notes": "V3 arm initialization, pneumatic plate clamping and LC3 carousel positioning; dispensing is not supported."
   },
   {
     "id": "hamilton-heater-shaker",

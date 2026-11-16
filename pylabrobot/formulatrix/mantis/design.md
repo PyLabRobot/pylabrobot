@@ -9,6 +9,11 @@ last section lists what is open and where the code does not follow a rule yet.
 ```
 device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
                              the driver, the parts; places the arm's links from a pose read.
+carousel.py                  MantisCarousel. The external LC3's own FTDI link, homing and
+                             calibrated chip-slot positioning; independent of arm movement.
+driver/carousel_configuration.py
+                             CarouselConfiguration. Serial-matched carousel geometry and motion
+                             settings read from the OEM database without modifying it.
 driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
                              the sequencer, discovery and the saved configuration; reads the
                              motors; halts the device at stop; shows setup and stop on the LED
@@ -36,6 +41,15 @@ liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity 
 ```
 
 ## The patterns
+
+The external LC3 carousel selects USB product `LC3` and its configured serial, on interface B.
+`MantisCarousel` uses `MantisDriver`'s command transport and motor reads without running Mantis
+feature discovery. All commands address motor 0 on the carousel's board 0. Setup reads firmware
+and travel limits without moving. Homing establishes the flag reference; positioning selects the
+nearest equivalent angle within the limits and applies the configured backlash approach on a
+decreasing move. Completion requires the matching event and an idle, homed status without faults.
+Failure or cancellation stops the motor. Shutdown stops in place and closes only the LC3 link.
+The carousel does not coordinate the arm or attach chips.
 
 **M1. One driver. Features hang off it.** (STAR P1.) A feature is a plain class holding `_driver`
 and sending through it. No per-feature backend or frontend.
