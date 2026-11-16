@@ -1,0 +1,101 @@
+{
+  "serial_number": "C196069",
+  "firmware": "1.0.7.378-trunk",
+  "head_id": 4,
+  "transport": "UDP 1964",
+  "fluid": "water",
+  "pressure_bar": 0.2,
+  "channels": [
+    2,
+    3
+  ],
+  "volume_calibrated": false,
+  "exchanges": [
+    {
+      "operation": "put_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PressureRegulator.Prop.SetPressure",
+      "arguments": [
+        0.2
+      ],
+      "sequence": 131,
+      "request": "100183020001ff01007800000000333333334d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e5072657373757265526567756c61746f722e50726f702e5365745072657373757265000d1003eb",
+      "response": "10068300000100751003fc"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.Dispens",
+      "arguments": [
+        1000000
+      ],
+      "sequence": 249,
+      "request": "1001f9040101ff0100ff00000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e44697370656e73000000000f42400000000010034b",
+      "response": "1006f900000100fffeec3534000000011003a8"
+    },
+    {
+      "operation": "put_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Head.Prop.SyncValves",
+      "arguments": [
+        0
+      ],
+      "sequence": 250,
+      "request": "1001fa020001ff01000100000000000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e486561642e50726f702e53796e6356616c766573000d1003ca",
+      "response": "1006fa00000100fe1003fc"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Head.Cmd.SyncValves",
+      "arguments": [],
+      "sequence": 251,
+      "request": "1001fb040001ff0100fe000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e486561642e436d642e53796e6356616c7665730000100364",
+      "response": "1006fb00000100fdfeec3533000000011003a9"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.Dispens",
+      "arguments": [
+        1000000
+      ],
+      "sequence": 43,
+      "request": "10012b040101ff0100cd00000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e44697370656e73000000000f42400000000010034a",
+      "response": "10062b00000100cdfeec351c000000011003c0"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PressureRegulator.Cmd.Discharge",
+      "arguments": [],
+      "sequence": 88,
+      "request": "100158040001ff0100a1000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e5072657373757265526567756c61746f722e436d642e446973636861726765000010034c",
+      "response": "10065800000100a0feec3506000000011003d6"
+    },
+    {
+      "operation": "put_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PressureRegulator.Prop.SetPressure",
+      "arguments": [
+        0
+      ],
+      "sequence": 90,
+      "request": "10015a020001ff0100a100000000000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e5072657373757265526567756c61746f722e50726f702e5365745072657373757265000d1003b7",
+      "response": "10065a000001009e1003fc"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.Dispens",
+      "arguments": [
+        1000
+      ],
+      "sequence": 227,
+      "request": "1001e3040101ff01001500000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e44697370656e73000000000003e8000000001003f1",
+      "response": "1006e30000010015feec2c9300000001100352"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.Dispens",
+      "arguments": [
+        1000
+      ],
+      "sequence": 125,
+      "request": "10017d040101ff01007b00000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e44697370656e73000000000003e8000000001003f0",
+      "response": "10067d000001007bfeec2bfe000000011003e8"
+    }
+  ]
+}

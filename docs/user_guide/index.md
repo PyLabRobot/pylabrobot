@@ -38,6 +38,7 @@ byonoy/index
 cole_parmer/index
 curiox/index
 formulatrix/index
+gyger/index
 hamilton/index
 high_res/index
 inheco/index
