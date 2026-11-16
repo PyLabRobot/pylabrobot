@@ -153,7 +153,7 @@ class ODTC:
     return state
 
   async def setup(self, *, simulation_mode: bool = False) -> None:
-    """Connect, register callbacks, and initialize an idle or standby instrument.
+    """Connect, register callbacks, and initialize a startup, standby, or idle instrument.
 
     A busy device is left running and setup raises. Repeated setup on an established
     session is a no-op. Simulation mode is the firmware's simulation mode.
@@ -166,7 +166,7 @@ class ODTC:
     await self._sila.setup()
     try:
       state = await self.request_status()
-      if state.lower() not in ("standby", "idle"):
+      if state.lower() not in ("startup", "standby", "idle"):
         raise RuntimeError(f"ODTC is {state}; setup will not reset an active or faulted device")
       await self._sila.send_command(
         "Reset",
@@ -217,10 +217,17 @@ class ODTC:
     response = await self._sila.send_command("ReadActualTemperature")
     if not isinstance(response, ET.Element):
       raise ValueError("ReadActualTemperature did not return ResponseData")
-    value = get_params(response, ["SensorValues"])["SensorValues"]
-    if not isinstance(value, str):
-      raise ValueError("SensorValues must contain XML text")
-    return parse_sensor_values(value)
+    # Firmware 6046.20645 returns a single unnamed String parameter. Accept it
+    # only for this command, with the same SensorValues payload validation.
+    parameters = response.findall(".//{*}Parameter")
+    if len(parameters) != 1:
+      raise ValueError("ReadActualTemperature must return exactly one parameter")
+    parameter = parameters[0]
+    if parameter.get("name") not in (None, "SensorValues"):
+      raise ValueError("ReadActualTemperature returned an unexpected parameter name")
+    if len(parameter) != 1 or parameter[0].tag.rsplit("}", 1)[-1] != "String":
+      raise ValueError("SensorValues must contain a single String parameter value")
+    return parse_sensor_values(required_text(parameter, "String"))
 
   async def request_block_temperature(self) -> float:
     """Read the block's mount temperature in degrees C."""
