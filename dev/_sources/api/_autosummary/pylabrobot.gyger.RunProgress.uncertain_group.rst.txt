@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunProgress.uncertain\_group
+=============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: RunProgress.uncertain_group

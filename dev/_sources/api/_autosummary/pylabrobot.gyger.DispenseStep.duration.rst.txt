@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.duration
+======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: DispenseStep.duration

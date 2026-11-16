@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.ControllerFault
+================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: ControllerFault
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ControllerFault.entity
+      ~ControllerFault.identifier
+      ~ControllerFault.code
+      ~ControllerFault.task
+      ~ControllerFault.text
+      ~ControllerFault.flags
+      ~ControllerFault.native_time
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ControllerFault.__init__
+   
+   

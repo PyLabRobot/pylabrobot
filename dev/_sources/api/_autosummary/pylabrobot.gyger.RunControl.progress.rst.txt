@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunControl.progress
+====================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoproperty:: RunControl.progress

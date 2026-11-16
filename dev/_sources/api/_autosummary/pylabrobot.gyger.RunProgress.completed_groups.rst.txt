@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunProgress.completed\_groups
+==============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: RunProgress.completed_groups

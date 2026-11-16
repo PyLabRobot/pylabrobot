@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusValve.close
+==================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusValve.close

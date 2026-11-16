@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.\_\_init\_\_
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: DispenseStep.__init__

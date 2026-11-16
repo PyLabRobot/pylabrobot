@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.abort
+=================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.abort

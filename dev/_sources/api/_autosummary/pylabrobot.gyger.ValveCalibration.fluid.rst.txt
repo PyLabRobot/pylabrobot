@@ -1,0 +1,6 @@
+pylabrobot.gyger.ValveCalibration.fluid
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ValveCalibration.fluid

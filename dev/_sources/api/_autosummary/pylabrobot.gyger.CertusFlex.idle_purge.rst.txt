@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.idle\_purge
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.idle_purge

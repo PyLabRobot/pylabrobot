@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.correction\_factor
+================================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: DispenseStep.correction_factor

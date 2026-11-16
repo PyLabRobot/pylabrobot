@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>CERTUS FLEX protocol and verification &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8" />
+
+    <script src="../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/plr_devices.js?v=ba1a2da2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/gyger/certus_flex/protocol';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.24.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/gyger/certus_flex/protocol.html" />
+    <link rel="icon" href="../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Hamilton" href="../../hamilton/index.html" />
+    <link rel="prev" title="CERTUS FLEX" href="hello-world.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="1.0.0b1" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button type="button" class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation" aria-expanded="false" aria-controls="pst-primary-sidebar-modal">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button type="button" class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button type="button" class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg me-1"></i>System Settings</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg me-1"></i>Light</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button type="button" class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button type="button" class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page" aria-expanded="false" aria-controls="pst-secondary-sidebar-modal">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal" tabindex="-1"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button type="button" class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg me-1"></i>System Settings</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg me-1"></i>Light</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button type="button" id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../getting-started/units.html">Default Units</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../needs-testing.html">Devices that need testing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../generic/index.html">Generic devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../generic/line-barcode-scanner/hello-world.html">Line-oriented serial barcode scanners</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/mixing.html">Mixing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../00_liquid-handling/container_no_go_zones.html">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/plateloc/hello-world.html">Agilent PlateLoc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../agilent/synergy_ht/hello-world.html">BioTek Synergy HT</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/state-machine.html">VSpin and Access2 state machine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../azenta/index.html">Azenta</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../azenta/fluidx/intellixcap96/hello-world.html">FluidX IntelliXcap 96</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../big_bear/index.html">BigBear</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../big_bear/orbital-shaker/hello-world.html">BigBear Orbital Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../bmg_labtech/index.html">BMG Labtech</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../bmg_labtech/vantastar/hello-world.html">BMG Labtech VANTAstar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../brooks/index.html">Brooks</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../brooks/precise_flex/hello-world.html">Brooks PreciseFlex PF400 / PF3400</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../brooks/precise_flex/events.html">PreciseFlex events</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../byonoy/index.html">Byonoy</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../byonoy/absorbance_96/hello-world.html">Byonoy Absorbance 96</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../byonoy/luminescence_96/hello-world.html">Byonoy Luminescence 96 — lab guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../byonoy/luminescence_96/led_bar.html">Byonoy L96 — LED bar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../cole_parmer/index.html">Cole-Parmer</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../cole_parmer/genogrinder/hello-world.html">Cole-Parmer GenoGrinder (fka SPEX GenoGrinder)</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../curiox/index.html">Curiox</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../curiox/curiox-ht2000/hello-world.html">Curiox Laminar Wash HT2000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../formulatrix/index.html">Formulatrix</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../formulatrix/mantis/hello-world.html">Formulatrix Mantis</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Fritz Gyger</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="hello-world.html">CERTUS FLEX</a></li>
+<li class="toctree-l2 current active"><a aria-current="page" class="current reference internal" href="#">CERTUS FLEX protocol and verification</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../hamilton/index.html">Hamilton</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../hamilton/star/index.html">Hamilton STAR and STARlet</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../hamilton/star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../hamilton/star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../hamilton/prep/index.html">Prep</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../00_liquid-handling/hamilton-prep/prep_basic_demo.html">Hamilton Prep: getting started</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/cpac/hello-world.html">Inheco CPAC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/incubator_shaker/hello-world.html">Inheco Incubator Shaker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/odtc/hello-world.html">Inheco ODTC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/scila/hello-world.html">Inheco SCILA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../inheco/thermoshake/hello-world.html">Inheco ThermoShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../kbioscience/index.html">KBioscience</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../kbioscience/kube/hello-world.html">KBioscience KUBE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../kbiosystems/index.html">KBiosystems</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-epro/hello-world.html">KBiosystems Ultraseal ePRO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-pro/hello-world.html">KBiosystems Ultraseal PRO (formerly WASP)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../kbiosystems/ultraseal-xt-pro/hello-world.html">KBiosystems Ultraseal XT Pro</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../li_cor/index.html">LI-COR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../li_cor/odyssey/hello-world.html">LI-COR Odyssey Classic</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../mettler_toledo/index.html">Mettler Toledo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../mettler_toledo/scales/hello-world.html">Mettler Toledo MT-SICS scales</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../micronic/index.html">Micronic</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../micronic/code_reader/hello-world.html">Micronic RD235 Code Reader</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../molecular_devices/index.html">Molecular Devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../molecular_devices/spectramax/hello-world.html">Molecular Devices SpectraMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../molecular_devices/imageXpress/pico.html">ImageXpress Pico</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../opentrons/index.html">Opentrons</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../opentrons/ot2/hello-world.html">Opentrons OT-2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../opentrons/flex/hello-world.html">Opentrons Flex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../opentrons/flex/usb.html">Flex over USB</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../paa/index.html">PAA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../paa/kx2/installation.html">KX2 installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../paa/kx2/hello-world.html">PAA KX2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../paa/kx2/continuous-motion.html">KX2 continuous motion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../paa/kx2/proximity-sensor.html">KX2 proximity sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../paa/kx2/barcode-reader.html">KX2 barcode reader</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../qinstruments/bioshake/hello-world.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../revvity/index.html">Revvity</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../revvity/celigo/index.html">Celigo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/hello-world.html">Celigo hello world</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/advanced-imaging.html">Advanced imaging and coordinates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/scan-planning.html">Scan specifications and planning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/components-and-diagnostics.html">Hardware components and diagnostics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../revvity/celigo/cli.html">Celigo CLI</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../sartorius/index.html">Sartorius</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../sartorius/entris2/hello-world.html">Sartorius Entris II</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../thermo_fisher/index.html">Thermo Fisher</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/alps/index.html">ALPS Heat Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps300/hello-world.html">Thermo Scientific ALPS 300</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps3000/hello-world.html">Thermo Scientific ALPS 3000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/alps/alps5000/hello-world.html">Thermo Scientific ALPS 5000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/btx/index.html">BTX</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/btx/gemini/X2/installation.html">BTX Gemini X2 installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/btx/gemini/X2/hello-world.html">BTX Gemini X2</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/kingfisher/index.html">KingFisher</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/kingfisher/presto/hello-world.html">KingFisher Presto</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../thermo_fisher/nanodrop_1000/index.html">Thermo Fisher NanoDrop 1000</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/nanodrop_1000/setup.html">NanoDrop 1000 setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../thermo_fisher/nanodrop_1000/hello-world.html">Thermo Fisher NanoDrop 1000</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../ufactory/index.html">UFACTORY</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../ufactory/xarm6/hello-world.html">UFACTORY xArm 6</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../machine-agnostic-features/event-bus.html">EventBus</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/incubator.html">Incubator events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/liquid-handler.html">LiquidHandler events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/thermal-and-shaking.html">Shaker and environmental-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../machine-agnostic-features/manual-operator.html">Operator actions</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-house"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Fritz Gyger</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">CERTUS FLEX protocol and verification</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="certus-flex-protocol-and-verification">
+<h1>CERTUS FLEX protocol and verification<a class="headerlink" href="#certus-flex-protocol-and-verification" title="Link to this heading">#</a></h1>
+<p>The driver provides direct Ethernet and INCO server connections, motion, pressure
+control, timed or calibrated dispensing, and valve maintenance. The Python API
+uses PLR’s default units: millimetres, seconds, microlitres, and bar for pressure.</p>
+<section id="verification-scope">
+<h2>Verification scope<a class="headerlink" href="#verification-scope" title="Link to this heading">#</a></h2>
+<p>Hardware evidence uses dispenser <strong>C196069</strong>, firmware <strong>1.0.7.378-trunk</strong>, with an
+angled FLEX8 head. The fixtures retain controller replies for regression testing.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Verification</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Direct UDP</p></td>
+<td><p>Identity, status, head, signed position/pressure reads; reconnect and sequence rollover</p></td>
+</tr>
+<tr class="row-odd"><td><p>Motion</p></td>
+<td><p>A1–A3 dry traversal at park height; B2/C3 positioning at 35.4 mm Z; return to park</p></td>
+</tr>
+<tr class="row-even"><td><p>Pressure</p></td>
+<td><p>Regulation to 0.2 bar and discharge to approximately zero</p></td>
+</tr>
+<tr class="row-odd"><td><p>Timed valves</p></td>
+<td><p>Water flow through channels 2/3; visible water in B2/C3 after 1 ms pulses</p></td>
+</tr>
+<tr class="row-even"><td><p>INCO server TCP</p></td>
+<td><p>Native request fixtures and simulated responses; no hardware verification</p></td>
+</tr>
+<tr class="row-odd"><td><p>Prime, purge, clean cycle</p></td>
+<td><p>One water cycle on channels 2/3 at 0.2 bar: 20 ms cumulative purge in 1 ms pulses, 250 ms pause, 100 ms prime per channel; observed flow into waste, park, and zero pressure after explicit discharge</p></td>
+</tr>
+<tr class="row-even"><td><p>Volume-to-time conversion</p></td>
+<td><p>Vendor-source reference cases cover interpolation, volume correction, units, and the valve command; physical volume accuracy depends on the supplied calibration</p></td>
+</tr>
+<tr class="row-odd"><td><p>Registered plate plan</p></td>
+<td><p>Live Corning 96-well geometry and channel offsets; four 1 ms water commands to B2/C2/B3/C3 in two compatible channel groups; raised pause after two confirmed doses, then resume</p></td>
+</tr>
+<tr class="row-even"><td><p>Run controls</p></td>
+<td><p>Paused-plan abort prevented every dose; stop/close accepted on all eight outputs; no pending faults before or after the integration protocol</p></td>
+</tr>
+<tr class="row-odd"><td><p>Extended maintenance</p></td>
+<td><p>50 ms bounded flush per channel and one 2 ms cumulative idle purge in 1 ms pulses on channels 2/3; park and zero pressure after discharge</p></td>
+</tr>
+<tr class="row-even"><td><p>Configuration reuse</p></td>
+<td><p>Device/head identity round trip on the connected controller; populated vendor calibration and configuration validation use offline fixtures, because measured curves for the installed valves were not supplied</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Reference-axis motion, the full travel envelope, other head types, and cleaning
+effectiveness remain unverified. Instrument calibration and cleaning effectiveness
+are separate from driver command verification and depend on the installed valves and fluid.</p>
+</section>
+<section id="capability-coverage">
+<h2>Capability coverage<a class="headerlink" href="#capability-coverage" title="Link to this heading">#</a></h2>
+<p>The registry’s <strong>Mostly</strong> level means routine plate and maintenance workflows are
+available, with the exclusions below. Hardware verification is scoped to the
+specific head, controller, and operations in the table above.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>User workflow</p></th>
+<th class="head"><p>API</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Connect and prepare</p></td>
+<td><p>Direct UDP or INCO server, identity, installed-head validation, initialization, park, pressure, and detailed faults</p></td>
+</tr>
+<tr class="row-odd"><td><p>Target a plate well</p></td>
+<td><p>PLR plate registration, channel offsets, height/clearance, travel bounds, and well capacity checks</p></td>
+</tr>
+<tr class="row-even"><td><p>Fill a plate or region</p></td>
+<td><p>Prevalidated plans, CSV volume maps, gradients, row/column/snake orders, repeats, and progress</p></td>
+</tr>
+<tr class="row-odd"><td><p>Use multiple channels</p></td>
+<td><p>Compatible channel groups queued before a shared completion barrier</p></td>
+</tr>
+<tr class="row-even"><td><p>Reuse calibration</p></td>
+<td><p>Vendor XML import and metadata-preserving re-export, PLR JSON curves, per-channel correction, and device-bound configurations</p></td>
+</tr>
+<tr class="row-odd"><td><p>Prepare and clean lines</p></td>
+<td><p>Timed and calibrated prime/purge, clean cycles, bounded continuous flush, and finite idle-purge schedules</p></td>
+</tr>
+<tr class="row-even"><td><p>Control a run</p></td>
+<td><p>Boundary pause/resume, abort, close-all, confirmed dose counts, and uncertain-group reporting</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The manufacturer describes independent channel calibration, parallel dispensing,
+and multiple plate formats in its <a class="reference external" href="https://www.fgyger.ch/certus-flex/technical-specifications/?lang=en">technical specifications</a>.
+The <a class="reference external" href="https://downloads.fgyger.ch/certus/Doc/User%20Manual/User%20Manual%20CERTUS%20FLEX%20EN%20V011.pdf">user manual</a>
+documents regions, variable-volume patterns, maintenance, and interval purging.
+Thermo Fisher’s <a class="reference external" href="https://apps.thermofisher.com/apps/lahr/LA_Online_Help_Resource/en-us/Content/Topics/Drivers/Dispensers/DRVR%20Certus%20Flex.htm">Certus automation interface</a>
+also exposes plate access, dispense tables, and head configuration.</p>
+<p>Vendor protocol-file execution, evaporation-curtain support, standby, device-network
+configuration, and a balance-assisted calibration acquisition workflow are outside
+this API. A numeric speed interface still requires protocol evidence; firmware
+profile names remain explicit. Supply measured curves for volume delivery; command
+verification does not establish the physical volume delivered by an uncalibrated valve.</p>
+</section>
+<section id="connection">
+<h2>Connection<a class="headerlink" href="#connection" title="Link to this heading">#</a></h2>
+<p>With <code class="docutils literal notranslate"><span class="pre">target</span></code> omitted, the Python client connects directly to the <strong>controller</strong>
+through <code class="docutils literal notranslate"><span class="pre">pylabrobot.io.UDP</span></code>, normally on UDP port <strong>1964</strong>. Put the computer’s wired
+interface on the controller’s subnet; <code class="docutils literal notranslate"><span class="pre">source_ip</span></code> can select the local interface
+when necessary. The tested controller was at <code class="docutils literal notranslate"><span class="pre">192.168.1.3</span></code>, with the computer at
+<code class="docutils literal notranslate"><span class="pre">192.168.1.2/24</span></code>; these are observed addresses, not assumed factory defaults.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.gyger</span><span class="w"> </span><span class="kn">import</span> <span class="n">CertusFlex</span>
+
+<span class="n">certus</span> <span class="o">=</span> <span class="n">CertusFlex</span><span class="p">(</span><span class="s2">"192.168.1.3"</span><span class="p">,</span> <span class="n">head</span><span class="o">=</span><span class="s2">"flex8_angled"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">target</span></code> set, the client uses <code class="docutils literal notranslate"><span class="pre">pylabrobot.io.Socket</span></code> to reach the <strong>INCO server
+on the control PC</strong>, normally on TCP port <strong>7979</strong>. <code class="docutils literal notranslate"><span class="pre">target</span></code> is the local target
+name configured in that server. It is separate from <code class="docutils literal notranslate"><span class="pre">host</span></code>, the server PC’s
+address. The server must have incoming TCP access enabled and be able to reach
+the controller. Neither transport loads a Windows DLL or requires SiLA.</p>
+<p>Remote target chains, INCO discovery, fragmented transfers,
+asynchronous procedure tickets, and protocol-file upload are outside this
+implementation. Only the synchronous get/put/procedure operations used below are
+implemented. Unsupported replies cause an error rather than an automatic retry.</p>
+</section>
+<section id="evidence">
+<h2>Evidence<a class="headerlink" href="#evidence" title="Link to this heading">#</a></h2>
+<p>The device paths, commands, state transitions, and channel mappings were recovered
+from CERTUS CONTROL <strong>2.1.17.2517</strong>. Transport framing was recovered from
+<code class="docutils literal notranslate"><span class="pre">inco_32.dll</span></code> and its matching PDB in <code class="docutils literal notranslate"><span class="pre">IndelToolsSetup-tools_19.2.0.exe</span></code>, distributed
+inside the manufacturer’s
+<a class="reference external" href="https://downloads.fgyger.ch/certus-flex/GUI/Certus%20CONTROL%202.1.17.2517/Certus%20CONTROL%20Setup%202.1.17.2517.zip">matching installer</a>.
+The supplied <strong>User Manual CERTUS FLEX EN</strong> gives the 0.051–1.0 bar dispensing
+pressure range; the machine’s valve and fluid requirements still apply.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Reference file</p></th>
+<th class="head"><p>SHA-256</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Gyger.IndelInterface.dll</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">a73215827ff28b9b05bd8c533a84bae8c392fc5cfed38fa1422d70c40a031594</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Gyger.Certus.DispenserCore.dll</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">8d853fd26b6f1a8c4cd55209646018953cb2d7d5e164954417b186b89777e9c4</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">inco_32.dll</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">8e42a7ab422c8e6845d38738d9af09c23852229f76e1406a6627b2294980e6d4</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">inco_32.pdb</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">60cd7c1351d1935cffbad5030c03e982f78b6ccfd207e8347da15b0565e57d0d</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">pylabrobot/gyger/certus_flex/fixtures/native_requests.json</span></code> contains eight complete
+requests produced by offline x86 emulation of that DLL. They cover numeric and
+string reads, a numeric write, positive and negative motion coordinates, fractional
+values, string and empty-string arguments, a timed pulse, and a zero-argument
+completion barrier. The fixtures are not produced by the Python encoder.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">hardware_udp_*.json</span></code> fixtures in that directory contain real controller
+exchanges for reads, start/park procedures, numeric plate moves, pressure writes,
+timed valve commands, prime limits, native purge/prime, waste positioning,
+completion barriers, and discharge. Timeouts, cancellation,
+malformed packets, and lost replies use a simulated transport; UDP datagram
+handling is tested on loopback sockets.</p>
+<p>The native call sequence is <code class="docutils literal notranslate"><span class="pre">CMcINCOFrameWithBuffer</span></code> construction, address
+generation with sender <code class="docutils literal notranslate"><span class="pre">.</span></code> and server insertion, frame number 1, operation
+generation, then <code class="docutils literal notranslate"><span class="pre">AdjustToNextTarget</span></code> as performed by <code class="docutils literal notranslate"><span class="pre">TransmitINCOFrame</span></code>.
+Useful virtual addresses in this specific x86 binary are:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Native function</p></th>
+<th class="head"><p>Address</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GenerateFrameAddress</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x1001c070</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CMcINCOFrameWithBuffer</span></code> constructor</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x1001c7d0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CMcINCOFrame::SetFrameNumber</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x1001df90</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CMcINCOFrameGenerator::GetVariable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x10022de0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CMcINCOFrameGenerator::PutVariable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x10023810</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CMcINCOFrameGenerator::CallProcedure</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x100210f0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CMcINCOFrameParser::GetVariable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x100242f0</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">CServerComm::TransmitINCOFrame</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x100175a0</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CThreadCommDataTcp::WriteFrame</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0x10018790</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="direct-udp-wire-format">
+<h2>Direct UDP wire format<a class="headerlink" href="#direct-udp-wire-format" title="Link to this heading">#</a></h2>
+<p>The tested controller uses classic INCO framing, not the extended TCP frame below.
+Each request is one datagram: <code class="docutils literal notranslate"><span class="pre">DLE</span> <span class="pre">SOH</span></code>, an eight-byte header (sequence, operation,
+subtype, destination count 1, destination <code class="docutils literal notranslate"><span class="pre">FF</span></code>, source count 1, source <code class="docutils literal notranslate"><span class="pre">00</span></code>, checksum),
+payload, <code class="docutils literal notranslate"><span class="pre">DLE</span> <span class="pre">ETX</span></code>, and a data checksum. Literal <code class="docutils literal notranslate"><span class="pre">DLE</span></code> bytes are doubled. The header
+sum, including <code class="docutils literal notranslate"><span class="pre">SOH</span></code> and its checksum, is <code class="docutils literal notranslate"><span class="pre">FF</span></code> modulo 256. The payload sum, including
+<code class="docutils literal notranslate"><span class="pre">ETX</span></code> and its checksum, is also <code class="docutils literal notranslate"><span class="pre">FF</span></code> modulo 256; escape bytes are excluded.</p>
+<p>An ACK begins <code class="docutils literal notranslate"><span class="pre">DLE</span> <span class="pre">ACK</span></code>, then sequence, a two-byte error, destination count 1,
+destination <code class="docutils literal notranslate"><span class="pre">00</span></code>, and header checksum. Its payload and trailer use the same
+escaping and checksum rule. A nonzero error is exposed as <code class="docutils literal notranslate"><span class="pre">0x50000</span> <span class="pre">+</span> <span class="pre">error</span></code>.
+The source stays <code class="docutils literal notranslate"><span class="pre">00</span></code>. Sequence numbers run from 1 to 255; the client reopens its
+socket before reusing a sequence. Valid replies with a different sequence are
+ignored under the original request deadline. Requests are never retransmitted.</p>
+<p>Numeric and string reads are <code class="docutils literal notranslate"><span class="pre">2/1</span></code> and <code class="docutils literal notranslate"><span class="pre">2/5</span></code>, with a NUL-terminated path and no
+padding. Strings return NUL-terminated Latin-1 bytes. Numeric responses use
+legacy 32.32 fixed point, optionally followed by type <code class="docutils literal notranslate"><span class="pre">0D</span></code>, or an eight-byte
+double followed by type <code class="docutils literal notranslate"><span class="pre">09</span></code>. The low fraction bit is a legacy sign flag and is
+removed from the numeric value. Short procedure results may use 16.16 fixed point.</p>
+<p>Numeric put (<code class="docutils literal notranslate"><span class="pre">2/0</span></code>) contains an eight-byte signed 32.32 value, the terminated path,
+and type <code class="docutils literal notranslate"><span class="pre">0D</span></code>. A zero-argument procedure (<code class="docutils literal notranslate"><span class="pre">4/0</span></code>) contains a four-byte zero count
+and a path padded to four bytes. Procedures with arguments (<code class="docutils literal notranslate"><span class="pre">4/1</span></code>) contain a
+four-byte count, four-byte type bitmap, padded path, then arguments. Numeric
+arguments set bitmap bits <code class="docutils literal notranslate"><span class="pre">i</span></code> and <code class="docutils literal notranslate"><span class="pre">16+i</span></code> and contain signed 32.32 values; string
+arguments set bit <code class="docutils literal notranslate"><span class="pre">16+i</span></code> and contain terminated strings padded to four bytes.
+At most 16 arguments and 494 payload bytes are supported.</p>
+<p>This format was recovered by static inspection of <code class="docutils literal notranslate"><span class="pre">ConvertVariableToClassicFrame</span></code>
+(<code class="docutils literal notranslate"><span class="pre">0x1001d460</span></code>), <code class="docutils literal notranslate"><span class="pre">ConvertCallProcedureToClassicFrame</span></code> (<code class="docutils literal notranslate"><span class="pre">0x1001cbe0</span></code>),
+<code class="docutils literal notranslate"><span class="pre">ConvertFromClasicFrame</span></code> (<code class="docutils literal notranslate"><span class="pre">0x1001d070</span></code>), and the classic frame generator/parser
+(<code class="docutils literal notranslate"><span class="pre">0x100280d0</span></code> / <code class="docutils literal notranslate"><span class="pre">0x100283f0</span></code>) in the referenced binary. Numeric writes and numeric
+procedure arguments also have hardware-capture coverage for the operations in
+the verification table.</p>
+</section>
+<section id="inco-server-tcp-wire-format">
+<h2>INCO server TCP wire format<a class="headerlink" href="#inco-server-tcp-wire-format" title="Link to this heading">#</a></h2>
+<p>Each TCP message consists of a 52-byte header, an optional extended header, an
+address block, and data. TCP may split any of these across reads. There is no
+additional TCP length prefix. Multi-byte header fields follow the endianness bit
+at byte 32; requests use big endian.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Offset</p></th>
+<th class="head"><p>Size</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>0</p></td>
+<td><p>13</p></td>
+<td><p>Compatibility bytes <code class="docutils literal notranslate"><span class="pre">100100820101ff01007a1003fc</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>13</p></td>
+<td><p>2</p></td>
+<td><p>Content interface/feature versions: 2, 3</p></td>
+</tr>
+<tr class="row-even"><td><p>15</p></td>
+<td><p>2</p></td>
+<td><p>Receiver interface/feature versions</p></td>
+</tr>
+<tr class="row-odd"><td><p>17</p></td>
+<td><p>1</p></td>
+<td><p>Transaction: request 1, reply 6</p></td>
+</tr>
+<tr class="row-even"><td><p>18</p></td>
+<td><p>2</p></td>
+<td><p>Operation type and subtype</p></td>
+</tr>
+<tr class="row-odd"><td><p>20</p></td>
+<td><p>4</p></td>
+<td><p>Frame number</p></td>
+</tr>
+<tr class="row-even"><td><p>24</p></td>
+<td><p>4</p></td>
+<td><p>Fragment count and fragment index, two 16-bit values</p></td>
+</tr>
+<tr class="row-odd"><td><p>28</p></td>
+<td><p>4</p></td>
+<td><p>Unsigned INCO error code</p></td>
+</tr>
+<tr class="row-even"><td><p>32</p></td>
+<td><p>4</p></td>
+<td><p>Flags; bit 0 of byte 32 selects big endian</p></td>
+</tr>
+<tr class="row-odd"><td><p>36</p></td>
+<td><p>4</p></td>
+<td><p>Spare</p></td>
+</tr>
+<tr class="row-even"><td><p>40</p></td>
+<td><p>4</p></td>
+<td><p>Target startup timestamp</p></td>
+</tr>
+<tr class="row-odd"><td><p>44</p></td>
+<td><p>2</p></td>
+<td><p>INCO path offset</p></td>
+</tr>
+<tr class="row-even"><td><p>46</p></td>
+<td><p>6</p></td>
+<td><p>Extended-header, address, and data lengths, three 16-bit values</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The outgoing address block begins <code class="docutils literal notranslate"><span class="pre">01</span> <span class="pre">20</span> <span class="pre">03</span> <span class="pre">01</span> <span class="pre">00</span> <span class="pre">00</span> <span class="pre">00</span> <span class="pre">00</span></code>, followed by three
+32-byte, NUL-padded slots: <code class="docutils literal notranslate"><span class="pre">.</span></code>, <code class="docutils literal notranslate"><span class="pre">...</span></code>, and the target name. These are direction,
+slot width, slot count, current index, reserved bytes, and the route respectively.</p>
+<p>Numeric get is type/subtype <code class="docutils literal notranslate"><span class="pre">2/1</span></code>; string get is <code class="docutils literal notranslate"><span class="pre">2/5</span></code>. Both contain four zero
+bytes followed by a NUL-terminated path, padded to a four-byte boundary. Numeric
+put is <code class="docutils literal notranslate"><span class="pre">2/0</span></code>, containing a typed number followed by the NUL-terminated path.
+Procedure call is <code class="docutils literal notranslate"><span class="pre">4/1</span></code>: one argument-count byte, three zero bytes, padded path,
+then typed arguments. Numeric arguments contain type <code class="docutils literal notranslate"><span class="pre">0x010f</span></code>, two padding bytes,
+an IEEE double and a signed 32.32 fallback. String arguments contain type
+<code class="docutils literal notranslate"><span class="pre">0x0200</span></code>, two padding bytes, and a padded NUL-terminated string.</p>
+<p>Numeric responses contain type <code class="docutils literal notranslate"><span class="pre">0x0109</span></code> (double) or <code class="docutils literal notranslate"><span class="pre">0x010d</span></code> (fixed point), two
+padding bytes, and eight value bytes. Fixed-point words are integer then fraction,
+even in little endian replies. String responses use type <code class="docutils literal notranslate"><span class="pre">0x0202</span></code>, two padding
+bytes, a length split into low and high 16-bit words, and the terminated string.
+The INCO error is checked before decoding a value and exposed as <code class="docutils literal notranslate"><span class="pre">IncoError.code</span></code>.</p>
+</section>
+<section id="device-operations">
+<h2>Device operations<a class="headerlink" href="#device-operations" title="Link to this heading">#</a></h2>
+<p>The root is <code class="docutils literal notranslate"><span class="pre">Machine.Entity.Dispenser</span></code>. Module paths begin
+<code class="docutils literal notranslate"><span class="pre">Machine.Entity.Dispenser.Module.Entity.</span></code>. <code class="docutils literal notranslate"><span class="pre">.Prop.State</span></code> values are startup=0,
+off=1, wait=2, on=3, ready=4, busy=5, error=6. The coordinator state is
+<code class="docutils literal notranslate"><span class="pre">Machine.Entity.Dispenser.Coord.Prop.State</span></code>.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Controller path or command</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Serial number</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Machine.Entity.Dispenser.Act.Serialnumber</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Firmware</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Software.Revision.Dispenser</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Start</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Machine.Entity.Dispenser.Cmd.Start()</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Reference axes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PosSystem.Cmd.Init(&quot;&quot;)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Position</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PosSystem.Act.Position.0</span></code>, <code class="docutils literal notranslate"><span class="pre">.1</span></code>, <code class="docutils literal notranslate"><span class="pre">.2</span></code> in mm</p></td>
+</tr>
+<tr class="row-odd"><td><p>Move</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PosSystem.Cmd.MoveXYZ(x:d,y:d,z:d,&quot;Slow&quot;)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Park</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PosSystem.Cmd.MoveZToPark(&quot;Slow&quot;)</span></code>, then <code class="docutils literal notranslate"><span class="pre">MoveXYToPark(&quot;Slow&quot;)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Prime/purge position</p></td>
+<td><p>Park Z, <code class="docutils literal notranslate"><span class="pre">MoveXYToPrime</span></code>/<code class="docutils literal notranslate"><span class="pre">MoveXYToPurge</span></code>, then matching Z command</p></td>
+</tr>
+<tr class="row-even"><td><p>Pressure</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PressureRegulator.Prop.SetPressure</span></code>, <code class="docutils literal notranslate"><span class="pre">.Act.Pressure</span></code>, in bar</p></td>
+</tr>
+<tr class="row-odd"><td><p>Pressurize/discharge</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PressureRegulator.Cmd.Init()</span></code>, <code class="docutils literal notranslate"><span class="pre">.Cmd.Discharge()</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Pulse</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ValveN.Cmd.Dispens(microseconds:d)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Prime</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ValveN.Cmd.Prime(microseconds:d)</span></code>; bounded by <code class="docutils literal notranslate"><span class="pre">ValveN.Prop.PrimeTimeout</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Purge</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ValveN.Cmd.Purge(total_open_microseconds:d,pulse_microseconds:d[,wait_microseconds:d])</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Close valve</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ValveN.Cmd.CloseValve()</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Await pulses</p></td>
+<td><p>Set <code class="docutils literal notranslate"><span class="pre">Head.Prop.SyncValves</span></code> to 0, call <code class="docutils literal notranslate"><span class="pre">Head.Cmd.SyncValves()</span></code>, poll flag &gt; 0</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The first head channel is <code class="docutils literal notranslate"><span class="pre">valves[0]</span></code>. FLEX5 maps to outputs 1–5; FLEX8 to 0–7;
+angled FLEX4 to 0–3; angled FLEX8 to 0–7. The installed head is an explicit
+constructor argument; the driver does not infer it from a serial number.</p>
+<p>Motion waits follow the vendor’s five-second acceptance observation: wait to see
+Ready depart, then wait for Ready to return. A sufficiently short move can finish
+between reads, so Ready after the observation period is also accepted. The
+timeout must allow that grace period. Fault states raise immediately. Pressure
+completion also requires a charged/idle charge state and actual pressure within
+0.01 bar of the requested value.</p>
+<p>Speed names select firmware profiles, such as <code class="docutils literal notranslate"><span class="pre">&quot;slow&quot;</span></code> mapping to <code class="docutils literal notranslate"><span class="pre">&quot;Slow&quot;</span></code>.
+A numeric mm/s command interface has not been verified.</p>
+<p>Durations use seconds at the Python API and microseconds on the controller. The
+protocol validator’s minimum is 50 µs; individual valves may require longer.
+Volume dispensing requires a measured per-valve/per-fluid <code class="docutils literal notranslate"><span class="pre">ValveCalibration</span></code> in
+µL and seconds. Setpoint and actual pressure must match that calibration.</p>
+<p><code class="docutils literal notranslate"><span class="pre">dispense(volume,</span> <span class="pre">correction_factor=1.0)</span></code> follows CERTUS CONTROL’s volume-to-time
+calculation: multiply the requested volume by the channel’s correction factor,
+then linearly interpolate between the surrounding calibration points. The factor
+range is 0.5–1.5. The factor applies to volume, not opening duration. PLR converts
+the resulting seconds to microseconds for the same native <code class="docutils literal notranslate"><span class="pre">ValveN.Cmd.Dispens</span></code>
+command used by CERTUS CONTROL. It does not read a control PC’s calibration files
+or correction factors automatically.</p>
+<p>Reference tests cover both interpolation segments, exact endpoints, factor limits,
+and the resulting microsecond command. Their synthetic data checks the calculations;
+it is not calibration data for an installed valve. For example, points of 0.5 µL
+at 500 µs and 1.5 µL at 1250 µs map a 1 µL request with factor 1.25 to 1062.5 µs.
+The reference methods are <code class="docutils literal notranslate"><span class="pre">DispenseCalibration.CalculateValveOpenTime</span></code> and
+<code class="docutils literal notranslate"><span class="pre">CalibrationUtils.InterpolateValveOpenTime</span></code> in CERTUS CONTROL 2.1.17.2517.
+Unlike the vendor’s extrapolation, PLR rejects corrected volumes outside the
+measured range. This verifies the command calculation, not the actual dispensed
+mass or volume; those require measurements for the installed fluid and valve.</p>
+<p>Motion and valve operations share a lock. The calibration pressure check is held
+under that same lock. This does not prevent another application from controlling
+the machine; use one controlling application at a time. A transport timeout,
+cancellation during an exchange, or malformed reply closes the socket and requires
+explicit reconnection. None of those outcomes proves that a physical operation
+stopped. A failed dose must be investigated before another dispense is requested.
+<code class="docutils literal notranslate"><span class="pre">stop()</span></code> disconnects only; use <code class="docutils literal notranslate"><span class="pre">set_pressure(0)</span></code> explicitly to discharge.</p>
+</section>
+<section id="valve-maintenance">
+<h2>Valve maintenance<a class="headerlink" href="#valve-maintenance" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">valves[i].prime(duration)</span></code> opens continuously at the current position.
+<code class="docutils literal notranslate"><span class="pre">valves[i].purge(duration,</span> <span class="pre">pulse_duration=...,</span> <span class="pre">interval=...)</span></code> requests a pulse
+train timed by the controller. All times are in seconds. Purge <code class="docutils literal notranslate"><span class="pre">duration</span></code> is
+cumulative valve-open time; it excludes gaps between pulses. Omit <code class="docutils literal notranslate"><span class="pre">interval</span></code> to
+use the firmware’s timing. Explicit intervals need the three-argument command;
+unsupported requests raise without retrying another command form.</p>
+<p><code class="docutils literal notranslate"><span class="pre">clean_cycle()</span></code> moves to the configured purge position and repeats purge, a
+250 ms pause, and prime. It processes selected channels sequentially, waits for
+each operation, and parks on success. <code class="docutils literal notranslate"><span class="pre">channels</span></code> uses zero-based valve indexes.
+Pressure is controlled separately and remains unchanged by cleaning:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">certus</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">certus</span><span class="o">.</span><span class="n">set_pressure</span><span class="p">(</span><span class="mf">0.2</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">certus</span><span class="o">.</span><span class="n">clean_cycle</span><span class="p">(</span>
+    <span class="n">channels</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="n">prime_duration</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">purge_duration</span><span class="o">=</span><span class="mf">0.02</span><span class="p">,</span>
+    <span class="n">purge_pulse_duration</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+    <span class="n">cycles</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+  <span class="p">)</span>
+<span class="k">finally</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">certus</span><span class="o">.</span><span class="n">set_pressure</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The default cycle count is five. These durations are a functional-test example,
+not a validated cleaning recipe. Use fluid-compatible cleaning conditions and
+waste collection. Calibrated volumes require measured valve/fluid calibration.
+On failure or cancellation, cleaning attempts to stop the selected valves and
+raises the original error without repeating doses or making a recovery move.</p>
+</section>
+<section id="continuing-hardware-verification">
+<h2>Continuing hardware verification<a class="headerlink" href="#continuing-hardware-verification" title="Link to this heading">#</a></h2>
+<p>Use the <a class="reference internal" href="hello-world.html"><span class="std std-doc">hello-world notebook</span></a> one cell at a time. Confirm the
+controller address (or server/target) and installed head, capture identity and status reads, and compare
+positions and pressure with CERTUS CONTROL. After those match, verify reference
+and park motions with a clear workspace, then a short water pulse into waste.
+Measure delivered volume separately before supplying a calibration. Preserve
+the PLR capture and record firmware, head, valve, pressure, pulse duration, and
+observations. Use registered PLR wells for plate protocols and explicit controller
+coordinates for commissioning.</p>
+</section>
+<section id="plr-plate-and-well-operations">
+<h2>PLR plate and well operations<a class="headerlink" href="#plr-plate-and-well-operations" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">read_plate_registration(plate,</span> <span class="pre">bounds=...)</span></code> reads the controller’s active plate
+origin, grid, height, park clearance, and per-channel offsets. It rejects a grid
+or installed head that disagrees with the selected resources. Supply a verified
+<code class="docutils literal notranslate"><span class="pre">MotionBounds</span></code> envelope: software-limit paths have not been established, so the
+API does not invent them. For a different plate definition, <code class="docutils literal notranslate"><span class="pre">PlateRegistration</span></code>
+also accepts explicitly measured geometry.</p>
+<p><code class="docutils literal notranslate"><span class="pre">move_to_well(registration,</span> <span class="pre">well,</span> <span class="pre">channel=...)</span></code> raises vertically to clearance,
+traverses XY, lowers, and checks the reported position within 0.05 mm.
+<code class="docutils literal notranslate"><span class="pre">dispense_to_well(registration,</span> <span class="pre">well,</span> <span class="pre">volume,</span> <span class="pre">channel=...)</span></code> additionally checks
+calibration, pressure, and well capacity before moving. Positions use PLR well
+centers and controller valve offsets. A lid, rotation, changed plate geometry,
+foreign well, or target outside the supplied bounds is rejected. Keep the volume
+tracker’s initial contents accurate; physical contents are not sensed, and these
+operations do not update the tracker automatically.</p>
+</section>
+<section id="plate-dispense-plans">
+<h2>Plate dispense plans<a class="headerlink" href="#plate-dispense-plans" title="Link to this heading">#</a></h2>
+<p>Create <code class="docutils literal notranslate"><span class="pre">DispenseStep(well,</span> <span class="pre">channel,</span> <span class="pre">volume=...)</span></code> requests in µL, then call
+<code class="docutils literal notranslate"><span class="pre">plan_dispense(registration,</span> <span class="pre">steps,</span> <span class="pre">repeats=1,</span> <span class="pre">order=&quot;given&quot;,</span> <span class="pre">parallel=True)</span></code>.
+Planning is offline and checks the entire recipe, calibration range, target bounds,
+common pressure, and cumulative capacity before movement. Zero-volume wells are
+skipped. <code class="docutils literal notranslate"><span class="pre">DispenseStep.gradient</span></code> produces a linear gradient; <code class="docutils literal notranslate"><span class="pre">from_csv</span></code> accepts
+<code class="docutils literal notranslate"><span class="pre">well,channel,volume</span></code> columns and an optional <code class="docutils literal notranslate"><span class="pre">correction_factor</span></code>. Channels are
+zero-based. Orders are <code class="docutils literal notranslate"><span class="pre">given</span></code>, <code class="docutils literal notranslate"><span class="pre">row</span></code>, <code class="docutils literal notranslate"><span class="pre">column</span></code>, <code class="docutils literal notranslate"><span class="pre">snake_row</span></code>, and <code class="docutils literal notranslate"><span class="pre">snake_column</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">execute_plan(plan)</span></code> revalidates geometry, calibration, capacity, head, and pressure.
+Consecutive requests with distinct channels at a common stage position are queued
+before a shared valve barrier. This permits controller concurrency without
+promising simultaneous pulse edges. Other requests retain their specified order.
+On success the head is raised at the final XY position. Park and pressure discharge
+are explicit. A failed group is stopped best-effort and never automatically repeated.</p>
+<p>For commissioning, steps may specify <code class="docutils literal notranslate"><span class="pre">duration</span></code> instead of <code class="docutils literal notranslate"><span class="pre">volume</span></code>; these timed
+plans cannot check physical filled volume. Do not supply both quantities. Rebuild
+plans after changing calibration or plate geometry.</p>
+</section>
+<section id="calibration-and-configuration-files">
+<h2>Calibration and configuration files<a class="headerlink" href="#calibration-and-configuration-files" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">ValveCalibration.from_vendor_xml(text,</span> <span class="pre">calibration_id=...)</span></code> imports one CERTUS
+CONTROL calibration map. It converts explicit units to µL, seconds, and bar,
+excludes disabled points, and preserves the source metadata and disabled points
+for <code class="docutils literal notranslate"><span class="pre">to_vendor_xml()</span></code>. Stored volume is already per shot; shot count must not
+divide it again. Ambiguous maps, missing units, and nonmonotonic curves are rejected.
+<code class="docutils literal notranslate"><span class="pre">save(path)</span></code> and <code class="docutils literal notranslate"><span class="pre">load(path)</span></code> provide versioned PLR JSON for measured curves.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.gyger</span><span class="w"> </span><span class="kn">import</span> <span class="n">ValveCalibration</span>
+
+<span class="n">calibration</span> <span class="o">=</span> <span class="n">ValveCalibration</span><span class="o">.</span><span class="n">from_vendor_xml</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"water-calibration.xml"</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+<span class="k">await</span> <span class="n">certus</span><span class="o">.</span><span class="n">configure_channel</span><span class="p">(</span>
+  <span class="mi">1</span><span class="p">,</span> <span class="n">calibration</span><span class="o">=</span><span class="n">calibration</span><span class="p">,</span> <span class="n">fluid</span><span class="o">=</span><span class="s2">"Water"</span><span class="p">,</span> <span class="n">valve_serial</span><span class="o">=</span><span class="s2">"INSTALLED-VALVE-SERIAL"</span><span class="p">,</span>
+  <span class="n">correction_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">certus</span><span class="o">.</span><span class="n">save_configuration</span><span class="p">(</span><span class="s2">"certus-water.json"</span><span class="p">)</span>
+<span class="c1"># In another session, after setup():</span>
+<span class="k">await</span> <span class="n">certus</span><span class="o">.</span><span class="n">load_configuration</span><span class="p">(</span><span class="s2">"certus-water.json"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Configuration files bind to the controller serial and installed head. Every channel
+entry is validated before any is applied. Fluid and valve serial are operator
+declarations: the controller does not identify the liquid or the individual valve.
+Volume operations inherit the configured correction factor unless explicitly
+overridden, and check actual pressure and setpoint against the calibration.
+Imported curves establish the command calculation; measured accuracy still depends
+on the installed valve, liquid, pressure, and the quality of those measurements.</p>
+</section>
+<section id="run-control-and-faults">
+<h2>Run control and faults<a class="headerlink" href="#run-control-and-faults" title="Link to this heading">#</a></h2>
+<p>Pass a single-use <code class="docutils literal notranslate"><span class="pre">RunControl</span></code> to <code class="docutils literal notranslate"><span class="pre">execute_plan(plan,</span> <span class="pre">control=control)</span></code>. Its immutable
+<code class="docutils literal notranslate"><span class="pre">progress</span></code> snapshot reports state, total/completed groups, confirmed doses, and an
+<code class="docutils literal notranslate"><span class="pre">uncertain_group</span></code> when submitted liquid commands lack confirmed completion.
+<code class="docutils literal notranslate"><span class="pre">control.pause()</span></code> requests a pause after the current group completes and Z raises;
+<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">control.wait_paused()</span></code> observes that boundary. <code class="docutils literal notranslate"><span class="pre">control.resume()</span></code> continues
+with the next group. Run the executor in an asyncio task to operate these controls.</p>
+<p><code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">certus.abort()</span></code> prevents further submissions, wakes a paused run, and stops
+and closes every selected-head valve. The executor raises <code class="docutils literal notranslate"><span class="pre">RunAborted</span></code>; a failed
+or aborted run cannot resume. An in-flight stage move may finish. Closure failures
+raise and do not prove that a valve stopped. No recovery movement, discharge, or
+retry is implicit. <code class="docutils literal notranslate"><span class="pre">close_all()</span></code> waits for the current operation before closing
+valves. Neither is a substitute for the physical emergency stop.</p>
+<p><code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">certus.get_faults()</span></code> returns controller issue IDs, codes, tasks, descriptive
+text, flags, and native timestamps without acknowledging them. Resolve the cause
+before explicitly starting another operation; the driver never clears faults to
+force a run through.</p>
+</section>
+<section id="bounded-flush-and-volume-based-maintenance">
+<h2>Bounded flush and volume-based maintenance<a class="headerlink" href="#bounded-flush-and-volume-based-maintenance" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">certus.flush([1,</span> <span class="pre">2],</span> <span class="pre">duration=0.05)</span></code> moves to prime waste, queues a continuous
+opening on each selected valve, waits, and parks. <code class="docutils literal notranslate"><span class="pre">duration</span></code> is in seconds and must
+fit each valve’s native prime timeout. It uses firmware-timed <code class="docutils literal notranslate"><span class="pre">Prime</span></code> rather than an
+indefinite <code class="docutils literal notranslate"><span class="pre">OpenValve</span></code>; connection loss cannot extend the requested opening. For an
+early stop, run it in a task and call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">certus.abort()</span></code>. A <code class="docutils literal notranslate"><span class="pre">RunControl</span></code> reports
+completion and uncertainty. Neither flush nor idle purge changes the pressure setpoint.</p>
+<p>With measured calibration assigned, <code class="docutils literal notranslate"><span class="pre">valves[i].prime_volume(volume)</span></code> opens once
+for the interpolated duration. <code class="docutils literal notranslate"><span class="pre">valves[i].purge_volume(volume,</span> <span class="pre">pulse_volume=...)</span></code>
+converts each pulse separately, including any remainder. All pulse volumes must
+fit the measured range; the whole request is validated before the first opening.
+These per-valve methods operate at the current position, which must be over waste.</p>
+<p><code class="docutils literal notranslate"><span class="pre">idle_purge(channels,</span> <span class="pre">interval=...,</span> <span class="pre">cycles=...,</span> <span class="pre">duration=...,</span> <span class="pre">pulse_duration=...)</span></code>
+waits the specified seconds before each cycle, acquires the operation lock, moves
+to purge waste, purges the selected channels, and parks. The cycle count is required
+and finite. It waits for active or paused plate plans and releases the lock between
+cycles. Run it as an asyncio task for background maintenance; abort or cancel and
+await that task before disconnecting. No persistent firmware timer is installed.
+For maintenance, progress counts completed valve operations rather than individual
+pulses. Cleaning effectiveness depends on the fluid, contamination, and chosen recipe.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="hello-world.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">CERTUS FLEX</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../hamilton/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Hamilton</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#verification-scope">Verification scope</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capability-coverage">Capability coverage</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connection">Connection</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evidence">Evidence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#direct-udp-wire-format">Direct UDP wire format</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#inco-server-tcp-wire-format">INCO server TCP wire format</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#device-operations">Device operations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#valve-maintenance">Valve maintenance</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#continuing-hardware-verification">Continuing hardware verification</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plr-plate-and-well-operations">PLR plate and well operations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plate-dispense-plans">Plate dispense plans</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calibration-and-configuration-files">Calibration and configuration files</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-control-and-faults">Run control and faults</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bounded-flush-and-volume-based-maintenance">Bounded flush and volume-based maintenance</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/gyger/certus_flex/protocol.md">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../_sources/user_guide/gyger/certus_flex/protocol.md.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.24.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+pylabrobot.gyger.ValveCalibration.valve\_serial
+===============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ValveCalibration.valve_serial

@@ -1,0 +1,6 @@
+﻿pylabrobot.gyger.IncoError
+==========================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoexception:: IncoError

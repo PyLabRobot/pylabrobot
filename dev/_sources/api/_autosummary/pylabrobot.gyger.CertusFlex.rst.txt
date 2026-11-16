@@ -1,0 +1,50 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.CertusFlex
+===========================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: CertusFlex
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CertusFlex.__init__
+      ~CertusFlex.abort
+      ~CertusFlex.clean_cycle
+      ~CertusFlex.close_all
+      ~CertusFlex.configure_channel
+      ~CertusFlex.dispense_to_well
+      ~CertusFlex.execute_plan
+      ~CertusFlex.flush
+      ~CertusFlex.get_faults
+      ~CertusFlex.get_position
+      ~CertusFlex.get_pressure
+      ~CertusFlex.get_status
+      ~CertusFlex.idle_purge
+      ~CertusFlex.initialize
+      ~CertusFlex.load_configuration
+      ~CertusFlex.move_to
+      ~CertusFlex.move_to_prime
+      ~CertusFlex.move_to_purge
+      ~CertusFlex.move_to_well
+      ~CertusFlex.park
+      ~CertusFlex.plan_dispense
+      ~CertusFlex.read_plate_registration
+      ~CertusFlex.save_configuration
+      ~CertusFlex.set_pressure
+      ~CertusFlex.setup
+      ~CertusFlex.stop
+      ~CertusFlex.validate_head
+   
+   

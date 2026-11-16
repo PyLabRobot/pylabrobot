@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.validate\_head
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.validate_head

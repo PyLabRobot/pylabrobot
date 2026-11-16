@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.DispenseStep
+=============================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: DispenseStep
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DispenseStep.correction_factor
+      ~DispenseStep.duration
+      ~DispenseStep.volume
+      ~DispenseStep.well
+      ~DispenseStep.channel
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DispenseStep.__init__
+      ~DispenseStep.from_csv
+      ~DispenseStep.gradient
+   
+   

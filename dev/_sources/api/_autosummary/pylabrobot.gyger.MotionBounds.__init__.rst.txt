@@ -1,0 +1,6 @@
+pylabrobot.gyger.MotionBounds.\_\_init\_\_
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: MotionBounds.__init__

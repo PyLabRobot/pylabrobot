@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispensePlan.count
+===================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoproperty:: DispensePlan.count

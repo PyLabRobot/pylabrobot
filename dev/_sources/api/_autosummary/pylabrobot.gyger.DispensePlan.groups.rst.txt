@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispensePlan.groups
+====================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: DispensePlan.groups

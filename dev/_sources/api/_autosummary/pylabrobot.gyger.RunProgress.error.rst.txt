@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunProgress.error
+==================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: RunProgress.error

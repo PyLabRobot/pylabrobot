@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunProgress.state
+==================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: RunProgress.state

@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.get\_faults
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.get_faults

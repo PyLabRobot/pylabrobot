@@ -1,0 +1,6 @@
+pylabrobot.gyger.PlateRegistration.\_\_init\_\_
+===============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: PlateRegistration.__init__

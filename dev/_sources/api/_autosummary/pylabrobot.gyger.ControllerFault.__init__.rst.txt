@@ -1,0 +1,6 @@
+pylabrobot.gyger.ControllerFault.\_\_init\_\_
+=============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: ControllerFault.__init__

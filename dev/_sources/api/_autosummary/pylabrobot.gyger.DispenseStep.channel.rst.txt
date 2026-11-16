@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.channel
+=====================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: DispenseStep.channel

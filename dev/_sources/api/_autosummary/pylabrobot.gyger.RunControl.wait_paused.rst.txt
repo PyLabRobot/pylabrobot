@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunControl.wait\_paused
+========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: RunControl.wait_paused

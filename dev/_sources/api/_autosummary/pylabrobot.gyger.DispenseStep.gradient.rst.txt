@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.gradient
+======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: DispenseStep.gradient

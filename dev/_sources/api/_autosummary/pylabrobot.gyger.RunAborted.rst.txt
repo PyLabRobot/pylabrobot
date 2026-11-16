@@ -1,0 +1,6 @@
+﻿pylabrobot.gyger.RunAborted
+===========================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoexception:: RunAborted

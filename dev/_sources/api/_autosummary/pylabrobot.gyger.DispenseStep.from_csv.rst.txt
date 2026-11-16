@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.from\_csv
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: DispenseStep.from_csv

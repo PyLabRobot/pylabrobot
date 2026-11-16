@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunProgress.\_\_init\_\_
+=========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: RunProgress.__init__

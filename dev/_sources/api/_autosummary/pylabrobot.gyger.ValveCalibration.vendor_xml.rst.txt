@@ -1,0 +1,6 @@
+pylabrobot.gyger.ValveCalibration.vendor\_xml
+=============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ValveCalibration.vendor_xml

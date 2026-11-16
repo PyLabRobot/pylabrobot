@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunControl.pause
+=================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: RunControl.pause

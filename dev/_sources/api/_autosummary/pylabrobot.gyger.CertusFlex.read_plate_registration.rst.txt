@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.read\_plate\_registration
+=====================================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.read_plate_registration

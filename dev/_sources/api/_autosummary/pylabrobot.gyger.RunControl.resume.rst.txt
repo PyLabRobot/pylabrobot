@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunControl.resume
+==================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: RunControl.resume

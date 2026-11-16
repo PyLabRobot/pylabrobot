@@ -1,0 +1,6 @@
+pylabrobot.gyger.ValveCalibration.duration\_for\_volume
+=======================================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: ValveCalibration.duration_for_volume

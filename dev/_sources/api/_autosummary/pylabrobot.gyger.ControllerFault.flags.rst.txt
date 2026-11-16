@@ -1,0 +1,6 @@
+pylabrobot.gyger.ControllerFault.flags
+======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ControllerFault.flags

@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusValve.dispense
+=====================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusValve.dispense

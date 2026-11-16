@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.plan\_dispense
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.plan_dispense

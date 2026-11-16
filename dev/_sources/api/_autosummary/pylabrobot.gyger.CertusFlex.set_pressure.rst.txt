@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.set\_pressure
+=========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.set_pressure

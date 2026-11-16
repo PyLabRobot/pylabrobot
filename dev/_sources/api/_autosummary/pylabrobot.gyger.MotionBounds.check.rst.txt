@@ -1,0 +1,6 @@
+pylabrobot.gyger.MotionBounds.check
+===================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: MotionBounds.check

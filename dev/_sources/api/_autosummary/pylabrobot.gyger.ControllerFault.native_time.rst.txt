@@ -1,0 +1,6 @@
+pylabrobot.gyger.ControllerFault.native\_time
+=============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ControllerFault.native_time
