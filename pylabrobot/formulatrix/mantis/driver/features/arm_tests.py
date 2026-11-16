@@ -1149,10 +1149,19 @@ class MoveTests(ArmTestCase):
   async def test_a_cancelled_queued_move_aborts_and_stops(self):
     link = RouteLink(answers=make_answers(), encoders={2: Z_UP_ENCODER_REPLY})
     driver = await self.set_up_moves(link=link)
-    task = asyncio.create_task(driver.arm.move_to_joint_state(joint_state={2: 0.0}))
-    while 68 not in [command for _, command, _ in self.sent(link)]:
-      await asyncio.sleep(0.01)
-    task.cancel()
+    # Cancel while the move waits for the queue, not as 0/68's reply arrives: Python before 3.12
+    # can drop a cancellation that races a reply inside asyncio.wait_for.
+    waiting = asyncio.Event()
+    wait_for_queue_item = driver._wait_for_queue_item
+
+    async def wait_and_say_so(*, item, timeout):
+      waiting.set()
+      return await wait_for_queue_item(item=item, timeout=timeout)
+
+    with mock.patch.object(driver, "_wait_for_queue_item", side_effect=wait_and_say_so):
+      task = asyncio.create_task(driver.arm.move_to_joint_state(joint_state={2: 0.0}))
+      await asyncio.wait_for(waiting.wait(), timeout=5)
+      task.cancel()
     with self.assertRaises(asyncio.CancelledError):
       await task
     sent = self.sent(link)
