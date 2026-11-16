@@ -32,8 +32,8 @@ from .head_tool import HeadTool
 from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
 from .liquid import Liquid
-from .mckesson import *
 from .manipulator import LinkBody
+from .mckesson import *
 from .n_channel_pipettes import NChannelPipette, TipMountingShaft, TipPickupMode
 from .nest import *
 from .opentrons import *
