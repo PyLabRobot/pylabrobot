@@ -12,12 +12,20 @@ from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.io import ContinuousConnectionIO, IOBase, ReconnectableConnectionIO
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.socket import Socket, SocketValidator
+from pylabrobot.io.udp import UDP, UDPValidator
 from pylabrobot.io.usb import USB, USBValidator
 from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.testing.mock_io import MockIO
 
-TRANSPORT_TYPES = (Serial, FTDI, USB, HID, Socket)
-VALIDATOR_TYPES = (SerialValidator, FTDIValidator, USBValidator, HIDValidator, SocketValidator)
+TRANSPORT_TYPES = (Serial, FTDI, USB, HID, Socket, UDP)
+VALIDATOR_TYPES = (
+  SerialValidator,
+  FTDIValidator,
+  USBValidator,
+  HIDValidator,
+  SocketValidator,
+  UDPValidator,
+)
 
 
 def test_default_transport_read_deadlines_do_not_warn() -> None:
@@ -25,10 +33,12 @@ def test_default_transport_read_deadlines_do_not_warn() -> None:
   with warnings.catch_warnings(record=True) as captured:
     warnings.simplefilter("always", DeprecationWarning)
     socket = Socket("socket", "127.0.0.1", 1)
+    udp = UDP("udp", "127.0.0.1", 1)
     usb = USB(1, 2, "USB", packet_read_timeout=0.01)
     serial = Serial("serial", port="fake")
     HID("HID", 1, 2)
   assert socket._read_timeout is None
+  assert udp._read_timeout is None
   assert usb.read_timeout is None
   assert serial.timeout is None
   assert not [warning for warning in captured if issubclass(warning.category, DeprecationWarning)]
@@ -38,6 +48,8 @@ def test_explicit_public_constructor_deadlines_warn_even_when_none() -> None:
   """An explicitly supplied compatibility setting is never silently ignored."""
   with pytest.warns(DeprecationWarning, match="Socket.read_timeout"):
     Socket("socket", "127.0.0.1", 1, read_timeout=None)
+  with pytest.warns(DeprecationWarning, match="UDP.read_timeout"):
+    UDP("udp", "127.0.0.1", 1, read_timeout=None)
   with pytest.warns(DeprecationWarning, match="USB.read_timeout"):
     usb = USB(1, 2, "USB", packet_read_timeout=0.01, read_timeout=1)
   with pytest.warns(DeprecationWarning, match="Serial.timeout"):
@@ -105,7 +117,7 @@ def test_connection_continuity_is_an_opt_in_contract() -> None:
 def test_reconnectable_io_refines_connection_continuity() -> None:
   """An explicit reconnect operation is the only extra way to change identity."""
   assert issubclass(ReconnectableConnectionIO, ContinuousConnectionIO)
-  for reconnectable_type in (Socket, FTDI, USB):
+  for reconnectable_type in (Socket, UDP, FTDI, USB):
     assert issubclass(reconnectable_type, ReconnectableConnectionIO)
     assert issubclass(reconnectable_type, ContinuousConnectionIO)
   for continuous_type in (Serial, HID):

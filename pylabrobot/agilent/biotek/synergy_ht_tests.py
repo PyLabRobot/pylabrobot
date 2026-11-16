@@ -1,11 +1,11 @@
 """Synergy HT command sequences, measurement parsing, and protocol failure cases."""
 
-from collections import deque
-from contextlib import asynccontextmanager
-from datetime import datetime
 import json
 import logging
 import math
+from collections import deque
+from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 from unittest.mock import AsyncMock, patch
@@ -255,7 +255,9 @@ class TestSynergyHT(AnyioTestBase):
     device, io = self.device, self.io
     transcript = setup_events()
     if failure == "model":
-      transcript[1]["hex"] = bytes.fromhex(transcript[1]["hex"]).replace(b"7090202", b"7310001").hex()
+      transcript[1]["hex"] = (
+        bytes.fromhex(transcript[1]["hex"]).replace(b"7090202", b"7310001").hex()
+      )
     elif failure in ("rdop22", "capability"):
       index = 7 if failure == "rdop22" else 11
       raw = bytes.fromhex(transcript[index]["hex"])
@@ -531,9 +533,7 @@ class TestSynergyHT(AnyioTestBase):
     "outcome,shake_duration",
     [("complete", 0), ("cancel", 0), ("timeout", 0), ("complete", 10), ("cancel", 10)],
   )
-  async def test_measurement_owns_connection_until_result_or_failure(
-    self, outcome, shake_duration
-  ):
+  async def test_measurement_owns_connection_until_result_or_failure(self, outcome, shake_duration):
     device, io = self.device, self.io
     read = SHAKING["read"] if shake_duration else FIXTURES["reads"][0]
     transcript = read["events"] + events(("tx", b"h"), ("rx", b"\x062370000\x03"))

@@ -1,7 +1,7 @@
 """Offline protocol regressions; no reader connection is opened."""
 
-from contextlib import asynccontextmanager
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 from unittest.mock import call, create_autospec

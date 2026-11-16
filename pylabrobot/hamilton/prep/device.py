@@ -139,6 +139,7 @@ class PrepDevice(Resource, HasLifespan):
     for spot in self.deck.spots:
       if spot.location is not None:
         spot.location = spot.location + offset
+
   # -- what the device carries ------------------------------------------------------------
   # Read through: they do not exist until setup has run.
 

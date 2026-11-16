@@ -84,9 +84,7 @@ class _Device:
 
 
 def _probe(device: _Device, spots: List[TipSpot], channels: List[int]) -> Dict[str, bool]:
-  return anyio.run(
-    lambda: probe_tip_presence_via_pickup(spots, channels, **device.kwargs())
-  )
+  return anyio.run(lambda: probe_tip_presence_via_pickup(spots, channels, **device.kwargs()))
 
 
 def _inventory(device: _Device, spots: List[TipSpot], channels: List[int]) -> Dict[str, bool]:

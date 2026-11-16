@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple, Union
 import anyio
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
-from pylabrobot.io.http import HTTP
+from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
@@ -19,6 +19,7 @@ from pylabrobot.opentrons.ot2.pipette import (
 )
 from pylabrobot.opentrons.run import OpentronsRun, RobotOperationLock
 from pylabrobot.opentrons.types import (
+  DoorStatus,
   ModuleInfo,
   MountedPipette,
   RobotInfo,
@@ -109,6 +110,13 @@ class OT2(HasLifespan):
       for pipette in mounted:
         if pipette.name not in _PIPETTE_SPECS:
           raise ValueError(f"Unsupported OT-2 pipette {pipette.name!r} on {pipette.mount}")
+      unfinished = await self.get_unfinished_run()
+      if unfinished is not None:
+        raise RuntimeError(
+          f"The OT-2 holds an unfinished run {unfinished.id} ({unfinished.status}, created "
+          f"{unfinished.created_at}), so it cannot create its own. Stop it with stop_run() or "
+          "the Opentrons App."
+        )
       await anyio.lowlevel.checkpoint()
       with anyio.CancelScope(shield=True):
         receipt = await self._api.create_run()
@@ -158,7 +166,7 @@ class OT2(HasLifespan):
 
   def _require_connected(self) -> None:
     if not self._connected:
-      raise RuntimeError("The OT-2 is not connected; call connect() or setup() first")
+      raise RuntimeError("The OT-2 is not connected; enter its lifespan first")
 
   async def get_health(self) -> RobotInfo:
     """Return a fresh health reading without changing device or run state."""
@@ -180,6 +188,101 @@ class OT2(HasLifespan):
     self._require_connected()
     return await self._api.get_runs()
 
+  async def get_run(self, run_id: str) -> RunInfo:
+    """Read one server run by id, without selecting or stopping it."""
+    self._require_connected()
+    return await self._api.get_run(run_id)
+
+  async def get_unfinished_run(self) -> Optional[RunInfo]:
+    """Return the robot's current run when it is not finished, or None.
+
+    Such a run is left by another client or an earlier session: a script stopped half way, or a
+    protocol loaded or paused in the Opentrons App. The robot creates no other run beside it.
+    """
+    for run in await self.get_runs():
+      if run.current and not run.finished:
+        return run
+    return None
+
+  async def stop_run(self, run_id: str, timeout: Optional[float] = None) -> RunInfo:
+    """Stop a run the robot holds and wait until the robot reports it finished.
+
+    For a run this object did not create, such as the one ``get_unfinished_run`` returns. A run
+    already finished is left as it is. This object's own run is stopped when exiting its lifespan.
+
+    Args:
+      run_id: the run to stop.
+      timeout: how long to wait for it to finish, in s. ``command_timeout`` when None.
+
+    Returns:
+      The run as last read.
+
+    Raises:
+      ValueError: If ``timeout`` is not finite and greater than zero.
+      RuntimeError: If ``run_id`` is this object's own run.
+      OpentronsError: If the robot does not take the stop request.
+      TimeoutError: If the run has not finished within ``timeout``.
+    """
+    wait = self.command_timeout if timeout is None else timeout
+    if not math.isfinite(wait) or wait <= 0:
+      raise ValueError("timeout must be finite and greater than zero")
+    async with self._operation_lock:
+      self._require_connected()
+      if self._run is not None and self._run.id == run_id:
+        raise RuntimeError("This is the OT-2's own run; exit its lifespan to stop it")
+      run = await self._api.get_run(run_id)
+      if run.finished:
+        return run
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self._api.stop_run(run_id)
+        deadline = anyio.current_time() + wait
+        while True:
+          try:
+            run = await self._api.get_run(run_id)
+          except HTTPError as error:
+            if error.status == 404:  # The legacy stop route can delete the run.
+              run = RunInfo(run_id, "stopped")
+              break
+            raise
+          if run.finished:
+            break
+          if anyio.current_time() >= deadline:
+            raise TimeoutError(
+              f"Run {run_id} did not finish within {wait:g} s (status {run.status!r})"
+            )
+          await anyio.sleep(self.command_poll_interval)
+      await anyio.lowlevel.checkpoint()
+      return run
+
+  async def get_rail_lights(self) -> bool:
+    """Read whether the rail lights are on. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_rail_lights()
+
+  async def set_rail_lights(self, on: bool) -> None:
+    """Turn the rail lights on or off. Needs a connection, not a run.
+
+    Args:
+      on: True for on, False for off.
+
+    Raises:
+      TypeError: If ``on`` is not a bool.
+    """
+    if not isinstance(on, bool):
+      raise TypeError(f"on must be a bool, got {on!r}")
+    async with self._operation_lock:
+      self._require_connected()
+      await anyio.lowlevel.checkpoint()
+      with anyio.CancelScope(shield=True):
+        await self._api.set_rail_lights(on)
+      await anyio.lowlevel.checkpoint()
+
+  async def get_door_status(self) -> DoorStatus:
+    """Read the front door's switch. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_door_status()
+
   async def _load_pipettes(self, mounted: Tuple[MountedPipette, ...]) -> None:
     run = self._require_run()
     for pipette in mounted:
@@ -196,7 +299,7 @@ class OT2(HasLifespan):
 
   def _require_run(self) -> OpentronsRun:
     if self._run is None or not self._run.active:
-      raise RuntimeError("The OT-2 is not set up")
+      raise RuntimeError("The OT-2 is not set up; have you entered its lifespan?")
     return self._run
 
   def _require_labware(self) -> LabwareRegistry:
@@ -206,9 +309,13 @@ class OT2(HasLifespan):
     return self._labware
 
   async def home(self) -> None:
-    """Home the gantry and pipette axes."""
+    """Home the gantry and pipette axes.
+
+    Homing is a robot endpoint rather than a run command, so it needs a connection and no run:
+    after ``stop_run``, it brings the robot back to a known position before entering a run lifespan.
+    """
     async with self._operation_lock:
-      self._require_run()
+      self._require_connected()
       await anyio.lowlevel.checkpoint()
       with anyio.CancelScope(shield=True):
         await self._api.home()

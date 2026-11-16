@@ -3807,7 +3807,9 @@ class Pipettes:
           rank = {channel: i for i, channel in enumerate(sorted(batch.channels))}
           results: List[Union[Optional[float], BaseException]] = [None] * len(searches)
 
-          async def _seek_floor_into(idx: int, search: Tuple[int, float, float, float, bool]) -> None:
+          async def _seek_floor_into(
+            idx: int, search: Tuple[int, float, float, float, bool]
+          ) -> None:
             try:
               results[idx] = await self._after(
                 rank[search[0]] * self.ztouch_cascade_interval, seek(*search)
@@ -4625,7 +4627,10 @@ class Pipettes:
         if picked_up[ch]:
           self._mount_tip(ch, tip)
       # What a channel carries moves its Z window, and the device answers the new one.
-      with anyio.CancelScope(shield=True), suppress(Exception):  # in a finally: never mask what went wrong above
+      with (
+        anyio.CancelScope(shield=True),
+        suppress(Exception),
+      ):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
       # Read once the tips are on the model: Z is reported at their bottom.
       await self._record_where_they_stopped()
@@ -4895,7 +4900,10 @@ class Pipettes:
         if released is not None and isinstance(dest, TipSpot) and dest.tracks_tips:
           dest.assign_tip(released)
       # What a channel carries moves its Z window, and the device answers the new one.
-      with anyio.CancelScope(shield=True), suppress(Exception):  # in a finally: never mask what went wrong above
+      with (
+        anyio.CancelScope(shield=True),
+        suppress(Exception),
+      ):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
       # Read once the tips are off the model: Z is reported at the shafts' ends again.
       await self._record_where_they_stopped()
@@ -5140,7 +5148,10 @@ class Pipettes:
         self._release_tip(ch)
     finally:
       # What a channel carries moves its Z window, and the device answers the new one.
-      with anyio.CancelScope(shield=True), suppress(Exception):  # in a finally: never mask what went wrong above
+      with (
+        anyio.CancelScope(shield=True),
+        suppress(Exception),
+      ):  # in a finally: never mask what went wrong above
         await self._record_channel_bounds()
       await self._record_where_they_stopped()
 

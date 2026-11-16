@@ -118,8 +118,20 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
   "docs/user_guide/curiox/curiox-ht2000/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("washer",), ("washer",)
   ),
+  "docs/user_guide/formulatrix/mantis/hello-world.ipynb": NotebookPolicy(
+    "structural-only",
+    True,
+    ("mantis", "viewer", "carousel"),
+    ("carousel", "viewer", "mantis"),
+  ),
   "docs/user_guide/generic/line-barcode-scanner/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("scanner",), ("scanner",)
+  ),
+  "docs/user_guide/gyger/certus_flex/hello-world.ipynb": NotebookPolicy(
+    "structural-only", True, ("certus",), ("certus",)
+  ),
+  "docs/user_guide/hamilton/star/diagnostics/core-gripper-tool-centers.ipynb": NotebookPolicy(
+    "structural-only", True, ("star",), ("star",)
   ),
   "docs/user_guide/high_res/lid-valet/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("valet",), ("valet",)
@@ -141,6 +153,9 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
     True,
     ("stack", "stack_a", "stack_b"),
     ("stack", "stack_b", "stack_a"),
+  ),
+  "docs/user_guide/inheco/odtc/hello-world.ipynb": NotebookPolicy(
+    "structural-only", True, ("odtc",), ("odtc",)
   ),
   "docs/user_guide/inheco/scila/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("scila",), ("scila",)
@@ -189,6 +204,18 @@ LIFECYCLE_NOTEBOOKS: dict[str, NotebookPolicy] = {
   ),
   "docs/user_guide/opentrons/ot2/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("ot2",), ("ot2",)
+  ),
+  "docs/user_guide/paa/kx2/barcode-reader.ipynb": NotebookPolicy(
+    "structural-only", True, ("reader",), ("reader",)
+  ),
+  "docs/user_guide/paa/kx2/continuous-motion.ipynb": NotebookPolicy(
+    "structural-only", True, ("kx2",), ("kx2",)
+  ),
+  "docs/user_guide/paa/kx2/hello-world.ipynb": NotebookPolicy(
+    "structural-only", True, ("kx2",), ("kx2",)
+  ),
+  "docs/user_guide/paa/kx2/proximity-sensor.ipynb": NotebookPolicy(
+    "structural-only", True, ("kx2",), ("kx2",)
   ),
   "docs/user_guide/qinstruments/bioshake/hello-world.ipynb": NotebookPolicy(
     "structural-only", True, ("bs",), ("bs",)
@@ -255,13 +282,17 @@ EXPECTED_RUNTIME_CLASSIFICATIONS: dict[str, RuntimeClass] = {
   "docs/user_guide/byonoy/luminescence_96/led_bar.ipynb": "structural-only",
   "docs/user_guide/cole_parmer/genogrinder/hello-world.ipynb": "structural-only",
   "docs/user_guide/curiox/curiox-ht2000/hello-world.ipynb": "structural-only",
+  "docs/user_guide/formulatrix/mantis/hello-world.ipynb": "structural-only",
   "docs/user_guide/generic/line-barcode-scanner/hello-world.ipynb": "structural-only",
+  "docs/user_guide/gyger/certus_flex/hello-world.ipynb": "structural-only",
+  "docs/user_guide/hamilton/star/diagnostics/core-gripper-tool-centers.ipynb": "structural-only",
   "docs/user_guide/high_res/lid-valet/hello-world.ipynb": "structural-only",
   "docs/user_guide/high_res/sample-storage/ambistore/hello-world.ipynb": "structural-only",
   "docs/user_guide/high_res/sample-storage/steristore/hello-world.ipynb": "structural-only",
   "docs/user_guide/high_res/sample-storage/tundrastore/hello-world.ipynb": "structural-only",
   "docs/user_guide/inheco/cpac/hello-world.ipynb": "structural-only",
   "docs/user_guide/inheco/incubator_shaker/hello-world.ipynb": "structural-only",
+  "docs/user_guide/inheco/odtc/hello-world.ipynb": "structural-only",
   "docs/user_guide/inheco/scila/hello-world.ipynb": "structural-only",
   "docs/user_guide/inheco/thermoshake/hello-world.ipynb": "structural-only",
   "docs/user_guide/kbioscience/kube/hello-world.ipynb": "structural-only",
@@ -282,6 +313,10 @@ EXPECTED_RUNTIME_CLASSIFICATIONS: dict[str, RuntimeClass] = {
   "docs/user_guide/molecular_devices/spectramax/hello-world.ipynb": "structural-only",
   "docs/user_guide/opentrons/flex/hello-world.ipynb": "structural-only",
   "docs/user_guide/opentrons/ot2/hello-world.ipynb": "structural-only",
+  "docs/user_guide/paa/kx2/barcode-reader.ipynb": "structural-only",
+  "docs/user_guide/paa/kx2/continuous-motion.ipynb": "structural-only",
+  "docs/user_guide/paa/kx2/hello-world.ipynb": "structural-only",
+  "docs/user_guide/paa/kx2/proximity-sensor.ipynb": "structural-only",
   "docs/user_guide/qinstruments/bioshake/hello-world.ipynb": "structural-only",
   "docs/user_guide/revvity/celigo/advanced-imaging.ipynb": "structural-only",
   "docs/user_guide/revvity/celigo/components-and-diagnostics.ipynb": "structural-only",
@@ -352,9 +387,24 @@ TASK2_LIFECYCLE_CELL_IDS: dict[str, tuple[str, ...]] = {
     "ht2000-connect-code",
     "ht2000-disconnect-code",
   ),
+  "docs/user_guide/formulatrix/mantis/hello-world.ipynb": (
+    "mantis-09",
+    "mantis-viewer-2",
+    "lc3-setup",
+    "lc3-stop",
+    "mantis-21",
+  ),
   "docs/user_guide/generic/line-barcode-scanner/hello-world.ipynb": (
     "serial-barcode-setup-code",
     "serial-barcode-stop-code",
+  ),
+  "docs/user_guide/gyger/certus_flex/hello-world.ipynb": (
+    "6545532b",
+    "6677e754",
+  ),
+  "docs/user_guide/hamilton/star/diagnostics/core-gripper-tool-centers.ipynb": (
+    "51299903",
+    "star-diagnostics-stop",
   ),
   "docs/user_guide/high_res/lid-valet/hello-world.ipynb": ("connect-code", "teardown-code"),
   "docs/user_guide/high_res/sample-storage/ambistore/hello-world.ipynb": (
@@ -378,6 +428,7 @@ TASK2_LIFECYCLE_CELL_IDS: dict[str, tuple[str, ...]] = {
     "incubator-shaker-multi-interactive-setup",
     "incubator-shaker-interactive-stop",
   ),
+  "docs/user_guide/inheco/odtc/hello-world.ipynb": ("a00c5aac", "8d38a4a9"),
   "docs/user_guide/inheco/scila/hello-world.ipynb": ("z5fcugljbwk", "ebejgue4wyn"),
   "docs/user_guide/inheco/thermoshake/hello-world.ipynb": ("jdb9stxlizk", "18p0yuw8kd3"),
   "docs/user_guide/kbioscience/kube/hello-world.ipynb": (
@@ -425,6 +476,10 @@ TASK2_LIFECYCLE_CELL_IDS: dict[str, tuple[str, ...]] = {
   ),
   "docs/user_guide/opentrons/flex/hello-world.ipynb": ("e436da0d", "20068ed9"),
   "docs/user_guide/opentrons/ot2/hello-world.ipynb": ("ot2-setup", "ot2-stop"),
+  "docs/user_guide/paa/kx2/barcode-reader.ipynb": ("27ce8e67", "0bf89968"),
+  "docs/user_guide/paa/kx2/continuous-motion.ipynb": ("kx2-continuous-connect", "6d320012"),
+  "docs/user_guide/paa/kx2/hello-world.ipynb": ("b156aa4a", "b0324325"),
+  "docs/user_guide/paa/kx2/proximity-sensor.ipynb": ("kx2-proximity-connect", "ad21588a"),
   "docs/user_guide/qinstruments/bioshake/hello-world.ipynb": (
     "bioshake-interactive-setup",
     "bioshake-interactive-stop",
@@ -555,8 +610,17 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
   "docs/user_guide/byonoy/luminescence_96/led_bar.ipynb": (("connect-code", ("reader",)),),
   "docs/user_guide/cole_parmer/genogrinder/hello-world.ipynb": (("gg-connect", ("grinder",)),),
   "docs/user_guide/curiox/curiox-ht2000/hello-world.ipynb": (("ht2000-connect-code", ("washer",)),),
+  "docs/user_guide/formulatrix/mantis/hello-world.ipynb": (
+    ("mantis-09", ("mantis",)),
+    ("mantis-viewer-2", ("viewer",)),
+    ("lc3-setup", ("carousel",)),
+  ),
   "docs/user_guide/generic/line-barcode-scanner/hello-world.ipynb": (
     ("serial-barcode-setup-code", ("scanner",)),
+  ),
+  "docs/user_guide/gyger/certus_flex/hello-world.ipynb": (("6545532b", ("certus",)),),
+  "docs/user_guide/hamilton/star/diagnostics/core-gripper-tool-centers.ipynb": (
+    ("51299903", ("star",)),
   ),
   "docs/user_guide/high_res/lid-valet/hello-world.ipynb": (("connect-code", ("valet",)),),
   "docs/user_guide/high_res/sample-storage/ambistore/hello-world.ipynb": (
@@ -573,6 +637,7 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
     ("incubator-shaker-interactive-setup", ("stack",)),
     ("incubator-shaker-multi-interactive-setup", ("stack_a", "stack_b")),
   ),
+  "docs/user_guide/inheco/odtc/hello-world.ipynb": (("a00c5aac", ("odtc",)),),
   "docs/user_guide/inheco/scila/hello-world.ipynb": (("z5fcugljbwk", ("scila",)),),
   "docs/user_guide/inheco/thermoshake/hello-world.ipynb": (("jdb9stxlizk", ("control_box",)),),
   "docs/user_guide/kbioscience/kube/hello-world.ipynb": (("kube-connect-code", ("sealer",)),),
@@ -602,6 +667,10 @@ DEPRECATED_INTERACTIVE_START_CELLS: dict[str, tuple[tuple[str, tuple[str, ...]],
   ),
   "docs/user_guide/opentrons/flex/hello-world.ipynb": (("e436da0d", ("flex",)),),
   "docs/user_guide/opentrons/ot2/hello-world.ipynb": (("ot2-setup", ("ot2",)),),
+  "docs/user_guide/paa/kx2/barcode-reader.ipynb": (("27ce8e67", ("reader",)),),
+  "docs/user_guide/paa/kx2/continuous-motion.ipynb": (("kx2-continuous-connect", ("kx2",)),),
+  "docs/user_guide/paa/kx2/hello-world.ipynb": (("b156aa4a", ("kx2",)),),
+  "docs/user_guide/paa/kx2/proximity-sensor.ipynb": (("kx2-proximity-connect", ("kx2",)),),
   "docs/user_guide/qinstruments/bioshake/hello-world.ipynb": (
     ("bioshake-interactive-setup", ("bs",)),
   ),
@@ -901,8 +970,8 @@ def _definition_names(tree: ast.AST) -> set[str]:
   return names
 
 
-def test_lifecycle_notebook_inventory_has_55_explicit_paths() -> None:
-  assert len(LIFECYCLE_NOTEBOOKS) == 57
+def test_lifecycle_notebook_inventory_has_65_explicit_paths() -> None:
+  assert len(LIFECYCLE_NOTEBOOKS) == 65
   tracked = set(_tracked_notebooks())
   assert all(path.endswith(".ipynb") for path in LIFECYCLE_NOTEBOOKS)
   assert set(LIFECYCLE_NOTEBOOKS) <= tracked
@@ -923,7 +992,7 @@ def _connection_example_source() -> str:
     if "class Connection(HasLifespan):" in source
   ]
   assert len(examples) == 1
-  return examples[0]
+  return str(examples[0])
 
 
 def _assert_connection_example_valid(source: str) -> None:
@@ -1203,7 +1272,7 @@ def test_notebooks_pin_expected_backend_source_and_constructor(
 
 
 def test_runtime_classifications_match_closed_inventory() -> None:
-  assert len(EXPECTED_RUNTIME_CLASSIFICATIONS) == 57
+  assert len(EXPECTED_RUNTIME_CLASSIFICATIONS) == 65
   assert {
     path: policy.runtime for path, policy in LIFECYCLE_NOTEBOOKS.items()
   } == EXPECTED_RUNTIME_CLASSIFICATIONS

@@ -3,7 +3,7 @@ import logging
 import ssl
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import anyio
 from anyio.abc import ByteStream
@@ -195,6 +195,15 @@ class _SocketBase(IOBase):
     """Wrapper around a byte stream send with lock and IO logging.
     Does not retry on timeouts.
     """
+    await self._write_with_dispatch(data, timeout=timeout)
+
+  async def _write_with_dispatch(
+    self,
+    data: bytes,
+    timeout: Optional[float] = None,
+    on_dispatch: Optional[Callable[[], None]] = None,
+  ) -> None:
+    """Write to the stream, invoking ``on_dispatch`` immediately before sending."""
     timeout = self._write_timeout if timeout is None else timeout
     async with self._write_lock:
       self._require_connection_usable()
@@ -214,8 +223,11 @@ class _SocketBase(IOBase):
       )
       try:
         with anyio.CancelScope(shield=True):
+          if on_dispatch is not None:
+            on_dispatch()
           with anyio.fail_after(timeout):
             await stream.send(data)
+        await anyio.lowlevel.checkpoint_if_cancelled()
         return
       except TimeoutError as exc:
         self._mark_connection_lost()
@@ -474,6 +486,9 @@ class SocketValidator(Socket):
     """Validate write command against captured data."""
     self._require_connection_usable()
     await anyio.lowlevel.checkpoint()
+    on_dispatch = kwargs.get("on_dispatch")
+    if on_dispatch is not None:
+      on_dispatch()
     next_command = SocketCommand(**self.cr.next_command())
     if not (
       next_command.module == "socket"

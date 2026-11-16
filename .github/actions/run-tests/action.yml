@@ -24,7 +24,14 @@ runs:
       shell: bash
     - name: Install BTX OCR system dependency
       if: ${{ inputs.extra == 'btx' || inputs.extra == 'all' }}
-      run: sudo apt-get install -y tesseract-ocr
+      # Its OCR tests skip without it, so only the `btx` job, which tests that extra, fails on a
+      # missing install; the `all` jobs warn and run the rest.
+      run: |
+        sudo apt-get update || true
+        if ! sudo apt-get install -y tesseract-ocr; then
+          if [ "${{ inputs.extra }}" = "btx" ]; then exit 1; fi
+          echo "::warning::tesseract-ocr could not be installed; its OCR tests are skipped"
+        fi
       shell: bash
     - name: Set up Python
       uses: actions/setup-python@v6

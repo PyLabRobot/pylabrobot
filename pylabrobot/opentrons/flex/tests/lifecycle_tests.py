@@ -1,7 +1,7 @@
 """Offline regression coverage for Flex lifecycle and operation ownership."""
 
-from contextlib import AbstractAsyncContextManager
 import logging
+from contextlib import AbstractAsyncContextManager
 from typing import Any, Optional
 from unittest.mock import AsyncMock, call, patch
 

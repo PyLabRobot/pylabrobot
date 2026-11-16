@@ -1,5 +1,5 @@
-from typing import Optional
 from functools import partial
+from typing import Optional
 
 from pylabrobot.concurrency import attempt_in_order
 from pylabrobot.legacy.shaking import Shaker

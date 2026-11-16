@@ -14,6 +14,8 @@ else:
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.legacy.pumps import PumpArray
+from pylabrobot.legacy.pumps import pump as pump_module
+from pylabrobot.legacy.pumps import pumparray as pumparray_module
 from pylabrobot.legacy.pumps.backend import PumpArrayBackend, PumpBackend
 from pylabrobot.legacy.pumps.calibration import PumpCalibration
 from pylabrobot.legacy.pumps.chatterbox import (
@@ -22,8 +24,6 @@ from pylabrobot.legacy.pumps.chatterbox import (
 )
 from pylabrobot.legacy.pumps.errors import NotCalibratedError
 from pylabrobot.legacy.pumps.pump import Pump
-from pylabrobot.legacy.pumps import pump as pump_module
-from pylabrobot.legacy.pumps import pumparray as pumparray_module
 from pylabrobot.testing.concurrency import AnyioTestBase
 
 

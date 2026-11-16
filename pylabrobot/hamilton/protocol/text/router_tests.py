@@ -1,6 +1,8 @@
+import logging
 import sys
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Callable, Optional, Union, cast
+from typing import Any, AsyncIterator, Callable, Optional, Union, cast
+from unittest import mock
 
 import anyio
 import pytest
@@ -18,6 +20,8 @@ from pylabrobot.testing.mock_io import MockIO
 
 if sys.version_info < (3, 11):
   from exceptiongroup import BaseExceptionGroup
+
+ROUTER_LOGGER = "pylabrobot.hamilton.protocol.text.router"
 
 
 class RouterIO(MockIO):
@@ -125,12 +129,17 @@ def _parse_id(response: str) -> Optional[int]:
   return int(value)
 
 
+def _is_spontaneous(line: str) -> bool:
+  return line[2:4] == "__"
+
+
 def _new_router(
   io: RouterIO,
   *,
   raise_for_error: Callable[[str], None] = lambda response: None,
   packet_read_timeout: float = 0.01,
   read_timeout: float = 1,
+  is_spontaneous: Optional[Callable[[str], bool]] = None,
 ) -> ReplyRouter:
   """Build a router using the test protocol callbacks."""
   return ReplyRouter(
@@ -141,6 +150,7 @@ def _new_router(
     packet_read_timeout=packet_read_timeout,
     read_timeout=read_timeout,
     reader=USBReplyReader(cast(USB, io)),
+    is_spontaneous=is_spontaneous,
   )
 
 
@@ -453,6 +463,75 @@ class TestWaiterLifecycle(AnyioTestBase):
 
       io.write.side_effect = reply_during_write
       assert await router.send("C0AA", None) == "C0AAfresh"
+
+  async def test_pre_dispatch_cancelled_idless_waiter_on_tcp_does_not_poison_successor(
+    self,
+  ) -> None:
+    from pylabrobot.hamilton.transport.text_tcp.io import HamiltonTextTCP
+
+    sent: list[bytes] = []
+
+    class FakeStream(anyio.abc.ByteStream):
+      def __init__(self) -> None:
+        self._tx, self._rx = anyio.create_memory_object_stream[Optional[bytes]](float("inf"))
+
+      def feed(self, data: bytes) -> None:
+        self._tx.send_nowait(data)
+
+      async def receive(self, max_bytes: int = 65536) -> bytes:
+        del max_bytes
+        item = await self._rx.receive()
+        if item is None:
+          raise anyio.EndOfStream
+        return item
+
+      async def send(self, item: bytes) -> None:
+        sent.append(bytes(item))
+
+      async def send_eof(self) -> None:
+        pass
+
+      async def aclose(self) -> None:
+        await self._tx.aclose()
+        await self._rx.aclose()
+
+    stream = FakeStream()
+
+    async def fake_connect_tcp(*args: Any, **kwargs: Any) -> FakeStream:
+      del args, kwargs
+      return stream
+
+    registered = anyio.Event()
+
+    class NotifyRegisterRouter(ReplyRouter):
+      def _register(self, id_: Optional[int], cmd: str) -> HamiltonTask:
+        task = super()._register(id_, cmd)
+        registered.set()
+        return task
+
+    with mock.patch("pylabrobot.io.socket.anyio.connect_tcp", side_effect=fake_connect_tcp):
+      tcp_io = HamiltonTextTCP("127.0.0.1", 24652)
+      async with tcp_io.lifespan():
+        router = NotifyRegisterRouter(tcp_io, 2, _parse_id, lambda response: None)
+        async with router.lifespan():
+          cancel_scope = anyio.CancelScope()
+
+          async def blocked_send() -> None:
+            with cancel_scope:
+              await router.send("C0AA", None)
+
+          async with tcp_io._socket._write_lock:
+            async with anyio.create_task_group() as tg:
+              tg.start_soon(blocked_send)
+              await registered.wait()
+              await anyio.sleep(0)
+              cancel_scope.cancel()
+          assert cancel_scope.cancelled_caught
+          assert sent == []
+          assert router._waiting_tasks_by_command == {}
+          stream.feed(b"C0AAfresh\r\n")
+          with anyio.fail_after(1):
+            assert await router.send("C0AA", None) == "C0AAfresh"
 
   async def test_pre_dispatch_failed_idless_waiter_does_not_poison_successor(self) -> None:
     io = RouterIO()
@@ -775,3 +854,144 @@ class TestReaderOwnership(AnyioTestBase):
         await anyio.sleep_forever()
 
     assert any(isinstance(error, UnicodeDecodeError) for error in error_info.value.exceptions)
+
+
+class TestSpontaneousMessages(AnyioTestBase):
+  """A line the machine sent unasked is discarded, and never answers a command."""
+
+  SPONTANEOUS = b'C0__id0sm"Spontan Message"'
+
+  async def test_a_spontaneous_line_does_not_answer_the_waiting_command(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
+    io = RouterIO()
+    router = _new_router(io, is_spontaneous=_is_spontaneous)
+    results: list[Optional[str]] = []
+
+    async def send() -> None:
+      results.append(await router.send("C0QWid0007", id_=7))
+
+    with caplog.at_level(logging.WARNING, logger=ROUTER_LOGGER):
+      async with _running_router(router) as tg:
+        tg.start_soon(send)
+        await _wait_until(lambda: 7 in router._waiting_tasks_by_id)
+        await io.publish(self.SPONTANEOUS)
+        await _wait_until(lambda: io.boundary_reads >= 2)
+        assert results == []
+        assert 7 in router._waiting_tasks_by_id
+        await io.publish(b"C0QWid0007er00/00qw1")
+        await _wait_until(lambda: len(results) == 1)
+    assert results == ["C0QWid0007er00/00qw1"]
+    assert caplog.records == []
+
+  async def test_a_spontaneous_line_is_discarded_before_its_id_is_read(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
+    io = RouterIO()
+    router = _new_router(io, is_spontaneous=_is_spontaneous)
+    results: list[Optional[str]] = []
+
+    async def send() -> None:
+      results.append(await router.send("C0QWid0008", id_=8))
+
+    # `id0s` is not an id `_parse_id` can read, which would be logged as WARNING if tried.
+    with caplog.at_level(logging.DEBUG, logger=ROUTER_LOGGER):
+      async with _running_router(router) as tg:
+        tg.start_soon(send)
+        await _wait_until(lambda: 8 in router._waiting_tasks_by_id)
+        await io.publish(self.SPONTANEOUS)
+        await io.publish(b"C0QWid0008er00/00qw1")
+        await _wait_until(lambda: len(results) == 1)
+    assert [record.levelno for record in caplog.records] == [logging.DEBUG]
+    assert "discarded spontaneous message" in caplog.records[0].getMessage()
+
+  async def test_a_spontaneous_line_on_an_idle_link_is_discarded(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
+    io = RouterIO()
+    router = _new_router(io, is_spontaneous=_is_spontaneous)
+
+    with caplog.at_level(logging.WARNING, logger=ROUTER_LOGGER):
+      async with _running_router(router) as tg:
+        await io.publish(self.SPONTANEOUS)
+        await _wait_until(lambda: io.boundary_reads >= 2)
+        results: list[Optional[str]] = []
+
+        async def send() -> None:
+          results.append(await router.send("C0QWid0008", id_=8))
+
+        tg.start_soon(send)
+        await _wait_until(lambda: 8 in router._waiting_tasks_by_id)
+        await io.publish(b"C0QWid0008er00/00qw1")
+        await _wait_until(lambda: len(results) == 1)
+        assert results == ["C0QWid0008er00/00qw1"]
+    assert caplog.records == []
+
+  async def test_without_a_filter_such_a_line_is_not_treated_specially(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
+    io = RouterIO()
+    router = _new_router(io)
+    results: list[Optional[str]] = []
+
+    async def send() -> None:
+      results.append(await router.send("C0QWid0009", id_=9))
+
+    with caplog.at_level(logging.WARNING, logger=ROUTER_LOGGER):
+      async with _running_router(router) as tg:
+        tg.start_soon(send)
+        await _wait_until(lambda: 9 in router._waiting_tasks_by_id)
+        await io.publish(self.SPONTANEOUS)
+        await io.publish(b"C0QWid0009er00/00qw1")
+        await _wait_until(lambda: len(results) == 1)
+    assert any("Could not parse response" in r.getMessage() for r in caplog.records)
+
+
+class TestReplyReaderBinding:
+  """ReplyRouter requires a framed ReplyReader, accepting IOBase transports that provide one."""
+
+  def test_unframed_io_without_reader_is_rejected(self) -> None:
+    io = RouterIO()
+    with pytest.raises(ValueError, match="A framed reply reader is required"):
+      ReplyRouter(
+        io=io,
+        module_id_length=2,
+        parse_id=_parse_id,
+        raise_for_error=lambda response: None,
+      )
+
+  def test_framed_io_binds_itself_as_reader(self) -> None:
+    class FramedIO(RouterIO):
+      async def read_reply(self) -> bytes:
+        return b""
+
+    io = FramedIO()
+    router = ReplyRouter(
+      io=io,
+      module_id_length=2,
+      parse_id=_parse_id,
+      raise_for_error=lambda response: None,
+    )
+    assert router.reader is io
+
+
+class TestNextId:
+  """Command ids run from 1 to 9999 and never take the id a machine's own messages carry."""
+
+  def test_the_first_id_is_1(self) -> None:
+    assert _new_router(RouterIO()).next_id() == 1
+
+  def test_ids_wrap_from_9999_to_1_and_skip_0(self) -> None:
+    router = _new_router(RouterIO())
+    router.id_ = 9998
+    assert [router.next_id() for _ in range(3)] == [9999, 1, 2]
+
+  def test_a_full_cycle_never_yields_0(self) -> None:
+    router = _new_router(RouterIO())
+    ids = [router.next_id() for _ in range(20000)]
+    assert 0 not in ids
+    assert set(ids) == set(range(1, 10000))

@@ -85,6 +85,7 @@ class TestRunCycles(AnyioTestBase):
     assert "cycle 3 of 5 skipped," in messages["WARNING"][1]
     assert len(messages["ERROR"]) == 1  # progress_callback raised; the run went on
     import re
+
     assert re.search(
       r"cycle 1 of 5 took 0\.\d s of its 0\.2 s cycle time", " ".join(messages["DEBUG"])
     )
@@ -130,12 +131,8 @@ class TestRunCycles(AnyioTestBase):
       return cycle_function
 
     async with anyio.create_task_group() as tg:
-      tg.start_soon(
-        lambda: run_cycles(cycle_function_for("a", 0.02), cycle_time=0.02, cycles=4)
-      )
-      tg.start_soon(
-        lambda: run_cycles(cycle_function_for("b", 0.03), cycle_time=0.03, cycles=3)
-      )
+      tg.start_soon(lambda: run_cycles(cycle_function_for("a", 0.02), cycle_time=0.02, cycles=4))
+      tg.start_soon(lambda: run_cycles(cycle_function_for("b", 0.03), cycle_time=0.03, cycles=3))
     assert seen == {"a": [0, 1, 2, 3], "b": [0, 1, 2]}
 
   async def test_invalid_arguments_raise(self):

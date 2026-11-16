@@ -5,6 +5,8 @@ from pylabrobot.io.command_line import CommandLineTransport, CommandLineValidato
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
+from pylabrobot.io.socket import Socket, SocketValidator
+from pylabrobot.io.udp import UDP, UDPValidator
 from pylabrobot.io.usb import USB, USBValidator
 
 cr: Optional[CaptureReader] = None
@@ -29,12 +31,15 @@ def validate(capture_file: str):
       Serial: SerialValidator,
       FTDI: FTDIValidator,
       HID: HIDValidator,
+      Socket: SocketValidator,
+      UDP: UDPValidator,
       CommandLineTransport: CommandLineValidator,
     }
     if not hasattr(obj, "io"):
       return False
     if obj.io.__class__ in io2v:
-      obj.io = io2v[obj.io.__class__](**obj.io.serialize(), cr=cr)
+      params = {k: v for k, v in obj.io.serialize().items() if k != "type"}
+      obj.io = io2v[obj.io.__class__](**params, cr=cr)
     elif obj.io.__class__ in io2v.values():
       obj.io.cr = cr
     else:

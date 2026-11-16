@@ -126,9 +126,7 @@ class TestLuminescence(AnyioTestBase):
   async def test_the_defaults_are_the_ground_truth(self):
     io = FakeFTDI()
     await read(io)
-    assert ftdi_extract_payload(io.written[1]) == with_fields(
-      LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES
-    )
+    assert ftdi_extract_payload(io.written[1]) == with_fields(LUMINESCENCE_RUN_FRAME, NOMINAL_EDGES)
 
   async def test_the_result_carries_the_focal_height_read_at(self):
     assert (await read(FakeFTDI())).focal_height == GROUND_TRUTH_FOCAL_HEIGHT

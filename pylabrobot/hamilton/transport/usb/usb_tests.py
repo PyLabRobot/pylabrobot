@@ -7,9 +7,9 @@ import pytest
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, use_event_bus
 from pylabrobot.hamilton.protocol.text.router import ReplyRouter, USBReplyReader
-from pylabrobot.io.boundary import BoundaryRead
 from pylabrobot.hamilton.transport.usb import usb as hamilton_usb_module
 from pylabrobot.hamilton.transport.usb.usb import HamiltonUSBDriver
+from pylabrobot.io.boundary import BoundaryRead
 from pylabrobot.io.usb import USB
 from pylabrobot.testing.concurrency import AnyioTestBase
 from pylabrobot.testing.mock_io import MockIO

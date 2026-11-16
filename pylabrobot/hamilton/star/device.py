@@ -8,6 +8,7 @@ from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
+from pylabrobot.hamilton.star.driver.features.diagnostics import Diagnostics
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP
@@ -333,6 +334,11 @@ class STARDevice(Resource, HasLifespan):
   def autoload(self) -> Optional[Autoload]:
     """The autoload, on a device that has one."""
     return self.driver.autoload
+
+  @property
+  def diagnostics(self) -> Optional[Diagnostics]:
+    """The diagnostics, on a device whose channels can carry the CoRe gripper tools."""
+    return self.driver.diagnostics
 
   # -- session ---------------------------------------------------------------
 

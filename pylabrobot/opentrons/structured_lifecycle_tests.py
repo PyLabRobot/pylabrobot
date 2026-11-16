@@ -39,9 +39,7 @@ class RobotHTTP(HTTP):
       return {"left": {"name": None}, "right": {"name": None}}
     if path == "/deck_configuration":
       return {
-        "data": {
-          "cutoutFixtures": [{"cutoutId": "cutoutA3", "cutoutFixtureId": "trashBinAdapter"}]
-        }
+        "data": {"cutoutFixtures": [{"cutoutId": "cutoutA3", "cutoutFixtureId": "trashBinAdapter"}]}
       }
     if path == "/instruments":
       return {
@@ -55,6 +53,8 @@ class RobotHTTP(HTTP):
           }
         ]
       }
+    if path == "/runs" and method == "GET":
+      return {"data": []}
     if path == "/runs" and method == "POST":
       return {"data": {"id": "run"}}
     if path == "/runs/run/actions":

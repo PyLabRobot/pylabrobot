@@ -5,7 +5,9 @@ order rather than send order. A reader task owned by the router lifespan continu
 the link and hands each reply to its waiter; commands register before writing so a
 fast reply cannot arrive before its waiter exists. Replies with an ID match that
 ID; replies without one match the module and command prefix in send order.
-Unmatched replies are dropped rather than assigned to another command.
+Spontaneous unasked messages matched by ``is_spontaneous`` are discarded before ID
+parsing so they never answer a command, and unmatched replies are dropped rather
+than assigned to another command.
 
 The link can be any ``pylabrobot.io`` transport: STAR and Vantage use USB, a
 heater shaker box uses USB, and STAR V uses a socket. The router borrows that
@@ -19,12 +21,13 @@ import logging
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable, Deque, Dict, Optional, Protocol
+from typing import AsyncIterator, Callable, Deque, Dict, Optional, Protocol, runtime_checkable
 
 import anyio
 
-from pylabrobot.hamilton.protocol.text.framing import read_id
 from pylabrobot.concurrency import AsyncExitStackWithShielding
+from pylabrobot.hamilton.protocol.text.framing import read_id
+from pylabrobot.hamilton.transport.text_tcp.io import HamiltonTextTCP
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.usb import USB
 
@@ -43,6 +46,7 @@ class HamiltonTask:
   abandoned: bool = False
 
 
+@runtime_checkable
 class ReplyReader(Protocol):
   """Produce one complete protocol reply from a transport-specific boundary."""
 
@@ -92,16 +96,21 @@ class ReplyRouter:
     packet_read_timeout: float = 3,
     read_timeout: float = 30,
     reader: Optional[ReplyReader] = None,
-  ):
+    is_spontaneous: Optional[Callable[[str], bool]] = None,
+  ) -> None:
     self.io = io
     self.module_id_length = module_id_length
     self._parse_id = parse_id
     self._raise_for_error = raise_for_error
+    self._is_spontaneous = is_spontaneous
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
     if reader is None:
-      raise ValueError("A framed reply reader is required")
-    self.reader = reader
+      if isinstance(io, ReplyReader):
+        reader = io
+      else:
+        raise ValueError("A framed reply reader is required")
+    self.reader: ReplyReader = reader
     self.id_ = 0
     self._active = False
     self._stopping = False
@@ -109,15 +118,19 @@ class ReplyRouter:
     self._waiting_tasks_by_command: Dict[str, Deque[HamiltonTask]] = {}
 
   def next_id(self) -> int:
-    """Generate a command ID modulo 10000."""
-    self.id_ += 1
-    return self.id_ % 10000
+    """Continuously generate ids 1 <= x <= 9999.
+
+    Id 0 is never produced: a machine sends the messages it was not asked for with id 0, so a
+    command that carried it could be confused with one.
+    """
+    self.id_ = self.id_ % 9999 + 1
+    return self.id_
 
   async def send(
     self,
     cmd: str,
     id_: Optional[int],
-    write_timeout: Optional[int] = None,
+    write_timeout: Optional[float] = None,
     read_timeout: Optional[float] = None,
     wait: bool = True,
   ) -> Optional[str]:
@@ -140,7 +153,7 @@ class ReplyRouter:
 
     try:
       await anyio.lowlevel.checkpoint_if_cancelled()
-      if isinstance(self.io, USB):
+      if isinstance(self.io, (USB, HamiltonTextTCP)):
         await self.io.write(cmd.encode(), timeout=write_timeout, on_dispatch=mark_dispatch)
       else:
         dispatch_possible = True
@@ -170,7 +183,7 @@ class ReplyRouter:
   async def send_raw(
     self,
     command: str,
-    write_timeout: Optional[int] = None,
+    write_timeout: Optional[float] = None,
     read_timeout: Optional[float] = None,
     wait: bool = True,
   ) -> Optional[str]:
@@ -249,6 +262,11 @@ class ReplyRouter:
       with reader_scope:
         while True:
           response = (await self.reader.read_reply()).decode("utf-8")
+          if response == "":
+            continue
+          if self._is_spontaneous is not None and self._is_spontaneous(response):
+            logger.debug("discarded spontaneous message: %s", response)
+            continue
           try:
             response_id = self._parse_id(response)
           except ValueError as error:

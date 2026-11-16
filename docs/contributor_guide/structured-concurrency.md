@@ -297,7 +297,7 @@ The supported operation-scope inventory is explicit rather than inferred from me
   inventory is `InhecoIncubatorShakerUnit` and `IncubatorShakerStack`, keyed by physical stack unit.
 - `freedrive(...)` is available on legacy `ExperimentalSCARA`, including its
   `PreciseFlex3400Backend` and `PreciseFlex400Backend` configurations through the frontend, and on
-  v1 `PreciseFlex` and `XArm6`.
+  v1 `KX2`, `PreciseFlex`, and `XArm6`.
 - `objective_maintenance(...)` is available on v1 `Pico` and legacy `ExperimentalPicoBackend`.
 - `acquisition()` is owned by v1 `AravisCamera` and delegated by `CytationMicroscope`. Legacy
   acquisition is available on `CytationBackend` and `Cytation5Backend` around their existing PySpin
@@ -379,7 +379,7 @@ balanced deprecated asyncio/Jupyter compatibility sessions.
 
 ## Use shared I/O transports
 
-Enter Serial, FTDI, USB, HID, Socket, and command-line transports with `async with`. A driver that
+Enter Serial, FTDI, USB, HID, Socket, UDP, and command-line transports with `async with`. A driver that
 owns a transport must enter its lifespan through the driver's exit stack so the transport cannot
 outlive the driver:
 
@@ -425,9 +425,10 @@ blocking devices are separate from these caller-owned deadlines.
 | `USB` (`ReconnectableConnectionIO`) | One selected device handle and endpoints between explicit reconnects; hard transfer failures invalidate it. Packet polling timeouts do not. | Reads and writes have independent locks and can progress concurrently; calls in each direction serialize. |
 | `HID` (`ContinuousConnectionIO`) | One HID handle; hard report failure invalidates the entry. | HIDAPI calls share one affinity-preserving worker. |
 | `Socket` (`ReconnectableConnectionIO`) | One TCP/TLS stream between explicit reconnects; observed EOF or stream failure blocks I/O until reconnect or a new lifespan. | Per-direction locking does not make a driver's state coherent across reconnection. |
+| `UDP` (`ReconnectableConnectionIO`) | One peer-filtered UDP socket between explicit reconnects; observed socket failure blocks I/O until reconnect or a new lifespan. | Reads and writes have independent locks; datagram delivery and protocol correlation belong to the driver. |
 | `FTDI` (`ReconnectableConnectionIO`) | One FTDI handle between explicit reconnects; observed hard I/O failure blocks further operations until reconnect or a new lifespan. `usb_reset()` and buffer purges can disrupt device state or observed events without replacing the handle. | FTDI worker calls are serialized; multi-call protocol transactions belong to the driver. |
 | `HTTP`, `CommandLineTransport` | These are `HasLifespan` objects, not `IOBase`: HTTP connects per request, and the command-line transport launches a process per invocation. | HTTP serializes requests; command-line invocations serialize. No connection identity spans calls. |
-| SiLA/gRPC and vendor SDK integrations | Their sessions, callbacks, and possible remote locks have protocol-specific contracts. UDP/mDNS in this repository is discovery, not a lasting connection. | Determine ordering at the integration or driver boundary. |
+| SiLA/gRPC and vendor SDK integrations | Their sessions, callbacks, and possible remote locks have protocol-specific contracts. Broadcast/mDNS discovery in this repository is per-query, not a lasting connection. | Determine ordering at the integration or driver boundary. |
 
 The guarantee assumes the driver exclusively controls the transport's public API: another caller
 invoking `reconnect()` can invalidate a driver's assumptions without changing its lifespan.

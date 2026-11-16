@@ -59,7 +59,9 @@ class TestGating(AnyioTestBase):
     return driver
 
   async def test_a_fitted_temperature_controller_is_built(self):
-    assert isinstance((await self.discover_with(True)).temperature_controller, TemperatureController)
+    assert isinstance(
+      (await self.discover_with(True)).temperature_controller, TemperatureController
+    )
 
   async def test_no_temperature_controller_is_built(self):
     assert (await self.discover_with(False)).temperature_controller is None

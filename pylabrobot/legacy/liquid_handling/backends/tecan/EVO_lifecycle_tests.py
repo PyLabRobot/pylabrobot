@@ -5,8 +5,8 @@ import pytest
 
 from pylabrobot.concurrency import AsyncExitStackWithShielding
 from pylabrobot.legacy.liquid_handling import LiquidHandler
-from pylabrobot.legacy.liquid_handling.backends.tecan.EVO_backend import EVOBackend
 from pylabrobot.legacy.liquid_handling.backends.tecan.errors import TecanError
+from pylabrobot.legacy.liquid_handling.backends.tecan.EVO_backend import EVOBackend
 from pylabrobot.legacy.tip_tracker import TipTracker
 from pylabrobot.resources import Deck, EVO150Deck
 from pylabrobot.testing import AnyioTestBase

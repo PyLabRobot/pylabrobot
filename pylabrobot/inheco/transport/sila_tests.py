@@ -1,716 +1,466 @@
-"""Software-only lifecycle tests for the Inheco SiLA transport."""
+"""SiLA acceptance, callback, fault, timeout, and lifespan behavior at the HTTP boundary."""
 
-import datetime
-import socket
+import inspect
+import logging
 import threading
-import urllib.request
 import xml.etree.ElementTree as ET
-from types import TracebackType
-from typing import Any, Optional, Type, cast
+from typing import Any, Callable, Mapping, Optional
 from unittest import mock
 
 import anyio
 import pytest
 
-from pylabrobot.concurrency import HasLifespan
-from pylabrobot.inheco.scila.soap import soap_encode
+from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
+from pylabrobot.inheco.soap import soap_body_payload, soap_encode
 from pylabrobot.inheco.transport import sila as sila_module
 from pylabrobot.inheco.transport.sila import (
   InhecoSiLAInterface,
-  SOAP_RESPONSE_ResponseEventResponse,
+  SiLAError,
+  get_params,
+  required_text,
 )
+from pylabrobot.io.http import HTTPResponse
+from pylabrobot.io.http_server import HTTPServer
 from pylabrobot.testing.concurrency import AnyioTestBase
 
 
-def _response_event(request_id: int, *, return_code: int = 3, message: str = "Success") -> bytes:
-  """Build one asynchronous SiLA callback body."""
-  return cast(
-    bytes,
-    soap_encode(
-      "ResponseEvent",
-      {
-        "requestId": request_id,
-        "returnValue": {"returnCode": return_code, "message": message},
-        "responseData": '<Parameters><Parameter name="value"><Int32>42</Int32></Parameter></Parameters>',
-      },
-      method_ns="http://sila.coop",
-    ).encode("utf-8"),
-  )
-
-
-def _immediate_response(command: str) -> bytes:
-  """Build one successful immediate SiLA command response."""
-  return cast(
-    bytes,
-    soap_encode(
-      f"{command}Response",
-      {f"{command}Result": {"returnCode": 1, "message": "Success"}},
-      method_ns="http://sila.coop",
-    ).encode("utf-8"),
-  )
-
-
-def _accepted_response(command: str, duration: object = datetime.timedelta(seconds=1)) -> bytes:
-  """Build one immediate response accepting an asynchronous command."""
-  result = {"returnCode": 2, "message": "Accepted"}
+def _response(
+  command: str,
+  code: int = 2,
+  message: str = "Success",
+  duration: Optional[str] = "PT10S",
+) -> HTTPResponse:
+  result: dict[str, Any] = {"returnCode": code, "message": message}
   if duration is not None:
     result["duration"] = duration
-  return cast(
-    bytes,
+  return HTTPResponse(
+    200,
     soap_encode(
       f"{command}Response",
       {f"{command}Result": result},
       method_ns="http://sila.coop",
-    ).encode("utf-8"),
+    ).encode(),
+    {},
   )
 
 
-async def _post_callback(port: int, body: bytes) -> bytes:
-  """POST a callback without blocking the asynchronous test runner."""
+def _event(
+  request_id: int,
+  code: int = 3,
+  name: str = "ResponseEvent",
+  data: str = "<ResponseData/>",
+) -> bytes:
+  return soap_encode(
+    name,
+    {
+      "requestId": request_id,
+      "returnValue": {"returnCode": code, "message": "device message"},
+      "responseData": data,
+    },
+    method_ns="http://sila.coop",
+  ).encode()
 
-  def post() -> bytes:
-    request = urllib.request.Request(
-      f"http://127.0.0.1:{port}/callback?source=test", data=body, method="POST"
-    )
-    with urllib.request.urlopen(request, timeout=2) as response:
-      return cast(bytes, response.read())
 
-  return cast(bytes, await anyio.to_thread.run_sync(post))
+class _FakeHTTPServer(HasLifespan):
+  """Software double for HTTPServer within InhecoSiLAInterface unit tests."""
 
-
-class _BlockingResponse:
-  """Context-managed response returned by the blocking machine fake."""
-
-  def __init__(self, body: bytes) -> None:
-    self._body = body
-
-  def __enter__(self) -> "_BlockingResponse":
-    return self
-
-  def __exit__(
+  def __init__(
     self,
-    exception_type: Optional[Type[BaseException]],
-    exception: Optional[BaseException],
-    traceback: Optional[TracebackType],
+    handler: Callable[[bytes], Any],
+    host: str,
+    port: int = 0,
+    *,
+    entry_error: Optional[BaseException] = None,
   ) -> None:
-    return None
+    super().__init__()
+    self.handler = handler
+    self.host = host
+    self.port = port
+    self._entry_error = entry_error
+    self._bound_port: Optional[int] = None
 
-  def read(self) -> bytes:
-    return self._body
+  @property
+  def bound_port(self) -> int:
+    if self._bound_port is None:
+      raise RuntimeError("HTTP callback server is not active")
+    return self._bound_port
 
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding) -> None:
+    await super()._enter_lifespan(stack)
+    if self._entry_error is not None:
+      raise self._entry_error
+    self._bound_port = 8000
+    stack.callback(self._clear)
 
-class _RecordingThreadingHTTPServer(sila_module._CallbackHTTPServer):
-  """Signal when the real callback handler begins processing a request."""
-
-  def __init__(self, *args: Any, **kwargs: Any) -> None:
-    self.request_started = threading.Event()
-    super().__init__(*args, **kwargs)
-
-  def finish_request(self, request: Any, client_address: Any) -> None:
-    self.request_started.set()
-    super().finish_request(request, client_address)
-
-
-class _RecordingInhecoSiLAInterface(InhecoSiLAInterface):
-  """Record callback cleanup ordering around the real transport cleanup."""
-
-  def __init__(self) -> None:
-    super().__init__(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    self.cleanup_trace: list[str] = []
-
-  async def _close_callback_server(self) -> None:
-    self.cleanup_trace.append("cleanup-started")
-    await super()._close_callback_server()
-
-
-class _PausedStartupInhecoSiLAInterface(InhecoSiLAInterface):
-  """Pause callback serving before its worker can report readiness."""
-
-  def __init__(self) -> None:
-    super().__init__(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    self.child_started = anyio.Event()
-
-  async def _serve_callbacks(self) -> None:
-    self.child_started.set()
-    await anyio.sleep_forever()
+  def _clear(self) -> None:
+    self._bound_port = None
 
 
 class TestInhecoSiLAInterface(AnyioTestBase):
-  """Exercise the transport through its managed lifespan on both AnyIO backends."""
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    stack.enter_context(mock.patch.object(sila_module, "HTTPServer", _FakeHTTPServer))
+    self.session = InhecoSiLAInterface("127.0.0.1", client_ip="127.0.0.1")
+    self.requests: list[tuple[str, str, Optional[bytes], Optional[Mapping[str, str]]]] = []
+    self.next_response: Callable[..., Any] = lambda *args, **kw: _response("GetStatus", 1)
 
-  async def test_uses_async_resource_managed_methods(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
+    async def fake_request_raw(
+      method: str,
+      path: str,
+      body: Optional[bytes] = None,
+      *,
+      headers: Optional[Mapping[str, str]] = None,
+      allow_redirects: bool = True,
+    ) -> HTTPResponse:
+      self.requests.append((method, path, body, headers))
+      res = self.next_response(method, path, body, headers=headers, allow_redirects=allow_redirects)
+      if inspect.isawaitable(res):
+        awaited: HTTPResponse = await res
+        return awaited
+      direct: HTTPResponse = res
+      return direct
 
-    assert isinstance(interface, HasLifespan)
+    stack.enter_context(
+      mock.patch.object(self.session.io, "request_raw", side_effect=fake_request_raw)
+    )
+    await stack.enter_async_context(self.session.lifespan())
+
+  def test_uses_has_lifespan_managed_methods(self) -> None:
+    assert isinstance(self.session, HasLifespan)
     assert InhecoSiLAInterface.__aenter__ is HasLifespan.__aenter__
     assert InhecoSiLAInterface.__aexit__ is HasLifespan.__aexit__
     assert InhecoSiLAInterface.setup is HasLifespan.setup
     assert InhecoSiLAInterface.stop is HasLifespan.stop
-    assert "start" not in InhecoSiLAInterface.__dict__
-    assert "close" not in InhecoSiLAInterface.__dict__
 
-  async def test_lifespan_binds_and_releases_callback_server(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
+  async def test_callback_before_acceptance_is_retained(self) -> None:
+    async def post(method: str, path: str, body: Optional[bytes], **kwargs: Any) -> HTTPResponse:
+      assert body is not None
+      request = soap_body_payload(body.decode())
+      request_id = int(required_text(request, "requestId"))
+      await self.session._handle_event(_event(request_id))
+      return _response("OpenDoor")
 
-    async with interface:
-      port = interface.bound_port
-
-      def connect() -> None:
-        with socket.create_connection(("127.0.0.1", port), timeout=1):
-          pass
-
-      await anyio.to_thread.run_sync(connect)
-
-    with socket.socket() as released_socket:
-      released_socket.bind(("127.0.0.1", port))
-
-  async def test_lifespan_supports_sequential_reentry(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-
-    async with interface:
-      assert interface.is_active
-      assert interface.bound_port > 0
-    async with interface:
-      assert interface.is_active
-      assert interface.bound_port > 0
-
-    assert not interface.is_active
-
-  async def test_cancelled_callback_startup_completes_and_releases_port(self) -> None:
-    interface = _PausedStartupInhecoSiLAInterface()
-    scopes: list[anyio.CancelScope] = []
-    finished = anyio.Event()
-
-    async def enter_interface() -> None:
-      with anyio.CancelScope() as scope:
-        scopes.append(scope)
-        try:
-          async with interface:
-            pytest.fail("cancelled entry reached the body")
-        finally:
-          finished.set()
-
-    async with anyio.create_task_group() as task_group:
-      task_group.start_soon(enter_interface)
-      await interface.child_started.wait()
-      port = interface.bound_port
-      scopes[0].cancel()
-      with anyio.move_on_after(1):
-        await finished.wait()
-      completed_without_rescue = finished.is_set()
-      if not completed_without_rescue:
-        task_group.start_soon(InhecoSiLAInterface._serve_callbacks, interface)
-        await finished.wait()
-
-    with socket.socket() as released_socket:
-      released_socket.bind(("127.0.0.1", port))
-    assert completed_without_rescue
-
-  async def test_bind_failure_clears_run_state_and_prevents_network_send(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    bind_error = OSError("bind failed")
-
-    with mock.patch.object(sila_module, "_CallbackHTTPServer", side_effect=bind_error):
-      with pytest.raises(OSError, match="bind failed") as error_info:
-        async with interface:
-          pytest.fail("failed entry reached the body")
-
-    assert error_info.value is bind_error
-    assert not interface.is_active
-    assert interface._making_request is None
-    assert interface._portal is None
-    assert interface._httpd is None
-    assert interface._callback_server_started is None
-    assert interface._callback_server_stopped is None
-    assert interface._callback_server_startup_resolved is None
-    assert not interface._callback_server_worker_requested
-    with mock.patch.object(urllib.request, "urlopen", side_effect=AssertionError("network send")):
-      with pytest.raises(RuntimeError, match="is not active"):
-        await interface.send_command("Read")
-
-    async with interface:
-      assert interface.is_active
-      assert interface.bound_port > 0
-
-  async def test_callback_server_routes_matching_response(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-
-    async with interface:
-      pending = interface._SiLACommand(name="Read", request_id=17, completed=anyio.Event())
-      interface._pending = pending
-
-      response = await _post_callback(interface.bound_port, _response_event(17))
-
-      assert response == SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
-      assert pending.completed.is_set()
-      result = pending.result
-      assert isinstance(result, ET.Element)
-      value = result.find(".//Int32")
-      assert value is not None
-      assert value.text == "42"
-
-  async def test_partial_callback_body_does_not_block_shutdown_or_port_release(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    entered = anyio.Event()
-    exit_lifespan = anyio.Event()
-    finished = anyio.Event()
-    ports: list[int] = []
-
-    async def run_lifespan() -> None:
-      async with interface:
-        ports.append(interface.bound_port)
-        entered.set()
-        await exit_lifespan.wait()
-      finished.set()
-
-    with (
-      mock.patch.object(sila_module, "_CALLBACK_REQUEST_TIMEOUT_S", 60.0),
-      mock.patch.object(sila_module, "_CallbackHTTPServer", _RecordingThreadingHTTPServer),
-    ):
-      async with anyio.create_task_group() as task_group:
-        task_group.start_soon(run_lifespan)
-        await entered.wait()
-        client = await anyio.to_thread.run_sync(
-          socket.create_connection, ("127.0.0.1", ports[0]), 1
-        )
-        try:
-          await anyio.to_thread.run_sync(
-            client.sendall,
-            b"POST /callback HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\n<",
-          )
-          server = interface._httpd
-          assert isinstance(server, _RecordingThreadingHTTPServer)
-          assert await anyio.to_thread.run_sync(server.request_started.wait, 1)
-          exit_lifespan.set()
-          with anyio.move_on_after(1):
-            await finished.wait()
-          completed_before_client_close = finished.is_set()
-        finally:
-          client.close()
-        await finished.wait()
-
-    with socket.socket() as released_socket:
-      released_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-      released_socket.bind(("127.0.0.1", ports[0]))
-    assert completed_before_client_close
-
-  async def test_mismatched_request_id_leaves_command_pending(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-
-    async with interface:
-      pending = interface._SiLACommand(name="Read", request_id=17, completed=anyio.Event())
-      interface._pending = pending
-
-      response = await _post_callback(interface.bound_port, _response_event(18))
-
-      assert response == SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
-      assert not pending.completed.is_set()
-
-    assert pending.completed.is_set()
-    assert isinstance(pending.error, RuntimeError)
-
-  async def test_exit_releases_pending_command_and_ignores_late_callback(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    pending = interface._SiLACommand(name="Read", request_id=17, completed=anyio.Event())
-
-    async with interface:
-      interface._pending = pending
-
-    assert pending.completed.is_set()
-    assert isinstance(pending.error, RuntimeError)
-    assert interface._pending is None
-    request = interface._HTTPRequest(
-      method="POST", path="/callback", query="", headers={}, body=_response_event(17)
-    )
-    assert await interface._on_http(request) == SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
-
-  async def test_machine_request_uses_finite_socket_operation_timeout(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    observed_timeouts: list[float] = []
-
-    def urlopen_with_timeout(
-      request: urllib.request.Request, *, timeout: float
-    ) -> _BlockingResponse:
-      observed_timeouts.append(timeout)
-      return _BlockingResponse(_immediate_response("Read"))
-
-    with mock.patch.object(urllib.request, "urlopen", urlopen_with_timeout):
-      async with interface:
-        await interface.send_command("Read")
-
-    assert observed_timeouts == [sila_module._MACHINE_REQUEST_TIMEOUT_S]
-
-  async def test_cancellation_waits_for_machine_worker_before_callback_cleanup(self) -> None:
-    interface = _RecordingInhecoSiLAInterface()
-    started = threading.Event()
-    release = threading.Event()
-    scopes: list[anyio.CancelScope] = []
-    finished = anyio.Event()
-    worker_finished = threading.Event()
-
-    observed_timeouts: list[float] = []
-
-    def blocking_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      observed_timeouts.append(timeout)
-      started.set()
-      release.wait()
-      interface.cleanup_trace.append("worker-finished")
-      worker_finished.set()
-      return _BlockingResponse(_immediate_response("Read"))
-
-    async def send_in_scope() -> None:
-      with anyio.CancelScope() as scope:
-        scopes.append(scope)
-        async with interface:
-          await interface.send_command("Read")
-      finished.set()
-
-    with anyio.fail_after(3):
-      with mock.patch.object(urllib.request, "urlopen", blocking_urlopen):
-        async with anyio.create_task_group() as task_group:
-          task_group.start_soon(send_in_scope)
-          assert await anyio.to_thread.run_sync(started.wait, 1)
-          scopes[0].cancel()
-          await anyio.lowlevel.checkpoint()
-          try:
-            assert not finished.is_set()
-            assert interface._httpd is not None
-          finally:
-            release.set()
-          await finished.wait()
-
-    assert worker_finished.is_set()
-    assert observed_timeouts == [sila_module._MACHINE_REQUEST_TIMEOUT_S]
-    assert interface.cleanup_trace == ["worker-finished", "cleanup-started"]
-    assert interface._httpd is None
-    assert not interface.is_active
-
-  async def test_cancel_during_post_waits_for_accepted_command_callback(self) -> None:
-    """Reconcile an accepted POST even when cancellation arrives before its worker returns."""
-    interface = _RecordingInhecoSiLAInterface()
-    post_started = threading.Event()
-    release_post = threading.Event()
-    finished = anyio.Event()
-    scopes: list[anyio.CancelScope] = []
-
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      post_started.set()
-      release_post.wait(timeout=2)
-      return _BlockingResponse(_accepted_response("ExecuteMethod"))
-
-    async def send_in_scope() -> None:
-      with anyio.CancelScope() as scope:
-        scopes.append(scope)
-        async with interface:
-          await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-      finished.set()
-
-    with mock.patch.object(urllib.request, "urlopen", accepted_urlopen):
-      async with anyio.create_task_group() as task_group:
-        task_group.start_soon(send_in_scope)
-        assert await anyio.to_thread.run_sync(post_started.wait, 1)
-        scopes[0].cancel()
-        try:
-          assert not finished.is_set()
-          release_post.set()
-          with anyio.fail_after(1):
-            while interface._pending is None:
-              assert not finished.is_set()
-              await anyio.lowlevel.checkpoint()
-          pending = interface._pending
-          assert pending is not None
-          assert not finished.is_set()
-          request = interface._HTTPRequest(
-            method="POST",
-            path="/callback",
-            query="",
-            headers={},
-            body=_response_event(pending.request_id),
-          )
-          await interface._on_http(request)
-          with anyio.fail_after(1):
-            await finished.wait()
-        finally:
-          release_post.set()
-
-    assert interface.cleanup_trace == ["cleanup-started"]
-    assert scopes[0].cancelled_caught
-
-  @pytest.mark.parametrize("callback_return_code", [3, 5])
-  async def test_cancellation_after_acceptance_reconciles_callback_before_cleanup(
-    self, callback_return_code: int
-  ) -> None:
-    """Kills awaiting an accepted command's callback future outside the transaction shield."""
-    interface = _RecordingInhecoSiLAInterface()
-    scopes: list[anyio.CancelScope] = []
-    cancellation_caught: list[bool] = []
-    command_errors: list[RuntimeError] = []
-    command_returned = False
-    finished = anyio.Event()
-    release_callback = anyio.Event()
-    callback_reconciled = anyio.Event()
-
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      assert timeout == 10.0
-      return _BlockingResponse(_accepted_response("ExecuteMethod"))
-
-    async def send_in_scope() -> None:
-      nonlocal command_returned
-      async with interface:
-        with anyio.CancelScope() as scope:
-          scopes.append(scope)
-          try:
-            await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-            command_returned = True
-          except RuntimeError as error:
-            command_errors.append(error)
-        cancellation_caught.append(scope.cancelled_caught)
-      finished.set()
-
-    async def deliver_callback(request_id: int) -> None:
-      await release_callback.wait()
-      request = interface._HTTPRequest(
-        method="POST",
-        path="/callback",
-        query="",
-        headers={},
-        body=_response_event(
-          request_id,
-          return_code=callback_return_code,
-          message="callback failed" if callback_return_code != 3 else "Success",
-        ),
-      )
-      response = await interface._on_http(request)
-      assert response == SOAP_RESPONSE_ResponseEventResponse.encode("utf-8")
-      interface.cleanup_trace.append("callback-reconciled")
-      callback_reconciled.set()
-
-    with anyio.fail_after(3):
-      with mock.patch.object(urllib.request, "urlopen", accepted_urlopen):
-        async with anyio.create_task_group() as task_group:
-          task_group.start_soon(send_in_scope)
-          while interface._pending is None:
-            await anyio.lowlevel.checkpoint()
-          request_id = interface._pending.request_id
-          scopes[0].cancel()
-          await anyio.lowlevel.checkpoint()
-          assert interface.cleanup_trace == []
-          assert interface._pending is not None
-          task_group.start_soon(deliver_callback, request_id)
-          release_callback.set()
-          await callback_reconciled.wait()
-          await finished.wait()
-
-    assert not command_returned
-    if callback_return_code == 3:
-      assert cancellation_caught == [True]
-      assert command_errors == []
-    else:
-      assert cancellation_caught == [False]
-      assert len(command_errors) == 1
-      assert "callback failed" in str(command_errors[0])
-    assert interface.cleanup_trace == ["callback-reconciled", "cleanup-started"]
-    assert interface._pending is None
-
-  async def test_accepted_callback_deadline_uses_protocol_duration(self) -> None:
-    """Kill reusing the shorter machine-request timeout for an accepted callback."""
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    observed_deadlines: list[float] = []
-    fail_after = anyio.fail_after
-
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      return _BlockingResponse(
-        _accepted_response("ExecuteMethod", datetime.timedelta(seconds=12.5))
-      )
-
-    def record_deadline(delay: float):
-      observed_deadlines.append(delay)
-      return fail_after(1)
-
-    async def deliver_callback() -> None:
-      while interface._pending is None:
-        await anyio.lowlevel.checkpoint()
-      request_id = interface._pending.request_id
-      request = interface._HTTPRequest(
-        method="POST",
-        path="/callback",
-        query="",
-        headers={},
-        body=_response_event(request_id),
-      )
-      await interface._on_http(request)
-
-    with (
-      mock.patch.object(urllib.request, "urlopen", accepted_urlopen),
-      mock.patch.object(sila_module.anyio, "fail_after", record_deadline),
-    ):
-      async with interface:
-        async with anyio.create_task_group() as task_group:
-          task_group.start_soon(deliver_callback)
-          result = await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-
+    self.next_response = post
+    pending = await self.session.start_command("OpenDoor")
+    result = await pending.wait()
     assert isinstance(result, ET.Element)
-    assert observed_deadlines == [22.5]
+    assert result.tag == "ResponseData"
+    assert pending.duration == 10
+    assert self.session._pending == {}
 
-  async def test_cancellation_without_callback_reports_timeout_not_cancellation(self) -> None:
-    """An accepted command cannot promise device idleness when its callback never arrives."""
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
+  async def test_error_is_still_raised_by_later_waiter(self) -> None:
+    self.next_response = lambda *args, **kw: _response("ExecuteMethod")
+    pending = await self.session.start_command("ExecuteMethod", methodName="PCR")
+    await self.session._handle_event(_event(pending.request_id, 2002))
+    await anyio.sleep(0)
+    for _ in range(2):
+      with pytest.raises(SiLAError) as error_info:
+        await pending.wait()
+      assert error_info.value.code == 2002
+
+  async def test_timeout_and_cancellation_do_not_cancel_command(self) -> None:
+    self.next_response = lambda *args, **kw: _response("ExecuteMethod")
+    pending = await self.session.start_command("ExecuteMethod")
+    with pytest.raises(TimeoutError):
+      await pending.wait(0.001)
+    assert not pending.done
+
+    entered = anyio.Event()
     scopes: list[anyio.CancelScope] = []
-    failures: list[TimeoutError] = []
-    finished = anyio.Event()
 
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      return _BlockingResponse(_accepted_response("ExecuteMethod", datetime.timedelta(0)))
-
-    async def send_in_scope() -> None:
+    async def wait_and_cancel() -> None:
       with anyio.CancelScope() as scope:
         scopes.append(scope)
-        try:
-          await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-        except TimeoutError as error:
-          failures.append(error)
-      finished.set()
+        entered.set()
+        await pending.wait()
 
-    with (
-      mock.patch.object(urllib.request, "urlopen", accepted_urlopen),
-      mock.patch.object(sila_module, "_CALLBACK_REQUEST_TIMEOUT_S", 0.02),
-    ):
-      async with interface:
-        async with anyio.create_task_group() as task_group:
-          task_group.start_soon(send_in_scope)
-          with anyio.fail_after(1):
-            while interface._pending is None:
-              await anyio.lowlevel.checkpoint()
-          scopes[0].cancel()
-          with anyio.fail_after(1):
-            await finished.wait()
-        assert len(failures) == 1
-        assert not scopes[0].cancelled_caught
-        assert interface._pending is not None
-        assert not interface._pending.completed.is_set()
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(wait_and_cancel)
+      await entered.wait()
+      await anyio.sleep(0)
+      scopes[0].cancel()
 
-  @pytest.mark.parametrize("duration", [None, "later"])
-  async def test_accepted_response_requires_valid_protocol_duration(self, duration: object) -> None:
-    """Kill silently inventing a callback deadline for malformed accepted responses."""
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
+    assert scopes[0].cancelled_caught
+    assert not pending.done
+    await self.session._handle_event(_event(pending.request_id))
+    assert isinstance(await pending.wait(), ET.Element)
 
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      return _BlockingResponse(_accepted_response("ExecuteMethod", duration))
-
-    with mock.patch.object(urllib.request, "urlopen", accepted_urlopen):
-      async with interface:
-        with pytest.raises(
-          ValueError,
-          match="duration not found or invalid in accepted response for ExecuteMethod",
-        ):
-          await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-        assert interface._pending is None
-
-  @pytest.mark.parametrize("callback_return_code", [3, 5])
-  async def test_callback_timeout_retains_command_until_late_reconciliation(
-    self, callback_return_code: int
+  async def test_concurrent_reads_do_not_wait_for_method_completion_and_exit_fails_pending(
+    self,
   ) -> None:
-    """Kill cancelling or releasing an accepted command when its caller times out."""
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    machine_requests = 0
+    with mock.patch.object(sila_module, "HTTPServer", _FakeHTTPServer):
+      session = InhecoSiLAInterface("127.0.0.1", client_ip="127.0.0.1")
+      responses = [_response("ExecuteMethod"), _response("GetStatus", 1)]
 
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      nonlocal machine_requests
-      machine_requests += 1
-      return _BlockingResponse(_accepted_response("ExecuteMethod", datetime.timedelta(0)))
+      async def fake_post(*args: Any, **kw: Any) -> HTTPResponse:
+        return responses.pop(0)
 
-    with (
-      mock.patch.object(sila_module, "_CALLBACK_REQUEST_TIMEOUT_S", 0.01),
-      mock.patch.object(urllib.request, "urlopen", accepted_urlopen),
+      with mock.patch.object(session.io, "request_raw", side_effect=fake_post):
+        async with session:
+          pending = await session.start_command("ExecuteMethod")
+          await session.send_command("GetStatus")
+          assert not pending.done
+      with pytest.raises(ConnectionError, match="SiLA connection closed"):
+        await pending.wait()
+
+  async def test_busy_rejection_retains_firmware_error(self) -> None:
+    self.next_response = lambda *args, **kw: _response("OpenDoor", 4, "Busy with ExecuteMethod")
+    with pytest.raises(SiLAError, match="Busy with ExecuteMethod"):
+      await self.session.send_command("OpenDoor")
+    assert self.session._pending == {}
+
+  async def test_finished_with_warning_logs_and_succeeds(
+    self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+  ) -> None:
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
+    self.next_response = lambda *args, **kw: _response("OpenDoor")
+    pending = await self.session.start_command("OpenDoor")
+    with caplog.at_level(logging.WARNING, logger="pylabrobot.inheco.transport.sila"):
+      await self.session._handle_event(_event(pending.request_id, 12))
+    await pending.wait()
+    assert any("completed with warning" in record.message for record in caplog.records)
+
+  async def test_response_code_one_and_empty_payload(self) -> None:
+    self.next_response = lambda *args, **kw: _response("OpenDoor")
+    pending = await self.session.start_command("OpenDoor")
+    await self.session._handle_event(_event(pending.request_id, 1, data=""))
+    assert await pending.wait() is None
+
+  async def test_error_event_fails_corresponding_command(self) -> None:
+    self.next_response = lambda *args, **kw: _response("ExecuteMethod")
+    pending = await self.session.start_command("ExecuteMethod")
+    await self.session._handle_event(_event(pending.request_id, 2001, name="ErrorEvent"))
+    with pytest.raises(SiLAError) as error_info:
+      await pending.wait()
+    assert error_info.value.code == 2001
+
+  async def test_malformed_callback_fails_waiter(self) -> None:
+    self.next_response = lambda *args, **kw: _response("ReadActualTemperature")
+    pending = await self.session.start_command("ReadActualTemperature")
+    with pytest.raises(ET.ParseError):
+      await self.session._handle_event(_event(pending.request_id, data="<broken"))
+    with pytest.raises(ET.ParseError):
+      await pending.wait()
+
+  async def test_sequential_reentry_and_bind_failure_cleanup(self) -> None:
+    bind_error = OSError("bind failed")
+    with mock.patch.object(
+      sila_module,
+      "HTTPServer",
+      lambda handler, host, port=0: _FakeHTTPServer(handler, host, port, entry_error=bind_error),
     ):
-      async with interface:
-        with pytest.raises(TimeoutError):
-          await interface.send_command("ExecuteMethod", methodName="PLR_Test")
+      failing = InhecoSiLAInterface("127.0.0.1", client_ip="127.0.0.1")
+      with pytest.raises(OSError, match="bind failed"):
+        async with failing:
+          pass
+      assert not failing.is_active
+      assert not failing.io.is_active
+      with pytest.raises(RuntimeError, match="not active"):
+        await failing.send_command("GetStatus")
 
-        pending = interface._pending
-        assert pending is not None
-        assert not pending.completed.is_set()
-        with pytest.raises(RuntimeError, match="can't send multiple commands at the same time"):
-          await interface.send_command("Read")
-        assert machine_requests == 1
+    with mock.patch.object(sila_module, "HTTPServer", _FakeHTTPServer):
+      reusable = InhecoSiLAInterface("127.0.0.1", client_ip="127.0.0.1")
+      with mock.patch.object(
+        reusable.io,
+        "request_raw",
+        side_effect=lambda *args, **kw: _response("GetStatus", 1),
+      ):
+        async with reusable:
+          await reusable.send_command("GetStatus")
+        async with reusable:
+          await reusable.send_command("GetStatus")
 
-        request = interface._HTTPRequest(
-          method="POST",
-          path="/callback",
-          query="",
-          headers={},
-          body=_response_event(
-            pending.request_id,
-            return_code=callback_return_code,
-            message="callback failed" if callback_return_code != 3 else "Success",
+  async def test_empty_success_message_is_valid_xml_string(self) -> None:
+    self.next_response = lambda *args, **kw: _response("GetStatus", 1, message="")
+    await self.session.send_command("GetStatus")
+
+  async def test_invalid_duration_raises_and_mismatched_callback_leaves_pending_intact(
+    self,
+  ) -> None:
+    self.next_response = lambda *args, **kw: _response("OpenDoor", 2, duration="NOT_ISO8601")
+    with pytest.raises(ValueError, match="Invalid SiLA duration"):
+      await self.session.start_command("OpenDoor")
+    assert self.session._pending == {}
+
+    self.next_response = lambda *args, **kw: _response("OpenDoor", 2, duration="PT80S")
+    pending = await self.session.start_command("OpenDoor")
+    assert pending.duration == 80.0
+    await self.session._handle_event(_event(pending.request_id + 999))
+    assert not pending.done
+    await self.session._handle_event(_event(pending.request_id))
+    assert pending.done
+
+  async def test_send_command_reconciles_accepted_callback_under_cancellation(self) -> None:
+    accepted = anyio.Event()
+    scopes: list[anyio.CancelScope] = []
+    request_ids: list[int] = []
+
+    async def post(method: str, path: str, body: Optional[bytes], **kwargs: Any) -> HTTPResponse:
+      assert body is not None
+      request = soap_body_payload(body.decode())
+      request_ids.append(int(required_text(request, "requestId")))
+      accepted.set()
+      return _response("OpenDoor", 2, duration="PT5S")
+
+    self.next_response = post
+    reconciled = anyio.Event()
+
+    async def run() -> None:
+      with anyio.CancelScope() as scope:
+        scopes.append(scope)
+        await self.session.send_command("OpenDoor")
+      reconciled.set()
+
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(run)
+      await accepted.wait()
+      await anyio.sleep(0)
+      scopes[0].cancel()
+      await anyio.sleep(0.01)
+      assert not reconciled.is_set()
+      await self.session._handle_event(_event(request_ids[0]))
+      await reconciled.wait()
+    assert scopes[0].cancelled_caught
+    assert self.session._pending == {}
+
+  async def test_send_command_cancelled_without_callback_reports_timeout(self) -> None:
+    accepted = anyio.Event()
+    scope = anyio.CancelScope()
+
+    async def post(method: str, path: str, body: Optional[bytes], **kwargs: Any) -> HTTPResponse:
+      accepted.set()
+      return _response("OpenDoor", 2, duration="PT1S")
+
+    self.next_response = post
+
+    async def cancel_after_accept() -> None:
+      await accepted.wait()
+      await anyio.sleep(0)
+      scope.cancel()
+
+    async with anyio.create_task_group() as tg:
+      tg.start_soon(cancel_after_accept)
+      with pytest.raises(TimeoutError):
+        with scope:
+          await self.session.send_command("OpenDoor", timeout=0.02)
+
+  async def test_cancel_during_post_retains_accepted_command_and_reconciles_callback(self) -> None:
+    with mock.patch.object(sila_module, "HTTPServer", _FakeHTTPServer):
+      session = InhecoSiLAInterface("127.0.0.1", client_ip="127.0.0.1")
+      post_started = threading.Event()
+      allow_return = threading.Event()
+      request_ids: list[int] = []
+
+      def blocking_raw_request(
+        method: str,
+        path: str,
+        body: Optional[bytes],
+        headers: Mapping[str, str],
+        allow_redirects: bool,
+      ) -> HTTPResponse:
+        del method, path, headers, allow_redirects
+        assert body is not None
+        request = soap_body_payload(body.decode())
+        request_ids.append(int(required_text(request, "requestId")))
+        post_started.set()
+        assert allow_return.wait(timeout=5.0)
+        return _response("ExecuteMethod", 2, duration="PT10S")
+
+      with mock.patch.object(session.io, "_make_raw_request", side_effect=blocking_raw_request):
+        async with session:
+          start_scope = anyio.CancelScope()
+          pending_holder: list[Any] = []
+
+          async def run_start() -> None:
+            with start_scope:
+              pending_holder.append(await session.start_command("ExecuteMethod", methodName="PCR"))
+
+          with anyio.fail_after(5.0):
+            async with anyio.create_task_group() as tg:
+              tg.start_soon(run_start)
+              while not post_started.is_set():
+                await anyio.sleep(0.001)
+              start_scope.cancel()
+              allow_return.set()
+
+          assert len(pending_holder) == 1
+          pending = pending_holder[0]
+          assert pending.request_id in session._pending
+          await session._handle_event(_event(pending.request_id))
+          assert isinstance(await pending.wait(), ET.Element)
+          assert session._pending == {}
+
+          post_started.clear()
+          allow_return.clear()
+          request_ids.clear()
+          send_scope = anyio.CancelScope()
+          reconciled = anyio.Event()
+
+          async def run_send() -> None:
+            with send_scope:
+              await session.send_command("ExecuteMethod", methodName="PCR")
+            reconciled.set()
+
+          with anyio.fail_after(5.0):
+            async with anyio.create_task_group() as tg:
+              tg.start_soon(run_send)
+              while not post_started.is_set():
+                await anyio.sleep(0.001)
+              send_scope.cancel()
+              allow_return.set()
+              while request_ids[0] not in session._pending:
+                await anyio.sleep(0.001)
+              await anyio.sleep(0.01)
+              assert not reconciled.is_set()
+              await session._handle_event(_event(request_ids[0]))
+              await reconciled.wait()
+
+          assert send_scope.cancelled_caught
+          assert session._pending == {}
+
+  def test_get_params_handles_empty_string_and_trimmed_scalars(self) -> None:
+    xml = ET.fromstring(
+      "<ResponseData>"
+      "<Parameter name='EmptyStr'><String/></Parameter>"
+      "<Parameter name='Temp'><Float64> 37.5 </Float64></Parameter>"
+      "<Parameter name='Count'><Int32> 12 </Int32></Parameter>"
+      "<Parameter name='Enabled'><Boolean> true </Boolean></Parameter>"
+      "</ResponseData>"
+    )
+    assert get_params(xml, ["EmptyStr", "Temp", "Count", "Enabled"]) == {
+      "EmptyStr": "",
+      "Temp": 37.5,
+      "Count": 12,
+      "Enabled": True,
+    }
+
+
+class TestInhecoSiLAInterfaceLoopback(AnyioTestBase):
+  async def test_loopback_http_and_callback_server_work_on_current_backend(self) -> None:
+    assert sila_module.HTTPServer is HTTPServer
+    interface = InhecoSiLAInterface("127.0.0.1", client_ip="127.0.0.1")
+
+    async def fake_machine_post(
+      method: str, path: str, body: Optional[bytes], **kwargs: Any
+    ) -> HTTPResponse:
+      assert body is not None
+      request = soap_body_payload(body.decode())
+      request_id = int(required_text(request, "requestId"))
+      callback_client = sila_module.HTTP("callback sender", interface.event_receiver_uri)
+      async with callback_client:
+        ack = await callback_client.request_raw(
+          "POST",
+          "/",
+          _event(
+            request_id,
+            data='<Parameters><Parameter name="value"><Int32>42</Int32></Parameter></Parameters>',
           ),
         )
-        assert await interface._on_http(request) == SOAP_RESPONSE_ResponseEventResponse.encode(
-          "utf-8"
-        )
-        assert pending.completed.is_set()
-        if callback_return_code == 5:
-          assert str(pending.error) == (
-            "Command ExecuteMethod failed with code 5: 'callback failed'"
-          )
-        else:
-          assert pending.error is None
-          assert isinstance(pending.result, ET.Element)
-        assert interface._pending is None
+        assert ack.status == 200
+      return _response("ExecuteMethod")
 
-  async def test_lifespan_exit_releases_callback_retained_after_timeout(self) -> None:
-    """Kill leaking an accepted command that timed out before lifespan teardown."""
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> _BlockingResponse:
-      return _BlockingResponse(_accepted_response("ExecuteMethod", datetime.timedelta(0)))
-
-    with (
-      mock.patch.object(sila_module, "_CALLBACK_REQUEST_TIMEOUT_S", 0.01),
-      mock.patch.object(urllib.request, "urlopen", accepted_urlopen),
-    ):
+    with mock.patch.object(interface.io, "request_raw", side_effect=fake_machine_post):
       async with interface:
-        with pytest.raises(TimeoutError):
-          await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-        pending = interface._pending
-        assert pending is not None
-        assert not pending.completed.is_set()
-
-    assert pending.completed.is_set()
-    assert isinstance(pending.error, RuntimeError)
-    assert interface._pending is None
-
-
-class TestInhecoSiLAInterfaceTrio(AnyioTestBase):
-  """Exercise the callback bridge from a Trio task and an HTTP handler thread."""
-
-  _anyio_backends = ["trio"]
-
-  async def test_trio_accepts_http_callback_and_completes_command(self) -> None:
-    interface = InhecoSiLAInterface(machine_ip="127.0.0.1", client_ip="127.0.0.1")
-    results: list[ET.Element] = []
-    urlopen = urllib.request.urlopen
-
-    def accepted_urlopen(request: urllib.request.Request, *, timeout: float) -> Any:
-      if request.full_url == "http://127.0.0.1:8080/":
-        return _BlockingResponse(_accepted_response("ExecuteMethod"))
-      return urlopen(request, timeout=timeout)
-
-    async def run_command() -> None:
-      result = await interface.send_command("ExecuteMethod", methodName="PLR_Test")
-      assert isinstance(result, ET.Element)
-      results.append(result)
-
-    with mock.patch.object(urllib.request, "urlopen", accepted_urlopen):
-      async with interface:
-        async with anyio.create_task_group() as task_group:
-          task_group.start_soon(run_command)
-          with anyio.fail_after(1):
-            while interface._pending is None:
-              await anyio.lowlevel.checkpoint()
-          callback = _response_event(interface._pending.request_id)
-          response = await _post_callback(interface.bound_port, callback)
-          assert response == SOAP_RESPONSE_ResponseEventResponse.encode("utf-8"), response
-
-    assert len(results) == 1
-    assert results[0].findtext(".//Int32") == "42"
+        result = await interface.send_command("ExecuteMethod", methodName="PCR")
+        assert isinstance(result, ET.Element)
+        assert result.findtext(".//Int32") == "42"
