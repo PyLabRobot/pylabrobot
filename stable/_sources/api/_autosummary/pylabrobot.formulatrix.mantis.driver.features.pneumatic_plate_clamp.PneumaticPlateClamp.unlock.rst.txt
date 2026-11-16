@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.pneumatic\_plate\_clamp.PneumaticPlateClamp.unlock
+================================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp
+
+.. automethod:: PneumaticPlateClamp.unlock

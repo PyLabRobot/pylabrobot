@@ -811,7 +811,7 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="formulatrix-mantis">
 <h1>Formulatrix Mantis<a class="headerlink" href="#formulatrix-mantis" title="Link to this heading">#</a></h1>
-<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks the v4 plate clamp, reads chip tags, and shows colours on a v4’s LED bar. Moving to arbitrary positions and dispensing are not supported yet.</p>
+<p>The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks pneumatic and motor plate clamps, reads chip tags, and shows colours on a v4’s LED bar. Moving to arbitrary positions and dispensing are not supported yet.</p>
 <div class="plr-device-card" id="device-formulatrix-mantis">
   <div class="plr-device-card__head">
     <div>
@@ -823,7 +823,7 @@
   <div class="plr-device-card__kind">bulk dispenser</div>
   <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 201">dispensing</span></div>
   <div class="plr-device-card__models-scroll" role="region" tabindex="0" aria-label="Formulatrix Mantis models"><table class="plr-device-card__models"><caption>Models</caption><thead><tr><th scope="col">Model</th><th scope="col">Support</th></tr></thead><tbody><tr><th scope="row">v3</th><td><span class="plr-device-status plr-device-status--wip">WIP</span></td></tr><tr><th scope="row">v4</th><td><span class="plr-device-status plr-device-status--wip">WIP</span></td></tr></tbody></table></div>
-  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.formulatrix.Mantis</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div>
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.formulatrix.Mantis</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Manager</span><span class="plr-device-card__value"><a class="plr-device-link" href="https://discuss.pylabrobot.org/u/rickwierenga"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>@rickwierenga</a></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Notes</span><span class="plr-device-card__value">V3 arm initialization and pneumatic plate clamping; dispensing is not supported.</span></div>
   <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/formulatrix/mantis"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a> <a class="plr-device-link" href="https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/" rel="nofollow noopener"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>OEM</a></div>
 </div><div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -858,7 +858,7 @@
 <td><p>brought up at setup from where its absolute encoders read; Z homed; parked at idle at stop</p></td>
 </tr>
 <tr class="row-even"><td><p>Plate clamp</p></td>
-<td><p>lock at one of the unit’s levels, waiting for clamping done; unlock</p></td>
+<td><p>v3 pneumatic lock/release with air-pump restoration; v4 motor clamp with adjustable levels</p></td>
 </tr>
 <tr class="row-odd"><td><p>RFID</p></td>
 <td><p>the chip in each input slot: serial, chip type, date of manufacture</p></td>
@@ -891,7 +891,7 @@
 </section>
 <section id="unit-configuration">
 <h2>Unit configuration<a class="headerlink" href="#unit-configuration" title="Link to this heading">#</a></h2>
-<p>Some values are set per unit and cannot be read off the device; they sit in its <code class="docutils literal notranslate"><span class="pre">.config</span></code> files, in <code class="docutils literal notranslate"><span class="pre">Data/Device/Configs</span></code>. Give setup that folder once, then save the configuration. The saved file carries the unit’s values from then on, and the folder is no longer needed. These include the plate clamp’s lock levels, RFID antenna mapping and arm calibration. A v3 needs its offsets, home positions, flag-search settings and post-home route from <code class="docutils literal notranslate"><span class="pre">RobotArm.config</span></code>. A v4 needs its offsets, absolute encoder references and encoder correction files.</p>
+<p>Some values are set per unit and cannot be read off the device; they sit in its <code class="docutils literal notranslate"><span class="pre">.config</span></code> files, in <code class="docutils literal notranslate"><span class="pre">Data/Device/Configs</span></code>. Give setup that folder once, then save the configuration. The saved file carries the unit’s values from then on, and the folder is no longer needed. These include the plate clamp’s lock levels or pneumatic output mapping, RFID antenna mapping and arm calibration. The pneumatic clamp requires <code class="docutils literal notranslate"><span class="pre">PlateClampController=&quot;PressureRegulator&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">PlateClampAuxId=&quot;2&quot;</span></code> in the unit’s <code class="docutils literal notranslate"><span class="pre">Device.config</span></code>, or the corresponding saved configuration block. A v3 needs its offsets, home positions, flag-search settings and post-home route from <code class="docutils literal notranslate"><span class="pre">RobotArm.config</span></code>. A v4 needs its offsets, absolute encoder references and encoder correction files.</p>
 <p>Without clamp levels or antennas, a recording of the same generation supplies them with a warning. <strong>Arm calibration must come from this unit</strong>: setup refuses without it unless <code class="docutils literal notranslate"><span class="pre">skip_arm=True</span></code>. Where the folder and a saved file both hold a value, they must agree. Older saved files can obtain missing arm calibration from the unit’s folder.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -934,6 +934,7 @@
 <h3>Simulation<a class="headerlink" href="#simulation" title="Link to this heading">#</a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">Mantis(simulation=True)</span></code> builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4’s recording (<code class="docutils literal notranslate"><span class="pre">RECORDING_MANTIS_V4</span></code>, or a file given as <code class="docutils literal notranslate"><span class="pre">declared_configuration_json</span></code>), its reads answer from it, its plate clamp’s state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its arm stands at idle, with no offsets unless the file declares the arm’s calibration, and setup brings it up at once; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated.</p>
 <p>For a v3 simulation, pass a saved v3 configuration containing its <code class="docutils literal notranslate"><span class="pre">arm</span></code> block. It simulates seating, homing and the declared route without opening USB; no default v3 motion calibration is supplied.</p>
+<p>A declared pneumatic clamp simulates its valve and air-pump states. Locking starts its simulated pump if needed; release restores a pump started by the clamp.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">simulated</span> <span class="o">=</span> <span class="n">Mantis</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"simulated_mantis"</span><span class="p">,</span> <span class="n">simulation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1105,7 +1106,7 @@
 </section>
 <section id="pressure">
 <h2>Pressure<a class="headerlink" href="#pressure" title="Link to this heading">#</a></h2>
-<p>The pump exists only when the pressure board (board 10) answered at setup. Its three pressure controllers, <code class="docutils literal notranslate"><span class="pre">&quot;bottle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;chip&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;vacuum&quot;</span></code>, each regulate one line from a feedback sensor. Nothing here switches the pump or a controller on.</p>
+<p>The pump exists only when the pressure board (board 10) answered at setup. Its three pressure controllers, <code class="docutils literal notranslate"><span class="pre">&quot;bottle&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;chip&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;vacuum&quot;</span></code>, each regulate one line from a feedback sensor. These methods read only. The pneumatic clamp starts the air pump when needed and restores it on release; it does not change pressure-controller settings.</p>
 <p>Each sensor’s calibration, (scale, offset), as setup read it; it is never written nor saved. The offsets are re-zeroed on the device between sessions, so setup reads them every time:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
@@ -1147,31 +1148,24 @@
 </section>
 <section id="plate-clamp">
 <h2>Plate clamp<a class="headerlink" href="#plate-clamp" title="Link to this heading">#</a></h2>
-<p>The clamp holds the plate on the deck. <code class="docutils literal notranslate"><span class="pre">lock</span></code> releases it, locks it at one of the unit’s levels, 1 the weakest, and returns once the device reports clamping done; if it does not, the clamp is released again and an error is raised. <code class="docutils literal notranslate"><span class="pre">stop()</span></code> releases a clamp that does not read unclamping done.</p>
-<p>It exists only when the LC3 board (board 12) answered at setup. Its levels are the declared ones:</p>
+<p>The clamp holds the plate on the deck. Place the plate in its holder and keep the clamping area clear. <code class="docutils literal notranslate"><span class="pre">lock()</span></code> engages the clamp; <code class="docutils literal notranslate"><span class="pre">unlock()</span></code> releases it.</p>
+<p>The v3 pneumatic clamp uses the unit’s configured pressure-board output and starts the air pump when needed. It has no adjustable lock levels. The v4 motor clamp supports the unit’s levels, with <code class="docutils literal notranslate"><span class="pre">lock(level=2)</span></code> selecting level 2; omitting the level uses <code class="docutils literal notranslate"><span class="pre">default_lock_level</span></code>. A failed or cancelled pneumatic lock releases the valve and restores a pump started by the clamp.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">plate_clamp</span><span class="o">.</span><span class="n">levels</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">plate_clamp</span><span class="o">.</span><span class="n">lock</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
 </div>
+<p>Read the clamp state. On a pneumatic clamp, this is the valve’s commanded state; it does not sense plate contact or confirm pneumatic pressure. On a motor clamp, it means the controller reports clamping done. The motor clamp also exposes its raw state through <code class="docutils literal notranslate"><span class="pre">request_state()</span></code>.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">plate_clamp</span><span class="o">.</span><span class="n">lock</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">plate_clamp</span><span class="o">.</span><span class="n">request_locked</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
 </div>
-<p>The clamp’s state: 0 idle, 1 stopped, 2 clamping, 3 clamping done, 4 clamping error timeout, 5 unclamping, 6 unclamping done, 7 unclamping error timeout, 8 motor fault. A lock that reads 4 or 8, or an unlock that reads 7 or 8, raises <code class="docutils literal notranslate"><span class="pre">PlateClampError</span></code> at once.</p>
-<div class="cell docutils container">
-<div class="cell_input docutils container">
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">plate_clamp</span><span class="o">.</span><span class="n">request_state</span><span class="p">()</span>
-</pre></div>
-</div>
-</div>
-</div>
-<p>Release the clamp:</p>
+<p>Release the plate. A pneumatic clamp turns off a pump it started; a pump already running before clamping stays on. Repeating a pneumatic lock or release leaves the requested state in place.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">plate_clamp</span><span class="o">.</span><span class="n">unlock</span><span class="p">()</span>
@@ -1297,7 +1291,7 @@
 </section>
 <section id="stop">
 <h2>Stop<a class="headerlink" href="#stop" title="Link to this heading">#</a></h2>
-<p>Stop the visualizer and close the links. <code class="docutils literal notranslate"><span class="pre">stop()</span></code> aborts the sequencer and stops every motor. A v3 stays where it stopped; it does not perform the v4 park move and must initialize again after reconnecting. On a v4, an initialized arm is parked at idle and Z lowered to 20 mm, unless the head is away from idle. The plate clamp is then released.</p>
+<p>Stop the visualizer and close the links. <code class="docutils literal notranslate"><span class="pre">stop()</span></code> aborts the sequencer and stops every motor. A v3 stays where it stopped; it does not perform the v4 park move and must initialize again after reconnecting. On a v4, an initialized arm is parked at idle and Z lowered to 20 mm, unless the head is away from idle. The plate clamp is then released. A pneumatic clamp also restores a pump it started; a pump already running before clamping stays on.</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">viewer</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
