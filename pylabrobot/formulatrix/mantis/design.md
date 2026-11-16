@@ -52,7 +52,8 @@ configuration (`_request_configuration`), checks it against a declared one, then
 is the exception: `discover` builds it when it answers its ping on interface A, after every
 opening of the link.
 Each feature is an `Optional` attribute of the driver, `None` until `_discover_features` builds
-it: `plate_clamp` is built only when board 12 answered discovery, so a v3 without it has none;
+it: a pneumatic `plate_clamp` requires a declared pressure-board output and board 10;
+the motor clamp requires board 12. The controller choice is made during discovery;
 `pump` only when board 10 answered; `arm` is `Arm` when board 11 answered (v4), otherwise
 `V3Arm`, which homes against flags. `led_bar` is gated
 by the generation: built only on a v4 whose board 12 answered, never on a v3, whose install sets
@@ -82,7 +83,8 @@ each value it lacks comes from the folder, else the recording, in simulation too
 naming each and where it came from. A later block or field is optional the same way.
 `save_configuration` saves the unit's blocks, never a recording's, so after one setup with the
 folder the saved file alone carries them. A block is loaded only where its source applies:
-`plate_clamp.levels` for a clamp driven as a DC motor, `rfid.slot_to_antenna` where `RFID.config`
+`plate_clamp.levels` for a clamp driven as a DC motor, or its auxiliary output for a pneumatic
+clamp controlled by the pressure board, `rfid.slot_to_antenna` where `RFID.config`
 exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`, `arm` where the unit
 declares the arms' absolute encoder references (v4), its encoder correction from the `Data`
 folder; otherwise the v3 home frame, flag searches, retract/backoff settings and route to idle.
@@ -181,6 +183,12 @@ other fault bits fail immediately. Each home must finish with its homed bit, and
 ends with a strict fault check. Failure or cancellation stops all three motors. A v3 stop sends
 no park move.
 
+`PneumaticPlateClamp.lock` engages its declared auxiliary output and starts the air pump if
+needed. Readbacks confirm both control states; they do not measure plate contact or pressure.
+Unlock and shutdown release the valve and restore a pump started by the clamp. A pump already
+running stays on. The clamp serializes its operations, owns a pump change before sending it,
+and attempts valve release and pump restoration independently on failure or cancellation.
+
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
 | what it touches | prefix | here |
@@ -231,13 +239,15 @@ configuration from the file's `device` block (a field it lacks filled as in M4a)
 answer from it; a board it leaves `None` does not answer, and the device name is not simulated. Each
 feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
 above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
-unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` reads off,
-every line at 0, with the recorded calibration; `MantisSimulationLedBar` takes every command and
-waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
+unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` starts off,
+reads every line at 0 with the recorded calibration, and follows clamp commands for its air-pump
+state. `MantisSimulationLedBar` takes every command and waits no hold.
+`MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
 needs no encoder correction; its offsets are the declared ones, else 0. Each command moves it at
 once, and the motor reads answer from it; without it the motors read idle at 0, as after power-on.
-A v3 uses `MantisSimulationV3Arm`, which requires the unit's homing block and simulates
-seating against stops, flags, and the route to idle. A motor read the configuration does not hold
+`MantisSimulationPneumaticPlateClamp` holds the valve state and uses the simulated pump. A v3 uses
+`MantisSimulationV3Arm`, which requires the unit's homing block and simulates seating against
+stops, flags, and the route to idle. A motor read the configuration does not hold
 is not simulated. The sequencer, on the driver, holds
 `SEQUENCER_QUEUE_SIZE` items, stopped and empty after setup, and once started plays each item at
 once, a queued move moving the simulated arm; stop and abort keep what is queued.
@@ -286,7 +296,7 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
    in the device's units; the arm converts them.
 5. **Whether motor limits differ between devices of one generation** is unknown; one unit of each
    generation has been read.
-6. **The plate clamp and the RFID reader have run on one v4 only,** on macOS and on Windows.
+6. **The motor plate clamp and the RFID reader have run on one v4 only,** on macOS and on Windows.
    The v3 arm has initialized and stopped on Linux;
    its RFID reader has answered its ping, but tag scans remain unverified.
 7. **The release payload is fixed, not declared.** Every release sends (0.75, 0, 5000); how it
@@ -297,9 +307,9 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
    `resource_model._mesh`, which is private to that package.
 10. **A clamp failure state (4, 7 or 8) raises at once, untested.** No device has shown one, so
     no test plays one.
-11. **A v3's clamp is pneumatic, switched by aux output 2 on the pressure board.** A v3 install's
-    `Device.config` reads `Pneumatic`, `PressureRegulator`, aux 2, with no PWM levels; #987 switches
-    aux output 2 off at shutdown. PR 1 builds no clamp on a v3; the v3 clamp comes next.
+11. **The pneumatic clamp has no plate-contact feedback.** Its pressure-board auxiliary output
+    reports the commanded valve state only. Output 2 is the supported clamp mapping; the unit's
+    configuration must explicitly select it. It has no PWM lock levels.
 12. **Capturing both interfaces at once is unproven.** They share one serial number, and a PLR
     capture tells links apart by it.
 13. **The antenna switch's address on a v3 is unknown.** The PPI write at 120 is seen only on our

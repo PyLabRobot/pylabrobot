@@ -125,6 +125,7 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
 
   ``plate_clamp``: the lock levels, from ``Device.config`` (``PlateClampInisiatePWM``,
   ``PlateClampTimer``), only for a clamp driven as a DC motor (``PlateClampController``).
+  A pneumatic clamp controlled by the pressure board instead uses ``PlateClampAuxId``.
   ``rfid``: each input slot's antenna, from every ``RFIDAntennaId.ACC<n>`` of ``RFID.config``, only
   when it exists; with ``Device.config``'s ``RfidMultiplexerDelay`` as written.
   ``led_bar``: the LED count, from ``Device.config``'s ``NumberOfLed``, only where it is set.
@@ -157,6 +158,16 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
     return settings[key]
 
   blocks: Dict[str, Any] = {}
+  if values.get("PlateClampController") == "PressureRegulator":
+    key = "PlateClampAuxId"
+    output = number(
+      path=device_config, key=key, text=setting(path=device_config, settings=values, key=key)
+    )
+    if output != 2:
+      raise MantisConfigurationError(
+        f"{device_config}: unsupported pneumatic clamp output {output}"
+      )
+    blocks["plate_clamp"] = {"controller": "pressure_regulator", "auxiliary_output": int(output)}
   if values.get("PlateClampController") == "MotorDC":
     pwms = [
       number(path=device_config, key="PlateClampInisiatePWM", text=text)

@@ -1,12 +1,13 @@
 """The pump: the pressure board (board 10), its air pump and its three pressure controllers.
 
-Each controller regulates one line, bottle, chip or vacuum, from its feedback sensor. Everything
-here reads; nothing is written, the sensor calibration included.
+Each controller regulates one line, bottle, chip or vacuum, from its feedback sensor. Public
+methods read; the pneumatic clamp can privately start and restore the air pump.
 """
 
 import struct
 from typing import TYPE_CHECKING, Dict, Literal, Tuple
 
+from ..errors import MantisPressureError
 from ..framing import PRESSURE_BOARD
 
 if TYPE_CHECKING:
@@ -99,6 +100,20 @@ class Pump:
     reply = await self._driver._send_command(board=PRESSURE_BOARD, command=14, attempts=3)
     (on,) = struct.unpack_from("<H", reply)
     return bool(on)
+
+  async def _unchecked_fw_set_pump_on(self, *, on: bool) -> None:
+    """Set the air pump (board 10, command 15), sent once, without changing controllers."""
+    await self._driver._send_command(
+      board=PRESSURE_BOARD, command=15, payload=struct.pack("<H", on), attempts=1
+    )
+
+  async def _set_pump_on(self, *, on: bool) -> None:
+    """Set the pump only if needed and confirm its control-state readback."""
+    if await self.request_pump_on() == on:
+      return
+    await self._unchecked_fw_set_pump_on(on=on)
+    if await self.request_pump_on() != on:
+      raise MantisPressureError(f"{self._driver.name}: air pump did not become {on}")
 
   async def _request_calibration(self) -> Dict[PressureController, Tuple[float, float]]:
     """Every controller's feedback sensor calibration, by controller, read at setup."""

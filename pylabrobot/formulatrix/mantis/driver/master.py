@@ -12,7 +12,18 @@ import json
 import logging
 import struct
 import time
-from typing import Any, AsyncContextManager, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import (
+  Any,
+  AsyncContextManager,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Optional,
+  Set,
+  Tuple,
+  Union,
+)
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -52,7 +63,8 @@ from .events import (
 from .features.arm import Arm
 from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
-from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
+from .features.plate_clamp import PlateClamp
+from .features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .features.pump import Pump
 from .features.rfid import RFID_BAUD_RATE, RFID_FTDI_INTERFACE, Rfid, _initialize_rfid_module
 from .framing import (
@@ -177,7 +189,7 @@ class MantisDriver:
       if rfid_io is not None or io is not None
       else self._build_rfid_io(device_id=device_id, ftdi_library=ftdi_library)
     )
-    self.plate_clamp: Optional[PlateClamp] = None
+    self.plate_clamp: Optional[Union[PlateClamp, PneumaticPlateClamp]] = None
     self.pump: Optional[Pump] = None
     self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
@@ -876,7 +888,23 @@ class MantisDriver:
     Raises:
       MantisConfigurationError: if the ``plate_clamp``, ``led_bar`` or ``arm`` block is malformed.
     """
-    if self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None:
+    if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
+      self.pump = Pump(driver=self)
+    block = self._unit_blocks.get("plate_clamp")
+    if block is not None and block.get("controller") == "pressure_regulator":
+      if self.pump is not None and self.plate_clamp is None:
+        try:
+          output = block["auxiliary_output"]
+          self.plate_clamp = PneumaticPlateClamp(
+            driver=self, pump=self.pump, auxiliary_output=output
+          )
+        except (KeyError, TypeError, ValueError) as error:
+          raise MantisConfigurationError(
+            f"malformed pneumatic plate_clamp block: {error}"
+          ) from error
+    elif (
+      self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None
+    ):
       levels: Optional[Dict[int, Tuple[float, int]]] = None
       block = self._unit_blocks.get("plate_clamp")
       if block is not None:
@@ -888,8 +916,6 @@ class MantisDriver:
         except (KeyError, TypeError, ValueError) as error:
           raise MantisConfigurationError(f"malformed plate_clamp block: {error!r}") from error
       self.plate_clamp = PlateClamp(driver=self, levels=levels)
-    if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
-      self.pump = Pump(driver=self)
     # The LED bar is the v4's, on board 12: a v3 has none.
     if (
       self.configuration.generation == "v4"
@@ -1182,8 +1208,7 @@ class MantisDriver:
       await self._halt()
     if self.plate_clamp is not None and self._connected:
       try:
-        if await self.plate_clamp.request_state(attempts=1) != UNCLAMPING_DONE:
-          await self.plate_clamp.unlock()
+        await self.plate_clamp._release()
       except Exception:
         logger.warning("[%s] could not release the plate clamp", self.name, exc_info=True)
     if self.led_bar is not None and self._connected:

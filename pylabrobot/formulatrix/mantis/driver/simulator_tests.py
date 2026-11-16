@@ -17,6 +17,8 @@ from pylabrobot.formulatrix.mantis.driver.errors import (
 )
 from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
 from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
+from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
+from pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
 from pylabrobot.formulatrix.mantis.driver.simulator import (
   MantisSimulationArm,
@@ -34,16 +36,38 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_clamp_starts_idle_then_locks_and_unlocks(self):
     clamp = self.mantis.plate_clamp
-    assert clamp is not None
+    assert isinstance(clamp, PlateClamp)
     self.assertEqual(await clamp.request_state(), 0)
     await clamp.lock(level=3)
     self.assertEqual(await clamp.request_state(), 3)
     await clamp.unlock()
     self.assertEqual(await clamp.request_state(), 6)
 
+  async def test_pneumatic_clamp_uses_and_restores_the_simulated_pump(self):
+    """Pneumatic simulation follows the valve and pump lifecycle without any USB link."""
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      recording = json.load(file)
+    recording["device"]["generation"] = "v3"
+    recording["device"]["firmware_versions"].update({"11": None, "12": None})
+    recording["plate_clamp"] = {"controller": "pressure_regulator", "auxiliary_output": 2}
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "pneumatic.json")
+      with open(path, "w", encoding="utf-8") as file:
+        json.dump(recording, file)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      await mantis.setup(skip_arm=True)
+      self.addAsyncCleanup(mantis.stop)
+      assert isinstance(mantis.plate_clamp, PneumaticPlateClamp) and mantis.pump is not None
+      await mantis.plate_clamp.lock()
+      self.assertTrue(await mantis.plate_clamp.request_locked())
+      self.assertTrue(await mantis.pump.request_pump_on())
+      await mantis.stop()
+      self.assertFalse(await mantis.plate_clamp.request_locked())
+      self.assertFalse(await mantis.pump.request_pump_on())
+
   async def test_stop_releases_a_locked_clamp(self):
     clamp = self.mantis.plate_clamp
-    assert clamp is not None
+    assert isinstance(clamp, PlateClamp)
     await clamp.lock(level=3)
     await self.mantis.stop()
     await self.mantis.setup()
