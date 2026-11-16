@@ -836,15 +836,17 @@ class MantisDriver:
   async def _request_configuration(self) -> DeviceConfiguration:
     """Read the firmware versions off the device.
 
-    Only the motion board must answer. Each other board gets one attempt; one that times out,
-    refuses or answers a malformed version is absent, not a fault.
+    Only the motion board must answer. Board 11 gets a second attempt, as its silence makes a unit
+    a v3; each other board gets one. A board that times out, refuses or answers a malformed version
+    is absent, not a fault.
     """
     firmware_versions: Dict[int, Optional[str]] = {
       MOTION_BOARD: await self.request_firmware_version(board=MOTION_BOARD)
     }
     for board in (PRESSURE_BOARD, ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD):
+      attempts = 2 if board == ABSOLUTE_POSITION_SENSOR_BOARD else 1
       try:
-        reply = await self._send_command(board=board, command=1, attempts=1)
+        reply = await self._send_command(board=board, command=1, attempts=attempts)
         firmware_versions[board] = decode_string(payload=reply)
       except (TimeoutError, CommandRefusedError, FrameError, UnicodeDecodeError) as error:
         logger.info("[%s] board %d taken as absent: %r", self.name, board, error)
@@ -1052,6 +1054,12 @@ class MantisDriver:
       )
     elif self.arm is None:
       block = self._unit_blocks.get("arm")
+      # Absolute-encoder references are a v4's: never seat a v4's arms against their stops.
+      if block is not None and ("homing_position_a" in block or "encoder_correction" in block):
+        raise MantisConfigurationError(
+          f"{self.name}: board 11 did not answer, but the arm block has absolute-encoder "
+          "references, as a v4's has; refusing to treat this unit as a v3"
+        )
       v3_arm_configuration = V3ArmConfiguration.from_block(block) if block is not None else None
       self.arm = V3Arm(
         driver=self,

@@ -59,10 +59,11 @@ The carousel does not coordinate the arm or attach chips.
 and sending through it. No per-feature backend or frontend.
 
 **M2. The generation comes from discovery.** `_request_configuration` reads the firmware version
-on boards 0, 10, 11 and 12. Only board 0 must answer. Each other board gets one attempt, and one
-that times out, refuses or answers a malformed version is absent, not a fault: it is logged and
-recorded as `None`. Board 11 answering means v4; absent means v3. Board 0's version string and the
-serial number decide nothing.
+on boards 0, 10, 11 and 12. Only board 0 must answer. Board 11 gets two attempts, each other board
+one, and one that times out, refuses or answers a malformed version is absent, not a fault: it is
+logged and recorded as `None`. Board 11 answering means v4; absent means v3. A unit whose arm block
+has absolute-encoder references is refused as a v3, so a v4's arms are never seated against their
+stops. Board 0's version string and the serial number decide nothing.
 
 **M3. Nothing exists until the device says it is fitted.** (STAR P2.) `discover` reads the
 configuration (`_request_configuration`), checks it against a declared one, then

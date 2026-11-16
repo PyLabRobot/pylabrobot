@@ -303,7 +303,7 @@ class SetupTests(DriverTestCase):
       {0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
     )
 
-  async def test_only_board_0_must_answer_and_each_other_board_is_asked_once(self):
+  async def test_only_board_0_must_answer_and_board_11_is_asked_twice(self):
     self.default_read_timeout = 0.25  # boards 10 to 12 never answer
     link = FakeLink(answers=make_answers(absent_boards=(10, 11, 12)))
     driver = await self.set_up_driver(link=link)
@@ -312,9 +312,41 @@ class SetupTests(DriverTestCase):
       driver.configuration.firmware_versions, {0: "4.20.6.2", 10: None, 11: None, 12: None}
     )
     sent = [parse_frame(frame=frame)[1:] for frame in link.written]
-    for board in (10, 11, 12):
+    for board, count in ((10, 1), (11, 2), (12, 1)):
       with self.subTest(board=board):
-        self.assertEqual(sent.count((board, 1, b"")), 1)
+        self.assertEqual(sent.count((board, 1, b"")), count)
+
+  async def test_board_11_answering_its_second_attempt_makes_a_v4(self):
+    self.default_read_timeout = 0.25  # board 11's first version request goes unanswered
+    link = FakeLink(answers=make_answers())
+    write = link.write
+    dropped: List[bytes] = []
+
+    async def drop_first_board_11_request(data: bytes) -> int:
+      if parse_frame(frame=data)[1:3] == (11, 1) and not dropped:
+        dropped.append(data)
+        link.written.append(data)
+        return len(data)
+      return await write(data)
+
+    link.io.write.side_effect = drop_first_board_11_request
+    driver = await self.set_up_driver(link=link)
+    self.assertEqual(driver.configuration.generation, "v4")
+    self.assertEqual(driver.configuration.firmware_versions[11], "0.1.7 DBG")
+
+  async def test_a_v4_arm_block_on_a_silent_board_11_refuses_setup(self):
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "declared.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump({"arm": {"homing_position_a": {"0": 0.0, "1": 0.0}}}, f)
+      link = FakeLink(answers=make_answers(absent_boards=(11,)))
+      driver = self.make_driver(link=link, declared_configuration_json=path)
+      driver.default_read_timeout = 0.25  # board 11 never answers
+      with self.assertRaisesRegex(MantisConfigurationError, "absolute-encoder references"):
+        await driver.setup()
+    sent = [parse_frame(frame=frame)[1:3] for frame in link.written]
+    self.assertNotIn((0, 22), sent)
+    self.assertIsNone(driver.arm)
 
   async def test_declared_configuration_that_disagrees_refuses_setup(self):
     with tempfile.TemporaryDirectory() as directory:
