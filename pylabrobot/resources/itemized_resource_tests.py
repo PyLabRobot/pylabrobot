@@ -38,6 +38,7 @@ class TestItemizedResource(unittest.TestCase):
         size_x=9,
         size_y=9,
         size_z=9,
+        name_prefix="plate",
       ),
     )
     self.plate.location = Coordinate.zero()
@@ -254,6 +255,7 @@ class TestItemizedResource1536(unittest.TestCase):
         size_x=2.3,
         size_y=2.3,
         size_z=8.6,
+        name_prefix="plate_1536",
       ),
     )
 
@@ -324,6 +326,7 @@ class TestItemizedResourceWithLid(unittest.TestCase):
         size_x=9,
         size_y=9,
         size_z=9,
+        name_prefix="plate",
       ),
     )
 
@@ -394,14 +397,16 @@ class TestItemizedResourceTraversal(unittest.TestCase):
     def item_id(row, column):
       return "ABC"[row] + str(column + 1)
 
-    items = [
-      Resource(name=item_id(row, col), size_x=1, size_y=1, size_z=1).at(Coordinate(col, row, 0))
+    items = {
+      item_id(row, col): Resource(
+        name=f"test_resource_{item_id(row, col)}", size_x=1, size_y=1, size_z=1
+      ).at(Coordinate(col, row, 0))
       for col in range(3)
       for row in range(3)
-    ]
+    }
     self.ir = ItemizedResource(
       "test_resource",
-      ordered_items={item.name: item for item in items},
+      ordered_items=items,
       size_x=3,
       size_y=3,
       size_z=1,

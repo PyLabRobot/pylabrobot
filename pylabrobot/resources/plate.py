@@ -4,9 +4,11 @@ import warnings
 from collections import OrderedDict
 from typing import (
   TYPE_CHECKING,
+  Any,
   Dict,
   List,
   Literal,
+  Mapping,
   Optional,
   Sequence,
   Tuple,
@@ -40,6 +42,7 @@ class Plate(Liddable, ItemizedResource["Well"]):
     model: Optional[str] = None,
     plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
     stacking_z_height: Optional[float] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Initialize a Plate resource.
 
@@ -64,6 +67,7 @@ class Plate(Liddable, ItemizedResource["Well"]):
       ordering=ordering,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.plate_type = plate_type
     self.stacking_z_height = stacking_z_height
@@ -82,11 +86,12 @@ class Plate(Liddable, ItemizedResource["Well"]):
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "plate_type": self.plate_type,
-      "stacking_z_height": self.stacking_z_height,
-    }
+    data = super().serialize()
+    if self.plate_type != "skirted":
+      data["plate_type"] = self.plate_type
+    if self.stacking_z_height is not None:
+      data["stacking_z_height"] = self.stacking_z_height
+    return data
 
   def __eq__(self, other) -> bool:
     # `stacking_z_height` is a physical dimension (the pitch a plate adds to a stack), so plates
@@ -116,12 +121,16 @@ class Plate(Liddable, ItemizedResource["Well"]):
 
     return super().get_item(identifier)
 
-  def get_wells(self, identifier: Union[str, Sequence[int]]) -> List["Well"]:
+  def get_wells(self, identifier: Optional[Union[str, Sequence[int]]] = None) -> List["Well"]:
     """Get the wells with the given identifier.
+
+    If no identifier is given, all wells are returned.
 
     See :meth:`~.get_items` for more information.
     """
 
+    if identifier is None:
+      return super().get_items(list(range(self.num_items)))
     return super().get_items(identifier)
 
   def set_well_volumes(

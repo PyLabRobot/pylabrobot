@@ -26,13 +26,14 @@ class HIDCommand(Command):
 
   def __init__(self, device_id: str, action: str, data: str):
     super().__init__(module="hid", device_id=device_id, action=action)
+    self.data = data
 
 
 class HID(IOBase):
   def __init__(
     self, human_readable_device_name: str, vid: int, pid: int, serial_number: Optional[str] = None
   ):
-    self._human_readable_device_name = human_readable_device_name
+    self.human_readable_device_name = human_readable_device_name
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
@@ -43,17 +44,8 @@ class HID(IOBase):
     if get_capture_or_validation_active():
       raise RuntimeError("Cannot create a new HID object while capture or validation is active")
 
-  async def setup(self):
-    """
-    Sets up the HID device by enumerating connected devices, matching the specified
-    VID, PID, and optional serial number, and opening a connection to the device.
-    """
-    if not USE_HID:
-      raise RuntimeError(
-        "hid is not installed. Install with: pip install pylabrobot[hid]. "
-        f"Import error: {_HID_IMPORT_ERROR}"
-      )
-
+  def _setup_sync(self) -> None:
+    """Enumerate, match and open the device. Runs on the executor that owns all device calls."""
     # --- 1. Enumerate all HID devices ---
     all_devices = hid.enumerate()
     candidates = [
@@ -102,19 +94,55 @@ class HID(IOBase):
     self.device = hid.Device(
       path=chosen["path"]  # safer than vid/pid/serial triple
     )
+
+  async def setup(self):
+    """
+    Sets up the HID device by enumerating connected devices, matching the specified
+    VID, PID, and optional serial number, and opening a connection to the device.
+    """
+    if not USE_HID:
+      raise RuntimeError(
+        "hid is not installed. Install with: pip install pylabrobot[hid]. "
+        f"Import error: {_HID_IMPORT_ERROR}"
+      )
+
     self._executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_running_loop()
+    setup_future = loop.run_in_executor(self._executor, self._setup_sync)
+    try:
+      await asyncio.shield(setup_future)
+    except BaseException as exc:
+      if isinstance(exc, asyncio.CancelledError):
+        try:
+          await setup_future
+        except BaseException:
+          pass
+      if self.device is not None:
+        try:
+          await loop.run_in_executor(self._executor, self.device.close)
+        except Exception:
+          logger.warning("Failed to close HID device after setup failure", exc_info=True)
+        self.device = None
+      self._shutdown_executor()
+      raise
 
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
 
+  def _shutdown_executor(self) -> None:
+    if self._executor is not None:
+      # the worker is idle here, so this does not block the event loop
+      self._executor.shutdown(wait=False, cancel_futures=True)
+      self._executor = None
+
   async def stop(self):
     if self.device is not None:
-      self.device.close()
+      loop = asyncio.get_running_loop()
+      await loop.run_in_executor(self._executor, self.device.close)
+      self.device = None
     logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
     capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
-    if self._executor is not None:
-      self._executor.shutdown(wait=True)
-      self._executor = None
+    self._shutdown_executor()
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
     r"""Writes data to the HID device.
@@ -144,7 +172,7 @@ class HID(IOBase):
 
     def _write():
       if self.device is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       return self.device.write(write_data)
 
     if self._executor is None:
@@ -156,12 +184,39 @@ class HID(IOBase):
     capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=write_data.hex()))
     return r
 
+  async def send_feature_report(self, data: bytes, report_id: bytes = b"\x00") -> int:
+    """Send a feature report, prepending its one-byte HID report ID.
+
+    Pass only the report payload in ``data``. Unnumbered reports use ID zero,
+    just like :meth:`write`. Device calls run on the transport's owning thread.
+    """
+    if len(report_id) != 1:
+      raise ValueError("report_id must contain exactly one byte")
+    if self._executor is None:
+      raise RuntimeError("Call setup() first.")
+    report = report_id + data
+
+    def send() -> int:
+      """Write the complete report on the HID worker."""
+      if self.device is None:
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
+      return int(self.device.send_feature_report(report))
+
+    written = await asyncio.get_running_loop().run_in_executor(self._executor, send)
+    if written != len(report):
+      raise OSError(f"Short HID feature report write: {written} of {len(report)} bytes")
+    logger.log(LOG_LEVEL_IO, "[%s] feature report %s", self._unique_id, report.hex())
+    capturer.record(
+      HIDCommand(device_id=self._unique_id, action="send_feature_report", data=report.hex())
+    )
+    return written
+
   async def read(self, size: int, timeout: int) -> bytes:
     loop = asyncio.get_running_loop()
 
     def _read():
       if self.device is None:
-        raise RuntimeError(f"Call setup() first for device '{self._human_readable_device_name}'.")
+        raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
       try:
         return self.device.read(size, timeout=int(timeout))
       except HIDException as e:
@@ -179,7 +234,7 @@ class HID(IOBase):
 
   def serialize(self):
     return {
-      "human_readable_device_name": self._human_readable_device_name,
+      "human_readable_device_name": self.human_readable_device_name,
       "vid": self.vid,
       "pid": self.pid,
       "serial_number": self.serial_number,
@@ -203,46 +258,44 @@ class HIDValidator(HID):
     )
     self.cr = cr
 
-  async def setup(self):
-    next_command = HIDCommand(**self.cr.next_command())
+  def _next_command(self, action: str) -> HIDCommand:
+    """Consume a captured command for this device and operation."""
+    command = self.cr.next_command()
     if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "open"
+      command["module"] != "hid"
+      or command["device_id"] != self._unique_id
+      or command["action"] != action
     ):
-      raise ValidationError(f"Next line is {next_command}, expected HID open {self._unique_id}")
+      raise ValidationError(f"Next command is {command}, expected HID {action} {self._unique_id}")
+    return HIDCommand(command["device_id"], command["action"], command["data"])
+
+  async def setup(self):
+    self._next_command("open")
 
   async def stop(self):
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "close"
-    ):
-      raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
+    self._next_command("close")
 
   async def write(self, data: bytes, report_id: bytes = b"\x00"):
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "write"
-    ):
-      raise ValidationError(f"Next line is {next_command}, expected HID write {self._unique_id}")
+    next_command = self._next_command("write")
     write_data = report_id + data
     if not next_command.data == write_data.hex():
       align_sequences(expected=next_command.data, actual=write_data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
+    return len(write_data)
+
+  async def send_feature_report(self, data: bytes, report_id: bytes = b"\x00") -> int:
+    """Validate the payload and report ID without opening hardware."""
+    if len(report_id) != 1:
+      raise ValueError("report_id must contain exactly one byte")
+    command = self._next_command("send_feature_report")
+    report = report_id + data
+    if command.data != report.hex():
+      raise ValidationError(f"Expected feature report {command.data}, got {report.hex()}")
+    return len(report)
 
   async def read(self, size: int, timeout: int) -> bytes:
-    next_command = HIDCommand(**self.cr.next_command())
-    if (
-      not next_command.module == "hid"
-      and next_command.device_id == self._unique_id
-      and next_command.action == "read"
-      and len(next_command.data) == size
-    ):
-      raise ValidationError(
-        f"Next line is {next_command}, expected HID read {self._unique_id}: {size}"
-      )
-    return next_command.data.encode()
+    command = self._next_command("read")
+    data = bytes.fromhex(command.data)
+    if len(data) > size:
+      raise ValidationError(f"Captured HID read has {len(data)} bytes, requested at most {size}")
+    return data

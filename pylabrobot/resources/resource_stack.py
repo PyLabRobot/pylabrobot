@@ -1,12 +1,12 @@
 import logging
-from typing import List, Optional
+from typing import Any, List, Mapping, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import get_child_location
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
 class ResourceStack(Resource):
@@ -21,7 +21,7 @@ class ResourceStack(Resource):
   another bare plate, it sinks in by ``size_z - stacking_z_height`` instead of resting at the
   lower plate's full height. A stack of ``N`` identical such plates is therefore
   ``size_z + (N - 1) * stacking_z_height`` tall. Plates without a ``stacking_z_height``, and plates
-  wearing a lid, do not nest.
+  wearing a lid, do not nest. Standing tip racks nest into one another the same way.
 
   Attributes:
     name: The name of the resource group.
@@ -61,8 +61,11 @@ class ResourceStack(Resource):
     name: str,
     direction: str,
     resources: Optional[List[Resource]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
-    super().__init__(name, size_x=0, size_y=0, size_z=0, category="resource_group")
+    super().__init__(
+      name, size_x=0, size_y=0, size_z=0, category="resource_group", metadata=metadata
+    )
     assert direction in [
       "x",
       "y",
@@ -74,6 +77,19 @@ class ResourceStack(Resource):
       resources = list(reversed(resources))
     for resource in resources:
       self.assign_child_resource(resource)
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "direction": self.direction}
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> "ResourceStack":
+    """Rebuild a stack. Its sizes follow from its children and its category is fixed."""
+    data = {
+      key: value
+      for key, value in data.items()
+      if key not in ("size_x", "size_y", "size_z", "category")
+    }
+    return super().deserialize(data=data, allow_marshal=allow_marshal)
 
   def get_size_x(self) -> float:
     """Get local size in the x direction."""
@@ -94,21 +110,35 @@ class ResourceStack(Resource):
   @staticmethod
   def _actual_resource_height(resource: Resource) -> float:
     """The height a resource occupies on its own, accounting for the lid nesting height if the
-    resource is a plate with a lid."""
-    if isinstance(resource, Plate) and resource.lid is not None:
+    resource is a plate or a tip rack with a lid."""
+    # Deferred: tip_rack imports this module.
+    from pylabrobot.resources.tip_rack import TipRack
+
+    if isinstance(resource, (Plate, TipRack)) and resource.lid is not None:
       return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
     return resource.get_size_z()
 
   def _nesting_overlap(self, upper: Resource, lower: Optional[Resource]) -> float:
     """How far ``upper`` sinks into ``lower`` when stacked in the z direction (``0`` if they do not
-    nest). Only a bare plate stacked on a bare plate with a known ``stacking_z_height`` nests; the
-    overlap is then ``size_z - stacking_z_height`` (i.e. the plate adds only its stacking pitch to
-    the stack instead of its full height)."""
+    nest). A bare plate on a bare plate, or a standing tip rack on a standing tip rack without a lid,
+    with a known ``stacking_z_height`` nests; the overlap is then ``size_z - stacking_z_height``
+    (i.e. it adds only its stacking pitch to the stack instead of its full height)."""
+    # Deferred: tip_rack imports this module.
+    from pylabrobot.resources.tip_rack import StandingTipRack
+
+    if self.direction != "z":
+      return 0.0
     if (
-      self.direction == "z"
-      and isinstance(upper, Plate)
+      isinstance(upper, Plate)
       and upper.stacking_z_height is not None
       and isinstance(lower, Plate)
+      and lower.lid is None
+    ):
+      return upper.get_size_z() - upper.stacking_z_height
+    if (
+      isinstance(upper, StandingTipRack)
+      and upper.stacking_z_height is not None
+      and isinstance(lower, StandingTipRack)
       and lower.lid is None
     ):
       return upper.get_size_z() - upper.stacking_z_height

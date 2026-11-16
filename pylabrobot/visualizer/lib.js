@@ -750,6 +750,12 @@ var resourceSnapshots = {}; // name -> serialized resource data
 
 var rootResource = null; // the root resource for fit-to-viewport
 
+// Find the deck by type rather than a hardcoded "deck" key: robust to the deck's name and to the
+// resource not yet being registered (returns undefined instead of throwing).
+function getDeck() {
+  return Object.values(resources).find((r) => r instanceof Deck);
+}
+
 function fitToViewport() {
   if (!rootResource || !stage) return;
   const padding = 40;
@@ -782,11 +788,6 @@ let recordingCounter = 0; // Counter to track the number of recorded frames
 var frameImages = [];
 let frameInterval = 8;
 var _recordingTimer = null;
-
-// The deck resource, found by type rather than a hardcoded name (decks may be named anything).
-function getDeck() {
-  return Object.values(resources).find((r) => r instanceof Deck);
-}
 
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
@@ -856,29 +857,27 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
     }
   }
 
-  // Check if the resource is in the OT Deck. The slots are ResourceHolder children of the deck, so
-  // their positions and sizes come from the serialized resource rather than being duplicated here.
+  // Check if the resource is in the OT Deck.
   if (deck.constructor.name === "OTDeck") {
-    for (const holder of deck.children) {
-      if (!holder.location || !(holder.name && /slot_\d+$/.test(holder.name))) {
-        continue;
-      }
-      const siteX = deck.location.x + holder.location.x;
-      const siteY = deck.location.y + holder.location.y;
+    const siteWidth = 128.0;
+    const siteHeight = 86.0;
+
+    for (let i = 0; i < otDeckSiteLocations.length; i++) {
+      let siteLocation = otDeckSiteLocations[i];
       if (
-        x > siteX &&
-        x < siteX + holder.size_x &&
-        y > siteY &&
-        y < siteY + holder.size_y
+        x > deck.location.x + siteLocation.x &&
+        x < deck.location.x + siteLocation.x + siteWidth &&
+        y > deck.location.y + siteLocation.y &&
+        y < deck.location.y + siteLocation.y + siteHeight
       ) {
         return {
           resource: deck,
-          location: { x: holder.location.x, y: holder.location.y },
+          location: { x: siteLocation.x, y: siteLocation.y },
           snappingBox: {
-            x: siteX,
-            y: siteY,
-            width: holder.size_x,
-            height: holder.size_y,
+            x: deck.location.x + siteLocation.x,
+            y: deck.location.y + siteLocation.y,
+            width: siteWidth,
+            height: siteHeight,
           },
         };
       }
@@ -926,7 +925,7 @@ function getSnappingGrid(x, y, width, height) {
       snappingLines.resourceX = deck.location.x;
     }
 
-    for (let rail = 0; rail < deck.num_rails; rail++) {
+    for (let rail = 0; rail < deck.num_tracks; rail++) {
       const railX = railOffset + 22.5 * rail;
       if (Math.abs(x - railX) < SNAP_MARGIN) {
         snappingLines.resourceX = railX;
@@ -1360,8 +1359,8 @@ class Deck extends Resource {
 class HamiltonSTARDeck extends Deck {
   constructor(resourceData) {
     super(resourceData, undefined);
-    const { num_rails } = resourceData;
-    this.num_rails = num_rails;
+    const { num_tracks } = resourceData;
+    this.num_tracks = num_tracks;
     this.railHeight = 497;
   }
 
@@ -1414,8 +1413,8 @@ class HamiltonSTARDeck extends Deck {
       })
     );
 
-    // Draw vertical rails as lines
-    for (let i = 0; i < this.num_rails; i++) {
+    // Draw vertical rails as lines: each track's left edge, then the last track's right edge
+    for (let i = 0; i <= this.num_tracks; i++) {
       const railBottomTickHeight = 10;
       const rail = new Konva.Line({
         points: [
@@ -1431,7 +1430,7 @@ class HamiltonSTARDeck extends Deck {
 
       // Add a text label every 5 rails. Rails are 1-indexed.
       // Keep in mind that the stage is flipped vertically.
-      if ((i + 1) % 5 === 0 || i === 0) {
+      if (i < this.num_tracks && ((i + 1) % 5 === 0 || i === 0)) {
         const railLabel = new Konva.Text({
           x: 100 + i * 22.5 + 11.25, // center of rail (between lines)
           y: 50,
@@ -1451,7 +1450,7 @@ class HamiltonSTARDeck extends Deck {
     return {
       ...super.serialize(),
       ...{
-        num_rails: this.num_rails,
+        num_tracks: this.num_tracks,
         with_trash: false,
         with_trash96: false,
       },
@@ -1465,10 +1464,10 @@ class VantageDeck extends Deck {
     const { size } = resourceData;
     this.size = size;
     if (size === 1.3) {
-      this.num_rails = 54;
+      this.num_tracks = 54;
     } else {
       alert(`Unsupported Vantage Deck size: ${size}. Only 1.3 is supported.`);
-      this.num_rails = 0;
+      this.num_tracks = 0;
     }
     this.railHeight = 497;
   }
@@ -1519,7 +1518,7 @@ class VantageDeck extends Deck {
       })
     );
 
-    for (let i = 0; i < this.num_rails; i++) {
+    for (let i = 0; i < this.num_tracks; i++) {
       const railX = 32.5 + i * 22.5;
       const railBottomTickHeight = 10;
       const rail = new Konva.Line({
@@ -1555,6 +1554,21 @@ class VantageDeck extends Deck {
   }
 }
 
+const otDeckSiteLocations = [
+  { x: 0.0, y: 0.0 },
+  { x: 132.5, y: 0.0 },
+  { x: 265.0, y: 0.0 },
+  { x: 0.0, y: 90.5 },
+  { x: 132.5, y: 90.5 },
+  { x: 265.0, y: 90.5 },
+  { x: 0.0, y: 181.0 },
+  { x: 132.5, y: 181.0 },
+  { x: 265.0, y: 181.0 },
+  { x: 0.0, y: 271.5 },
+  { x: 132.5, y: 271.5 },
+  { x: 265.0, y: 271.5 },
+];
+
 class OTDeck extends Deck {
   constructor(resourceData) {
     super(resourceData, undefined);
@@ -1563,7 +1577,7 @@ class OTDeck extends Deck {
   drawMainShape() {
     // The slot rectangles are drawn by the ResourceHolder children; the main shape is just the deck
     // border. The slot-number labels are added in draw() so they sit on top of the holders.
-    let group = new Konva.Group({});
+    const group = new Konva.Group({});
 
     // Opaque footprint fill, drawn first (behind the slot holders) so the deck paints its own
     // surface rather than relying on the global background; otherwise the gaps around and between
@@ -1758,6 +1772,45 @@ class Container extends Resource {
   }
 }
 
+// Draws a container seen from above as its cross section: a circle or a rectangle.
+function drawCrossSection(container) {
+  const mainShape = new Konva.Group({});
+  let liquid;
+  if (container.cross_section_type === "circle") {
+    mainShape.add(new Konva.Circle({  // background
+      radius: container.size_x / 2,
+      fill: RESOURCE_COLORS["ContainerBackground"],
+      offsetX: -container.size_x / 2,
+      offsetY: -container.size_y / 2,
+    }));
+    liquid = new Konva.Circle({ // liquid
+      radius: container.size_x / 2,
+      fill: Container.colorForVolume(container.getVolume(), container.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -container.size_x / 2,
+      offsetY: -container.size_y / 2,
+    });
+    mainShape.add(liquid);
+  } else {
+    mainShape.add(new Konva.Rect({  // background
+      width: container.size_x,
+      height: container.size_y,
+      fill: RESOURCE_COLORS["ContainerBackground"],
+    }));
+    liquid = new Konva.Rect({ // liquid
+      width: container.size_x,
+      height: container.size_y,
+      fill: Container.colorForVolume(container.getVolume(), container.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+    });
+    mainShape.add(liquid);
+  }
+  container._liquidShape = liquid;
+  return mainShape;
+}
+
 class Well extends Container {
   get draggable() { return false; }
   get canDelete() { return false; }
@@ -1778,41 +1831,30 @@ class Well extends Container {
   }
 
   drawMainShape() {
-    const mainShape = new Konva.Group({});
-    let liquid;
-    if (this.cross_section_type === "circle") {
-      mainShape.add(new Konva.Circle({  // background
-        radius: this.size_x / 2,
-        fill: RESOURCE_COLORS["ContainerBackground"],
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      }));
-      liquid = new Konva.Circle({ // liquid
-        radius: this.size_x / 2,
-        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
-        stroke: "black",
-        strokeWidth: 1,
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      });
-      mainShape.add(liquid);
-    } else {
-      mainShape.add(new Konva.Rect({  // background
-        width: this.size_x,
-        height: this.size_y,
-        fill: RESOURCE_COLORS["ContainerBackground"],
-      }));
-      liquid = new Konva.Rect({ // liquid
-        width: this.size_x,
-        height: this.size_y,
-        fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      mainShape.add(liquid);
-    }
-    this._liquidShape = liquid;
-    return mainShape;
+    return drawCrossSection(this);
+  }
+}
+
+// A petri dish is serialized as its diameter and height, and is always round.
+class PetriDish extends Container {
+  constructor(resourceData, parent) {
+    const { diameter, height } = resourceData;
+    super({ ...resourceData, size_x: diameter, size_y: diameter, size_z: height }, parent);
+    this.diameter = diameter;
+    this.height = height;
+    this.cross_section_type = "circle";
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      diameter: this.diameter,
+      height: this.height,
+    };
+  }
+
+  drawMainShape() {
+    return drawCrossSection(this);
   }
 }
 
@@ -2270,7 +2312,7 @@ function buildChannelAttrs(ch, headState) {
     attrs.push({ key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") });
     attrs.push({ key: "max_volume", value: (tipData.maximal_volume || "?") + " \u00B5L" });
     attrs.push({ key: "has_filter", value: tipData.has_filter ? "Yes" : "No" });
-    attrs.push({ key: "tip_length", value: (tipData.total_tip_length || "?") + " mm" });
+    attrs.push({ key: "tip_length", value: (tipData.size_z || "?") + " mm" });
   } else {
     attrs.push({ key: "has_tip", value: "false" });
   }
@@ -2286,7 +2328,7 @@ function buildTipAttrs(ch, headState) {
     { key: "name", value: tipData.name || "Unknown" },
     { key: "type", value: tipData.type || "Unknown" },
     { key: "tip_size", value: (tipData.tip_size || "").replace(/_/g, " ") },
-    { key: "total_tip_length", value: (tipData.total_tip_length || "?") + " mm" },
+    { key: "size_z", value: (tipData.size_z || "?") + " mm" },
     { key: "has_filter", value: tipData.has_filter ? "Yes" : "No" },
     { key: "maximal_volume", value: (tipData.maximal_volume || "?") + " \u00B5L" },
     { key: "pickup_method", value: (tipData.pickup_method || "").replace(/_/g, " ") },
@@ -2422,10 +2464,10 @@ function fillHeadIcons(panel, headState) {
     var ch = channels[ci];
     var tipData = headState[ch] && headState[ch].tip;
     var hasTip = tipData !== null && tipData !== undefined;
-    // Scale tip length: total_tip_length in mm, map to px (0.8 px/mm, clamp 10mm–80mm)
+    // Scale tip length: size_z in mm, map to px (0.8 px/mm, clamp 10mm–80mm)
     var tipLenPx = 0;
-    if (hasTip && tipData.total_tip_length) {
-      var clampedMm = Math.max(10, Math.min(80, tipData.total_tip_length));
+    if (hasTip && tipData.size_z) {
+      var clampedMm = Math.max(10, Math.min(80, tipData.size_z));
       tipLenPx = clampedMm * 0.8;
     }
     var col = document.createElement("div");
@@ -2511,7 +2553,7 @@ function fillHeadIcons(panel, headState) {
         tipG.addEventListener("mouseenter", function () { this.setAttribute("filter", "url(#tipGlow" + idx + ")"); });
         tipG.addEventListener("mouseleave", function () { this.removeAttribute("filter"); });
       })(ci);
-      var botW = (tipData.total_tip_length > 50) ? 2 : 1;
+      var botW = (tipData.size_z > 50) ? 2 : 1;
       var botL = 7 - botW / 2;
       var botR = 7 + botW / 2;
       var tipShapes =
@@ -2865,7 +2907,7 @@ function buildSingleArm(armData, anchorDropdown, armId) {
       attrs.push({ key: "resource_name", value: armData.resource_name });
       attrs.push({ key: "resource_type", value: armData.resource_type || "Unknown" });
       attrs.push({ key: "direction", value: armData.direction || "?" });
-      attrs.push({ key: "pickup_distance_from_top", value: (armData.pickup_distance_from_top || 0) + " mm" });
+      attrs.push({ key: "pickup_distance_from_bottom", value: (armData.pickup_distance_from_bottom || 0) + " mm" });
       attrs.push({ key: "size", value: (armData.size_x || "?") + " × " + (armData.size_y || "?") + " × " + (armData.size_z || "?") + " mm" });
       if (armData.num_items_x) attrs.push({ key: "wells", value: (armData.num_items_x * (armData.num_items_y || 1)) });
     }
@@ -3098,6 +3140,8 @@ function classForResourceType(type, category) {
       return Plate;
     case "Well":
       return Well;
+    case "PetriDish":
+      return PetriDish;
     case "TipRack":
       return TipRack;
     case "TipSpot":
@@ -4960,7 +5004,7 @@ function getUmlAttributes(resource) {
   }
   // HamiltonSTARDeck
   if (resource instanceof HamiltonSTARDeck) {
-    attrs.push({ key: "num_rails", value: resource.num_rails });
+    attrs.push({ key: "num_tracks", value: resource.num_tracks });
   }
   // PlateAdapter
   if (resource instanceof PlateAdapter) {

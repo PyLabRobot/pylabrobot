@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from pylabrobot.resources.resource_holder import get_child_location
 
@@ -30,6 +30,7 @@ class Lid(Resource):
     nesting_z_height: float,
     category: str = "lid",
     model: Optional[str] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
   ):
     """Create a lid.
 
@@ -47,6 +48,7 @@ class Lid(Resource):
       size_z=size_z,
       category=category,
       model=model,
+      metadata=metadata,
     )
     self.nesting_z_height = nesting_z_height
     if nesting_z_height == 0:

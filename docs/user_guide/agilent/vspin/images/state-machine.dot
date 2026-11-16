@@ -1,0 +1,30 @@
+digraph vspin_activity {
+  graph [bgcolor="#f8fafc", pad=0.2, layout=neato, overlap=true, splines=true, outputorder=edgesfirst];
+  node [shape=box, style="rounded,filled", fillcolor="#ede9fe", color="#8b5cf6",
+        fontcolor="#0f172a", fontname="Helvetica", fontsize=16, pin=true, margin="0.12,0.09"];
+  edge [color="#475569", fontcolor="#475569", fontname="Helvetica", fontsize=14];
+
+  idle [pos="3,6!", label="IDLE", penwidth=2];
+  interlocks [pos="0,6!", label="CHANGING\nINTERLOCKS"];
+  positioning [pos="0,3.5!", label="POSITIONING"];
+  transferring [pos="0,1!", label="TRANSFERRING"];
+  preparing [pos="6,6!", label="PREPARING\nTO SPIN"];
+  accelerating [pos="6,3.5!", label="ACCELERATING"];
+  at_speed [pos="6,1!", label="AT SPEED"];
+  decelerating [pos="3,1!", label="DECELERATING"];
+
+  idle -> interlocks [label="door / lock"];
+  interlocks -> idle [label="confirmed", constraint=false];
+  idle -> positioning [label="position"];
+  positioning -> idle [label="confirmed", constraint=false];
+  idle -> transferring [label="load / unload"];
+  transferring -> idle [xlabel="loader parked", constraint=false];
+  idle -> preparing [label="spin"];
+  preparing -> accelerating [label="trajectory starts"];
+  accelerating -> at_speed [label="speed verified"];
+  at_speed -> decelerating [label="duration /\nstop_spin"];
+  decelerating -> idle [label="stopped", constraint=false];
+  preparing -> idle [label="stop before motion", color="#0369a1",
+                     fontcolor="#0369a1", constraint=false];
+  accelerating -> decelerating [label="stop_spin", color="#0369a1", fontcolor="#0369a1"];
+}

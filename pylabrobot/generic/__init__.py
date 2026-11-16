@@ -1,0 +1,1 @@
+from .line_barcode_scanner import SerialBarcodeScanner

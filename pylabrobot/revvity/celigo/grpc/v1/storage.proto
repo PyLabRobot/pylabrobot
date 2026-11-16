@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package celigo.storage.v1;
+
+import "google/protobuf/timestamp.proto";
+import "pylabrobot/rpc/v1/jobs.proto";
+import "pylabrobot/revvity/celigo/grpc/v1/service.proto";
+
+// Private durable records. These are not RPC response types.
+message JobStatus {
+  pylabrobot.rpc.v1.JobRef job = 1;
+  string request_id = 2;
+  string kind = 3;
+  pylabrobot.rpc.v1.JobState state = 4;
+  pylabrobot.rpc.v1.Outcome outcome = 5;
+  string phase = 6;
+  bool cancellation_requested = 7;
+  uint32 completed = 8;
+  uint32 total = 9;
+  string progress_unit = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  string error = 13;
+  uint64 revision = 14;
+  string configuration_id = 15;
+  bool images_released = 16;
+  bool state_durable = 17;
+}
+
+message ImageFrame {
+  pylabrobot.rpc.v1.JobRef job = 1;
+  string frame_id = 2;
+  uint32 sequence = 3;
+  string representation = 4;
+  google.protobuf.Timestamp captured_at = 5;
+  uint32 width = 6;
+  uint32 height = 7;
+  string pixel_format = 8;
+  string encoding = 9;
+  bytes image = 10; // Complete PNG; never an application-level chunk.
+  string sha256 = 11;
+  celigo.v1.AcquisitionMetadata metadata = 12;
+}

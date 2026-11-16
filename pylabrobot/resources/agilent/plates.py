@@ -97,6 +97,7 @@ def agilent_96_wellplate_150uL_Vb(name: str) -> Plate:
       dz=15.9 - 14.0 - 0.88,  # spec - spec - measured manually
       item_dx=9.0,  # standard
       item_dy=9.0,  # standard
+      name_prefix=name,
       **well_kwargs,
     ),
     plate_type="skirted",
@@ -136,6 +137,38 @@ def agilent_2_reservoir_144mL_Vb(name: str) -> Plate:
       size_x=53.22,  # from spec
       size_y=71.23,  # from spec
       size_z=39.22,  # from spec
+      bottom_type=WellBottomType.V,
+      cross_section_type=CrossSectionType.RECTANGLE,
+      material_z_thickness=1.15,
+      name_prefix=name,
+    ),
+  )
+
+
+def agilent_1_troughplate_86mL_Vb(name: str) -> Plate:
+  """Agilent 1 Troughplate 86mL V bottom
+  Part Number: 201254-100
+  - Max Volume: 86 mL
+  Spec: https://labrulez.com/pdf/br_microplate_dimension_guide_5994_5247en_agilent_1368d1a796/br-microplate-dimension-guide-5994-5247en-agilent.pdf
+  """
+  return Plate(
+    name=name,
+    size_x=127.76,  # from spec
+    size_y=85.47,  # from spec
+    size_z=19.05,  # from spec
+    model="Agilent_1_troughplate_86mL_Vb",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=1,  # from spec
+      num_items_y=1,  # from spec
+      dx=9.3,  # measured
+      dy=6.21,  # measured
+      dz=19.05 - 17.91,  # measured
+      item_dx=0,  # from spec
+      item_dy=0,  # from spec
+      size_x=106.22,  # from spec
+      size_y=70.46,  # from spec
+      size_z=12.7,  # from spec
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
       material_z_thickness=1.15,

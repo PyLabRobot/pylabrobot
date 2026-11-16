@@ -1,0 +1,74 @@
+{
+  "device": {
+    "firmware_version": 1120,
+    "firmware_build": 1,
+    "firmware_package": 11,
+    "protocol_version": 1,
+    "mainboard_version": 1,
+    "cpu_board_version": 1,
+    "serial_number": "0000-000000",
+    "photomultipliers": "single",
+    "temperature_controller": true,
+    "temperature_controller_channels": 3,
+    "pumps": [
+      null,
+      null
+    ],
+    "spectrometer": true,
+    "spectrometer_maximum_wavelength": 1050,
+    "monochromator_slides": {
+      "EX_SP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "EX_LP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "BSP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2",
+        "4": "Filter 3"
+      },
+      "EM_SP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "EM_LP": {
+        "1": "open",
+        "2": "Filter 1",
+        "3": "Filter 2"
+      },
+      "EM_SLIT": {
+        "1": "open",
+        "2": "Slit 0.8",
+        "3": "Slit 1.2",
+        "4": "Slit 2.0",
+        "5": "Slit 3.0",
+        "7": "FP par",
+        "8": "FP per",
+        "6": "LUM lense"
+      },
+      "EX_SLIT": {
+        "1": "open",
+        "2": "Slit 0.6",
+        "3": "Slit 1.0",
+        "4": "Slit 1.6",
+        "5": "Slit 2.3",
+        "8": "FP Stdrd",
+        "7": "FP UV",
+        "9": "ABS",
+        "6": "F-Check"
+      }
+    },
+    "linear_variable_filters": true,
+    "atmospheric_control_unit_connected": false,
+    "stirrer": false,
+    "stacker_connected": null,
+    "barcode_readers": null
+  }
+}

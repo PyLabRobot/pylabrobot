@@ -1,0 +1,55 @@
+{
+  "source": "readAbsorbance600AllWells96WellPlate.pcap",
+  "sha256": "e315b9506a9d5df79c4c99005ab255a0d28df356b35ccf348e048b6fe691e4ec",
+  "instrument": "Synergy HT, firmware 2.24, serial 196804",
+  "records": [
+    {
+      "frame": 945,
+      "time": 7.302683,
+      "device": "7",
+      "direction": "tx",
+      "hex": "65",
+      "last_frame": 945
+    },
+    {
+      "frame": 947,
+      "time": 7.318508,
+      "device": "7",
+      "direction": "rx",
+      "hex": "0637303930323032202056657273696f6e20322e32342020203030303003",
+      "last_frame": 951
+    },
+    {
+      "frame": 991,
+      "time": 7.595043,
+      "device": "7",
+      "direction": "tx",
+      "hex": "7a",
+      "last_frame": 991
+    },
+    {
+      "frame": 993,
+      "time": 7.605019,
+      "device": "7",
+      "direction": "rx",
+      "hex": "06",
+      "last_frame": 993
+    },
+    {
+      "frame": 995,
+      "time": 7.605243,
+      "device": "7",
+      "direction": "tx",
+      "hex": "3230303003",
+      "last_frame": 995
+    },
+    {
+      "frame": 997,
+      "time": 7.621334,
+      "device": "7",
+      "direction": "rx",
+      "hex": "30303030303030303030303030303030303030303003",
+      "last_frame": 1001
+    }
+  ]
+}

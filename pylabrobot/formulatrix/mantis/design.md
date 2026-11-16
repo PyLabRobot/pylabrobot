@@ -1,0 +1,387 @@
+# How this integration is built
+
+The patterns the Mantis integration is written to, so that a new feature can follow them and an
+existing one can be checked against them. Each is stated as a rule, with where it is followed. The
+last section lists what is open and where the code does not follow a rule yet.
+
+## The layers
+
+```
+device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
+                             the driver, the parts; places the arm's links from a pose read.
+carousel.py                  MantisCarousel. The external LC3's own FTDI link, homing and
+                             calibrated chip-slot positioning; independent of arm movement.
+driver/carousel_configuration.py
+                             CarouselConfiguration. Serial-matched carousel geometry and motion
+                             settings read from the OEM database without modifying it.
+driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
+                             the sequencer, discovery and the saved configuration; reads the
+                             motors; halts the device at stop; shows setup and stop on the LED
+                             bar.
+driver/arm_kinematics.py     The arm's geometry and units: device units, inverse and forward
+                             kinematics, the absolute encoder's correction. Pure maths.
+driver/events.py             The events the device sends unasked: their codes, what each carries
+                             and how it is logged.
+driver/simulator.py          MantisSimulationDriver, MantisSimulationArm,
+                             MantisSimulationPlateClamp, MantisSimulationPump, MantisSimulationRfid,
+                             MantisSimulationLedBar. Answer from the declared configuration;
+                             nothing reaches a wire.
+driver/framing.py            The frame: header, check word, splitting, payload strings, boards.
+driver/errors.py             MantisError and one error per kind; what the device's codes mean.
+driver/configuration.py      DeviceConfiguration: what the device answered about itself.
+driver/oem_config.py         The unit's own values, read from its vendor
+                             .config files, into a declared configuration.
+driver/confirmed_firmware_versions.py
+                             The firmware sets confirmed on a device, per generation.
+driver/features/             One class per thing the device is fitted with: Arm, PlateClamp, Pump,
+                             Rfid, LedBar.
+driver/recordings/           One real Mantis of each generation: its configuration and unit values.
+resource_model/              The parts the device is modelled as, their files and manifest.
+liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity band and chip type.
+```
+
+## The patterns
+
+The external LC3 carousel selects USB product `LC3` and its configured serial, on interface B.
+`MantisCarousel` uses `MantisDriver`'s command transport and motor reads without running Mantis
+feature discovery. All commands address motor 0 on the carousel's board 0. Setup reads firmware
+and travel limits without moving. Homing establishes the flag reference; positioning selects the
+nearest equivalent angle within the limits and applies the configured backlash approach on a
+decreasing move. Completion requires the matching event and an idle, homed status without faults.
+Failure or cancellation stops the motor. Shutdown stops in place and closes only the LC3 link.
+The carousel does not coordinate the arm or attach chips.
+
+**M1. One driver. Features hang off it.** (STAR P1.) A feature is a plain class holding `_driver`
+and sending through it. No per-feature backend or frontend.
+
+**M2. The generation comes from discovery.** `_request_configuration` reads the firmware version
+on boards 0, 10, 11 and 12. Only board 0 must answer. Each other board gets one attempt, and one
+that times out, refuses or answers a malformed version is absent, not a fault: it is logged and
+recorded as `None`. Board 11 answering means v4; absent means v3. Board 0's version string and the
+serial number decide nothing.
+
+**M3. Nothing exists until the device says it is fitted.** (STAR P2.) `discover` reads the
+configuration (`_request_configuration`), checks it against a declared one, then
+`_discover_features` builds the features it lists; a refused setup builds none. The RFID reader
+is the exception: `discover` builds it when it answers its ping on interface A, after every
+opening of the link.
+Each feature is an `Optional` attribute of the driver, `None` until `_discover_features` builds
+it: a pneumatic `plate_clamp` requires a declared pressure-board output and board 10;
+the motor clamp requires board 12. The controller choice is made during discovery;
+`pump` only when board 10 answered; `arm` is `Arm` when board 11 answered (v4), otherwise
+`V3Arm`, which homes against flags. `led_bar` is gated
+by the generation: built only on a v4 whose board 12 answered, never on a v3, whose install sets
+no LED count. A difference between v3 and v4 is expressed there, by which feature is built, never
+by a branch on the generation inside a command.
+
+**M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
+what the device answered: generation, firmware versions, motor limits, and the pressure board's
+sensor calibration (`feedback_sensor_parameters`), read at setup and never written.
+`save_configuration` writes it; `declared_configuration_json` reads one back and setup refuses if
+the device disagrees on a fitted field (`FITTED_FIELDS`). The calibration is neither saved nor
+declared: the bottle and chip sensors' offsets are re-zeroed on the device between sessions, so
+they are read at every setup. A declared file that holds one, saved by an earlier version, loads;
+it is ignored. A simulated pump answers the generation's recording's.
+Each feature gets its own configuration when it is added, holding its own facts; the device
+configuration does not grow per feature, the calibration excepted, as discovery reads it with the
+firmware versions. Motor limits are compared as a build fact: every v4 is taken to share them until
+a second device shows otherwise.
+
+**M4a. A unit's own values come from its folder or its declared file, else its generation's
+recording.** What is set per unit and cannot be read off the device sits in the unit's vendor
+`Data/Device/Configs` folder (`oem_config_directory`). Each value is a block (`UNIT_BLOCKS`): where
+the folder and the declared file both hold it they must agree, or setup refuses listing the
+differences; one source suffices; with neither, the generation's recording supplies it, less
+accurate on this unit. A file saved before a block or a non-fitted device field existed still loads:
+each value it lacks comes from the folder, else the recording, in simulation too, with one warning
+naming each and where it came from. A later block or field is optional the same way.
+`save_configuration` saves the unit's blocks, never a recording's, so after one setup with the
+folder the saved file alone carries them. A block is loaded only where its source applies:
+`plate_clamp.levels` for a clamp driven as a DC motor, or its auxiliary output for a pneumatic
+clamp controlled by the pressure board, `rfid.slot_to_antenna` where `RFID.config`
+exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`, `arm` where the unit
+declares the arms' absolute encoder references (v4), its encoder correction from the `Data`
+folder; otherwise the v3 home frame, flag searches, retract/backoff settings and route to idle.
+
+**M4d. Motion calibration never comes from a recording.** A block that calibrates motion
+(`MOTION_CALIBRATION_BLOCKS`: `arm`) comes from the unit's folder or its declared file only; no
+recording holds one. Without it, nothing that needs it is sent: `Arm.initialize` refuses, and so
+does `setup` unless `skip_arm=True`, on both generations. Factory files (encoder corrections,
+taught sequences) are never committed; tests use synthetic tables.
+
+Which vendor values are the unit's own, from a v3 and a v4 install side by side:
+
+| values | file | |
+|---|---|---|
+| deck transform and tilt: `MicroplateTransformationMatrix`, `MicroplateOffsetX/Y` | `Device.config` | the unit's |
+| arm offsets `Motor.1/2.Offset`; homing `Motor.1/2.HomingPositionN`, `HomingPositionA` (v4) | `RobotArm.config` | the unit's |
+| absolute-encoder correction (v4) | `System/Encoder Correction/*.csv` | the unit's |
+| plate holder origin | `Device/Adapters/SBS Adapter.ad.txt` | the unit's |
+| chip changer and sequence safe Z (`ChipChanger.MovementZ`, `*.seq.txt`) | `ChipChanger.config`, sequences | unit or generation, unsettled |
+| clamp levels, RFID antennas, LED count (`NumberOfLed`, v4) | `Device.config`, `RFID.config` | one unit seen; read as the unit's |
+| deck reference points and heights, arm geometry, drop verification | `StageTuning.config`, `RobotArm.config`, `DropVerification.config` | the same on both units |
+| chip catalogue and liquid classes | `System/`, `Device/Others/` | the software's; liquid classes ship as code (M4c) |
+
+**M4b. Errors are one class per kind, under `MantisError`.** (STAR's errors by kind.) Each also
+subclasses the built-in it corresponds to, so an `except RuntimeError`, `ValueError` or
+`TimeoutError` still matches. A device code is carried on the error, and what it means is a table
+(`MOTOR_ERROR_CODE_DESCRIPTIONS`, `CLAMP_STATE_DESCRIPTIONS`, ...), not a class per code. A state
+the device reports as a failure raises at once, never after a full wait.
+
+**M4c. Liquid classes ship as code.** (STAR's `liquid_classes/mapping.py`.) A liquid class is plain
+data, one per (viscosity band, chip type) in `mantis_mapping`, taken from a v4 install's table,
+which follows the software's chip catalogue, not the unit. A dispense takes one per call; its
+explicit arguments win. No lookup by viscosity: the bands leave gaps (5.5 cP is in none).
+
+**M5. One command in flight; replies match on packet number and board.** The reader runs from
+setup to stop. A frame with a code from 0x0200 is an event: it is logged by its content
+(`describe_event`; a code not decoded, such as 0x7FFF, by its number) and goes to every waiter
+registered for its board and code whose `match` accepts its payload (`_expect_event`, before the
+command that causes it is sent, then `_wait_for_event`). A motor-error event fails every waiter for
+a motion event (`MOTION_EVENTS`) at once with `MantisMotionError`. An event whose payload does not
+match its layout is dropped before any waiter sees it. A reply nobody is waiting for is logged and
+dropped.
+A size field no frame can have (`MAXIMUM_FRAME_SIZE`) drops one byte at a time until a frame
+starts. A read that times out is resent with the same packet number, up to `attempts`. A command
+that writes or moves is sent once (`attempts=1`), never resent. A failed read ends the reader: the
+command in flight and every event waiter fail with it, and every later command, including one
+already waiting for the lock, raises until setup runs again. `stop` fails the command in flight and
+every event waiter. After a failed read, `stop` (and `setup`, which runs it first) sends nothing:
+it closes the dead link with one warning.
+
+**M5a. The sequencer plays queued items; a queue write is checked by its reply.** Clear (61),
+start (62), stop (63) and abort (64) are `_unchecked_fw_*` calls, sent once, returning the reply's
+word. `_queue_ppi_write` numbers each item from 1 to `LAST_QUEUE_ITEM` per opening of the link and
+sends it once (`_unchecked_fw_queue_write_ppi`, command 65). A reply of -1 free slots means the
+queue was full and the item not queued: it is sent again under the next item, for at most
+`default_queue_full_timeout`; a non-zero error word raises `InvalidQueueItemError`.
+`_wait_for_queue_item` waits for the item's progress event with nothing left queued; the reader
+keeps the last such item, so a report that came with the reply is not missed. A move of all three
+motors is queued the same way (`_unchecked_fw_queue_move_item`, command 68, `_queue_move_item`);
+a motor sent all zeros does not move.
+As seen on a v4: a duration is in steps of 1 ms. A sequencer not started takes 200 items
+(`SEQUENCER_QUEUE_SIZE`), then answers -1; a clear frees the slots. A frame written twice under
+one packet number is queued twice, so a queue write is never resent. A clear empties the queue
+but does not stop a running sequencer. Stop lets the queue play out, then reports it stopped;
+abort finishes the item playing, reports it stopped and keeps the rest for the next start. Only a
+clear drops items. On an idle sequencer, stop and abort keep the queue and report nothing. Clear,
+stop and abort answer 2 when sent while the sequencer runs, 0 when it is idle.
+Every progress event from board 0 sets `_sequence_progress`, the item played last, which the LED
+bar's dispense progress follows; opening the link clears it.
+
+**M6. The wire speaks the device's units; reads return them.** (STAR P4.) Every read returns what
+the device sent, decoded but not converted, until the feature that owns it knows the conversion.
+A feature then converts in one place, on its configuration, and speaks PyLabRobot's units. No unit
+suffix on names in default units. The arm converts in `arm_kinematics`: 200 device units per motor
+revolution, degrees on the arms and mm on Z (down from its flag), each rate rounded up half a step
+as on the wire.
+
+**M7. A range is checked before anything is sent.** (STAR P5.) A read accepts only the indices
+seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CONTROLLERS`);
+`_check_index`, and the pump's `_get_controller_index`, raise `ValueError` before a frame is built.
+
+**M8. A command that changes the device has one raw call and one public method.** (STAR P7, P8,
+P9.) The raw call is `_unchecked_fw_*` and sends once; the public method checks its arguments, then
+confirms what the device reports. `lock` checks the level against the declared levels, calls
+`_unchecked_fw_do_plate_clamping` and reads the clamp state until it reports clamping done.
+`Arm.initialize` matches the recorded v4 startup command for command: energise the arms, declare
+them three times where their absolute encoders read, set their following error, clear Z, declare,
+move to idle, home Z (waiting for its home-done event), twice declare and move to idle, home Z. A
+move reads each motor's status until none moves; a fault bit raises `MantisMotionError`. Idle is
+`POST_HOMING_POSITION` (the same on every unit seen) less the unit's offsets.
+
+`V3Arm.initialize` seats and backs off the arms using live demand positions, homes Z, repeats
+seating and Z homing, starts arm homing in order 1 then 0, declares the calibrated home frame and
+follows the unit's route to idle. Expected following errors are tolerated during these phases;
+other fault bits fail immediately. Each home must finish with its homed bit, and initialization
+ends with a strict fault check. Failure or cancellation stops all three motors. A v3 stop sends
+no park move.
+
+`PneumaticPlateClamp.lock` engages its declared auxiliary output and starts the air pump if
+needed. Readbacks confirm both control states; they do not measure plate contact or pressure.
+Unlock and shutdown release the valve and restore a pump started by the clamp. A pump already
+running stays on. The clamp serializes its operations, owns a pump change before sending it,
+and attempts valve release and pump restoration independently on failure or cancellation.
+
+**M9. Names say what kind of thing they are.** (STAR P10.)
+
+| what it touches | prefix | here |
+|---|---|---|
+| the device, doing work | `move_` | |
+| the device, a process left running | `start_`, `stop_` | |
+| the device's sensors | `measure_`, `sense_` | `pump.measure_pressure` |
+| the device's memory, reading | `request_` | `request_motor_limits`, `request_motor_status` |
+| the device's memory, writing | `set_` | |
+| the resource model, reading | `get_` | |
+| the resource model, writing | `update_` | |
+
+Commands, boards and fields are named for what they do; no vendor class, method or opcode names.
+
+**M10. What is acquired is released on every path.** A feature that turns on or holds anything
+(pump, pressure controllers, clamp, a chip) turns it off or releases it in a `finally`, each step in
+its own `try`, and the first fault is the one raised. `stop` fails what waits on the link; on a v4
+it aborts the sequencer, stops each motor at its default deceleration and, if every motor stopped,
+parks an arm brought up: Z up on its own, read back by its encoder (command 84), never the demand
+position (command 27); then queued, as in the recorded close, the arms, both, then Z down to
+`SHUTDOWN_Z` at idle. Then it releases each built feature, turns the LED bar off and closes the
+link. A move that fails part way stops the motors it sent a move and logs where their encoders
+read. A `lock` that does not report clamping done releases the clamp before raising, and `stop`
+releases a clamp that does not read released. A failed `Arm.initialize` unpowers the arm motors
+again, and a failed setup's `stop` does not park them. Failure behaviour is designed before
+coverage.
+
+**M11. Firmware is confirmed, never gated.** A version set outside `CONFIRMED_FIRMWARE_VERSIONS`
+warns once at setup; nothing refuses. A set goes in once it has been seen on a device.
+
+**M12. Defaults are public `default_*` attributes on the feature.** (STAR P18.) Declared on the
+class with a type, in PyLabRobot units, round, slightly below the firmware's own. A caller tunes
+one device by assigning on the instance, or every device by assigning on the class; a command
+checks the value it takes before anything is sent. `plate_clamp.default_lock_level` is the first.
+
+**M13. Tests assert the wire, against real replies.** (STAR P15.) A test pins the bytes we send. A
+reply in a test is one a device sent, held as a named constant in the test, never rebuilt or
+invented. The test link answers by board, command and payload and echoes the packet number; only
+the framing tests pin whole recorded frames. A reply that changes with what was sent before is a
+recorded list the test plays in order. A test exists where behaviour could regress.
+
+**M14. Comments say what this code does and what the device did.** (STAR P17.) No capture names,
+serials or dates; a constant is referenced by name, not repeated.
+
+**M15. The simulator answers from the declared configuration; nothing reaches a wire.** (CLARIOstar
+simulator.) `MantisSimulationDriver` builds no link and `_send_command` raises. Setup takes the
+configuration from the file's `device` block (a field it lacks filled as in M4a), and the reads
+answer from it; a board it leaves `None` does not answer, and the device name is not simulated. Each
+feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
+above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
+unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` starts off,
+reads every line at 0 with the recorded calibration, and follows clamp commands for its air-pump
+state. `MantisSimulationLedBar` takes every command and waits no hold.
+`MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
+needs no encoder correction; its offsets are the declared ones, else 0. Each command moves it at
+once, and the motor reads answer from it; without it the motors read idle at 0, as after power-on.
+`MantisSimulationPneumaticPlateClamp` holds the valve state and uses the simulated pump. A v3 uses
+`MantisSimulationV3Arm`, which requires the unit's homing block and simulates seating against
+stops, flags, and the route to idle. A motor read the configuration does not hold
+is not simulated. The sequencer, on the driver, holds
+`SEQUENCER_QUEUE_SIZE` items, stopped and empty after setup, and once started plays each item at
+once, a queued move moving the simulated arm; stop and abort keep what is queued.
+
+**M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
+add commands that the device runs together, each subsystem gets its own lock, taken in declaration
+order.
+
+**M17. The master holds every link to the device.** (STAR P21.) The FTDI has two interfaces; the
+master opens both in `setup` and closes them in `stop`, and a feature sends only through the
+master's links. Both links select USB product `Mantis`: the separate `LC3` carousel shares the
+VID/PID and motion protocol but does not control the arm. Interface B carries the command frames;
+interface A, the RFID reader's commands.
+
+**M18. The resource model mirrors the device; it never decides for it.** (STAR P12.) `MantisDevice`
+builds the parts and holds the driver; a feature reaches the parts through the device, and moves
+keep them in step. A driver with no resource tree still drives. The Z column carries the arm's
+four links (`LinkBody`), turned to the joint angles setup reads after the bring-up.
+
+**M19. The LED bar shows what the device does, never at the cost of it.** An action runs inside
+`_show_action`: the bar shows its colour, the enclosing action's when it ends, the idle animation
+when none is left, and `error_color` after one that failed. Each colour is an attribute of the bar
+(`setup_color`, ...), checked when it is set and read when it is shown; each bar has its own.
+`show_progress` lights a share of the LEDs from the left in `dispense_progress_color` and sends
+nothing when that many are already lit: each frame holds the link about 62 ms on a v4, so an action
+shows at most `number_of_leds` frames. Setup shows blue, the arm's bring-up with it, then green for
+`SETUP_DONE_HOLD`, then idle; `stop` turns the bar off and shows no colour first: one sent there was
+replaced within milliseconds, too briefly to see. The arm's moves show no colour of their own. An
+LED bar fault only warns: it never fails or masks the action. `show_actions=False` shows no action,
+only the idle animation from setup on. A colour change costs about 0.1 s of link time (two
+commands), so an action that is quick on its own shows none: the plate clamp's lock and unlock,
+where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
+
+## Open, and where this is not consistent yet
+
+1. **`CommandRefusedError` is untested.** No reply seen has a non-zero status.
+2. **One v3 board set has been verified:** boards 0 and 10 answer; boards 11 and 12 do not.
+   Other v3 installations may have different accessories.
+3. **Three link values are ours, not the vendor's.** The latency timer (2 ms), the read poll
+   (10 ms) and the reply timeout (5 s). A frame whose reserved word is not zero is logged, not
+   refused.
+4. **The arm model is partial.** The links are drawn as boxes: the manufacturer's link models are
+   compressed in a form not converted yet. The Z column is drawn with Z at 0: how far it travels
+   with Z is not measured. Which side of the device motor 0's links sit on is taken from the name
+   of a link length in the unit's files, not seen on a device. The motor reads stay on the driver
+   in the device's units; the arm converts them.
+5. **Whether motor limits differ between devices of one generation** is unknown; one unit of each
+   generation has been read.
+6. **The motor plate clamp and the RFID reader have run on one v4 only,** on macOS and on Windows.
+   The v3 arm has initialized and stopped on Linux;
+   its RFID reader has answered its ping, but tag scans remain unverified.
+7. **The release payload is fixed, not declared.** Every release sends (0.75, 0, 5000); how it
+   relates to `Device.config`'s `PlateClampUnclampPWM` (1000) is not known.
+8. **A lock that times out releases (command 31).** Command 32 may stop a lock instead, but no
+   capture has a command 32 frame, so the release, seen on the wire, is kept.
+9. **`MantisDevice` writes its base file's `mesh` itself** rather than through
+   `resource_model._mesh`, which is private to that package.
+10. **A clamp failure state (4, 7 or 8) raises at once, untested.** No device has shown one, so
+    no test plays one.
+11. **The pneumatic clamp has no plate-contact feedback.** Its pressure-board auxiliary output
+    reports the commanded valve state only. Output 2 is the supported clamp mapping; the unit's
+    configuration must explicitly select it. It has no PWM lock levels.
+12. **Capturing both interfaces at once is unproven.** They share one serial number, and a PLR
+    capture tells links apart by it.
+13. **The antenna switch's address on a v3 is unknown.** The PPI write at 120 is seen only on our
+    v4; board 0's PPI also drives the valves. A v3 capture of an RFID scan settles it before a v3
+    reads.
+14. **The RFID multiplexer delay is taken as ms.** Every unit seen holds 0, so the unit of
+    `RfidMultiplexerDelay` is unconfirmed.
+15. **The liquid classes' units are unconfirmed.** The delays may be ms or the valve sequence's time
+    steps, the pressures psi and the vacuum inHg; the dispensing PR settles them.
+16. **Some motor read fields are named by their order only.** The three currents, and the
+    configuration's flag and three values, have no meaning confirmed on the wire; the
+    position read returns its first field, the demand position, and drops the five after it.
+17. **Each arm motor's first absolute encoder read after connecting is not valid,** on both
+    motors of the v4. It is read again, up to `ABSOLUTE_ENCODER_READS` (5, ours); the recorded v4
+    startup reads it twice. Why it is not valid is not known.
+18. **The vacuum sensor's offset reads about -38.8,** against about -13.6 on the bottle and chip
+    sensors. Nothing uses the calibration yet. The target pressure read (command 10) is left out:
+    no reply to it has been recorded.
+19. **V3 pressure control is unproven.** Setup has read calibration from a v3 pressure board;
+    it reads it from any board 10 that answers its version; one that does not answer that read
+    leaves it empty, with a warning.
+20. **The LED bar has run on one v4 only.** The `fatal_error` and `unconnected` animations have
+    never been sent to a device, nor yellow shown; only writes of all 20 LEDs are recorded, so
+    `set_color` takes one colour per LED, no fewer.
+21. **The LED bar's replies are not checked.** A colour write and an animation start answer 1
+    when taken; a colour write while an animation plays answers 0 and is not shown, as in the
+    recorded v4, so every colour write stops the animation first.
+22. **The dispense progress has no caller yet.** `_show_fill` (`show_progress`), `_follow_fill` and
+    `_show_dispense_done` wait for the dispense; `_follow_fill` reads `_sequence_progress`, which
+    the sequencer sets.
+23. **A clear's words 8 and 9 are not explained.** A clear answered 8 once, right after Z homed,
+    and 9 has been seen; 2 and 0 mean running and idle. The word is returned, not checked.
+24. **`InvalidQueueItemError` is untested.** No queue reply seen has a non-zero error word.
+25. **A motor error is not kept for a later wait.** One that comes after an item is queued but
+    before `_wait_for_queue_item` begins leaves that wait to time out; the sequencer stops, so the
+    item is never reported played.
+26. **A sequence-stopped event's second word is not confirmed.** It read 0 after a stop that let
+    the queue play out and 2 after an abort that left two items queued, as if it counts them.
+27. **The v4 arm's bring-up and stop have not run through this driver.** Their commands and order
+    match the recorded v4 startup and close; a device run settles the rest. Before it parks, stop
+    waits for the motors to stop, refuses on a fault and reads where the head is from the absolute
+    encoders; no fault is cleared, so whether a stopped motor plays a queued move is not seen. Z
+    rises on its own before the arms move, unlike the recorded close's one queue; it must read
+    within `Z_TRAVERSE_TOLERANCE` (0.1 mm) of its flag by its encoder, twice the largest gap read
+    between Z's encoder and its demand position. Z's encoder has been read at rest only, never right
+    after a move.
+28. **The v4 arm is moved to idle only from near idle.** Without the unit's zones, setup and stop move
+    to idle only with the head within `FRONT_ZONE_X_RANGE` (the Front zone's x bounds, the same on
+    every unit seen); elsewhere they refuse. That admits the strip below the Front zone (y under
+    31 mm), where a recorded startup began (y about 28 mm): that startup moved X, Y and Z at once
+    from there; this driver raises Z first, as from the Front zone. The zones' routes lift this.
+29. **The absolute encoder's wrap and the forward kinematics' choice are not observed.** A motor's
+    position is taken one span lower above 100 (motor 0) or 120 (motor 1) device units, and of the
+    two solutions the head's is the one of greater y; no reading near a wrap has been seen.
+30. **A slip before Z homes refuses.** If an arm reads a following error just before Z homes,
+    setup raises instead of homing; no recording shows what should follow.
+31. **Unpowering the arm (command 19, open loop) is unrecorded.** A failed bring-up sends it; its
+    reply has not been seen.
+32. **The encoder correction files are found two levels above `oem_config_directory`.** That
+    argument still names `Data/Device/Configs`; the corrections sit in `Data/System`.
+

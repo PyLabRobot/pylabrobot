@@ -1,0 +1,163 @@
+{
+  "device": {
+    "serial_number": "PRPBC1317",
+    "firmware_version": "MLPrep Runtime V3.0.20.675 99020-02 Rev N",
+    "num_channels": 2,
+    "head8_installed": true,
+    "has_enclosure": true,
+    "heater_shaker_installed": true,
+    "safe_speeds_enabled": false,
+    "deck_bounds": {
+      "min_x": 0.0,
+      "max_x": 299.0,
+      "min_y": -9.0,
+      "max_y": 385.0,
+      "min_z": 19.5,
+      "max_z": 167.5
+    },
+    "deck_sites": [
+      {
+        "id": 0,
+        "left_bottom_front_x": -2.2300000190734863,
+        "left_bottom_front_y": 390.0,
+        "left_bottom_front_z": 0.0,
+        "length": 310.0,
+        "width": 100.0,
+        "height": 167.0
+      },
+      {
+        "id": 1,
+        "left_bottom_front_x": 270.0,
+        "left_bottom_front_y": -3.0,
+        "left_bottom_front_z": 0.0,
+        "length": 100.0,
+        "width": 400.0,
+        "height": 73.0
+      },
+      {
+        "id": 2,
+        "left_bottom_front_x": 284.760009765625,
+        "left_bottom_front_y": 214.2899932861328,
+        "left_bottom_front_z": 0.0,
+        "length": 6.0,
+        "width": 6.0,
+        "height": 85.0
+      },
+      {
+        "id": 0,
+        "left_bottom_front_x": -2.2300000190734863,
+        "left_bottom_front_y": 390.0,
+        "left_bottom_front_z": 0.0,
+        "length": 310.0,
+        "width": 100.0,
+        "height": 165.60000610351562
+      },
+      {
+        "id": 1,
+        "left_bottom_front_x": 270.0,
+        "left_bottom_front_y": -3.0,
+        "left_bottom_front_z": 0.0,
+        "length": 100.0,
+        "width": 400.0,
+        "height": 73.0
+      },
+      {
+        "id": 2,
+        "left_bottom_front_x": 284.760009765625,
+        "left_bottom_front_y": 214.2899932861328,
+        "left_bottom_front_z": 0.0,
+        "length": 6.0,
+        "width": 6.0,
+        "height": 85.0
+      }
+    ],
+    "waste_sites": [
+      {
+        "index": 1,
+        "x_position": 286.79998779296875,
+        "y_position": 10.0,
+        "z_position": 68.4000015258789,
+        "z_seek": 69.4000015258789
+      },
+      {
+        "index": 2,
+        "x_position": 286.79998779296875,
+        "y_position": 30.0,
+        "z_position": 68.4000015258789,
+        "z_seek": 69.4000015258789
+      },
+      {
+        "index": 3,
+        "x_position": 286.79998779296875,
+        "y_position": 112.0,
+        "z_position": 68.4000015258789,
+        "z_seek": 69.4000015258789
+      }
+    ]
+  },
+  "pipettes": {
+    "use_v1_aspirate_dispense": false,
+    "z_drive_acceleration": 800.0,
+    "supports_v2_pipetting": null,
+    "v2_pipetting_command_ids": [
+      38,
+      39,
+      40,
+      41,
+      42,
+      43
+    ],
+    "x_reference_anchor": "c",
+    "y_reference_anchor": "c",
+    "z_reference_anchor": "b",
+    "channel_width": 8.9826,
+    "channel_size_z": 140.0,
+    "channel_model": "hamilton_star_pipette_channel",
+    "z_speed_range": [
+      10.0,
+      142.0
+    ],
+    "default_y_ranges": [
+      [
+        0.0,
+        385.0
+      ],
+      [
+        -9.0,
+        376.0
+      ]
+    ],
+    "channels": [
+      {
+        "firmware_version": "Channel1ml Runtime V1.6.2.270 98228-02 Rev U",
+        "x_range": [
+          0.45,
+          299.45
+        ],
+        "y_range": [
+          0.0,
+          385.0
+        ],
+        "z_range": [
+          19.5,
+          167.5
+        ]
+      },
+      {
+        "firmware_version": "Channel1ml Runtime V1.6.2.270 98228-02 Rev U",
+        "x_range": [
+          0.45,
+          299.45
+        ],
+        "y_range": [
+          -9.0,
+          376.0
+        ],
+        "z_range": [
+          19.5,
+          167.5
+        ]
+      }
+    ]
+  }
+}

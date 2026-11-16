@@ -48,6 +48,7 @@ def nest_1_troughplate_195000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -96,6 +97,7 @@ def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -142,6 +144,7 @@ def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -186,6 +189,7 @@ def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -218,5 +222,52 @@ def NEST_96_wellplate_2200uL_Ub(name: str) -> Plate:
       cross_section_type=CrossSectionType.RECTANGLE,
       bottom_type=WellBottomType.U,
       max_volume=2200,  # from spec (2.2 mL)
+      name_prefix=name,
+    ),
+  )
+
+
+# Liquid height over the cavity bottom (mm) -> volume (uL), computed from spec: the well is a
+# truncated cone, 6.40 mm across the floor and 6.85 mm across the rim, 10.80 mm deep. The points
+# are at about the nominal volume (200 uL) and at the brim.
+_nest_96_wellplate_200uL_Fb_height_volume_data = {
+  0.0: 0.0,
+  6.0: 200.7,
+  10.8: 372.4,
+}
+
+
+def nest_96_wellplate_200uL_Fb(name: str) -> Plate:
+  """NEST Cat. No. 701011: 96 well cell culture plate, flat bottom, non-treated, polystyrene.
+  Spec: NEST data sheet, "96 well cell culture plate, Flat bottom" technical drawing
+  http://www.gzjetway.com/upload/pdf/202506/04a71256d0b04cf888df963be987194b.pdf
+  Recommended medium volume: 0.1-0.2 mL, growth area: 0.32 cm2 per well
+  https://www.nest-biotech.com/cell-culture-plates/59415537.html
+  """
+  return Plate(
+    name=name,
+    size_x=127.56,  # from spec
+    size_y=85.36,  # from spec
+    size_z=14.30,  # from spec
+    lid=None,
+    model=nest_96_wellplate_200uL_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      size_x=6.85,  # from spec (inner diameter at the rim)
+      size_y=6.85,  # from spec (inner diameter at the rim)
+      size_z=12.00,  # from spec (14.30 - 2.30)
+      dx=10.855,  # from spec (A1 center 14.28 - 6.85 / 2)
+      dy=7.755,  # from spec (row H center 11.18 from the front edge - 6.85 / 2)
+      dz=2.30,  # from spec (3.50 cavity floor - 1.20 floor thickness)
+      material_z_thickness=1.20,  # from spec
+      item_dx=9.0,  # from spec
+      item_dy=9.0,  # from spec
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      cross_section_type=CrossSectionType.CIRCLE,
+      bottom_type=WellBottomType.FLAT,
+      max_volume=372.4,  # computed from spec (brim-full, the last height_volume_data point)
+      height_volume_data=_nest_96_wellplate_200uL_Fb_height_volume_data,
+      name_prefix=name,
     ),
   )
