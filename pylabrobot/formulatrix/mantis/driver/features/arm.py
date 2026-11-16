@@ -1192,8 +1192,8 @@ class Arm:
   async def _play_queued_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> None:
     """Clear and start the sequencer, queue each move, then wait until the last is played.
 
-    If the wait fails, the sequencer is aborted so nothing more plays, and where the motors
-    stopped is logged.
+    If the wait fails or is cancelled, the sequencer is aborted so nothing more plays, every
+    motor is stopped so the item playing ends there, and where the motors stopped is logged.
 
     Raises:
       MantisMotionError: if a motor reports an error first.
@@ -1212,6 +1212,7 @@ class Arm:
         await self._driver._unchecked_fw_abort_sequencer()
       except Exception:
         logger.warning("[%s] could not abort the sequencer", self._driver.name, exc_info=True)
+      await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR))
       await self._log_where_it_stopped()
       raise
 
@@ -1250,7 +1251,7 @@ class Arm:
     low, high = FRONT_ZONE_X_RANGE
     if not low <= cast(float, head.x) <= high:
       raise MantisMotionError(
-        f"{self._driver.name}: the head is at ({head.x:.1f}, {head.y:.1f}) mm; it is moved to idle "
+        f"{self._driver.name}: the head is at ({head.x:.2f}, {head.y:.2f}) mm; it is moved to idle "
         f"only from x {low} to {high} mm. Park the arm at idle, then set up again"
       )
 
@@ -1298,7 +1299,7 @@ class Arm:
       raise MantisMotionError(f"{self._driver.name}: where the head is is not known") from error
     zone = self._get_zone(location=head)
     logger.info(
-      "[%s] the head is at (%.3f, %.3f) mm, in the %s zone", self._driver.name, head.x, head.y, zone
+      "[%s] the head is at (%.2f, %.2f) mm, in the %s zone", self._driver.name, head.x, head.y, zone
     )
     return self.configuration.safe_xy_routes[zone], self.configuration.idle_routes[zone]
 
@@ -1646,8 +1647,8 @@ class Arm:
     measured = await self._request_measured_position(motor=Z_MOTOR)
     if measured > z_joint_position + Z_TRAVERSE_TOLERANCE:
       raise MantisMotionError(
-        f"{self._driver.name}: Z reads {measured:.3f} mm down by its encoder after rising to "
-        f"{z_joint_position:.3f} mm down; the arms are not moved",
+        f"{self._driver.name}: Z reads {measured:.2f} mm down by its encoder after rising to "
+        f"{z_joint_position:.2f} mm down; the arms are not moved",
         motor=Z_MOTOR,
       )
 
@@ -1759,7 +1760,10 @@ class Arm:
 
   async def _leave_approach_path(self, *, name: str, index: int, until: int) -> None:
     """Move the head back along an approach path from the line it stands at to an earlier line:
-    the path's lines played backwards, one queued move each at the route profile; a line naming the arms and Z moves both in one item.
+    the path's lines played backwards, one queued move each at the route profile.
+
+    A line that moves the arms and raises Z is preceded by the arms' move alone, Z held: the arms
+    go back at the depth the path took them across, then Z rises, never both at once.
 
     Args:
       name: the approach path's name.
@@ -1771,12 +1775,20 @@ class Arm:
     empty = MantisArmCoordinate(x=None, y=None, z=None)
     steps = [line for line in reversed(path[until:index]) if line != empty]
     profiles = self._get_route_profiles()
-    await self._play_queued_moves(
-      moves=[
-        self._get_queued_move(targets=targets, profiles=profiles)
-        for targets in self._get_route_targets(route=steps)
-      ]
-    )
+    here = self._get_approach_path_states(path=path)[index]
+    moves = []
+    for line, targets in zip(steps, self._get_route_targets(route=steps)):
+      arms = line.x is not None and line.y is not None
+      arms_move = arms and (line.x, line.y) != (here.x, here.y)
+      if arms_move and line.z is not None and line.z < cast(float, here.z):
+        arm_targets = {motor: targets[motor] for motor in ARM_MOTORS}
+        moves.append(self._get_queued_move(targets=arm_targets, profiles=profiles))
+      moves.append(self._get_queued_move(targets=targets, profiles=profiles))
+      if arms:
+        here = dataclasses.replace(here, x=line.x, y=line.y)
+      if line.z is not None:
+        here = dataclasses.replace(here, z=line.z)
+    await self._play_queued_moves(moves=moves)
 
   async def _leave_approach_path_if_on_one(self, *, joint_state: JointState) -> JointState:
     """Move the head out to the start of the approach path it stands on, if it stands on one, and
@@ -1808,7 +1820,8 @@ class Arm:
     Without an xy speed or acceleration, given or default, the route profile. Given, each
     motor's is scaled by its turn over the nozzle's straight-line distance, so the motors start and
     end together and the move takes as long as a straight one would; the nozzle's path is not
-    straight.
+    straight. Of the two, one not given is the route profile's on the motor that turns most,
+    scaled down on the other by its turn, so they still end together.
 
     Args:
       start: where the arms stand; None only without an xy speed or acceleration.
@@ -1826,12 +1839,15 @@ class Arm:
         cast(float, target_head.x) - cast(float, start_head.x),
         cast(float, target_head.y) - cast(float, start_head.y),
       )
-      for motor in ARM_MOTORS:
-        turn = abs(target.get(motor, start[motor]) - start[motor])
+      turns = {motor: abs(target.get(motor, start[motor]) - start[motor]) for motor in ARM_MOTORS}
+      largest = max(turns.values())
+      for motor, turn in turns.items():
         if distance > 0 and turn > 0:
           rates[motor] = (
-            ROUTE_ARM_SPEED if speed is None else speed * turn / distance,
-            ROUTE_ARM_ACCELERATION if acceleration is None else acceleration * turn / distance,
+            ROUTE_ARM_SPEED * turn / largest if speed is None else speed * turn / distance,
+            ROUTE_ARM_ACCELERATION * turn / largest
+            if acceleration is None
+            else acceleration * turn / distance,
           )
     return {
       motor: self._get_profile(motor=motor, speed=motor_speed, acceleration=motor_acceleration)
@@ -1852,8 +1868,9 @@ class Arm:
 
     A move of an arm motor is guarded, as v1 STAR's moves across the deck: Z rises first to the
     traverse height if its encoder reads it below it, and is read back there, then the arms move
-    with Z held, then Z moves if named. A move of Z alone is one queued move. The arms move in one
-    joint move, not along a route: nothing here avoids the chip racks.
+    with Z held, then Z moves if named. A move of Z alone is one queued move, refused on an
+    approach path. The arms move in one joint move, not along a route: nothing here avoids the
+    chip racks. From an approach path the arms first leave along it; every check runs before.
 
     Args:
       joint_state: each motor's target, by motor, as ``request_joint_state`` reads them.
@@ -1866,8 +1883,9 @@ class Arm:
 
     Raises:
       MantisConfigurationError: for a traverse height in the deck frame without the unit's
-        ``stage`` block; nothing is sent.
-      MantisMotionError: if the arm is not brought up, a motor faults, or Z does not read at the traverse height after rising to it.
+        ``stage`` block; nothing moves.
+      MantisMotionError: if the arm is not brought up, Z alone is to move on an approach path
+        (nothing moves), a motor faults, or Z does not read at the traverse height after rising.
       MantisKinematicsError: if the links cannot meet at the arm motors' targets.
       ValueError: if a motor is unknown, a target outside its limits, or a speed or acceleration
         out of range.
@@ -1887,28 +1905,41 @@ class Arm:
     for motor, target in targets.items():
       self._check_reachable(motor=motor, position=target)
     arm_targets = {motor: target for motor, target in targets.items() if motor in ARM_MOTORS}
-    start = await self._leave_approach_path_if_on_one(joint_state=await self.request_joint_state())
+    start = await self.request_joint_state()
+    place = self._get_place(joint_state=start)
+    on_path = place is not None
     if not arm_targets:
+      if place is not None:
+        raise MantisMotionError(
+          f"{self._driver.name}: the head stands on the {place[0]} approach path; Z alone is not "
+          "moved there. Leave it first: park(), or a move across"
+        )
       await self._play_queued_moves(
         moves=[self._get_queued_move(targets=targets, profiles={Z_MOTOR: z_profile})]
       )
       await self._report_pose()
       return
-    end = {**start, **joint_state}
-    self._get_head_position(joint_state=end)
     if minimum_traverse_height_start is None:
       minimum_traverse_height_start = self.default_minimum_traverse_height
-    points: List[Tuple[float, float]] = []
-    if minimum_traverse_height_start is not None:
-      for pose in (start, end):
-        head = self._get_head_position(joint_state=pose)
-        points.append(self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y)))
-    traverse = self._get_traverse_z_joint_position(
-      minimum_traverse_height=minimum_traverse_height_start, points=points
-    )
-    arm_profiles = self._get_arm_profiles(
-      start=start, target=joint_state, xy_speed=xy_speed, xy_acceleration=xy_acceleration
-    )
+    # Checked where the head stands before anything moves; on a path, again where leaving it ends.
+    while True:
+      end = {**start, **joint_state}
+      self._get_head_position(joint_state=end)
+      points: List[Tuple[float, float]] = []
+      if minimum_traverse_height_start is not None:
+        for pose in (start, end):
+          head = self._get_head_position(joint_state=pose)
+          points.append(self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y)))
+      traverse = self._get_traverse_z_joint_position(
+        minimum_traverse_height=minimum_traverse_height_start, points=points
+      )
+      arm_profiles = self._get_arm_profiles(
+        start=start, target=joint_state, xy_speed=xy_speed, xy_acceleration=xy_acceleration
+      )
+      if not on_path:
+        break
+      start = await self._leave_approach_path_if_on_one(joint_state=start)
+      on_path = False
     await self._rise_to_traverse_height(z_joint_position=traverse, profiles={Z_MOTOR: z_profile})
     moves = [self._get_queued_move(targets=arm_targets, profiles=arm_profiles)]
     if Z_MOTOR in targets:
@@ -1932,6 +1963,7 @@ class Arm:
     height if it is below it, then the arms move with Z held. Nothing avoids the chip racks.
 
     Over the plate holder the unit's stage transform places it; elsewhere the arm frame fitted to it.
+    From an approach path the head first leaves along it.
 
     Args:
       x: right of the deck's front-left corner, mm.
@@ -1965,7 +1997,7 @@ class Arm:
     self, *, z: float, speed: Optional[float] = None, acceleration: Optional[float] = None
   ) -> None:
     """Move the nozzle to a height in the deck frame where it stands; the arms hold. The stage's
-    tilt under the nozzle is taken in.
+    tilt under the nozzle is taken in. Refused on an approach path.
 
     Args:
       z: above the deck, mm.
@@ -1974,16 +2006,21 @@ class Arm:
 
     Raises:
       MantisConfigurationError: without the unit's ``arm`` or ``stage`` block; nothing is sent.
-      MantisMotionError: if the arm is not brought up, or Z faults.
+      MantisMotionError: if the arm is not brought up, the head stands on an approach path
+        (nothing moves), or Z faults.
       MantisKinematicsError: if the links cannot meet at the angles read.
       ValueError: if the target is outside Z's limits, or a speed or acceleration out of range.
     """
     self._check_initialized()
     self._check_stage()
     z_profile = self._get_profile(motor=Z_MOTOR, speed=speed, acceleration=acceleration)
-    joint_state = await self._leave_approach_path_if_on_one(
-      joint_state=await self.request_joint_state()
-    )
+    joint_state = await self.request_joint_state()
+    place = self._get_place(joint_state=joint_state)
+    if place is not None:
+      raise MantisMotionError(
+        f"{self._driver.name}: the head stands on the {place[0]} approach path; Z alone is not "
+        "moved there. Leave it first: park(), or a move across"
+      )
     head = self._get_head_position(joint_state=joint_state)
     head_x, head_y = self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y))
     z_joint_position = self._get_z_joint_position(x=head_x, y=head_y, z=z)
@@ -2009,7 +2046,7 @@ class Arm:
 
     Every target is checked before anything moves, and Z is read back at the traverse height by
     its encoder before the arms move. The arms move in one joint move: nothing here avoids the
-    chip racks.
+    chip racks. From an approach path the head first leaves along it.
 
     Args:
       location: the nozzle's x, y and height above the deck, mm.
@@ -2035,29 +2072,36 @@ class Arm:
         self._check_positive(name=name, value=value)
     arm_frame_location = self._get_arm_frame_location(location=location)
     arm_targets = self._get_arm_targets(location=arm_frame_location)
+    arm_joint_state = {
+      motor: compute_position(motor=motor, device_position=target)
+      for motor, target in arm_targets.items()
+    }
     z_target = cast(float, arm_frame_location.z)
     for motor, target in (
       *arm_targets.items(),
       (Z_MOTOR, compute_device_position(motor=Z_MOTOR, position=z_target)),
     ):
       self._check_reachable(motor=motor, position=target)
-    start = await self._leave_approach_path_if_on_one(joint_state=await self.request_joint_state())
-    head = self._get_head_position(joint_state=start)
-    traverse = self._get_traverse_z_joint_position(
-      minimum_traverse_height=minimum_traverse_height_start,
-      points=[
-        self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y)),
-        (location.x, location.y),
-      ],
-    )
+    start = await self.request_joint_state()
+    on_path = self._get_place(joint_state=start) is not None
+    # Checked where the head stands before anything moves; on a path, again where leaving it ends.
+    while True:
+      head = self._get_head_position(joint_state=start)
+      traverse = self._get_traverse_z_joint_position(
+        minimum_traverse_height=minimum_traverse_height_start,
+        points=[
+          self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y)),
+          (location.x, location.y),
+        ],
+      )
+      arm_profiles = self._get_arm_profiles(
+        start=start, target=arm_joint_state, xy_speed=xy_speed, xy_acceleration=xy_acceleration
+      )
+      if not on_path:
+        break
+      start = await self._leave_approach_path_if_on_one(joint_state=start)
+      on_path = False
     await self._rise_to_traverse_height(z_joint_position=traverse, profiles={Z_MOTOR: z_profile})
-    arm_joint_state = {
-      motor: compute_position(motor=motor, device_position=target)
-      for motor, target in arm_targets.items()
-    }
-    arm_profiles = self._get_arm_profiles(
-      start=start, target=arm_joint_state, xy_speed=xy_speed, xy_acceleration=xy_acceleration
-    )
     z_device_target = compute_device_position(motor=Z_MOTOR, position=z_target)
     await self._play_queued_moves(
       moves=[self._get_queued_move(targets=arm_targets, profiles=arm_profiles)]
@@ -2105,13 +2149,19 @@ class Arm:
       MantisMotionError: if the arm is not brought up, a motor faults, Z does not read at the
         traverse height after rising, or without the unit's zones the head is not near idle.
       NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
-      ValueError: if the traverse height is outside Z's limits.
+      ValueError: if the traverse height is outside Z's limits; nothing moves.
     """
     self._check_initialized()
-    await self._leave_approach_path_if_on_one(joint_state=await self.request_joint_state())
+    # Checked where the head stands before anything moves; on a path, again where leaving it ends.
     traverse = await self._get_park_traverse_z_joint_position(
       minimum_traverse_height=minimum_traverse_height_start
     )
+    joint_state = await self.request_joint_state()
+    if self._get_place(joint_state=joint_state) is not None:
+      await self._leave_approach_path_if_on_one(joint_state=joint_state)
+      traverse = await self._get_park_traverse_z_joint_position(
+        minimum_traverse_height=minimum_traverse_height_start
+      )
     await self._route_to_idle(z_joint_position=traverse)
     await self._report_pose()
 
@@ -2224,7 +2274,7 @@ class Arm:
     z = await self._request_measured_position(motor=Z_MOTOR)
     if z > Z_TRAVERSE_TOLERANCE:
       raise MantisMotionError(
-        f"{self._driver.name}: Z reads {z:.3f} mm below its flag by its encoder after rising to "
+        f"{self._driver.name}: Z reads {z:.2f} mm below its flag by its encoder after rising to "
         "it; the arms are not moved",
         motor=Z_MOTOR,
       )

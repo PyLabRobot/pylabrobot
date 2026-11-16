@@ -125,7 +125,7 @@ def compute_joint_angles(*, location: MantisArmCoordinate) -> Tuple[float, float
   distance = math.hypot(x, y)
   distance_to_other_base = math.hypot(x - base_x, y - base_y)
   if distance == 0 or distance_to_other_base == 0:
-    raise MantisKinematicsError(f"({x:.3f}, {y:.3f}) mm is on a motor's base")
+    raise MantisKinematicsError(f"({x:.2f}, {y:.2f}) mm is on a motor's base")
   first = (RIGHT_SHORT_ARM_LENGTH**2 - RIGHT_LONG_ARM_LENGTH**2 + distance**2) / (
     2 * RIGHT_SHORT_ARM_LENGTH * distance
   )
@@ -133,7 +133,7 @@ def compute_joint_angles(*, location: MantisArmCoordinate) -> Tuple[float, float
     2 * LEFT_SHORT_ARM_LENGTH * distance_to_other_base
   )
   if not -1.0 <= first <= 1.0 or not -1.0 <= second <= 1.0:
-    raise MantisKinematicsError(f"({x:.3f}, {y:.3f}) mm is out of the arm's reach")
+    raise MantisKinematicsError(f"({x:.2f}, {y:.2f}) mm is out of the arm's reach")
   theta_1 = 90 + math.degrees(math.asin(first) - math.atan2(y, x))
   theta_2 = 90 - math.degrees(math.pi - math.asin(second) - math.atan2(y - base_y, x - base_x))
   return (
@@ -193,7 +193,7 @@ def compute_head_position(*, theta_1: float, theta_2: float) -> MantisArmCoordin
     or distance < abs(RIGHT_LONG_ARM_LENGTH - LEFT_LONG_ARM_LENGTH)
   ):
     raise MantisKinematicsError(
-      f"the links cannot meet at angles ({theta_1:.3f}, {theta_2:.3f}) degrees"
+      f"the links cannot meet at angles ({theta_1:.2f}, {theta_2:.2f}) degrees"
     )
   along = (RIGHT_LONG_ARM_LENGTH**2 - LEFT_LONG_ARM_LENGTH**2 + distance**2) / (2 * distance)
   across = math.sqrt(max(0.0, RIGHT_LONG_ARM_LENGTH**2 - along**2))

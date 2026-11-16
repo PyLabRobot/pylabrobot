@@ -23,6 +23,8 @@ Mantis
    driver.simulator.MantisSimulationRfid
    driver.simulator.MantisSimulationLedBar
    driver.features.arm.Arm
+   driver.features.arm.MantisPose
+   driver.features.arm.MantisArmConfiguration
    driver.arm_kinematics
    driver.stage_transform
    driver.sequence_files

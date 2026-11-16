@@ -125,6 +125,9 @@ class PlateClamp:
   async def request_state(self, *, attempts: int = 3) -> int:
     """The clamp's state (GetMotorClampState); ``CLAMP_STATE_DESCRIPTIONS`` says what each means.
 
+    Clamping done (3) means the lock's timer ran out, not that a plate is held: a device test read
+    the same states at the same times with and without a plate.
+
     Args:
       attempts: how often the read is sent before giving up.
 
@@ -264,6 +267,8 @@ class PlateClamp:
     if it does not, it is released again before raising. On a pressure-board output, switch the
     valve on and start the pump if it is off; a failure or cancellation releases the valve and
     restores a pump this clamp started before raising.
+
+    On board 12 clamping done is the lock's timer running out; it does not tell a plate is held.
 
     Args:
       level: one of ``levels``, 1 the weakest. ``default_lock_level`` when None. None only on a

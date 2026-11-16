@@ -38,6 +38,7 @@ from pylabrobot.formulatrix.mantis.driver.simulator import (
 from pylabrobot.formulatrix.mantis.driver.stage_transform import (
   compute_arm_frame_position,
 )
+from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 
 
@@ -433,6 +434,66 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
       await self.move_head_to(x=-57.0, y=0.0)
     leave.assert_awaited_once_with(name="waste", index=len(SYNTHETIC_WASTE_ROUTE) - 1, until=0)
     await self.assert_head_at(x=-57.0, y=0.0, z=1.57)
+
+  async def test_leaving_a_path_never_moves_the_arms_while_z_rises(self):
+    # Z down positive in device units: a target below where Z stands raises it.
+    driver = self.arm._driver
+    for name in ("waste", "wash_1"):
+      with self.subTest(path=name):
+        if name == "waste":
+          await self.arm.move_to_waste()
+        else:
+          await self.arm.move_to_wash(position=1)
+        positions = dict(self.arm._positions)
+        with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
+          await self.arm.park()
+        self.assertTrue(queue.called)
+        for call in queue.call_args_list:
+          targets = call.kwargs["targets"]
+          named = {motor: target[0] for motor, target in enumerate(targets) if target[1] != 0}
+          arms_move = any(positions[motor] != named[motor] for motor in (0, 1) if motor in named)
+          z_rises = 2 in named and named[2] < positions[2]
+          self.assertFalse(
+            arms_move and z_rises, f"one item moves the arms and raises Z: {targets}"
+          )
+          positions.update(named)
+
+  async def test_on_a_path_z_alone_and_bad_arguments_move_nothing(self):
+    await self.arm.move_to_waste()
+    positions = dict(self.arm._positions)
+    with self.assertRaisesRegex(MantisMotionError, "on the waste approach path; Z alone"):
+      await self.arm.move_to_z_position(z=50.0)
+    with self.assertRaisesRegex(MantisMotionError, "on the waste approach path; Z alone"):
+      await self.arm.move_to_joint_state(joint_state={2: 5.0})
+    # A traverse height that is no height is refused before the head leaves the path.
+    nan = float("nan")
+    deck_x, deck_y = self.arm._get_deck_frame_xy(x=-57.0, y=0.0)
+    with self.assertRaisesRegex(ValueError, "outside its limits"):
+      await self.arm.move_to_xy_position(x=deck_x, y=deck_y, minimum_traverse_height_start=nan)
+    with self.assertRaisesRegex(ValueError, "outside its limits"):
+      await self.arm.move_to_location(
+        location=Coordinate(x=deck_x, y=deck_y, z=60.0), minimum_traverse_height_start=nan
+      )
+    with self.assertRaisesRegex(ValueError, "outside its limits"):
+      await self.arm.park(minimum_traverse_height_start=nan)
+    self.assertEqual(self.arm._positions, positions)
+
+  async def test_move_to_xy_position_and_move_to_location_send_the_same_arm_targets(self):
+    # (-60, 14) mm in the arm frame: move_to_xy_position's targets go through the joint state and
+    # back, so they may differ in the last bit; move_to_location sends them as computed.
+    location = Coordinate(*self.arm._get_deck_frame_xy(x=-60.0, y=14.0), z=60.0)
+    driver = self.arm._driver
+    sent = []
+    for move in (
+      self.arm.move_to_xy_position(x=location.x, y=location.y),
+      self.arm.move_to_location(location=location),
+    ):
+      await self.arm.park()
+      with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
+        await move
+      sent.append(queue.call_args_list[0].kwargs["targets"][:2])
+    for xy_target, location_target in zip(sent[0], sent[1]):
+      self.assertAlmostEqual(xy_target[0], location_target[0], places=12)
 
   async def test_stop_from_a_back_zone_parks_along_its_route_and_lowers_z(self):
     await self.arm.move_to_waste()

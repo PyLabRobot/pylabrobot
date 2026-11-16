@@ -46,7 +46,7 @@ def compute_arm_frame_position(
   mapped = [row[0] * stage_x + row[1] * stage_y + row[2] for row in transformation_matrix]
   if mapped[2] == 0:
     raise MantisKinematicsError(
-      f"the stage transform maps ({x:.3f}, {y:.3f}) mm on the wellplate to infinity"
+      f"the stage transform maps ({x:.2f}, {y:.2f}) mm on the wellplate to infinity"
     )
   return MantisArmCoordinate(
     x=mapped[0] / mapped[2],

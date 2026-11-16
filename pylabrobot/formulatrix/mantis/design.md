@@ -222,6 +222,11 @@ The arm's generation fork points (`Arm._get_generation`):
   again.
 - `_halt`: a v3 stops its motors and is not parked until a v3 has run its moves.
 
+**M6a. Numbers shown to a user are mm and degrees to 2 decimals; nothing else is rounded.** Logs,
+exception messages and reprs print mm and degrees with 2 decimals (Z's encoder resolves about 6 µm;
+0.01 degree is about 15 µm at the arm's reach). Returned values are not rounded beyond PLR's
+`Coordinate`, and nothing sent is ever rounded.
+
 **M7. A range is checked before anything is sent.** (STAR P5.) A read accepts only the indices
 seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CONTROLLERS`);
 `_check_index`, and the pump's `_get_controller_index`, raise `ValueError` before a frame is built.
@@ -230,6 +235,8 @@ seen on a device (`MOTORS`, `ABSOLUTE_ENCODER_MOTORS`, the boards, `PRESSURE_CON
 P9.) The raw call is `_unchecked_fw_*` and sends once; the public method checks its arguments, then
 confirms what the device reports. `lock` checks the level against the declared levels, calls
 `_unchecked_fw_do_plate_clamping` and reads the clamp state until it reports clamping done.
+Clamping done (3) is the lock's timer running out, not a plate held: a device test read the same
+states at the same times with and without a plate.
 `Arm.initialize` matches the recorded v4 startup command for command: energise the arms, declare
 them three times where their absolute encoders read, set their following error, clear Z, then
 recover to idle. Recovering declares the arms, moves them along the head's zone's route to its safe
@@ -263,7 +270,8 @@ models the chip racks.
 
 An xy speed in mm/s turns into each arm motor's by its turn over the nozzle's straight-line
 distance, acceleration likewise: the motors start and end together, the move takes as long as a
-straight one would, and the nozzle's path is not straight. Without one, given or
+straight one would, and the nozzle's path is not straight. Of the two, one not given is the route
+profile's on the motor turning most, scaled down on the other. Without either, given or
 `default_xy_speed`/`default_xy_acceleration`, the arms take the route profile. `park` rises and reads Z back the same way, then follows the zone's
 route to idle.
 
@@ -274,9 +282,10 @@ height, within `APPROACH_PATH_TOLERANCE` of a line) is on that path. On the targ
 on from there. On a neighbouring path, one sharing the target's descent (the two washes), it goes
 back to that path's safe-Z line (its last line but one), then to the target's and down. On another it goes back to the last line the two share, then
 forward. In the open it is parked first. Going back, a path's lines play backwards, one queued
-item each; a line naming the arms and Z moves both
-in one item. Every other move, and `park`, from a pose on a path first goes back along it to its
-start.
+item each; a line that moves the arms and raises Z is preceded by the arms alone, Z held, so they
+go back at the depth the path took them across before Z rises. Every other move across, and
+`park`, from a pose on a path first goes back along it to its start, every argument checked
+before; a move of Z alone there is refused.
 
 On a v3, `Arm.initialize` (`_initialize_v3`) follows the captured cold start: it seats the arms
 against their stops (`_seat_arm_motors`, at most `SEAT_PASSES` passes) and backs them off from
@@ -545,6 +554,7 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     its following error. Speeds in mm/s are scaled from the route profile only when given, untested
     on a device.
 50. **The way out along an approach path is the path backwards, line for line,** as recorded
-    leaving a wash, and the move between the washes goes safe Z to safe Z, as recorded. A head
-    stopped between two lines of a path is not placed on it: it is in the open, and rises straight
-    up.
+    leaving a wash, and the move between the washes goes safe Z to safe Z, as recorded. Where the
+    recording moves the arms and raises Z in one item, the arms move first, Z held: in it the arms
+    end within the first 2 mm of the rise. A head stopped between two lines of a path is not
+    placed on it: it is in the open, and rises straight up.

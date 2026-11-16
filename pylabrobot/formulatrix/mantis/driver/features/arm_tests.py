@@ -617,7 +617,7 @@ class StopTests(ArmTestCase):
       "pylabrobot.formulatrix.mantis.driver.features.arm", level="WARNING"
     ) as logs:
       await driver.stop()
-    self.assertTrue(any("Z reads 19.996 mm below its flag" in line for line in logs.output))
+    self.assertTrue(any("Z reads 20.00 mm below its flag" in line for line in logs.output))
     commands = [command for _, command, _ in self.sent(link)]
     self.assertEqual(commands.count(22), 1)
     self.assertNotIn(68, commands)
@@ -1133,15 +1133,30 @@ class MoveTests(ArmTestCase):
       ["0:27:0000", "0:27:0100", "0:27:0200", "0:61:", "0:62:", f"0:68:{queued.hex()}"],
     )
 
-  async def test_a_queued_move_not_played_in_time_aborts_the_sequencer(self):
+  async def test_a_queued_move_not_played_in_time_aborts_and_stops(self):
     link = RouteLink(answers=make_answers(), encoders={2: Z_UP_ENCODER_REPLY})
     driver = await self.set_up_moves(link=link)
     with mock.patch.object(arm_module, "MOVE_TIMEOUT", 0.05):
       with self.assertRaises(MantisTimeoutError):
         await driver.arm.move_to_joint_state(joint_state={2: 0.0})
-    commands = [command for _, command, _ in self.sent(link)]
-    self.assertEqual(commands[:7], [27, 27, 27, 61, 62, 68, 64])
-    self.assertEqual(commands[7:], [84, 84, 84])  # where the motors stopped, logged
+    sent = self.sent(link)
+    self.assertEqual([command for _, command, _ in sent[:6]], [27, 27, 27, 61, 62, 68])
+    # Aborted and every motor stopped, as the recorded halt, so the item playing ends; then where
+    # the motors stopped, logged.
+    self.assertEqual(sent[6:10], HALT)
+    self.assertEqual([command for _, command, _ in sent[10:]], [84, 84, 84])
+
+  async def test_a_cancelled_queued_move_aborts_and_stops(self):
+    link = RouteLink(answers=make_answers(), encoders={2: Z_UP_ENCODER_REPLY})
+    driver = await self.set_up_moves(link=link)
+    task = asyncio.create_task(driver.arm.move_to_joint_state(joint_state={2: 0.0}))
+    while 68 not in [command for _, command, _ in self.sent(link)]:
+      await asyncio.sleep(0.01)
+    task.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+    sent = self.sent(link)
+    self.assertEqual(sent[6:10], HALT)
 
   async def test_move_to_location_rises_moves_across_then_lowers(self):
     arms = get_queued_move(item=15, targets=DECK_POINT_ARM_TARGETS)
@@ -1261,6 +1276,23 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
           self.assertAlmostEqual(value, expected_value, places=9)
     route = arm._get_arm_profiles(start=None, target=target, xy_speed=None, xy_acceleration=None)
     self.assertEqual(route[0], (ARM_PROFILE_SPEED, ARM_PROFILE_ACCELERATION))
+    # Given one, the other is the route profile's on the motor turning most, scaled on the other
+    # by its turn: speed and acceleration in one ratio on both, so they end together.
+    turns = {motor: abs(target[motor] - start[motor]) for motor in (0, 1)}
+    largest = max(turns.values())
+    for given in ({"xy_speed": 100.0}, {"xy_acceleration": 500.0}):
+      profiles = arm._get_arm_profiles(
+        start=start, target=target, **{"xy_speed": None, "xy_acceleration": None, **given}
+      )
+      for motor in (0, 1):
+        with self.subTest(given=given, motor=motor):
+          turn = turns[motor]
+          expected = (
+            100.0 * turn / distance if "xy_speed" in given else 10000.0 * turn / largest,
+            500.0 * turn / distance if "xy_acceleration" in given else 1500.0 * turn / largest,
+          )
+          for value, rate in zip(profiles[motor], expected):
+            self.assertAlmostEqual(value, compute_device_rate(motor=motor, rate=rate), places=9)
 
   def test_over_the_plate_holder_the_stage_transform_places_the_nozzle(self):
     # The holder's back-left corner is the wellplate frame's origin.
@@ -1527,11 +1559,12 @@ class ApproachPathTests(ArmTestCase):
     self.assertEqual(self.sent(link), [])
 
   async def test_leaving_the_waste_plays_its_path_backwards(self):
-    # From the waste's last line back to its start, line by line: a line naming the arms and Z
-    # moves both in one item; a line naming nothing is skipped.
+    # From the waste's last line back to its start, line by line; a line naming nothing is skipped.
+    # A line moving the arms and raising Z is preceded by the arms alone at depth, Z held.
     way_out = [
       (-60.0, 10.0, 30.0),
       (None, None, 30.0),
+      (-50.0, 20.0, None),
       (-50.0, 20.0, -1.57),
       (None, None, -1.57),
       (15.0, 30.0, -1.57),
