@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 
+from pylabrobot.formulatrix.mantis.driver.arm_kinematics import MantisArmCoordinate
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
 from pylabrobot.formulatrix.mantis.driver.sequence_files import parse_move_sequence
 
@@ -31,17 +32,23 @@ class ParseMoveSequenceTests(unittest.TestCase):
     self.assertEqual(
       self.parse(SYNTHETIC_ROUTE),
       [
-        (None, None, None),
-        (15.0, 30.0, None),
-        (None, None, -1.57),
-        (-50.0, 20.0, -1.57),
-        (-60.0, 10.0, 30.0),
+        MantisArmCoordinate(x=None, y=None, z=None),
+        MantisArmCoordinate(x=15.0, y=30.0, z=None),
+        MantisArmCoordinate(x=None, y=None, z=-1.57),
+        MantisArmCoordinate(x=-50.0, y=20.0, z=-1.57),
+        MantisArmCoordinate(x=-60.0, y=10.0, z=30.0),
       ],
     )
 
   def test_a_line_without_a_delay_and_a_byte_order_mark_are_read(self):
     text = "﻿MoveSequenceItem %00 True Z -1.570 0\r\nMoveSequenceItem %00 True X 15 Y 30 Z 1"
-    self.assertEqual(self.parse(text), [(None, None, -1.57), (15.0, 30.0, 1.0)])
+    self.assertEqual(
+      self.parse(text),
+      [
+        MantisArmCoordinate(x=None, y=None, z=-1.57),
+        MantisArmCoordinate(x=15.0, y=30.0, z=1.0),
+      ],
+    )
 
   def test_lines_that_are_not_supported_refuse(self):
     cases = {

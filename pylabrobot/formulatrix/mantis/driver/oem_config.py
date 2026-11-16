@@ -9,9 +9,15 @@ import re
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Dict, List, Optional
 
-from .arm_kinematics import MICROSTEPS, PITCH, STEPS_PER_REVOLUTION, compute_position
+from .arm_kinematics import (
+  MICROSTEPS,
+  PITCH,
+  STEPS_PER_REVOLUTION,
+  MantisArmCoordinate,
+  compute_position,
+)
 from .errors import MantisConfigurationError
-from .sequence_files import RouteLine, parse_move_sequence
+from .sequence_files import parse_move_sequence
 from .v3_arm_configuration import V3ArmConfiguration
 
 # Where a v4 install keeps each arm motor's absolute encoder correction, from its ``Data`` folder.
@@ -219,10 +225,10 @@ def _parse_route(*, path: str) -> List[List[Optional[float]]]:
   """
   if not os.path.isfile(path):
     raise MantisConfigurationError(f"a route is missing: {path}")
-  route: List[RouteLine] = parse_move_sequence(path=path)
-  if all(route_line == (None, None, None) for route_line in route):
+  route: List[MantisArmCoordinate] = parse_move_sequence(path=path)
+  if all(route_line == MantisArmCoordinate(x=None, y=None, z=None) for route_line in route):
     raise MantisConfigurationError(f"{path} moves nothing")
-  return [list(route_line) for route_line in route]
+  return [[route_line.x, route_line.y, route_line.z] for route_line in route]
 
 
 def _load_zones(*, path: str, sequence_directory: str) -> Dict[str, Any]:

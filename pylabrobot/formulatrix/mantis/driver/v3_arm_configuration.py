@@ -2,9 +2,9 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
-from .arm_kinematics import compute_joint_angles
+from .arm_kinematics import MantisArmCoordinate, compute_joint_angles
 from .errors import MantisConfigurationError
 
 
@@ -43,7 +43,7 @@ class V3ArmConfiguration:
   jog_speed: float
   jog_acceleration: float
   motor_xy_homing_delay: float
-  post_homing_positions: List[Tuple[float, float]]
+  post_homing_positions: List[MantisArmCoordinate]
 
   @classmethod
   def from_block(cls, *, block: Dict[str, Any]) -> "V3ArmConfiguration":
@@ -97,9 +97,9 @@ class V3ArmConfiguration:
         x, y = point
         _check_finite(value=x)
         _check_finite(value=y)
-        x, y = float(x), float(y)
-        compute_joint_angles(x=x, y=y)
-        positions.append((x, y))
+        position = MantisArmCoordinate(x=float(x), y=float(y), z=None)
+        compute_joint_angles(location=position)
+        positions.append(position)
       if not positions:
         raise ValueError("post_homing_positions must contain a route to idle")
       return cls(

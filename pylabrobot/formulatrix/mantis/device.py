@@ -2,7 +2,7 @@
 
 import math
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Deck, Resource
@@ -64,9 +64,13 @@ class MantisDevice(Resource):
       ("right", RIGHT_BASE, right_elbow),
       ("left", LEFT_BASE, left_elbow),
     ):
+      base_x, base_y = cast(float, base.x), cast(float, base.y)
+      elbow_x, elbow_y = cast(float, elbow.x), cast(float, elbow.y)
       # The device frame mirrors the arm frame in y, so an angle there turns the other way.
-      short_angle = -math.degrees(math.atan2(elbow[1] - base[1], elbow[0] - base[0]))
-      long_angle = -math.degrees(math.atan2(head[1] - elbow[1], head[0] - elbow[0]))
+      short_angle = -math.degrees(math.atan2(elbow_y - base_y, elbow_x - base_x))
+      long_angle = -math.degrees(
+        math.atan2(cast(float, head.y) - elbow_y, cast(float, head.x) - elbow_x)
+      )
       short, long = self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"]
       short.rotate_to(z=short_angle, pivot_coordinate=short.proximal_joint)
       long.rotate_to(z=long_angle - short_angle, pivot_coordinate=long.proximal_joint)
@@ -182,7 +186,9 @@ class MantisDevice(Resource):
       assert short.distal_joint is not None
       self.z_column.assign_child_resource(
         short,
-        location=Coordinate(ARM_BASE_X + base[0], ARM_BASE_Y - base[1], ARM_Z)
+        location=Coordinate(
+          ARM_BASE_X + cast(float, base.x), ARM_BASE_Y - cast(float, base.y), ARM_Z
+        )
         - measured_at["z_column"]
         - short.proximal_joint,
       )

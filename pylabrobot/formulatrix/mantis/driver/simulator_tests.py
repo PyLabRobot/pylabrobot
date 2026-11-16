@@ -10,6 +10,7 @@ from unittest import mock
 from pylabrobot.formulatrix.mantis import Mantis
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
+  MantisArmCoordinate,
   compute_device_position,
   compute_device_rate,
   compute_joint_angles,
@@ -43,8 +44,8 @@ from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 async def request_head_position(*, arm) -> Tuple[float, float, float]:
   """Where the head is: x and y in the arm frame, mm, and Z's height above its flag, mm."""
   joint_state = await arm.request_joint_state()
-  x, y = arm._get_head_position(joint_state=joint_state)
-  return x, y, 0.0 - joint_state[2]
+  head = arm._get_head_position(joint_state=joint_state)
+  return head.x, head.y, 0.0 - joint_state[2]
 
 
 # The synthetic stage's reference height, mm.
@@ -190,7 +191,9 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     # Without offsets, the arm motors' idle targets are the links' angles for the head at idle.
     idle = [
       compute_device_position(motor=motor, position=angle)
-      for motor, angle in enumerate(compute_joint_angles(x=15.0, y=31.177))
+      for motor, angle in enumerate(
+        compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=31.177, z=None))
+      )
     ]
     for motor, status, position in ((0, 0, idle[0]), (1, 0, idle[1]), (2, 4, 0.0)):
       with self.subTest(motor=motor):
@@ -227,7 +230,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     self.addAsyncCleanup(mantis.stop)
     arm = mantis.driver.arm
     assert isinstance(arm, MantisSimulationArm)
-    theta_1, theta_2 = compute_joint_angles(x=-57.0, y=0.0)
+    theta_1, theta_2 = compute_joint_angles(location=MantisArmCoordinate(x=-57.0, y=0.0, z=None))
     arm._absolute_positions = {
       0: compute_device_position(motor=0, position=theta_1),
       1: compute_device_position(motor=1, position=theta_2),
@@ -437,7 +440,7 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(
       self.arm._positions[2], compute_device_position(motor=2, position=SHUTDOWN_Z)
     )
-    idle = compute_joint_angles(x=15.0, y=31.177)
+    idle = compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=31.177, z=None))
     for motor in (0, 1):
       self.assertAlmostEqual(
         self.arm._positions[motor], compute_device_position(motor=motor, position=idle[motor])
@@ -478,7 +481,7 @@ class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):
         center = self.wellplate.get_item(name).get_location_wrt(self.mantis.deck, x="c", y="c")
         await arm.move_to_xy_position(x=center.x, y=center.y)
         await arm.move_to_z_position(z=26.7)
-        arm_x, arm_y, z = compute_arm_frame_position(
+        arm_frame_location = compute_arm_frame_position(
           position=(x, y, REFERENCE_HEIGHT - 26.7),
           origin=(-50.0, 40.0, 51.0),
           transformation_matrix=SYNTHETIC_STAGE_BLOCK["transformation_matrix"],
@@ -488,9 +491,11 @@ class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):
           arm_type_translation=(0.0, 0.0, 0.0),
         )
         head_x, head_y, head_z = await request_head_position(arm=arm)
-        self.assertAlmostEqual(head_x, arm_x, places=3)
-        self.assertAlmostEqual(head_y, arm_y, places=3)
-        self.assertAlmostEqual(head_z, -z, places=3)
+        assert arm_frame_location.x is not None and arm_frame_location.y is not None
+        assert arm_frame_location.z is not None
+        self.assertAlmostEqual(head_x, arm_frame_location.x, places=3)
+        self.assertAlmostEqual(head_y, arm_frame_location.y, places=3)
+        self.assertAlmostEqual(head_z, -arm_frame_location.z, places=3)
     await arm.park()
     self.assertTrue(await arm.request_is_parked())
 

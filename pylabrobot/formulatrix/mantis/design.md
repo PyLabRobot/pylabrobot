@@ -190,17 +190,19 @@ the device sent, decoded but not converted, until the feature that owns it knows
 A feature then converts in one place, on its configuration, and speaks PyLabRobot's units. No unit
 suffix on names in default units. The arm converts in `arm_kinematics`: 200 device units per motor
 revolution, degrees on the arms and mm on Z (down from its flag), each rate rounded up half a step
-as on the wire. A joint state keeps the motor's sign (Z down from its flag). The routes keep the
-frame their files write: the arm frame, Z down from its flag. Every public position and height is
-the nozzle's in the deck frame, every public speed the nozzle's in mm/s and mm/s²; degrees/s stay
-inside, on the wire. Over the plate holder a point goes through the stage transform
-(`stage_transform`) in full: y flipped to run from the holder's back edge, the height taken below
-the unit's `ReferenceHeight` (`StageTuning.config`), the arm type, the holder's origin, the
-projective matrix on x and y and the tilt on z; a point read back is the matrix inverted, so it
-reads where it was sent. Elsewhere x and y go through the arm frame fitted once to the stage over
-the holder, its edges included (`_get_deck_to_arm_transform`): one turn and shift, as the resource
-model places the arm by the manufacturer's model and each unit's differs by millimetres. A height is
-always the stage's, its tilt extended past the holder.
+as on the wire. A joint state keeps the motor's sign (Z down from its flag). The routes, zones and
+kinematics keep the frame their files write: the arm frame, Z down from its flag, typed
+`MantisArmCoordinate` so it never passes for a deck-frame `Coordinate`. Every public position and
+height (`is_xy_reachable` included) is the nozzle's in the deck frame, every public speed the
+nozzle's in mm/s and mm/s²; degrees/s stay inside, on the wire. `_get_arm_frame_location` and
+`_get_deck_frame_location` convert between the two. Over the plate holder a point goes through
+the stage transform (`stage_transform`) in full: y flipped to run from the holder's back edge, the
+height taken below the unit's `ReferenceHeight` (`StageTuning.config`), the arm type, the holder's
+origin, the projective matrix on x and y and the tilt on z; a point read back is the matrix
+inverted, so it reads where it was sent. Elsewhere x and y go through the arm frame fitted once to
+the stage over the holder, its edges included (`_get_deck_to_arm_transform`): one turn and shift, as
+the resource model places the arm by the manufacturer's model and each unit's differs by
+millimetres. A height is always the stage's, its tilt extended past the holder.
 
 The arm's generation fork points (`Arm._get_generation`):
 

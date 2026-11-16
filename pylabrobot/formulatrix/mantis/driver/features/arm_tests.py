@@ -18,6 +18,7 @@ from unittest import mock
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver import master as master_module
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
+  MantisArmCoordinate,
   compute_absolute_device_position,
   compute_device_position,
   compute_device_rate,
@@ -81,7 +82,7 @@ RECORDED_IDLE_TARGETS = {
 }
 # A synthetic arm block: the offsets those targets imply, round references, each encoder reading
 # its own ideal value.
-IDLE_ANGLES = compute_joint_angles(x=POST_HOMING_POSITION[0], y=POST_HOMING_POSITION[1])
+IDLE_ANGLES = compute_joint_angles(location=POST_HOMING_POSITION)
 SYNTHETIC_OFFSETS = {
   motor: IDLE_ANGLES[motor]
   - compute_position(motor=motor, device_position=RECORDED_IDLE_TARGETS[motor])
@@ -541,7 +542,9 @@ class DefaultTests(unittest.TestCase):
 def get_arm_block_at(*, x: float, y: float) -> Dict:
   """The synthetic arm block, its references putting the last recorded readings at (x, y) mm."""
   homing_position_a = {}
-  for motor, angle in enumerate(compute_joint_angles(x=x, y=y)):
+  for motor, angle in enumerate(
+    compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
+  ):
     _, reading = struct.unpack("<Hd", bytes.fromhex(STARTUP_ABSOLUTE_ENCODER_REPLIES[motor][-1]))
     position = compute_device_position(motor=motor, position=angle - SYNTHETIC_OFFSETS[motor])
     homing_position_a[str(motor)] = (reading - position) % 200.0
@@ -795,7 +798,7 @@ def get_expected_move(*, motor: int, position: float) -> bytes:
 
 def get_arm_positions(*, x: float, y: float) -> Dict[int, float]:
   """Each arm motor's target for the head at (x, y), device units, with the synthetic offsets."""
-  angles = compute_joint_angles(x=x, y=y)
+  angles = compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
   return {
     motor: compute_device_position(motor=motor, position=angles[motor] - SYNTHETIC_OFFSETS[motor])
     for motor in (0, 1)
@@ -953,11 +956,14 @@ class ZoneTests(ArmTestCase):
       with self.subTest(zone=zone):
         if zone in ("Front", "Unknown"):
           continue
-        angles = compute_joint_angles(x=x, y=y)
+        angles = compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
         joint_state = {motor: angles[motor] - SYNTHETIC_OFFSETS[motor] for motor in (0, 1)}
         _, route = arm._get_routes(joint_state=joint_state)
-        self.assertEqual(route, [tuple(route_line) for route_line in SYNTHETIC_IDLE_ROUTES[zone]])
-    self.assertEqual(arm._get_zone(x=15.0, y=20.0), "Unknown")
+        self.assertEqual(
+          route,
+          [MantisArmCoordinate(x=x, y=y, z=z) for x, y, z in SYNTHETIC_IDLE_ROUTES[zone]],
+        )
+    self.assertEqual(arm._get_zone(location=MantisArmCoordinate(x=15.0, y=20.0, z=None)), "Unknown")
 
 
 # A stage that only moves the wellplate frame by its origin, so where a point lands is worked by hand.
@@ -1098,6 +1104,20 @@ class MoveTests(ArmTestCase):
       await driver.arm.request_pose()
     self.assertEqual(self.sent(link), [])
 
+  async def test_is_xy_reachable_takes_the_deck_frame_and_sends_nothing(self):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_moves(link=link)
+    self.assertTrue(driver.arm.is_xy_reachable(x=DECK_POINT[0], y=DECK_POINT[1]))
+    self.assertFalse(driver.arm.is_xy_reachable(x=500.0, y=500.0))
+    self.assertEqual(self.sent(link), [])
+
+  async def test_is_xy_reachable_without_the_stage_block_raises_and_sends_nothing(self):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_arm(link=link)
+    with self.assertRaisesRegex(MantisConfigurationError, "no stage transform"):
+      driver.arm.is_xy_reachable(x=DECK_POINT[0], y=DECK_POINT[1])
+    self.assertEqual(self.sent(link), [])
+
   async def test_a_joint_move_holds_the_motors_it_does_not_name(self):
     held_z_up = bytes.fromhex(CLOSE_QUEUED_MOVES[13])  # the arms held, Z to 0
     queued = struct.pack("<h", 15) + held_z_up[2:]
@@ -1194,6 +1214,9 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
         deck_x, deck_y = arm._get_deck_frame_xy(x=arm_x, y=arm_y)
         self.assertAlmostEqual(deck_x, x, places=9)
         self.assertAlmostEqual(deck_y, y, places=9)
+        arm_frame_location = arm._get_arm_frame_location(location=Coordinate(x=x, y=y, z=5.0))
+        location = arm._get_deck_frame_location(arm_frame_location=arm_frame_location)
+        self.assertEqual(location, Coordinate(x=x, y=y, z=5.0))
 
   def test_over_the_plate_holder_a_point_reads_back_where_it_was_sent(self):
     # The projective stage is inverted exactly there, not through the fit.
@@ -1202,10 +1225,11 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
       x = PLATE_HOLDER_LOCATION.x + holder_x
       y = PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - holder_y
       with self.subTest(x=x, y=y):
-        arm_x, arm_y = arm._get_arm_frame_xy(x=x, y=y)
-        deck_x, deck_y = arm._get_deck_frame_xy(x=arm_x, y=arm_y)
-        self.assertAlmostEqual(deck_x, x, places=9)
-        self.assertAlmostEqual(deck_y, y, places=9)
+        arm_frame_location = arm._get_arm_frame_location(location=Coordinate(x=x, y=y, z=5.0))
+        location = arm._get_deck_frame_location(arm_frame_location=arm_frame_location)
+        self.assertAlmostEqual(location.x, x, places=9)
+        self.assertAlmostEqual(location.y, y, places=9)
+        self.assertAlmostEqual(location.z, 5.0, places=9)
 
   def test_an_xy_speed_scales_each_motor_by_its_turn(self):
     # 100 mm/s and 500 mm/s² over the straight line: each motor at its turn over the distance, so
@@ -1218,8 +1242,8 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
         encoder_correction={0: [], 1: []},
       ),
     )
-    start_angles = compute_joint_angles(x=15.0, y=31.177)
-    target_angles = compute_joint_angles(x=-20.0, y=70.0)
+    start_angles = compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=31.177, z=None))
+    target_angles = compute_joint_angles(location=MantisArmCoordinate(x=-20.0, y=70.0, z=None))
     start = {0: start_angles[0], 1: start_angles[1], 2: 0.0}
     target = {0: target_angles[0], 1: target_angles[1]}
     distance = math.hypot(-20.0 - 15.0, 70.0 - 31.177)
@@ -1241,26 +1265,32 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
   def test_over_the_plate_holder_the_stage_transform_places_the_nozzle(self):
     # The holder's back-left corner is the wellplate frame's origin.
     arm = make_staged_arm(stage=SYNTHETIC_STAGE_BLOCK)
-    corner = arm._get_arm_frame_xy(
-      x=PLATE_HOLDER_LOCATION.x, y=PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y
+    corner = arm._get_arm_frame_location(
+      location=Coordinate(
+        x=PLATE_HOLDER_LOCATION.x, y=PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y, z=0.0
+      )
+    )
+    assert corner.x is not None and corner.y is not None
+    self.assertAlmostEqual(
+      corner.x, (-50.0 * 1.001 + 40.0 * 0.001 - 0.08) / (-50.0 * -2e-05 + 40.0 * -3e-05 + 1.004)
     )
     self.assertAlmostEqual(
-      corner[0], (-50.0 * 1.001 + 40.0 * 0.001 - 0.08) / (-50.0 * -2e-05 + 40.0 * -3e-05 + 1.004)
-    )
-    self.assertAlmostEqual(
-      corner[1], (-50.0 * -0.004 + 40.0 * 0.9995 + 0.09) / (-50.0 * -2e-05 + 40.0 * -3e-05 + 1.004)
+      corner.y, (-50.0 * -0.004 + 40.0 * 0.9995 + 0.09) / (-50.0 * -2e-05 + 40.0 * -3e-05 + 1.004)
     )
 
   def test_a_height_above_the_deck_takes_the_reference_height_and_the_tilt(self):
     # 10 mm right of and 20 mm in front of the holder's back-left corner, 5 mm above the deck:
     # 51 + (9.665 - 5) - 0.0015 * 10 + 0.0025 * 20 = 55.7 mm down.
     arm = make_staged_arm(stage=SYNTHETIC_STAGE_BLOCK)
-    z = arm._get_z_joint_position(
-      x=PLATE_HOLDER_LOCATION.x + 10.0,
-      y=PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - 20.0,
-      z=5.0,
+    arm_frame_location = arm._get_arm_frame_location(
+      location=Coordinate(
+        x=PLATE_HOLDER_LOCATION.x + 10.0,
+        y=PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - 20.0,
+        z=5.0,
+      )
     )
-    self.assertAlmostEqual(z, 55.7)
+    assert arm_frame_location.z is not None
+    self.assertAlmostEqual(arm_frame_location.z, 55.7)
 
   async def test_request_pose_places_the_nozzle_in_the_deck_frame(self):
     arm = make_staged_arm(
@@ -1276,7 +1306,8 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
     with mock.patch.object(arm, "request_joint_state", mock.AsyncMock(return_value=joints)):
       pose = await arm.request_pose()
     # The translated stage puts the wellplate frame's origin at (-50, 40) in the arm frame.
-    x, y = POST_HOMING_POSITION
+    x, y = POST_HOMING_POSITION.x, POST_HOMING_POSITION.y
+    assert x is not None and y is not None
     self.assertAlmostEqual(pose.nozzle_location.x, PLATE_HOLDER_LOCATION.x + x + 50.0)
     self.assertAlmostEqual(
       pose.nozzle_location.y, PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - (y - 40.0)
@@ -1534,14 +1565,14 @@ class ApproachPathTests(ArmTestCase):
         homing_position_a=SYNTHETIC_HOMING_POSITION_A,
         encoder_correction={0: [], 1: []},
         approach_paths={
-          name: [(line[0], line[1], line[2]) for line in path]
+          name: [MantisArmCoordinate(x=line[0], y=line[1], z=line[2]) for line in path]
           for name, path in SYNTHETIC_APPROACH_PATHS_BLOCK.items()
         },
       ),
     )
 
     def joints_at(x: float, y: float, z: float) -> Dict[int, float]:
-      angles = compute_joint_angles(x=x, y=y)
+      angles = compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
       return {0: angles[0], 1: angles[1], 2: z}
 
     # At the waste's bottom, at its last line; at idle, or level with a route line above the safe
@@ -1607,7 +1638,10 @@ class RouteDiscoveryTests(ArmTestCase):
       zones=SYNTHETIC_ZONES_BLOCK,
       approach_paths=SYNTHETIC_APPROACH_PATHS_BLOCK,
     )
-    self.assertEqual(driver.arm.configuration.approach_paths["wash_1"][0], (None, None, -1.57))
+    self.assertEqual(
+      driver.arm.configuration.approach_paths["wash_1"][0],
+      MantisArmCoordinate(x=None, y=None, z=-1.57),
+    )
     path = os.path.join(self.directory, "saved.json")
     driver.save_configuration(path=path)
     with open(path, encoding="utf-8") as f:
@@ -1879,9 +1913,9 @@ class V3ArmTests(DriverTestCase):
     driver, link = await self.set_up_arm()
     self.assertTrue(driver.arm.is_initialized)
     joint_state = await driver.arm.request_joint_state()
-    x, y = driver.arm._get_head_position(joint_state=joint_state)
-    self.assertAlmostEqual(x, 15.0, places=3)
-    self.assertAlmostEqual(y, 31.177, places=3)
+    head = driver.arm._get_head_position(joint_state=joint_state)
+    self.assertAlmostEqual(head.x, 15.0, places=3)
+    self.assertAlmostEqual(head.y, 31.177, places=3)
     self.assertAlmostEqual(joint_state[2], 0.0, places=3)
     with self.assertRaisesRegex(MantisConfigurationError, "no absolute"):
       await driver.arm.request_absolute_joint_state()

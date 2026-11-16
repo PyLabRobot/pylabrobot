@@ -5,7 +5,10 @@ import unittest
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis import Mantis, MantisDevice
-from pylabrobot.formulatrix.mantis.driver.arm_kinematics import compute_joint_angles
+from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
+  MantisArmCoordinate,
+  compute_joint_angles,
+)
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
 from pylabrobot.io.ftdi import FTDI
 
@@ -37,7 +40,7 @@ class ArmModelTests(unittest.IsolatedAsyncioTestCase):
     column = device.z_column.location
     assert column is not None
     # The simulated arm has no offsets: its joint state is the links' own angles.
-    theta_1, theta_2 = compute_joint_angles(x=15.0, y=60.0)
+    theta_1, theta_2 = compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=60.0, z=None))
     await device.arm.move_to_joint_state(joint_state={0: theta_1, 1: theta_2, 2: 10.0})
     self.assertAlmostEqual(device.z_column.get_absolute_location().z, column.z - 10.0)
     idle, posed = Mantis(simulation=True), Mantis(simulation=True)

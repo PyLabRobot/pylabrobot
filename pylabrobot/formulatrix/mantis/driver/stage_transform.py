@@ -9,6 +9,7 @@ the projective transformation matrix and its z tilted; never through a fitted ho
 import math
 from typing import Sequence, Tuple
 
+from .arm_kinematics import MantisArmCoordinate
 from .errors import MantisKinematicsError
 
 
@@ -21,8 +22,8 @@ def compute_arm_frame_position(
   offset_y: Tuple[float, float, float],
   arm_type_rotation_degree: float,
   arm_type_translation: Tuple[float, float, float],
-) -> Tuple[float, float, float]:
-  """A point of the wellplate frame in the arm frame: x and y in mm, z in mm down from Z's flag.
+) -> MantisArmCoordinate:
+  """A point of the wellplate frame in the arm frame, z as Z's position down from its flag.
 
   Args:
     position: (x, y, z) in the wellplate frame, mm.
@@ -47,8 +48,8 @@ def compute_arm_frame_position(
     raise MantisKinematicsError(
       f"the stage transform maps ({x:.3f}, {y:.3f}) mm on the wellplate to infinity"
     )
-  return (
-    mapped[0] / mapped[2],
-    mapped[1] / mapped[2],
-    origin[2] + framed_z + framed_x * offset_x[2] + framed_y * offset_y[2],
+  return MantisArmCoordinate(
+    x=mapped[0] / mapped[2],
+    y=mapped[1] / mapped[2],
+    z=origin[2] + framed_z + framed_x * offset_x[2] + framed_y * offset_y[2],
   )

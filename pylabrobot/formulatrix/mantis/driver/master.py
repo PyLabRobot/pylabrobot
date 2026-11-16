@@ -26,6 +26,7 @@ from typing import (
 
 from pylabrobot.io.ftdi import FTDI
 
+from .arm_kinematics import MantisArmCoordinate
 from .configuration import (
   FITTED_FIELDS,
   MOTION_CALIBRATION_BLOCKS,
@@ -83,7 +84,6 @@ from .oem_config import (
   ZONES,
   _load_unit_configuration,
 )
-from .sequence_files import RouteLine
 from .v3_arm_configuration import V3ArmConfiguration
 
 logger = logging.getLogger(__name__)
@@ -895,11 +895,11 @@ class MantisDriver:
         numbers, a route line not three numbers or None, or a route to safe XY that moves Z.
     """
 
-    def to_route(lines: Any) -> List[RouteLine]:
+    def to_route(lines: Any) -> List[MantisArmCoordinate]:
       route = []
       for line in lines:
         x, y, z = (None if value is None else float(value) for value in line)
-        route.append((x, y, z))
+        route.append(MantisArmCoordinate(x=x, y=y, z=z))
       return route
 
     routes: Dict[str, Any] = {
@@ -915,7 +915,10 @@ class MantisDriver:
         rectangles = {}
         for zone in ZONES:
           minimum_x, maximum_x, minimum_y, maximum_y = (float(v) for v in zones["rectangles"][zone])
-          rectangles[zone] = (minimum_x, maximum_x, minimum_y, maximum_y)
+          rectangles[zone] = (
+            MantisArmCoordinate(x=minimum_x, y=minimum_y, z=None),
+            MantisArmCoordinate(x=maximum_x, y=maximum_y, z=None),
+          )
         routes["zone_rectangles"] = rectangles
         for field in ("safe_xy_routes", "idle_routes"):
           routes[field] = {zone: to_route(zones[field][zone]) for zone in (*ZONES, UNKNOWN_ZONE)}
@@ -928,7 +931,9 @@ class MantisDriver:
         f"malformed zones or approach_paths block: {error!r}"
       ) from error
     if routes["safe_xy_routes"] is not None and any(
-      x is None or z is not None for route in routes["safe_xy_routes"].values() for x, _, z in route
+      line.x is None or line.z is not None
+      for route in routes["safe_xy_routes"].values()
+      for line in route
     ):
       raise MantisConfigurationError("zones block: a route to safe XY moves the arms only")
     known = {WASTE_APPROACH_PATH, *(WASH_APPROACH_PATH.format(position=p) for p in WASH_POSITIONS)}

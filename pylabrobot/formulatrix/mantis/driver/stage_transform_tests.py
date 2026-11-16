@@ -24,7 +24,7 @@ def compute(*, position, **stage):
 
 class StageTransformTests(unittest.TestCase):
   def assert_close(self, actual, expected):
-    for axis, value, wanted in zip("xyz", actual, expected):
+    for axis, value, wanted in zip("xyz", (actual.x, actual.y, actual.z), expected):
       with self.subTest(axis=axis):
         self.assertAlmostEqual(value, wanted, places=12)
 
