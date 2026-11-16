@@ -1817,11 +1817,12 @@ class Arm:
   ) -> Dict[int, Tuple[float, float]]:
     """Each arm motor's (speed, acceleration) in device units for a move of the nozzle.
 
-    Without an xy speed or acceleration, given or default, the route profile. Given, each
-    motor's is scaled by its turn over the nozzle's straight-line distance, so the motors start and
-    end together and the move takes as long as a straight one would; the nozzle's path is not
-    straight. Of the two, one not given is the route profile's on the motor that turns most,
-    scaled down on the other by its turn, so they still end together.
+    Without an xy speed or acceleration, given or default, the route profile. A speed, given or
+    the route's, is scaled per motor by its turn, so both motors run the move in the same time; the
+    nozzle's path is not straight. An acceleration is never scaled down: both motors take the
+    route's, or the given one as the motor that turns most needs it, as the device refuses a queued
+    move at too low an acceleration (seen at 18.2 device units/s²). They end within the short
+    acceleration phase of each other.
 
     Args:
       start: where the arms stand; None only without an xy speed or acceleration.
@@ -1841,14 +1842,16 @@ class Arm:
       )
       turns = {motor: abs(target.get(motor, start[motor]) - start[motor]) for motor in ARM_MOTORS}
       largest = max(turns.values())
-      for motor, turn in turns.items():
-        if distance > 0 and turn > 0:
-          rates[motor] = (
-            ROUTE_ARM_SPEED * turn / largest if speed is None else speed * turn / distance,
-            ROUTE_ARM_ACCELERATION * turn / largest
-            if acceleration is None
-            else acceleration * turn / distance,
-          )
+      if distance > 0 and largest > 0:
+        motor_acceleration = (
+          ROUTE_ARM_ACCELERATION if acceleration is None else acceleration * largest / distance
+        )
+        for motor, turn in turns.items():
+          if turn > 0:
+            rates[motor] = (
+              ROUTE_ARM_SPEED * turn / largest if speed is None else speed * turn / distance,
+              motor_acceleration,
+            )
     return {
       motor: self._get_profile(motor=motor, speed=motor_speed, acceleration=motor_acceleration)
       for motor, (motor_speed, motor_acceleration) in rates.items()

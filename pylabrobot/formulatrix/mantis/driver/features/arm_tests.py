@@ -1256,8 +1256,8 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(location.z, 5.0, places=9)
 
   def test_an_xy_speed_scales_each_motor_by_its_turn(self):
-    # 100 mm/s and 500 mm/s² over the straight line: each motor at its turn over the distance, so
-    # both end together; the motor that does not turn keeps the route profile.
+    # 100 mm/s over the straight line: each motor's speed at its turn over the distance, so both
+    # run the move in the same time; 500 mm/s² on both as the motor that turns most needs it.
     arm = Arm(
       driver=mock.Mock(**{"configuration.generation": "v4"}),
       configuration=MantisArmConfiguration(
@@ -1271,24 +1271,23 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
     start = {0: start_angles[0], 1: start_angles[1], 2: 0.0}
     target = {0: target_angles[0], 1: target_angles[1]}
     distance = math.hypot(-20.0 - 15.0, 70.0 - 31.177)
+    turns = {motor: abs(target[motor] - start[motor]) for motor in (0, 1)}
+    largest = max(turns.values())
     profiles = arm._get_arm_profiles(
       start=start, target=target, xy_speed=100.0, xy_acceleration=500.0
     )
     for motor in (0, 1):
-      turn = abs(target[motor] - start[motor])
       with self.subTest(motor=motor):
         expected = (
-          compute_device_rate(motor=motor, rate=100.0 * turn / distance),
-          compute_device_rate(motor=motor, rate=500.0 * turn / distance),
+          compute_device_rate(motor=motor, rate=100.0 * turns[motor] / distance),
+          compute_device_rate(motor=motor, rate=500.0 * largest / distance),
         )
         for value, expected_value in zip(profiles[motor], expected):
           self.assertAlmostEqual(value, expected_value, places=9)
     route = arm._get_arm_profiles(start=None, target=target, xy_speed=None, xy_acceleration=None)
     self.assertEqual(route[0], (ARM_PROFILE_SPEED, ARM_PROFILE_ACCELERATION))
-    # Given one, the other is the route profile's on the motor turning most, scaled on the other
-    # by its turn: speed and acceleration in one ratio on both, so they end together.
-    turns = {motor: abs(target[motor] - start[motor]) for motor in (0, 1)}
-    largest = max(turns.values())
+    # Given one, a speed not given is the route's scaled by turn; an acceleration not given is the
+    # route's on both motors, never scaled down.
     for given in ({"xy_speed": 100.0}, {"xy_acceleration": 500.0}):
       profiles = arm._get_arm_profiles(
         start=start, target=target, **{"xy_speed": None, "xy_acceleration": None, **given}
@@ -1298,10 +1297,36 @@ class DeckFrameTests(unittest.IsolatedAsyncioTestCase):
           turn = turns[motor]
           expected = (
             100.0 * turn / distance if "xy_speed" in given else 10000.0 * turn / largest,
-            500.0 * turn / distance if "xy_acceleration" in given else 1500.0 * turn / largest,
+            500.0 * largest / distance if "xy_acceleration" in given else 1500.0,
           )
           for value, rate in zip(profiles[motor], expected):
             self.assertAlmostEqual(value, compute_device_rate(motor=motor, rate=rate), places=9)
+
+  def test_a_motor_that_barely_turns_keeps_a_full_acceleration(self):
+    # On the device a queued move at 18.2 device units/s² was refused (error 6): a motor turning
+    # 0.25 du against the other's 11.66 never gets a scaled-down acceleration.
+    arm = Arm(
+      driver=mock.Mock(**{"configuration.generation": "v4"}),
+      configuration=MantisArmConfiguration(
+        offsets={0: 0.0, 1: 0.0},
+        homing_position_a=SYNTHETIC_HOMING_POSITION_A,
+        encoder_correction={0: [], 1: []},
+      ),
+    )
+    start_angles = compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=31.177, z=None))
+    start = {0: start_angles[0], 1: start_angles[1], 2: 0.0}
+    target = {
+      0: start[0] + compute_position(motor=0, device_position=0.25),
+      1: start[1] + compute_position(motor=1, device_position=11.66),
+    }
+    for given in ({"xy_speed": 50.0}, {"xy_speed": 50.0, "xy_acceleration": 200.0}, {}):
+      profiles = arm._get_arm_profiles(
+        start=start, target=target, **{"xy_speed": None, "xy_acceleration": None, **given}
+      )
+      with self.subTest(given=given):
+        self.assertEqual(profiles[0][1], profiles[1][1])
+        if "xy_acceleration" not in given:
+          self.assertEqual(profiles[0][1], ARM_PROFILE_ACCELERATION)
 
   def test_over_the_plate_holder_the_stage_transform_places_the_nozzle(self):
     # The holder's back-left corner is the wellplate frame's origin.
