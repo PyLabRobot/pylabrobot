@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusValve.\_\_init\_\_
+=========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusValve.__init__

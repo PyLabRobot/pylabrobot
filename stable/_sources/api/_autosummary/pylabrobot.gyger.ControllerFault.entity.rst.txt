@@ -1,0 +1,6 @@
+pylabrobot.gyger.ControllerFault.entity
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ControllerFault.entity

@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.RunControl
+===========================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: RunControl
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~RunControl.progress
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~RunControl.__init__
+      ~RunControl.pause
+      ~RunControl.resume
+      ~RunControl.wait_paused
+   
+   

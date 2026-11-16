@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.configure\_channel
+==============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.configure_channel

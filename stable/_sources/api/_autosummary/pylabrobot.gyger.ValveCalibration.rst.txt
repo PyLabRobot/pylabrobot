@@ -1,0 +1,45 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.ValveCalibration
+=================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: ValveCalibration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ValveCalibration.fluid
+      ~ValveCalibration.source_id
+      ~ValveCalibration.valve_serial
+      ~ValveCalibration.valve_type
+      ~ValveCalibration.vendor_xml
+      ~ValveCalibration.points
+      ~ValveCalibration.pressure
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~ValveCalibration.__init__
+      ~ValveCalibration.duration_for_volume
+      ~ValveCalibration.from_dict
+      ~ValveCalibration.from_vendor_xml
+      ~ValveCalibration.load
+      ~ValveCalibration.save
+      ~ValveCalibration.to_dict
+      ~ValveCalibration.to_vendor_xml
+      ~ValveCalibration.validate_for
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.setup
+=================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.setup

@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusValve.get\_state
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusValve.get_state

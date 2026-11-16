@@ -1,0 +1,6 @@
+﻿pylabrobot.gyger.IncoProtocolError
+==================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoexception:: IncoProtocolError

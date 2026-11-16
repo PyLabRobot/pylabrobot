@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunProgress.total\_groups
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: RunProgress.total_groups

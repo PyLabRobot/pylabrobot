@@ -1,0 +1,26 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.PlateRegistration
+==================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: PlateRegistration
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateRegistration.__init__
+      ~PlateRegistration.target
+      ~PlateRegistration.validate
+   
+   

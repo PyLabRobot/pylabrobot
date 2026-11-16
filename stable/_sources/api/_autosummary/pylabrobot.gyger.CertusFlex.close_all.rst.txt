@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.close\_all
+======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.close_all

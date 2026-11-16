@@ -1,0 +1,6 @@
+pylabrobot.gyger.ValveCalibration.points
+========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: ValveCalibration.points

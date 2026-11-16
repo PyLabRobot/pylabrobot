@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.get\_status
+=======================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.get_status

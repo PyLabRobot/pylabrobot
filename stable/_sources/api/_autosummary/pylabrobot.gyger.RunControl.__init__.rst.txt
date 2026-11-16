@@ -1,0 +1,6 @@
+pylabrobot.gyger.RunControl.\_\_init\_\_
+========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: RunControl.__init__

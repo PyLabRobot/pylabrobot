@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.move\_to\_well
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.move_to_well

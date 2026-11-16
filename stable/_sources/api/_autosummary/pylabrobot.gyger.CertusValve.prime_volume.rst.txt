@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusValve.prime\_volume
+==========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusValve.prime_volume

@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.DispensePlan
+=============================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: DispensePlan
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DispensePlan.count
+      ~DispensePlan.registration
+      ~DispensePlan.groups
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~DispensePlan.__init__
+   
+   

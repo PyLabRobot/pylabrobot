@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.execute\_plan
+=========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.execute_plan

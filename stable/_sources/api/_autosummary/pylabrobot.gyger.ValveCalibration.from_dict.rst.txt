@@ -1,0 +1,6 @@
+pylabrobot.gyger.ValveCalibration.from\_dict
+============================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: ValveCalibration.from_dict

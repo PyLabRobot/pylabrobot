@@ -1,0 +1,32 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.CertusValve
+============================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: CertusValve
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~CertusValve.__init__
+      ~CertusValve.close
+      ~CertusValve.dispense
+      ~CertusValve.dispense_for
+      ~CertusValve.get_state
+      ~CertusValve.prime
+      ~CertusValve.prime_volume
+      ~CertusValve.purge
+      ~CertusValve.purge_volume
+   
+   

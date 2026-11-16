@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.\_\_init\_\_
+========================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.__init__

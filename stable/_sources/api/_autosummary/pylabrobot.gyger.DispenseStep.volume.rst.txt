@@ -1,0 +1,6 @@
+pylabrobot.gyger.DispenseStep.volume
+====================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: DispenseStep.volume

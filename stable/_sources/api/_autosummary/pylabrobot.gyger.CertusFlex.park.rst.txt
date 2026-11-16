@@ -1,0 +1,6 @@
+pylabrobot.gyger.CertusFlex.park
+================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. automethod:: CertusFlex.park

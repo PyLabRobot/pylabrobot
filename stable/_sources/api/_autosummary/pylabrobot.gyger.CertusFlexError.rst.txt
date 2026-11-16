@@ -1,0 +1,6 @@
+﻿pylabrobot.gyger.CertusFlexError
+================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoexception:: CertusFlexError

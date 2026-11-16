@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.MotionBounds
+=============================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: MotionBounds
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MotionBounds.minimum
+      ~MotionBounds.maximum
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MotionBounds.__init__
+      ~MotionBounds.check
+   
+   

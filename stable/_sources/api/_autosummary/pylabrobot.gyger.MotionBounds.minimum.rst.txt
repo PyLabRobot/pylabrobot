@@ -1,0 +1,6 @@
+pylabrobot.gyger.MotionBounds.minimum
+=====================================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoattribute:: MotionBounds.minimum

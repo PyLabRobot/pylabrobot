@@ -2173,5 +2173,21 @@
     "code_slug": "thermo_fisher/kingfisher/presto",
     "doc_slug": "thermo_fisher/kingfisher/presto/hello-world",
     "notes": "USB HID protocol control; pending hardware and manufacturer-file verification."
+  },
+  {
+    "id": "gyger-certus-flex",
+    "vendor": "Fritz Gyger",
+    "name": "CERTUS FLEX",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing"
+    ],
+    "status": "mostly",
+    "needs_hardware_testing": false,
+    "api": "pylabrobot.gyger.CertusFlex",
+    "api_version": "v1",
+    "code_slug": "gyger/certus_flex",
+    "doc_slug": "gyger/certus_flex/hello-world",
+    "notes": "Plate plans, coordinated channels, calibration reuse, run controls, and maintenance. Angled FLEX8 tested over direct Ethernet; INCO server and other heads use offline fixtures."
   }
 ]

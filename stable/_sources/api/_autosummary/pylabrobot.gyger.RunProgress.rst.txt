@@ -1,0 +1,36 @@
+﻿:orphan:
+
+
+pylabrobot.gyger.RunProgress
+============================
+
+.. currentmodule:: pylabrobot.gyger
+
+.. autoclass:: RunProgress
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~RunProgress.completed_doses
+      ~RunProgress.completed_groups
+      ~RunProgress.error
+      ~RunProgress.state
+      ~RunProgress.total_groups
+      ~RunProgress.uncertain_group
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~RunProgress.__init__
+   
+   
