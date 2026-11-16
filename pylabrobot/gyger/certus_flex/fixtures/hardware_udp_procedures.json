@@ -1,0 +1,38 @@
+{
+  "serial_number": "C196069",
+  "firmware": "1.0.7.378-trunk",
+  "head_id": 4,
+  "captured_at": "2026-11-15T00:38:37Z",
+  "transport": "UDP 1964",
+  "protocol": "initialize, park; axes already referenced and parked; no pressure or valve commands",
+  "exchanges": [
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Cmd.Start",
+      "arguments": [],
+      "sequence": 13,
+      "request": "10010d040001ff0100ec000000004d616368696e652e456e746974792e44697370656e7365722e436d642e53746172740000100343",
+      "response": "10060d00000100ebfeec899b000000011003ed"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveZToPark",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 213,
+      "request": "1001d5040101ff01002300000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655a546f5061726b00000000536c6f7700000000100344",
+      "response": "1006d50000010023feec88ae000000011003db"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYToPark",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 221,
+      "request": "1001dd040101ff01001b00000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655859546f5061726b000000536c6f77000000001003ed",
+      "response": "1006dd000001001bfeec88a7000000011003e2"
+    }
+  ]
+}

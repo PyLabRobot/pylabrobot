@@ -1,5 +1,6 @@
 """Formulatrix Mantis liquid dispenser."""
 
+from .carousel import MantisCarousel
 from .device import RECORDING_MANTIS_V4, Mantis, MantisDevice
 from .driver import (
   CLAMP_STATE_DESCRIPTIONS,
@@ -39,5 +40,6 @@ from .driver import (
   Pump,
   Rfid,
 )
+from .driver.carousel_configuration import CarouselConfiguration
 from .driver.configuration import RECORDING_MANTIS_V3
 from .liquid_classes import MantisLiquidClass, mantis_mapping

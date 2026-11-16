@@ -30,6 +30,7 @@ Manufacturers
     pylabrobot.cole_parmer
     pylabrobot.curiox
     pylabrobot.formulatrix
+    pylabrobot.gyger
     pylabrobot.hamilton
     pylabrobot.high_res
     pylabrobot.inheco
