@@ -485,6 +485,39 @@ class FTDID2XXTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(library.opened, ["SERIALB"])
     self.assertEqual(io.device_id, "SERIAL")
 
+  def test_usb_product_filters_d2xx_channel_descriptions(self):
+    """Shared VID/PID and a matching serial must not override a product mismatch."""
+    self.use_library(channels=[])
+    nodes = []
+    for serial, description in (
+      (b"MA", b"Mantis A"),
+      (b"MB", b"Mantis B"),
+      (b"LA", b"LC3 A"),
+      (b"LB", b"LC3 B"),
+    ):
+      node = ftdi_module._D2XXDeviceListInfoNode()
+      node.SerialNumber = serial
+      node.Description = description
+      node.ID = FT2232H_ID
+      nodes.append(node)
+    with mock.patch.object(ftdi_module, "_list_d2xx_devices", return_value=nodes):
+      io = FTDI(
+        human_readable_device_name="test",
+        interface_select=2,
+        ftdi_library="d2xx",
+        usb_product="Mantis",
+      )
+      self.assertEqual(io._resolve_d2xx_serial_number(), "MB")
+      io = FTDI(
+        human_readable_device_name="test",
+        device_id="L",
+        interface_select=2,
+        ftdi_library="d2xx",
+        usb_product="Mantis",
+      )
+      with self.assertRaisesRegex(RuntimeError, "No FTDI channel"):
+        io._resolve_d2xx_serial_number()
+
   async def test_no_interface_takes_channel_a_as_libftdi_does(self):
     library = self.use_library(channels=TWO_CHANNEL_CHIP)
     io = FTDI(human_readable_device_name="test", device_id="SERIAL", ftdi_library="d2xx")
@@ -570,6 +603,76 @@ class FTDID2XXTests(unittest.IsolatedAsyncioTestCase):
             await validator.setup()
           finally:
             reader.done()
+
+
+@unittest.skipUnless(HAS_PYLIBFTDI and HAS_PYUSB, "pylibftdi/pyusb not installed")
+class FTDIProductTests(unittest.TestCase):
+  """The product string distinguishes controllers with identical USB vendor/product IDs."""
+
+  def setUp(self):
+    """List a main controller and its separate carousel accessory."""
+    self.devices = [
+      SimpleNamespace(
+        idVendor=0x0403,
+        idProduct=0x6010,
+        iSerialNumber=3,
+        iProduct=2,
+        serial="M",
+        product="Mantis",
+        bus=5,
+        port_numbers=(1,),
+        address=5,
+      ),
+      SimpleNamespace(
+        idVendor=0x0403,
+        idProduct=0x6010,
+        iSerialNumber=3,
+        iProduct=2,
+        serial="L",
+        product="LC3",
+        bus=5,
+        port_numbers=(2,),
+        address=4,
+      ),
+    ]
+    finder = mock.patch.object(ftdi_module.usb.core, "find", return_value=self.devices)
+    strings = mock.patch.object(
+      ftdi_module.usb.util,
+      "get_string",
+      side_effect=lambda device, index: device.serial if index == 3 else device.product,
+    )
+    finder.start()
+    strings.start()
+    self.addCleanup(finder.stop)
+    self.addCleanup(strings.stop)
+
+  def test_product_selects_only_the_main_controller(self):
+    io = FTDI(human_readable_device_name="test", vid=0x0403, pid=0x6010, usb_product="Mantis")
+    self.assertEqual(io._resolve_device_serial(), "M")
+    self.assertEqual(FTDI(**io.serialize())._resolve_device_serial(), "M")
+
+  def test_explicit_serial_cannot_select_the_wrong_product(self):
+    io = FTDI(
+      human_readable_device_name="test", device_id="L", vid=0x0403, pid=0x6010, usb_product="Mantis"
+    )
+    with self.assertRaisesRegex(RuntimeError, "product Mantis"):
+      io._resolve_device_serial()
+
+  def test_topology_selection_checks_the_product(self):
+    for address, expected in (("5-1", (5, 5)), ("5-2", None)):
+      with self.subTest(address=address):
+        io = FTDI(
+          human_readable_device_name="test",
+          vid=0x0403,
+          pid=0x6010,
+          usb_address=address,
+          usb_product="Mantis",
+        )
+        if expected is not None:
+          self.assertEqual(io._resolve_device_location(), expected)
+        else:
+          with self.assertRaisesRegex(RuntimeError, "has product 'LC3'"):
+            io._resolve_device_location()
 
 
 if __name__ == "__main__":

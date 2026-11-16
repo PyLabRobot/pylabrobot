@@ -8,7 +8,9 @@ import re
 import xml.etree.ElementTree as ElementTree
 from typing import Any, Dict, List
 
+from .arm_kinematics import MICROSTEPS, PITCH, STEPS_PER_REVOLUTION, compute_position
 from .errors import MantisConfigurationError
+from .v3_arm_configuration import V3ArmConfiguration
 
 # Where a v4 install keeps each arm motor's absolute encoder correction, from its ``Data`` folder.
 ENCODER_CORRECTION_DIRECTORY = os.path.join("System", "Encoder Correction", "Sampling File")
@@ -56,6 +58,68 @@ def _parse_correction_table(*, path: str) -> List[List[float]]:
   return rows
 
 
+def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
+  """Read the v3 home frame and search settings, converting vendor units at the boundary."""
+  try:
+
+    def number(key: str) -> float:
+      """Read one required vendor setting."""
+      return float(values[key])
+
+    def flag(key: str) -> bool:
+      """Read a boolean flag without accepting an unknown encoding."""
+      if values[key] not in ("0", "1"):
+        raise ValueError(f"{key} must be 0 or 1")
+      return values[key] == "1"
+
+    for motor in (0, 1, 2):
+      prefix = f"Motor.{motor + 1}."
+      if (
+        number(prefix + "StepsPerRevolution") != STEPS_PER_REVOLUTION
+        or number(prefix + "MicroSteps") != MICROSTEPS
+        or number(prefix + "PositionMapper.Pitch") != PITCH[motor]
+      ):
+        raise ValueError(f"motor {motor}'s unit conversion is unsupported")
+    count = number("Arm.PostHomingPosition.Count")
+    if count != int(count) or count < 1:
+      raise ValueError("Arm.PostHomingPosition.Count must be a positive integer")
+    route = []
+    for index in range(1, int(count) + 1):
+      x, y, z = map(float, values[f"Arm.PostHomingPosition.{index}"].split(","))
+      if z != 0:
+        raise ValueError("the v3 post-home route requires Z at its home flag")
+      route.append([x, y])
+    block = {
+      "offsets": {str(motor): number(f"Motor.{motor + 1}.Offset") for motor in (0, 1)},
+      "home_positions": {
+        str(motor): compute_position(
+          motor=motor, device_position=number(f"Motor.{motor + 1}.HomingPositionN")
+        )
+        for motor in (0, 1)
+      },
+      "motors": {
+        str(motor): {
+          "method": number(f"Motor.{motor + 1}.HomingPin"),
+          "positive_edge": flag(f"Motor.{motor + 1}.HomingPinActiveState"),
+          "positive_direction": flag(f"Motor.{motor + 1}.HomingDirection"),
+          "speed": number(f"Motor.{motor + 1}.HomingVelocity"),
+          "acceleration": number(f"Motor.{motor + 1}.HomingAcceleration"),
+        }
+        for motor in (0, 1, 2)
+      },
+      "retract": number("Arm.PreHomingMovement.RetractStep"),
+      "backoff": number("Arm.PreHomingMovement.EnforceStep"),
+      "jog_speed": number("Motor.1.DefaultVelocity"),
+      "jog_acceleration": number("Motor.1.DefaultAcceleration"),
+      "motor_delay": number("MotorXYHomingDelay") / 1000.0,
+      "post_home_positions": route,
+    }
+    V3ArmConfiguration.from_block(block)
+    return block
+  except (KeyError, TypeError, ValueError) as error:
+    raise MantisConfigurationError(f"invalid v3 RobotArm.config: {error}") from error
+
+
 def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   """The unit's blocks, as declared configurations hold them, from its vendor ``.config`` files.
 
@@ -66,7 +130,8 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   ``led_bar``: the LED count, from ``Device.config``'s ``NumberOfLed``, only where it is set.
   ``arm``: each arm motor's ``Offset`` and ``HomingPositionA`` from ``RobotArm.config`` and its
   encoder correction file from the ``Data`` folder two levels up, only where ``HomingPositionA``
-  is set (a v4). Motor 0 is ``Motor.1`` there.
+  is set (a v4). Otherwise, the v3's offsets, home positions, flag searches, retract/backoff
+  settings and post-home route. Motor 0 is ``Motor.1`` there.
 
   Args:
     oem_config_directory: the unit's ``Data/Device/Configs`` folder.
@@ -168,4 +233,6 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
       for field, key in (("offsets", "Offset"), ("homing_position_a", "HomingPositionA"))
     }
     blocks["arm"]["encoder_correction"] = correction
+  elif arm_values:
+    blocks["arm"] = _load_v3_arm_configuration(values=arm_values)
   return blocks

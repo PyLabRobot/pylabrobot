@@ -433,7 +433,8 @@
     "name": "Mantis",
     "models": [
       {
-        "name": "v3"
+        "name": "v3",
+        "needs_hardware_testing": false
       },
       {
         "name": "v4"

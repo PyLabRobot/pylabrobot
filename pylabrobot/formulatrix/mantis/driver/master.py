@@ -50,6 +50,7 @@ from .events import (
   describe_event,
 )
 from .features.arm import Arm
+from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import UNCLAMPING_DONE, PlateClamp
 from .features.pump import Pump
@@ -66,6 +67,7 @@ from .framing import (
   split_frames,
 )
 from .oem_config import _load_unit_configuration
+from .v3_arm_configuration import V3ArmConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +93,10 @@ class MantisDriver:
   _default_queue_full_timeout: float = 60.0
 
   def _build_io(self, *, device_id: Optional[str], ftdi_library: Optional[str]) -> FTDI:
-    """Build the link to the Mantis ``device_id`` names, or to the first one found."""
+    """Select the Mantis USB product; its LC3 accessory shares the same VID/PID."""
     return FTDI(
       human_readable_device_name="Formulatrix Mantis",
+      usb_product="Mantis",
       device_id=device_id,
       vid=0x0403,
       pid=0x6010,
@@ -107,6 +110,7 @@ class MantisDriver:
     """Build the link to the RFID reader, interface A of the same FTDI bridge."""
     return FTDI(
       human_readable_device_name="Formulatrix Mantis RFID reader",
+      usb_product="Mantis",
       device_id=device_id,
       vid=0x0403,
       pid=0x6010,
@@ -905,8 +909,15 @@ class MantisDriver:
         driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
       )
     sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
-    if sensor_board is not None and self.arm is None:
-      self.arm = Arm(driver=self, **self._get_arm_calibration())
+    if self.arm is None:
+      if sensor_board is not None:
+        self.arm = Arm(driver=self, **self._get_arm_calibration())
+      else:
+        block = self._unit_blocks.get("arm")
+        self.arm = V3Arm(
+          driver=self,
+          configuration=V3ArmConfiguration.from_block(block) if block is not None else None,
+        )
 
   def _show_action(
     self, *, action: str, show_inner_actions: bool = True, only_when_idle: bool = False
@@ -1147,8 +1158,8 @@ class MantisDriver:
     await self.arm._halt()
 
   async def stop(self) -> None:
-    """Fail the command in flight and every event waiter; on a v4, abort the sequencer, stop the
-    motors and park an arm brought up; release the plate clamp, turn the LED bar off, stop reading
+    """Fail the command in flight and every event waiter; abort the sequencer, stop the
+    motors and park a v4 arm brought up; release the plate clamp, turn the LED bar off, stop reading
     the link and close it.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
@@ -1185,7 +1196,7 @@ class MantisDriver:
 
   async def setup(self, *, skip_arm: bool = False) -> None:
     """Open the link if it is not open, read the device's configuration and check it, then bring
-    the arm and Z up on a v4 (``Arm.initialize``). This moves the device.
+    the arm and Z up (``Arm.initialize`` or ``V3Arm.initialize``). This moves the device.
 
     On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
     ``SETUP_DONE_HOLD``, then idle.

@@ -1,7 +1,7 @@
 """A simulated Mantis: the driver with no device behind it, answering from its configuration."""
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -15,12 +15,14 @@ from .configuration import (
 )
 from .errors import MantisConfigurationError, MantisTimeoutError
 from .features.arm import ARM_MOTORS, MOTOR_HOMED, Z_MOTOR, Arm
+from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
 from .features.rfid import Rfid
 from .framing import ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD, MOTION_BOARD, PRESSURE_BOARD
 from .master import ABSOLUTE_ENCODER_MOTORS, MOTORS, SEQUENCER_QUEUE_SIZE, MantisDriver
+from .v3_arm_configuration import V3ArmConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +240,59 @@ class MantisSimulationArm(Arm):
     )
 
 
+class MantisSimulationV3Arm(V3Arm):
+  """A v3 arm simulated above the wire, with flags and following errors at the stops."""
+
+  def __init__(
+    self, *, driver: "MantisSimulationDriver", configuration: Optional[V3ArmConfiguration]
+  ):
+    """Use the declared route; simulation also requires a v3 homing calibration."""
+    super().__init__(driver=driver, configuration=configuration)
+    self._positions = {0: 0.0, 1: 0.0, 2: 0.0}
+    self._statuses = {0: 0, 1: 0, 2: 0}
+    self._homed: Set[int] = set()
+
+  async def _unchecked_fw_clear_motor_faults(self, *, motor: int) -> None:
+    """Clear the simulated fault, keeping the home state."""
+    self._statuses[motor] = MOTOR_HOMED if motor in self._homed else 0
+
+  async def _unchecked_fw_move_absolute(
+    self, *, motor: int, position: float, speed: float, acceleration: float
+  ) -> None:
+    """Move at once; a retract of an unhomed arm seats against its stop."""
+    if motor in ARM_MOTORS and motor not in self._homed and position < self._positions[motor]:
+      self._statuses[motor] = 128
+    self._positions[motor] = position
+
+  async def _unchecked_fw_set_motor_position(self, *, motor: int, position: float) -> None:
+    """Declare the simulated controller's position."""
+    self._positions[motor] = position
+
+  async def _unchecked_fw_home(
+    self,
+    *,
+    motor: int,
+    method: int,
+    positive_edge: bool,
+    positive_direction: bool,
+    slow_speed: float,
+    fast_speed: float,
+    acceleration: float,
+  ) -> None:
+    """Find the flag immediately."""
+    self._positions[motor] = 0.0
+    self._homed.add(motor)
+    self._statuses[motor] = MOTOR_HOMED
+
+  async def _unchecked_fw_stop(self, *, motor: int, deceleration: float) -> None:
+    """Do nothing: a simulated move has already finished."""
+
+  async def initialize(self) -> None:
+    """Establish the simulated home frame from an unhomed state."""
+    self._homed.clear()
+    await super().initialize()
+
+
 class MantisSimulationDriver(MantisDriver):
   """A Mantis driver with no device behind it.
 
@@ -340,6 +395,8 @@ class MantisSimulationDriver(MantisDriver):
   async def request_motor_status(self, *, motor: int) -> int:
     """Idle, no fault; Z homed once the simulated arm homed it."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
+    if isinstance(self.arm, MantisSimulationV3Arm):
+      return self.arm._statuses[motor]
     if isinstance(self.arm, MantisSimulationArm) and motor == Z_MOTOR and self.arm._z_homed:
       return MOTOR_HOMED
     return 0
@@ -347,7 +404,7 @@ class MantisSimulationDriver(MantisDriver):
   async def request_motor_position(self, *, motor: int) -> float:
     """Where the simulated arm's controller holds the motor; 0 without one, as after power-on."""
     self._check_index(name="motor", value=motor, allowed=MOTORS)
-    if isinstance(self.arm, MantisSimulationArm):
+    if isinstance(self.arm, (MantisSimulationArm, MantisSimulationV3Arm)):
       return self.arm._positions[motor]
     return 0.0
 
@@ -460,7 +517,10 @@ class MantisSimulationDriver(MantisDriver):
         number_of_leds=self.led_bar.number_of_leds,
         show_actions=self.led_bar.show_actions,
       )
-    if self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
+    if isinstance(self.arm, V3Arm):
+      if not isinstance(self.arm, MantisSimulationV3Arm):
+        self.arm = MantisSimulationV3Arm(driver=self, configuration=self.arm.configuration)
+    elif self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
       self.arm = MantisSimulationArm(
         driver=self,
         offsets=self.arm.offsets,
