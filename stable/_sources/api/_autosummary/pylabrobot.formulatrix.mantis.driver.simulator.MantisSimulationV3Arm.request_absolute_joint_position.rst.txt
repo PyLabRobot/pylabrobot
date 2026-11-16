@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationV3Arm.request\_absolute\_joint\_position
+=======================================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. automethod:: MantisSimulationV3Arm.request_absolute_joint_position

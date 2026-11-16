@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm\_v3.V3Arm.default\_arm\_speed
+===============================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm_v3
+
+.. autoproperty:: V3Arm.default_arm_speed

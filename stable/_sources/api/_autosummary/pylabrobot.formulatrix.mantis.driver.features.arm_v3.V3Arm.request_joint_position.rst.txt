@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm\_v3.V3Arm.request\_joint\_position
+====================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm_v3
+
+.. automethod:: V3Arm.request_joint_position
