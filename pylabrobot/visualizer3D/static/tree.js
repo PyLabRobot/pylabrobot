@@ -422,11 +422,6 @@ treeEl.addEventListener("keydown", (e) => {
 
 const sidepanel = document.getElementById("sidepanel");
 
-document.getElementById("toolbar-right-toggle").addEventListener("click", () => {
-  sidepanel.classList.toggle("collapsed");
-  resize();
-});
-
 let allExpanded = false;
 
 document.getElementById("toggle-expand-btn").addEventListener("click", () => {
@@ -476,6 +471,31 @@ function pickPane(which, button) {
 treeButton.addEventListener("click", () => pickPane("tree", treeButton));
 
 searchButton.addEventListener("click", () => pickPane("search", searchButton));
+
+// The inspector toggle hides the rail with the panel, as the existing visualizer's does, and
+// reopens the pane that was showing.
+const rightRail = document.getElementById("toolbar");
+
+let paneButtonBeforeHide = null;
+
+document.getElementById("toolbar-right-toggle").addEventListener("click", () => {
+  if (rightRail.style.display === "none") {
+    rightRail.style.display = "";
+    if (paneButtonBeforeHide) {
+      sidepanel.classList.remove("collapsed");
+      paneButtonBeforeHide.classList.add("active");
+    }
+  } else {
+    const open = !sidepanel.classList.contains("collapsed");
+    const active = treeButton.classList.contains("active") ? treeButton : searchButton;
+    paneButtonBeforeHide = open ? active : null;
+    sidepanel.classList.add("collapsed");
+    rightRail.style.display = "none";
+    treeButton.classList.remove("active");
+    searchButton.classList.remove("active");
+  }
+  resize();
+});
 
 // Matching as the existing visualizer matches: every term of the query must be found, as a
 // subsequence, in the name or the type; an exact name outranks a prefix, a prefix a substring, a

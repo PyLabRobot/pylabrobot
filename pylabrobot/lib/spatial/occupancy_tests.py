@@ -1,11 +1,17 @@
 import unittest
 from typing import Optional
 
-from pylabrobot.lib.spatial.occupancy import get_resource_at_location
+from pylabrobot.lib.spatial.occupancy import get_resource_at_location, get_resource_below_location
 from pylabrobot.resources.azenta.plates import azenta_96_wellplate_200uL_Vb_4titudeframestar
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.hamilton import PLT_CAR_L5AC_A00, STARDeck
+from pylabrobot.resources.hamilton import (
+  PLT_CAR_L5AC_A00,
+  STARDeck,
+  hamilton_96_tiprack_300uL_NTR,
+  hamilton_tip_carrier_L5_ntr_a00,
+)
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.rotation import Rotation
 
 
@@ -67,3 +73,55 @@ class GetResourceAtLocationBoxTests(unittest.TestCase):
     self.frame.assign_child_resource(bar, location=Coordinate(50, 20, 0))
     self.assertIs(get_resource_at_location(Coordinate(45, 100, 5), self.frame), bar)
     self.assertIsNone(get_resource_at_location(Coordinate(55, 25, 5), self.frame))
+
+
+class GetResourceBelowLocationTests(unittest.TestCase):
+  def setUp(self):
+    self.deck = STARDeck()
+    self.carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
+    self.deck.assign_child_resource(self.carrier, track=30)
+    self.carrier[0] = self.plate = azenta_96_wellplate_200uL_Vb_4titudeframestar(name="plate")
+    self.well = self.plate.get_well(identifier="D1")
+    self.ntr_carrier = hamilton_tip_carrier_L5_ntr_a00(name="ntr_carrier")
+    self.deck.assign_child_resource(self.ntr_carrier, track=40)
+    self.stack = ResourceStack(name="stack", direction="z")
+    for index in range(3):
+      self.stack.assign_child_resource(
+        resource=hamilton_96_tiprack_300uL_NTR(name=f"nested_{index}", with_tips=False)
+      )
+    self.ntr_carrier[1] = self.stack
+
+  def over(self, resource: Resource, height: float) -> Coordinate:
+    """The point over `resource`'s centre at `height` on the deck, in mm."""
+    centre = resource.get_location_wrt(self.deck, x="c", y="c", z="t")
+    return Coordinate(x=centre.x, y=centre.y, z=height)
+
+  def find(self, location: Coordinate) -> Optional[Resource]:
+    return get_resource_below_location(location=location, reference_frame=self.deck)
+
+  def test_a_point_over_a_well_meets_the_well_not_the_plate_or_carrier(self):
+    self.assertIs(self.find(location=self.over(resource=self.well, height=300.0)), self.well)
+
+  def test_a_point_inside_a_well_is_in_the_well(self):
+    rim = self.well.get_location_wrt(self.deck, z="t").z
+    self.assertIs(self.find(location=self.over(resource=self.well, height=rim - 2.0)), self.well)
+
+  def test_a_point_in_a_plate_under_its_well_is_in_the_plate(self):
+    under = (self.plate.get_location_wrt(self.deck).z + self.well.get_location_wrt(self.deck).z) / 2
+    self.assertIs(self.find(location=self.over(resource=self.well, height=under)), self.plate)
+
+  def test_a_point_over_an_empty_site_meets_the_site_not_its_carrier_walls(self):
+    site = self.ntr_carrier[0]
+    height = site.get_location_wrt(self.deck).z + 10.0
+    self.assertIs(self.find(location=self.over(resource=site, height=height)), site)
+
+  def test_a_point_over_nested_racks_meets_the_top_rack(self):
+    found = self.find(location=self.over(resource=self.stack, height=300.0))
+    self.assertIs(found, self.stack.get_top_item())
+
+  def test_a_resource_wholly_above_the_point_is_not_met(self):
+    top_rack = self.stack.get_top_item()
+    height = top_rack.get_location_wrt(self.deck).z - 1.0
+    self.assertIs(
+      self.find(location=self.over(resource=self.stack, height=height)), self.stack.children[1]
+    )
