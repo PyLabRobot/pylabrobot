@@ -2,45 +2,38 @@
 
 from pylabrobot.resources.tube import Tube, TubeBottomType
 
-_MCKESSON_TUBE_5ML_RB_HEIGHT_PER_UL = 0.01175032
-_MCKESSON_TUBE_5ML_RB_HEIGHT_INTERCEPT = 3.622768533
-
-
-def _compute_height_from_volume_McKesson_tube_5mL_Rb(volume: float) -> float:
-  """Compute liquid height in mm from volume in uL using the measured linear fit."""
-  return _MCKESSON_TUBE_5ML_RB_HEIGHT_PER_UL * volume + _MCKESSON_TUBE_5ML_RB_HEIGHT_INTERCEPT
-
-
-def _compute_volume_from_height_McKesson_tube_5mL_Rb(height: float) -> float:
-  """Compute volume in uL from liquid height in mm using the measured linear fit."""
-  return (height - _MCKESSON_TUBE_5ML_RB_HEIGHT_INTERCEPT) / _MCKESSON_TUBE_5ML_RB_HEIGHT_PER_UL
-
 
 def McKesson_tube_5mL_Rb(name: str) -> Tube:
   """McKesson Premium Glass Culture Tube, manufacturer no. 177-1505.
 
-  - Manufacturer: McKesson
-  - Manufacturer number: 177-1505
-  - Material: borosilicate glass
-  - Outside diameter: 12 mm
-  - Length: 75 mm
-  - Volume: 5 mL
-  - Bottom: round
-  - Rim: fire-polished
-  - Additive: plain
-  - Sterility: non-sterile
-  - Closure: none
-  - Manufacturer URL: https://mms.mckesson.com/product/1082085/McKesson-Brand-177-1505
+  The uncapped borosilicate tube has a round bottom and a fire-polished rim.
+  The cavity floor is modeled 1 mm above the outside base.
+
+  Liquid heights are approximated by a linear fit in mm above the cavity floor.
+  The table bounds the fit to the nominal 0–5,000 uL capacity. The positive
+  height at zero volume is the fit's extrapolated intercept.
+
+  Manufacturer specification
+  https://imgcdn.mckesson.com/CumulusWeb/Click_and_learn/premium_glass_culture_tubes_tear_sheet_2018-07.pdf
+
+  Args:
+    name: Name of the tube.
   """
-  diameter = 12
+  diameter = 12  # from spec, outside diameter in mm
+  capacity = 5_000  # from spec, nominal capacity in uL
+  height_per_volume = 0.01175032  # measured fit, mm/uL
+  height_intercept = 3.622768533  # measured fit, mm
   return Tube(
     name=name,
     size_x=diameter,
     size_y=diameter,
-    size_z=75,
+    size_z=75,  # from spec
+    material_z_thickness=1.0,  # estimated cavity-floor offset in mm
     model=McKesson_tube_5mL_Rb.__name__,
-    max_volume=5_000,
-    bottom_type=TubeBottomType.U,
-    compute_volume_from_height=_compute_volume_from_height_McKesson_tube_5mL_Rb,
-    compute_height_from_volume=_compute_height_from_volume_McKesson_tube_5mL_Rb,
+    max_volume=capacity,
+    bottom_type=TubeBottomType.U,  # from spec
+    height_volume_data={
+      height_intercept: 0,
+      height_intercept + height_per_volume * capacity: capacity,
+    },
   )
