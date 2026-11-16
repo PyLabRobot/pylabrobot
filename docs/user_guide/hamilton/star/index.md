@@ -7,5 +7,6 @@
 :maxdepth: 1
 
 debug
+diagnostics/index
 hardware/index
 ```

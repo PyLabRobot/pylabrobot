@@ -29,6 +29,7 @@ from pylabrobot.hamilton.star.driver.errors import (
 from pylabrobot.hamilton.star.driver.features.autoload import Autoload
 from pylabrobot.hamilton.star.driver.features.core_grippers import CoreGrippers
 from pylabrobot.hamilton.star.driver.features.cover import FrontCover
+from pylabrobot.hamilton.star.driver.features.diagnostics import Diagnostics
 from pylabrobot.hamilton.star.driver.features.head96 import Head96
 from pylabrobot.hamilton.star.driver.features.head384 import Head384
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPConfiguration
@@ -193,6 +194,7 @@ class STARDriver:
     self.left_x_arm: Optional[XArm] = None
     self.right_x_arm: Optional[XArm] = None
     self.autoload: Optional[Autoload] = None
+    self.diagnostics: Optional[Diagnostics] = None
 
   # ----------------------------------------
   # Connection and lifecycle
@@ -1217,6 +1219,12 @@ class STARDriver:
         arm.core_grippers = CoreGrippers(self)
     if self.configuration.autoload_installed and self.autoload is None:
       self.autoload = Autoload(self)
+    # Diagnostics probe with the channels, the CoRe gripper tools among what they probe.
+    if self.diagnostics is None and any(
+      arm is not None and arm.pipettes is not None and arm.core_grippers is not None
+      for arm in (self.left_x_arm, self.right_x_arm)
+    ):
+      self.diagnostics = Diagnostics(self)
     if self.configuration.main_front_cover_monitoring_installed and self.front_cover is None:
       self.front_cover = FrontCover(self)
 
