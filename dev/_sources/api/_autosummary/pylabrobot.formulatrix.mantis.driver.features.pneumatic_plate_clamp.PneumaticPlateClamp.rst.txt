@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.pneumatic\_plate\_clamp.PneumaticPlateClamp
+=========================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp
+
+.. autoclass:: PneumaticPlateClamp
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PneumaticPlateClamp.auxiliary_output
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PneumaticPlateClamp.__init__
+      ~PneumaticPlateClamp.lock
+      ~PneumaticPlateClamp.request_locked
+      ~PneumaticPlateClamp.unlock
+   
+   

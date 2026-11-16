@@ -7,7 +7,7 @@
    "source": [
     "# Formulatrix Mantis\n",
     "\n",
-    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks the v4 plate clamp, reads chip tags, and shows colours on a v4's LED bar. Moving to arbitrary positions and dispensing are not supported yet."
+    "The Mantis is a liquid dispenser from Formulatrix that dispenses through exchangeable chips. PyLabRobot connects to it, identifies it, reads its firmware versions, name, motors and pressure sensors, and initializes the arm and Z. A v3 homes against its flags and follows its calibrated route to idle; a v4 uses absolute encoders and parks at stop. The driver also locks and unlocks pneumatic and motor plate clamps, reads chip tags, and shows colours on a v4's LED bar. Moving to arbitrary positions and dispensing are not supported yet."
    ]
   },
   {
@@ -46,7 +46,7 @@
     "| Sequencer | queues PPI writes and moves of the three motors, and waits until each is played; internal, for the features that act |\n",
     "| Arm (v3) | homed at setup using the unit's calibration and route to idle; stopped in place at shutdown |\n",
     "| Arm (v4) | brought up at setup from where its absolute encoders read; Z homed; parked at idle at stop |\n",
-    "| Plate clamp | lock at one of the unit's levels, waiting for clamping done; unlock |\n",
+    "| Plate clamp | v3 pneumatic lock/release with air-pump restoration; v4 motor clamp with adjustable levels |\n",
     "| RFID | the chip in each input slot: serial, chip type, date of manufacture |\n",
     "| LED bar (v4) | one colour, one per LED, or an animation; shows setup, with the arm's bring-up; off at stop |\n",
     "| Unit configuration | the clamp's lock levels, each slot's RFID antenna and the arm's calibration, from the unit's configuration folder or a saved file; the first two else from a recording of its generation |\n",
@@ -84,7 +84,7 @@
    "source": [
     "## Unit configuration\n",
     "\n",
-    "Some values are set per unit and cannot be read off the device; they sit in its `.config` files, in `Data/Device/Configs`. Give setup that folder once, then save the configuration. The saved file carries the unit's values from then on, and the folder is no longer needed. These include the plate clamp's lock levels, RFID antenna mapping and arm calibration. A v3 needs its offsets, home positions, flag-search settings and post-home route from `RobotArm.config`. A v4 needs its offsets, absolute encoder references and encoder correction files.\n",
+    "Some values are set per unit and cannot be read off the device; they sit in its `.config` files, in `Data/Device/Configs`. Give setup that folder once, then save the configuration. The saved file carries the unit's values from then on, and the folder is no longer needed. These include the plate clamp's lock levels or pneumatic output mapping, RFID antenna mapping and arm calibration. The pneumatic clamp requires `PlateClampController=\"PressureRegulator\"` and `PlateClampAuxId=\"2\"` in the unit's `Device.config`, or the corresponding saved configuration block. A v3 needs its offsets, home positions, flag-search settings and post-home route from `RobotArm.config`. A v4 needs its offsets, absolute encoder references and encoder correction files.\n",
     "\n",
     "Without clamp levels or antennas, a recording of the same generation supplies them with a warning. **Arm calibration must come from this unit**: setup refuses without it unless `skip_arm=True`. Where the folder and a saved file both hold a value, they must agree. Older saved files can obtain missing arm calibration from the unit's folder."
    ]
@@ -156,7 +156,9 @@
     "\n",
     "`Mantis(simulation=True)` builds a Mantis with nothing behind it; nothing reaches a wire. It takes its configuration, lock levels and RFID antennas from a Mantis v4's recording (`RECORDING_MANTIS_V4`, or a file given as `declared_configuration_json`), its reads answer from it, its plate clamp's state changes at once, every declared RFID slot reads empty, and its LED bar takes every command. Its arm stands at idle, with no offsets unless the file declares the arm's calibration, and setup brings it up at once; its pump reads off, every line at 0, with the recorded sensor calibration. Its sequencer, once started, plays each queued item at once. The device name is not simulated.\n",
     "\n",
-    "For a v3 simulation, pass a saved v3 configuration containing its `arm` block. It simulates seating, homing and the declared route without opening USB; no default v3 motion calibration is supplied."
+    "For a v3 simulation, pass a saved v3 configuration containing its `arm` block. It simulates seating, homing and the declared route without opening USB; no default v3 motion calibration is supplied.\n",
+    "\n",
+    "A declared pneumatic clamp simulates its valve and air-pump states. Locking starts its simulated pump if needed; release restores a pump started by the clamp."
    ]
   },
   {
@@ -471,7 +473,7 @@
    "source": [
     "## Pressure\n",
     "\n",
-    "The pump exists only when the pressure board (board 10) answered at setup. Its three pressure controllers, `\"bottle\"`, `\"chip\"` and `\"vacuum\"`, each regulate one line from a feedback sensor. Nothing here switches the pump or a controller on.\n",
+    "The pump exists only when the pressure board (board 10) answered at setup. Its three pressure controllers, `\"bottle\"`, `\"chip\"` and `\"vacuum\"`, each regulate one line from a feedback sensor. These methods read only. The pneumatic clamp starts the air pump when needed and restores it on release; it does not change pressure-controller settings.\n",
     "\n",
     "Each sensor's calibration, (scale, offset), as setup read it; it is never written nor saved. The offsets are re-zeroed on the device between sessions, so setup reads them every time:"
    ]
@@ -544,71 +546,61 @@
   },
   {
    "cell_type": "markdown",
-   "id": "mantis-clamp-text",
+   "id": "plate-clamp-operation",
    "metadata": {},
    "source": [
     "## Plate clamp\n",
     "\n",
-    "The clamp holds the plate on the deck. `lock` releases it, locks it at one of the unit's levels, 1 the weakest, and returns once the device reports clamping done; if it does not, the clamp is released again and an error is raised. `stop()` releases a clamp that does not read unclamping done.\n",
+    "The clamp holds the plate on the deck. Place the plate in its holder and keep the clamping area clear. `lock()` engages the clamp; `unlock()` releases it.\n",
     "\n",
-    "It exists only when the LC3 board (board 12) answered at setup. Its levels are the declared ones:"
+    "The v3 pneumatic clamp uses the unit's configured pressure-board output and starts the air pump when needed. It has no adjustable lock levels. The v4 motor clamp supports the unit's levels, with `lock(level=2)` selecting level 2; omitting the level uses `default_lock_level`. A failed or cancelled pneumatic lock releases the valve and restores a pump started by the clamp."
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": null,
-   "id": "plate-clamp-levels",
+   "id": "plate-clamp-lock",
    "metadata": {},
-   "outputs": [],
    "source": [
-    "mantis.plate_clamp.levels"
-   ]
-  },
-  {
-   "cell_type": "code",
+    "await mantis.plate_clamp.lock()"
+   ],
    "execution_count": null,
-   "id": "mantis-clamp-lock-code",
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "await mantis.plate_clamp.lock(level=2)"
-   ]
+   "outputs": []
   },
   {
    "cell_type": "markdown",
-   "id": "mantis-clamp-state-text",
+   "id": "plate-clamp-readback",
    "metadata": {},
    "source": [
-    "The clamp's state: 0 idle, 1 stopped, 2 clamping, 3 clamping done, 4 clamping error timeout, 5 unclamping, 6 unclamping done, 7 unclamping error timeout, 8 motor fault. A lock that reads 4 or 8, or an unlock that reads 7 or 8, raises `PlateClampError` at once."
+    "Read the clamp state. On a pneumatic clamp, this is the valve's commanded state; it does not sense plate contact or confirm pneumatic pressure. On a motor clamp, it means the controller reports clamping done. The motor clamp also exposes its raw state through `request_state()`."
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": null,
-   "id": "mantis-clamp-state-code",
+   "id": "plate-clamp-locked",
    "metadata": {},
-   "outputs": [],
    "source": [
-    "await mantis.plate_clamp.request_state()"
-   ]
+    "await mantis.plate_clamp.request_locked()"
+   ],
+   "execution_count": null,
+   "outputs": []
   },
   {
    "cell_type": "markdown",
-   "id": "mantis-clamp-unlock-text",
+   "id": "plate-clamp-release",
    "metadata": {},
    "source": [
-    "Release the clamp:"
+    "Release the plate. A pneumatic clamp turns off a pump it started; a pump already running before clamping stays on. Repeating a pneumatic lock or release leaves the requested state in place."
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": null,
-   "id": "mantis-clamp-unlock-code",
+   "id": "plate-clamp-unlock",
    "metadata": {},
-   "outputs": [],
    "source": [
     "await mantis.plate_clamp.unlock()"
-   ]
+   ],
+   "execution_count": null,
+   "outputs": []
   },
   {
    "cell_type": "markdown",
@@ -846,7 +838,7 @@
    "source": [
     "## Stop\n",
     "\n",
-    "Stop the visualizer and close the links. `stop()` aborts the sequencer and stops every motor. A v3 stays where it stopped; it does not perform the v4 park move and must initialize again after reconnecting. On a v4, an initialized arm is parked at idle and Z lowered to 20 mm, unless the head is away from idle. The plate clamp is then released."
+    "Stop the visualizer and close the links. `stop()` aborts the sequencer and stops every motor. A v3 stays where it stopped; it does not perform the v4 park move and must initialize again after reconnecting. On a v4, an initialized arm is parked at idle and Z lowered to 20 mm, unless the head is away from idle. The plate clamp is then released. A pneumatic clamp also restores a pump it started; a pump already running before clamping stays on."
    ]
   },
   {

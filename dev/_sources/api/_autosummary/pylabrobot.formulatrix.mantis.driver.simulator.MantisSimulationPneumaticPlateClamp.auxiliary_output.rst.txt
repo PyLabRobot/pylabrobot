@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPneumaticPlateClamp.auxiliary\_output
+====================================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoproperty:: MantisSimulationPneumaticPlateClamp.auxiliary_output

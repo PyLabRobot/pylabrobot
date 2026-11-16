@@ -28,6 +28,7 @@ pylabrobot.formulatrix.mantis.driver.features.plate\_clamp.PlateClamp
    
       ~PlateClamp.__init__
       ~PlateClamp.lock
+      ~PlateClamp.request_locked
       ~PlateClamp.request_state
       ~PlateClamp.unlock
    
