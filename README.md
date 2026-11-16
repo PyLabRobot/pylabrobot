@@ -5,8 +5,9 @@
 <div style="text-align: center" align="center">
 <a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> |
 <a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> |
-<a href="https://docs.pylabrobot.org/0.2.1/user_guide/_getting-started/installation.html"><strong>Installation</strong></a> |
-<a href="https://docs.pylabrobot.org/0.2.1/user_guide/index.html"><strong>Getting started</strong></a>
+<a href="https://docs.pylabrobot.org/stable/user_guide/getting-started/installation.html"><strong>Installation</strong></a> |
+<a href="https://docs.pylabrobot.org/stable/user_guide/index.html"><strong>Getting started</strong></a> |
+  <a href="https://docs.pylabrobot.org/dev/user_guide/machines.html"><strong>Supported Machines</strong></a>
 </div>
 
 ## What is PyLabRobot?
@@ -20,172 +21,10 @@ Advantages over proprietary software:
 - **Fast iteration**: PyLabRobot enables rapid development of protocols using atomic commands run interactively in Jupyter notebooks or the Python REPL. This decreases iteration time from minutes to seconds.
 - **Open-source**: PyLabRobot is open-source and free to use.
 - **Control**: With Python, you have ultimate flexibility to control your lab automation equipment. You can write Turing-complete protocols that include feedback loops.
-- **Modern**: PyLabRobot is built on modern Python 3.9+ features and async/await syntax.
+- **Modern**: PyLabRobot is built on modern Python 3.10+ features and async/await syntax.
 - **Fast support**: PyLabRobot has [an active community forum](https://discuss.pylabrobot.org) for support and discussion, and most pull requests are merged within a day.
 
-### Liquid handling robots ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/00_liquid-handling/_liquid-handling.html))
-
-PyLabRobot enables the use of any liquid handling robot through a single universal interface, that works on any modern operating system (Windows, macOS, Linux). We currently support Hamilton STAR, Hamilton Vantage, Tecan Freedom EVO, and Opentrons OT-2 robots, but we will soon support many more.
-
-Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on **Hamilton STAR** (this will work on any operating system!):
-
-```python
-from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import STARBackend
-from pylabrobot.resources import Deck
-
-deck = Deck.load_from_json_file("hamilton-layout.json")
-lh = LiquidHandler(backend=STARBackend(), deck=deck)
-await lh.setup()
-
-await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
-await lh.aspirate(lh.deck.get_resource("plate")["A1"], vols=100)
-await lh.dispense(lh.deck.get_resource("plate")["A2"], vols=100)
-await lh.return_tips()
-```
-
-To run the same protocol on an **Opentrons**, use the following:
-
-```python
-from pylabrobot.liquid_handling.backends import OpentronsOT2Backend
-deck = Deck.load_from_json_file("opentrons-layout.json")
-lh = LiquidHandler(backend=OpentronsOT2Backend(host="x.x.x.x"), deck=deck)
-```
-
-Or **Tecan** (also works on any operating system!):
-
-```python
-from pylabrobot.liquid_handling.backends import EVOBackend
-deck = Deck.load_from_json_file("tecan-layout.json")
-lh = LiquidHandler(backend=EVOBackend(), deck=deck)
-```
-
-We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and can be used to develop and test protocols without a physical robot.
-
-![Visualizer](.github/img/visualizer.png)
-
-### Plate readers ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/02_analytical/plate-reading/plate-reading.html))
-
-Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
-
-```python
-from pylabrobot.plate_reading import PlateReader, CLARIOstarBackend
-
-pr = PlateReader(name="plate reader", backend=CLARIOstarBackend(), size_x=1, size_y=1, size_z=1)
-await pr.setup()
-
-# Use in combination with a liquid handler
-lh.assign_child_resource(pr, location=Coordinate(x, y, z))
-lh.move_plate(lh.deck.get_resource("plate"), pr)
-
-data = await pr.read_luminescence()
-```
-
-For Cytation5, use the `Cytation5` backend.
-
-### Centrifuges ([docs](https://docs.pylabrobot.org/user_guide/01_material-handling/centrifuge/_centrifuge.html))
-
-Centrifugation at 800g for 60 seconds with an Agilent VSpin:
-
-```python
-from pylabrobot.centrifuge import Centrifuge, VSpinBackend
-
-vspin_backend = VSpinBackend(device_id="YOUR_FTDI_ID_HERE")
-cf = Centrifuge(name="centrifuge", backend=vspin_backend, size_x=1, size_y=1, size_z=1)
-await cf.setup()
-
-await cf.spin(g=800, duration=60)
-```
-
-For a HighRes Biosolutions MicroSpin, use the MicroSpin factory:
-
-```python
-from pylabrobot.centrifuge import MicroSpin
-
-cf = MicroSpin(name="microspin", host="192.168.127.60")
-await cf.setup()
-await cf.backend.home()
-
-await cf.spin(g=800, duration=60)
-```
-
-### Pumps ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/00_liquid-handling/pumps/_pumps.html))
-
-Pumping at 100 rpm for 30 seconds using a Masterflex pump:
-
-```python
-from pylabrobot.pumps import Pump
-from pylabrobot.pumps.cole_parmer.masterflex import Masterflex
-
-p = Pump(backend=Masterflex())
-await p.setup()
-await p.run_for_duration(speed=100, duration=30)
-```
-
-### Scales ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/02_analytical/scales/scales.html))
-
-Taking a measurement from a Mettler Toledo scale:
-
-```python
-from pylabrobot.scales import Scale
-from pylabrobot.scales.mettler_toledo import MettlerToledoWXS205SDU
-
-backend = MettlerToledoWXS205SDU(port="/dev/cu.usbserial-110")
-scale = Scale(backend=backend, size_x=0, size_y=0, size_z=0)
-await scale.setup()
-
-weight = await scale.get_weight()
-```
-
-### Heater shakers ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/heating_shaking/heating_shaking.html))
-
-Setting the temperature of a heater shaker to 37&deg;C:
-
-```python
-from pylabrobot.heating_shaking import HeaterShaker, InhecoThermoShakeBackend
-
-backend = InhecoThermoShakeBackend()
-hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
-await hs.setup()
-await hs.set_temperature(37)
-```
-
-### Fans ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/fans/fans.html))
-
-Running a fan at 100% intensity for one minute:
-
-```python
-from pylabrobot.only_fans import Fan
-from pylabrobot.only_fans import HamiltonHepaFanBackend
-
-fan = Fan(backend=HamiltonHepaFanBackend(), name="my fan")
-await fan.setup()
-await fan.turn_on(intensity=100, duration=60)
-```
-
-### Thermocyclers ([docs](https://docs.pylabrobot.org/0.2.1/user_guide/01_material-handling/thermocycling/thermocycling.html))
-
-Running a thermocycler with a simple protocol:
-
-```python
-await tc.run_pcr_profile(
-  denaturation_temp=98.0,
-  denaturation_time=10.0,
-  annealing_temp=55.0,
-  annealing_time=30.0,
-  extension_temp=72.0,
-  extension_time=60.0,
-  num_cycles=2,
-  block_max_volume=25.0,
-  lid_temperature=105.0,
-  pre_denaturation_temp=95.0,
-  pre_denaturation_time=180.0,
-  final_extension_temp=72.0,
-  final_extension_time=300.0,
-  storage_temp=4.0,
-  storage_time=600.0,
-)
-```
+The [Supported Machines](https://docs.pylabrobot.org/dev/user_guide/machines.html) page lists every machine PyLabRobot supports and its current support level.
 
 ## Resources
 
@@ -193,10 +32,10 @@ await tc.run_pcr_profile(
 
 [docs.pylabrobot.org](https://docs.pylabrobot.org)
 
-- [Installation](https://docs.pylabrobot.org/0.2.1/user_guide/_getting-started/installation.html)
-- [Getting Started](https://docs.pylabrobot.org/0.2.1/user_guide/index.html)
-- [Contributing](https://docs.pylabrobot.org/0.2.1/contributor_guide/index.html)
-- [API Reference](https://docs.pylabrobot.org/0.2.1/api/pylabrobot.html)
+- [Installation](https://docs.pylabrobot.org/stable/user_guide/getting-started/installation.html)
+- [Getting Started](https://docs.pylabrobot.org/stable/user_guide/index.html)
+- [Contributing](https://docs.pylabrobot.org/stable/contributor_guide/index.html)
+- [API Reference](https://docs.pylabrobot.org/stable/api/pylabrobot.html)
 
 ### Support
 
@@ -225,6 +64,6 @@ If you use PyLabRobot in your research, please cite the following:
 
 ---
 
-**Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.
+**Disclaimer:** PyLabRobot is officially endorsed and supported by an increasing number of robot manufacturers (https://docs.pylabrobot.org/stable/#supported-by), but not all. If you use a firmware driver, such as the STAR driver provided here, you do so at your own risk. Whether it affects your warranty is between you and your vendor. Please contact us with any questions.
 
 _Developed for the Sculpting Evolution Group at the MIT Media Lab_

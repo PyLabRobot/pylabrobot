@@ -1,5 +1,6 @@
 :orphan:
 
+{% set exclude_methods = ["from_bytes", "to_bytes"] %}
 {{ fullname | escape | underline }}
 
 .. currentmodule:: {{ module }}
@@ -24,7 +25,7 @@
 
    .. autosummary::
       :toctree: .
-   {% for item in methods %}
+   {% for item in methods if item not in exclude_methods %}
       ~{{ objname }}.{{ item }}
    {%- endfor %}
    {% endif %}

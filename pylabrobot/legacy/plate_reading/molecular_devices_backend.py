@@ -1,0 +1,11 @@
+import warnings
+
+from .molecular_devices.backend import (  # noqa: F401
+  MolecularDevicesBackend,
+  MolecularDevicesSettings,
+)
+
+warnings.warn(
+  "pylabrobot.legacy.plate_reading.molecular_devices_backend is deprecated and will be removed in a future release. "
+  "Please use pylabrobot.legacy.plate_reading.molecular_devices.molecular_devices_backend instead.",
+)

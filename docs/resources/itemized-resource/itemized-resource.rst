@@ -39,3 +39,4 @@ To instantiate an ``ItemizedResource``, it is convenient to use the ``pylabrobot
 
    plate/plate
    tiprack/tiprack
+   container-rack/container-rack

@@ -1,0 +1,1 @@
+from .serial import SerialBarcodeScanner

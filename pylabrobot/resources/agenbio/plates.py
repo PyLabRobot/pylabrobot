@@ -58,6 +58,7 @@ def agenbio_96_wellplate_Ub_2200uL(name: str, lid: Optional[Lid] = None) -> Plat
       dz=3.8,  # measured
       item_dx=9,
       item_dy=9,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -70,13 +71,14 @@ def agenbio_4_troughplate_75mL_Vb(name: str, lid: Optional[Lid] = None) -> Plate
   - Max. volume: 75 mL
   """
   INNER_WELL_WIDTH = 26.1  # measured
-  INNER_WELL_LENGTH = 71.2  # measured
+  INNER_WELL_LENGTH = 72.0  # corrected from 71.2 to seat 8 channels at STAR's 9mm spacing
 
   well_kwargs = {
     "size_x": 26,  # measured
-    "size_y": 71.2,  # measured
+    "size_y": INNER_WELL_LENGTH,
     "size_z": 42.55,  # measured to bottom of well
-    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 75_000,  # spec rating; box volume (~80 mL) would overstate capacity
+    "bottom_type": WellBottomType.V,
     "cross_section_type": CrossSectionType.RECTANGLE,
     "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_rectangle(
       liquid_volume,
@@ -103,10 +105,11 @@ def agenbio_4_troughplate_75mL_Vb(name: str, lid: Optional[Lid] = None) -> Plate
       num_items_x=4,
       num_items_y=1,
       dx=9.8,  # measured
-      dy=7.2,  # measured
+      dy=6.8,
       dz=0.9,  # measured
       item_dx=INNER_WELL_WIDTH + 1,  # 1 mm wall thickness
       item_dy=INNER_WELL_LENGTH,
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -181,6 +184,7 @@ def agenbio_1_troughplate_190mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
       dz=5.88,
       item_dx=None,  # single column
       item_dy=None,  # single row
+      name_prefix=name,
       **well_kwargs,
     ),
   )
@@ -231,6 +235,7 @@ def agenbio_1_troughplate_100mL_Fl(name: str, lid: Optional[Lid] = None) -> Plat
       dz=5.88,
       item_dx=None,  # single column
       item_dy=None,  # single row
+      name_prefix=name,
       **well_kwargs,
     ),
   )

@@ -62,6 +62,7 @@ def bioer_96_wellplate_2200uL_Vb(name: str) -> Plate:
       dz=6.0,  # calibrated (mounting offset for your deck)
       item_dx=9.0,  # measured
       item_dy=9.0,  # measured
+      name_prefix=name,
       **well_kwargs,
     ),
   )

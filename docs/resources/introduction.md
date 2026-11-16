@@ -8,7 +8,7 @@ While you can instantiate a `Resource` directly, several subclasses of methods e
 
 The relation between resources is modelled by a tree, specifically an [_arborescence_](<https://en.wikipedia.org/wiki/Arborescence_(graph_theory)>) (a directed, rooted tree). The location of a resource in the tree is a Cartesian coordinate and always relative to the bottom front left corner of its immediate parent. The absolute location, the location of the resource wrt the root of the tree it is in, can be computed using {meth}`~pylabrobot.resources.resource.Resource.get_absolute_location`. The location wrt any resource between a given one and the root can be computed using {meth}`~pylabrobot.resources.resource.Resource.get_location_wrt`. The x-axis is left (smaller) and right (larger); the y-axis is front (small) and back (larger); the z-axis is down (smaller) and up (higher). Each resource has `children` and `parent` attributes that allow you to navigate the tree.
 
-{class}`pylabrobot.machines.machine.Machine` is a special type of resource that represents a physical machine, such as a liquid handling robot ({class}`pylabrobot.liquid_handling.liquid_handler.LiquidHandler`) or a plate reader ({class}`pylabrobot.plate_reading.plate_reader.PlateReader`). Machines have a `backend` attribute linking to the backend that is responsible for converting PyLabRobot commands into commands that a specific machine can understand. Other than that, Machines, including {class}`pylabrobot.liquid_handling.liquid_handler.LiquidHandler`, are just like any other Resource.
+{class}`pylabrobot.machines.machine.Machine` is a special type of resource that represents a physical machine, such as a liquid handling robot ({class}`pylabrobot.legacy.liquid_handling.liquid_handler.LiquidHandler`) or a plate reader ({class}`pylabrobot.legacy.plate_reading.plate_reader.PlateReader`). Machines have a `backend` attribute linking to the backend that is responsible for converting PyLabRobot commands into commands that a specific machine can understand. Other than that, Machines, including {class}`pylabrobot.legacy.liquid_handling.liquid_handler.LiquidHandler`, are just like any other Resource.
 
 ## Defining a simple resource
 
@@ -30,6 +30,48 @@ from pylabrobot.resources import Resource, Coordinate
 child = Resource(name="child", size_x=5, size_y=5, size_z=5)
 # assign to bottom front left corner of parent
 resource.assign_child_resource(child, Coordinate(x=0, y=0, z=0))
+```
+
+## Resource Metadata
+
+You can attach generic key-value metadata to any `Resource` via the `metadata` parameter during initialization or by modifying `resource.metadata`:
+
+```python
+from pylabrobot.resources import Resource
+
+plate = Resource(
+    name="plate1",
+    size_x=127.76,
+    size_y=85.48,
+    size_z=14.5,
+    metadata={"solvent": "water", "batch_id": "B2026-07", "is_sterilized": True},
+    model="vendor_plate_96_Vb",
+)
+```
+
+Metadata key-value pairs are included in serialization (`resource.serialize()`) and deserialization (`Resource.deserialize()`).
+
+## Finding Resources (`find_resources` and `find_resource`)
+
+You can query resources in a deck or resource tree using `find_resources` and `find_resource`:
+
+```python
+# Find all resources with solvent="water"
+water_plates = deck.find_resources(metadata={"solvent": "water"})
+
+# Check metadata key presence
+sterilized_items = deck.find_resources(has_metadata="is_sterilized")
+
+# Use predicate functions for metadata values (receives metadata.get(key), e.g. None if key is missing)
+incubated = deck.find_resources(metadata={"temperature": lambda t: t is not None and t >= 37.0})
+
+# Filter by top-level attributes (name, type, model, category)
+import re
+from pylabrobot.resources import Plate
+plates = deck.find_resources(type=Plate, model=re.compile(r"vendor_"))
+
+# Find the first matching resource
+first_sterile = deck.find_resource(metadata={"is_sterilized": True})
 ```
 
 ## Saving and loading resources

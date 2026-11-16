@@ -1,0 +1,188 @@
+{
+  "metadata": {
+    "schema": "CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    "rows": [
+      [
+        "schema_version",
+        "1"
+      ],
+      [
+        "device_id",
+        "legacy-device"
+      ],
+      [
+        "spec_format",
+        "celigo.brightfield.v1"
+      ]
+    ]
+  },
+  "jobs": {
+    "schema": "CREATE TABLE jobs (\n        job_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE,\n        specification BLOB NOT NULL, status BLOB NOT NULL, reservation INTEGER NOT NULL\n      )",
+    "rows": [
+      [
+        "retained",
+        "retained",
+        {
+          "bytes": "Ci0JAAAAAADAT0ARAAAAAACARUAZzczMzMzMBEAhAAAAAAAA8D8pAAAAAAAA8D8QCBgI"
+        },
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjFw9nWBhDgnqycAnAEehJsZWdhY3ktY2FsaWJyYXRpb26IAQE="
+        },
+        75
+      ],
+      [
+        "released",
+        "released",
+        {
+          "bytes": "Ci0JAAAAAADAT0ARAAAAAACARUAZzczMzMzMBEAhAAAAAAAA8D8pAAAAAAAA8D8QCBgI"
+        },
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjFw9nWBhDos6XKAnAFehJsZWdhY3ktY2FsaWJyYXRpb26AAQGIAQE="
+        },
+        0
+      ],
+      [
+        "interrupted",
+        "interrupted",
+        {
+          "bytes": "Ci0JAAAAAADAT0ARAAAAAACARUAZzczMzMzMBEAhAAAAAAAA8D8pAAAAAAAA8D8QCBgI"
+        },
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0ABSAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQgOvO3wJwA3oSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        },
+        65666
+      ]
+    ]
+  },
+  "frames": {
+    "schema": "CREATE TABLE frames (\n        job_id TEXT NOT NULL REFERENCES jobs(job_id), frame_id TEXT NOT NULL UNIQUE,\n        sequence INTEGER NOT NULL, metadata BLOB NOT NULL, image BLOB,\n        byte_length INTEGER NOT NULL, sha256 TEXT NOT NULL,\n        PRIMARY KEY(job_id, sequence)\n      )",
+    "rows": [
+      [
+        "retained",
+        "retained-1",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEgpyZXRhaW5lZC0xGAEiB1ByZXZpZXcqCwiA4s+qBhDAss07MAg4CEIFTW9ubzhKA1BOR1pAOTEwYjA5MjQ3MjU4N2ZiMDRjNjUyMWU1NWJmNjdmNDQ4ODRkNzhmZDM0OTVlMzIxNDc5ZDFkNWUwYmE0NDg1YmJ6CgticmlnaHRmaWVsZBEAAAAAAAD0PxmamZmZmZnxPyEAAAAAAMBPQCkAAAAAAIBFQDECK4cW2c4EQDoGRml4ZWRaQWq8dJMYBPA/SWq8dJMYBABAUZqZmZmZmck/WTMzMzMzM9M/YhJsZWdhY3ktY2FsaWJyYXRpb24="
+        },
+        {
+          "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAAAAADhZOFXAAAAEklEQVR4AWNkYIQCDijNQhYDABMvAIvpSV8LAAAAAElFTkSuQmCC"
+        },
+        75,
+        "910b092472587fb04c6521e55bf67f44884d78fd3495e321479d1d5e0ba4485b"
+      ],
+      [
+        "released",
+        "released-1",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEgpyZWxlYXNlZC0xGAEiB1ByZXZpZXcqCwiA4s+qBhDAss07MAg4CEIFTW9ubzhKA1BOR1pAOTEwYjA5MjQ3MjU4N2ZiMDRjNjUyMWU1NWJmNjdmNDQ4ODRkNzhmZDM0OTVlMzIxNDc5ZDFkNWUwYmE0NDg1YmJ6CgticmlnaHRmaWVsZBEAAAAAAAD0PxmamZmZmZnxPyEAAAAAAMBPQCkAAAAAAIBFQDECK4cW2c4EQDoGRml4ZWRaQWq8dJMYBPA/SWq8dJMYBABAUZqZmZmZmck/WTMzMzMzM9M/YhJsZWdhY3ktY2FsaWJyYXRpb24="
+        },
+        null,
+        75,
+        "910b092472587fb04c6521e55bf67f44884d78fd3495e321479d1d5e0ba4485b"
+      ],
+      [
+        "interrupted",
+        "interrupted-1",
+        1,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEg1pbnRlcnJ1cHRlZC0xGAEiB1ByZXZpZXcqCwiA4s+qBhDAss07MAg4CEIFTW9ubzhKA1BOR1pAOTEwYjA5MjQ3MjU4N2ZiMDRjNjUyMWU1NWJmNjdmNDQ4ODRkNzhmZDM0OTVlMzIxNDc5ZDFkNWUwYmE0NDg1YmJ6CgticmlnaHRmaWVsZBEAAAAAAAD0PxmamZmZmZnxPyEAAAAAAMBPQCkAAAAAAIBFQDECK4cW2c4EQDoGRml4ZWRaQWq8dJMYBPA/SWq8dJMYBABAUZqZmZmZmck/WTMzMzMzM9M/YhJsZWdhY3ktY2FsaWJyYXRpb24="
+        },
+        {
+          "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAAAAADhZOFXAAAAEklEQVR4AWNkYIQCDijNQhYDABMvAIvpSV8LAAAAAElFTkSuQmCC"
+        },
+        75,
+        "910b092472587fb04c6521e55bf67f44884d78fd3495e321479d1d5e0ba4485b"
+      ]
+    ]
+  },
+  "transitions": {
+    "schema": "CREATE TABLE transitions (\n        job_id TEXT NOT NULL REFERENCES jobs(job_id), revision INTEGER NOT NULL,\n        status BLOB NOT NULL, PRIMARY KEY(job_id, revision)\n      )",
+    "rows": [
+      [
+        "retained",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyABKAEyBVJlYWR5SAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQiIKkgAJwAXoSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        }
+      ],
+      [
+        "retained",
+        2,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0gBUgZGcmFtZXNaBgiA4s+qBmIMCMXD2dYGELjS7IcCcAJ6EmxlZ2FjeS1jYWxpYnJhdGlvbogBAQ=="
+        }
+      ],
+      [
+        "retained",
+        3,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0ABSAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQkJrqlAJwA3oSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        }
+      ],
+      [
+        "retained",
+        4,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJldGFpbmVkEghyZXRhaW5lZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjFw9nWBhDgnqycAnAEehJsZWdhY3ktY2FsaWJyYXRpb26IAQE="
+        }
+      ],
+      [
+        "released",
+        1,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyABKAEyBVJlYWR5SAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQ2JuFpQJwAXoSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        }
+      ],
+      [
+        "released",
+        2,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0gBUgZGcmFtZXNaBgiA4s+qBmIMCMXD2dYGEIDLyK0CcAJ6EmxlZ2FjeS1jYWxpYnJhdGlvbogBAQ=="
+        }
+      ],
+      [
+        "released",
+        3,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0ABSAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQgIjttgJwA3oSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        }
+      ],
+      [
+        "released",
+        4,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjFw9nWBhDgkJjAAnAEehJsZWdhY3ktY2FsaWJyYXRpb26IAQE="
+        }
+      ],
+      [
+        "released",
+        5,
+        {
+          "bytes": "ChkKDWxlZ2FjeS1kZXZpY2USCHJlbGVhc2VkEghyZWxlYXNlZBoHUHJldmlldyADKAIyCEZpbmlzaGVkQAFIAVIGRnJhbWVzWgYIgOLPqgZiDAjFw9nWBhDos6XKAnAFehJsZWdhY3ktY2FsaWJyYXRpb26AAQGIAQE="
+        }
+      ],
+      [
+        "interrupted",
+        1,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyABKAEyBVJlYWR5SAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQ2Ifb0AJwAXoSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        }
+      ],
+      [
+        "interrupted",
+        2,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0gBUgZGcmFtZXNaBgiA4s+qBmIMCMXD2dYGEIDhk9gCcAJ6EmxlZ2FjeS1jYWxpYnJhdGlvbogBAQ=="
+        }
+      ],
+      [
+        "interrupted",
+        3,
+        {
+          "bytes": "ChwKDWxlZ2FjeS1kZXZpY2USC2ludGVycnVwdGVkEgtpbnRlcnJ1cHRlZBoHUHJldmlldyACKAEyCUNhcHR1cmluZ0ABSAFSBkZyYW1lc1oGCIDiz6oGYgwIxcPZ1gYQgOvO3wJwA3oSbGVnYWN5LWNhbGlicmF0aW9uiAEB"
+        }
+      ]
+    ]
+  }
+}
