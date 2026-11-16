@@ -391,9 +391,18 @@ class InitializeTests(ArmTestCase):
       events={(0, 21, home): [bytes.fromhex(RECORDED_MOTOR_ERROR_EVENTS[0])]},
     )
     driver = await self.set_up_arm(link=link)
-    driver.default_read_timeout = 0.25  # unpowering the arms is never answered
-    with self.assertRaisesRegex(MantisMotionError, "reported error 9") as caught:
-      await driver.arm.initialize()
+    send_command = driver._send_command
+
+    async def wait_briefly_for_unpower(**kwargs):
+      # Unpowering the arms (command 19) is never answered: only it waits briefly, so a slow
+      # runner cannot time out a command that is answered.
+      if kwargs["command"] == 19:
+        kwargs["timeout"] = 0.25
+      return await send_command(**kwargs)
+
+    with mock.patch.object(driver, "_send_command", side_effect=wait_briefly_for_unpower):
+      with self.assertRaisesRegex(MantisMotionError, "reported error 9") as caught:
+        await driver.arm.initialize()
     self.assertEqual((caught.exception.motor, caught.exception.code), (0, 9))
     self.assertEqual(self.sent(link)[-2:], UNPOWER)
 
