@@ -22,8 +22,8 @@ from typing import (
 
 from pylabrobot.beckman_coulter.biomek_i7.driver import motion
 from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import PodConfiguration
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles
 from pylabrobot.beckman_coulter.biomek_i7.driver.planning import pod_model
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles
 
 # A move: axis targets in counts, sent together.
 Move = Dict[str, int]

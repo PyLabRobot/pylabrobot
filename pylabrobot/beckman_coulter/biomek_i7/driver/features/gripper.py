@@ -28,6 +28,7 @@ from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import GripCheckError
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 from pylabrobot.beckman_coulter.biomek_i7.units import MM_PER_CM
 from pylabrobot.beckman_coulter.biomek_i7.units import optional_cm as _cm
 from pylabrobot.lib.pick_and_place.assignment import assign_placed_resource
@@ -41,7 +42,6 @@ from pylabrobot.resources.lid import Lid, Liddable
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck

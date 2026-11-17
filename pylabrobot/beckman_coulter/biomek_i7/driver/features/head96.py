@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import PLUNGER_RECIPES, Homer
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad, load_tips
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.alps import BiomekPosition
@@ -59,7 +60,6 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck

@@ -15,10 +15,10 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_labware
-from pylabrobot.resources import Plate, beckman_coulter_biomek_96_wellplate_vb
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   generic_biomek,
 )
+from pylabrobot.resources import Plate, beckman_coulter_biomek_96_wellplate_vb
 
 # Biomek's TiterplateLid widths (open 9.401 cm, close 7.592 cm) on the lid, which PyLabRobot sizes
 # to its plate's 8.56 cm: per call, as the gripper's defaults are Biomek's margins for labware.

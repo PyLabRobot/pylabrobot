@@ -52,6 +52,7 @@ from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid, motion
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import NotHomedError, TipCheckError
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import shaft_of, show_tip
 from pylabrobot.beckman_coulter.biomek_i7.techniques import (
   Conditioning,
@@ -73,7 +74,6 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipSpot
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
@@ -1255,22 +1255,26 @@ class Pipettes:
       liquid_heights: mm from `height_from`, one per channel or one for all.
       lld_mode: liquid-level sensing: None or OFF only, until it is built.
       flow_rates: uL/s; the pumps move together, so one rate for all.
-      settling_times, blow_out_air_volumes, transport_air_volumes: STAR's per-channel lists, as
-        `Head96.aspirate`'s `settling_time`, `blow_out_air_volume`, `transport_air_volume`; the
-        template applies one value to every probe, so the values must agree.
-      pre_mixes: STAR's per-channel `Mix`es, as `Head96.aspirate`'s `pre_mix`: one mix for every
-        probe, or None for all.
-      height_from, follow_liquid, minimum_height, z_speed, approach_height, conditioning,
-        tip_touch, mix_heights: as `Head96.aspirate`.
-      cutoff_velocity: the pumps' cutoff velocity, uL/s (Biomek's technique; `CV`).
-      lls_sensitivity: the liquid-level sensors' sensitivity, set before each move measured from
-        the liquid (Biomek's conductivity; `SS`).
-      minimum_traverse_height_start / _end: as `pick_up_tips`.
+      settling_times: STAR per-channel list (as ``Head96.aspirate`` ``settling_time``); one value for all probes.
+      blow_out_air_volumes: STAR per-channel list; values must agree across probes.
+      transport_air_volumes: STAR per-channel list; values must agree across probes.
+      pre_mixes: STAR per-channel ``Mix``es (as ``Head96.aspirate`` ``pre_mix``), or None for all.
+      height_from: as ``Head96.aspirate``.
+      follow_liquid: as ``Head96.aspirate``.
+      minimum_height: as ``Head96.aspirate``.
+      z_speed: as ``Head96.aspirate``.
+      approach_height: as ``Head96.aspirate``.
+      conditioning: as ``Head96.aspirate``.
+      tip_touch: as ``Head96.aspirate``.
+      mix_heights: as ``Head96.aspirate``.
+      cutoff_velocity: the pumps' cutoff velocity, uL/s (Biomek's technique; ``CV``).
+      lls_sensitivity: liquid-level sensor sensitivity before each measured move (``SS``).
+      minimum_traverse_height_start: as ``pick_up_tips``.
+      minimum_traverse_height_end: as ``pick_up_tips``.
 
     Raises:
       NotImplementedError: for liquid-level sensing.
-      ValueError: for channels, containers or heights that cannot be worked out, or per-channel
-        values that differ.
+      ValueError: for channels, containers or heights that cannot be worked out, or per-channel values that differ.
     """
     _no_lld(self, lld_mode)
     settings = self._settings(

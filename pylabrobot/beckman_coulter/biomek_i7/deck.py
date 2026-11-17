@@ -30,7 +30,9 @@ from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource_holder import ResourceHolder
 
 if TYPE_CHECKING:
-  from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import DeviceConfiguration
+  from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
+    DeviceConfiguration as BiomekI7DeviceConfiguration,
+  )
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +99,9 @@ class BiomekI7Deck(Deck):
 
   @classmethod
   def from_configuration(
-    cls, configuration: "DeviceConfiguration", name: str = "deck"
+    cls, configuration: "BiomekI7DeviceConfiguration", name: str = "deck"
   ) -> "BiomekI7Deck":
-    """The deck a declared configuration lays out (`deck_layout`, imported from the instrument
+    """The deck a declared configuration lays out (``deck_layout``, imported from the instrument
     file's default deck), each ALP by its pin column and row with its positions' names.
 
     Where the instrument file has an ALP's left edge (`X1`) whole pin pitches from where its

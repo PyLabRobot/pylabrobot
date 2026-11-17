@@ -85,7 +85,9 @@ class TurnSweepTests(unittest.TestCase):
     # A pose read from the boards: 0 and 90 degrees within a count, not exactly.
     a, b = (self.config.to_value("GR", self.config.to_counts("GR", gr)) for gr in (0.0, 90.0))
     self.assertNotEqual((a, b), (0.0, 90.0))
-    turn = [pod_model.GripperState(s.gy, s.gz, gr, s.gg, s.held) for s, gr in zip(self.turn, (a, b))]
+    turn = [
+      pod_model.GripperState(s.gy, s.gz, gr, s.gg, s.held) for s, gr in zip(self.turn, (a, b))
+    ]
     start, end = (pod_model.PodState(self.x, s, self.pipettor) for s in turn)
     self.assertTrue(check.quarter_turn_parts(self.config, start, end))
 
@@ -108,7 +110,9 @@ class BundleTests(unittest.TestCase):
     self.assertEqual(check._own_pairs([below], [], bundle), [])
 
   def test_only_a_span8_has_a_bundle(self) -> None:
-    pipettor = pod_model.PipettorState(tuple(10.0 + 0.9 * i for i in range(8)), (30.0,) * 8, (0.0,) * 8)
+    pipettor = pod_model.PipettorState(
+      tuple(10.0 + 0.9 * i for i in range(8)), (30.0,) * 8, (0.0,) * 8
+    )
     config = generic_configuration()
     self.assertIsNotNone(pod_model.bundle_part(config.pod("right"), 100.0, pipettor))
     head = pod_model.PipettorState((30.0,), (30.0,), (0.0,), None)
@@ -123,7 +127,9 @@ class PlanningPadTests(unittest.TestCase):
     config = generic_configuration().pod("right")
     pad = pod_model.planning_pad(config)
     self.assertGreater(pad, 0.3)
-    pipettor = pod_model.PipettorState(tuple(10.0 + 0.9 * i for i in range(8)), (39.0,) * 8, (0.0,) * 8)
+    pipettor = pod_model.PipettorState(
+      tuple(10.0 + 0.9 * i for i in range(8)), (39.0,) * 8, (0.0,) * 8
+    )
     grip = pod_model.GripperState(40.0, 30.0, 0.0, 9.0, None)
     start, end = (pod_model.PodState(x, grip, pipettor) for x in (100.0, 120.0))
     bottom = min(p.z_low for p in pod_model.gripper_parts(config, 100.0, grip))

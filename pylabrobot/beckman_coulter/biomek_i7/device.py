@@ -43,6 +43,8 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import (
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
 from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles, obstacle_part
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.pod_model import OPEN, Part
 from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import (
   RECORDING_ENV,
   sense_recorded_tips,
@@ -52,12 +54,6 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import (
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import cm, pod_model
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.alps import BiomekPosition
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import PROBES
-from pylabrobot.beckman_coulter.biomek_i7.resource_model.structure import (
-  BiomekObstacle,
-  FrameToDevice,
-  merge_obstacles,
-  structure_resources,
-)
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
   GripperModel,
   gripper_model,
@@ -65,13 +61,17 @@ from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
   place_span8_channel,
   span8_channels,
 )
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.structure import (
+  BiomekObstacle,
+  FrameToDevice,
+  merge_obstacles,
+  structure_resources,
+)
 from pylabrobot.resources.beckman_coulter.tips import beckman_coulter_biomek_tip_1070uL
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning.pod_model import OPEN, Part
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles, obstacle_part
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 logger = logging.getLogger(__name__)
 

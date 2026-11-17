@@ -38,12 +38,16 @@ class MergePathTests(unittest.TestCase):
   def test_a_vertical_move_never_joins_a_horizontal_move_of_its_part(self) -> None:
     path = [{"Z": 5}, {"X": 1}, {"GZ": 5}, {"GY": 3}]
     # Z up and GZ up go first (step 3) and join; X and GY join; never Z or GZ with X or GY.
-    self.assertEqual(merge.merge_path(path, START, anything), [{"Z": 5, "GZ": 5}, {"X": 1, "GY": 3}])
+    self.assertEqual(
+      merge.merge_path(path, START, anything), [{"Z": 5, "GZ": 5}, {"X": 1, "GY": 3}]
+    )
 
   def test_a_later_step_on_the_same_axis_is_summed_into_an_earlier_one(self) -> None:
     path = [{"X": 1}, {"GR": 4}, {"X": 3}]
     # In steps: X +1, GR +4, X +2; the later X pulled forward and summed: X +3, then GR.
-    merged = merge.merge_path(path, START, lambda moves: not any("GR" in m and "X" in m for m in moves))
+    merged = merge.merge_path(
+      path, START, lambda moves: not any("GR" in m and "X" in m for m in moves)
+    )
     self.assertEqual(merged, [{"X": 3}, {"GR": 4}])
 
   def test_vertical_steps_are_summed_only_the_same_way(self) -> None:

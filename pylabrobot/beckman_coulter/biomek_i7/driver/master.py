@@ -49,9 +49,9 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.features.gripper import Gripper
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import MoveResult, Pod
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import XRail
 from pylabrobot.io.usb import USB
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning.obstacles import Obstacles
 
 if TYPE_CHECKING:
   from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
@@ -262,13 +262,15 @@ class BiomekI7Driver:
     order, places it. Seen on one instrument; an unknown type or side, two boards claiming one
     place, no chassis, or a pod type other than the declared one is refused (`_check_declared_against`).
 
-    On the instrument (no `boards` given), two checks follow, each refusing:
+    On the instrument (no ``boards`` given), two checks follow, each refusing:
+
     - the declared configuration must be this instrument's: its chassis serial number and each
       declared pod's module serial number as the modules report them, and not the generic one
-      (`DeviceConfiguration.generic`);
+      (:attr:`~pylabrobot.beckman_coulter.biomek_i7.driver.configuration.DeviceConfiguration.generic`);
     - it must still match the Biomek files it was imported from, where they can be found
-      (`DeviceConfiguration.check_sources`): a re-framed deck or re-measured motors there make it
-      stale. Where they cannot be found (another computer), a warning says so.
+      (:meth:`~pylabrobot.beckman_coulter.biomek_i7.driver.configuration.DeviceConfiguration.check_sources`):
+      a re-framed deck or re-measured motors there make it stale. Where they cannot be found
+      (another computer), a warning says so.
 
     Raises:
       RuntimeError: for a board this driver cannot place, or no chassis.

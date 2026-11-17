@@ -25,13 +25,13 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.planning.pod_model import (
   PodModel,
   PodState,
   Point,
-  on_quarter,
-  planning_pad,
   body_part,
   bundle_part,
   gripper_parts,
   moving_parts,
+  on_quarter,
   pipettor_parts,
+  planning_pad,
 )
 
 

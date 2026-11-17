@@ -7,7 +7,7 @@ from typing import Optional
 
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.homing_tests import SimulatedRunTest
-from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import RailPose, RailCollisionError, XRail
+from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import RailCollisionError, RailPose, XRail
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_configuration
 
 CONFIG = generic_configuration()
@@ -307,7 +307,9 @@ class ClearTheWayTests(SimulatedRunTest):
     # it is checked (the grip's close, or the first move after), which moves the other pod aside.
     driver, left, right, rail = await self.pods()
     await left.move_axes({"X": int((70 - 10.519) * 2560), "GR": LEFT.to_counts("GR", 0.0)})
-    await right.move_axes({"X": int((112 - 146.40669375) * 2560), "GR": RIGHT.to_counts("GR", 180.0)})
+    await right.move_axes(
+      {"X": int((112 - 146.40669375) * 2560), "GR": RIGHT.to_counts("GR", 180.0)}
+    )
     before, left_x = rail.occupied("right"), left.cpositions["X"][1]
     assert right.gripper is not None
     right.gripper.set_held_labware(g.HeldLabware(length=12.776, width=8.548, height=0.9))
