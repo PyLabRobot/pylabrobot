@@ -2147,7 +2147,7 @@ class Arm:
     self,
     *,
     minimum_traverse_height_start: Optional[float] = None,
-    with_model_updates: bool = True,
+    with_model_updates: bool = False,
   ) -> None:
     """Move the head to idle along its zone's route, from any zone; from an approach path, first out
     along it.
@@ -2158,8 +2158,8 @@ class Arm:
     Args:
       minimum_traverse_height_start: the nozzle's height above the deck to rise to first, mm;
         ``default_minimum_traverse_height`` when None.
-      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
-        plays the path in one go.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
       MantisConfigurationError: for a height in the deck frame without the unit's ``stage`` block;
@@ -2249,12 +2249,12 @@ class Arm:
     if not (with_model_updates and moves):  # else passed on after the last move
       await self._report_pose()
 
-  async def move_to_waste(self, *, with_model_updates: bool = True) -> None:
+  async def move_to_waste(self, *, with_model_updates: bool = False) -> None:
     """Move the head into the waste along the unit's approach path, from wherever it stands.
 
     Args:
-      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
-        plays the path in one go.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
       MantisConfigurationError: without the unit's approach path; nothing moves.
@@ -2264,14 +2264,14 @@ class Arm:
       name=WASTE_APPROACH_PATH, with_model_updates=with_model_updates
     )
 
-  async def move_to_wash(self, *, position: int, with_model_updates: bool = True) -> None:
+  async def move_to_wash(self, *, position: int, with_model_updates: bool = False) -> None:
     """Move the head into a wash position along the unit's approach path, from wherever it stands;
     from the other wash position without leaving the wash.
 
     Args:
       position: 1 or 2.
-      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
-        plays the path in one go.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
       MantisConfigurationError: without the unit's approach path; nothing moves.
