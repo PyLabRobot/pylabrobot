@@ -1,0 +1,51 @@
+{
+  "serial_number": "C196069",
+  "firmware": "1.0.7.378-trunk",
+  "head_id": 4,
+  "captured_at": "2026-11-14",
+  "transport": "UDP 1964",
+  "exchanges": [
+    {
+      "operation": "get_string",
+      "path": "Machine.Entity.Dispenser.Act.Serialnumber",
+      "value": "C196069",
+      "request": "100101020501ff0100f54d616368696e652e456e746974792e44697370656e7365722e4163742e53657269616c6e756d62657200100364",
+      "response": "10060100000100f7433139363036390010037a"
+    },
+    {
+      "operation": "get_string",
+      "path": "Software.Revision.Dispenser",
+      "value": "1.0.7.378-trunk",
+      "request": "100102020501ff0100f4536f6674776172652e5265766973696f6e2e44697370656e73657200100359",
+      "response": "10060200000100f6312e302e372e3337382d7472756e6b001003d7"
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Prop.State",
+      "value": 3.0,
+      "request": "100103020101ff0100f74d616368696e652e456e746974792e44697370656e7365722e50726f702e5374617465001003c3",
+      "response": "10060300000100f500000003000000000d1003ec"
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Head.Act.Id",
+      "value": 4.0,
+      "request": "100104020101ff0100f64d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e486561642e4163742e4964001003c1",
+      "response": "10060400000100f400000004000000000d1003eb"
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Act.Position.0",
+      "value": -62.0009765625,
+      "request": "100105020101ff0100f54d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e4163742e506f736974696f6e2e3000100376",
+      "response": "10060500000100f3ffffffc1ffc000010d100371"
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PressureRegulator.Act.Pressure",
+      "value": -0.0009775171056389809,
+      "request": "100106020101ff0100f44d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e5072657373757265526567756c61746f722e4163742e507265737375726500100379",
+      "response": "10060600000100f2ffffffffffbfeffd0d100349"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "serial_number": "C196069",
+  "firmware": "1.0.7.378-trunk",
+  "head_id": 4,
+  "captured_at": "2026-11-15T00:50:21Z",
+  "transport": "UDP 1964",
+  "protocol": "Dry A1/A2/A3 moves at park Z; no pressure or valve commands",
+  "exchanges": [
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        48.38,
+        29.96,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 40,
+      "request": "100128040101ff0100d000000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000306147ae140000001df5c28f5c0000004180000000536c6f77000000001003b2",
+      "response": "10062800000100d0feec526e00000001100351",
+      "well": "A1",
+      "actual_mm": [
+        48.37353515625,
+        29.96044921875,
+        65.50048828125
+      ]
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        57.38,
+        29.96,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 100,
+      "request": "100164040101ff01009400000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000396147ae140000001df5c28f5c0000004180000000536c6f77000000001003a9",
+      "response": "1006640000010094feec521b000000011003a4",
+      "well": "A2",
+      "actual_mm": [
+        57.3515625,
+        29.96044921875,
+        65.50048828125
+      ]
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        66.38,
+        29.96,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 111,
+      "request": "10016f040101ff01008900000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000426147ae140000001df5c28f5c0000004180000000536c6f77000000001003a0",
+      "response": "10066f0000010089feec51fc000000011003c4",
+      "well": "A3",
+      "actual_mm": [
+        66.3515625,
+        29.96044921875,
+        65.50048828125
+      ]
+    }
+  ]
+}

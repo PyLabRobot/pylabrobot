@@ -13,13 +13,27 @@ Mantis
 
    Mantis
    MantisDevice
+   MantisCarousel
+   CarouselConfiguration
    driver.master.MantisDriver
    driver.simulator.MantisSimulationDriver
+   driver.simulator.MantisSimulationArm
    driver.simulator.MantisSimulationPlateClamp
+   driver.simulator.MantisSimulationPump
    driver.simulator.MantisSimulationRfid
+   driver.simulator.MantisSimulationLedBar
+   driver.features.arm.Arm
+   driver.features.arm.MantisPose
+   driver.features.arm.MantisArmConfiguration
+   driver.arm_kinematics
+   driver.stage_transform
+   driver.sequence_files
    driver.features.plate_clamp.PlateClamp
+   driver.features.pump.Pump
    driver.features.rfid.Rfid
+   driver.features.led_bar.LedBar
    driver.configuration.DeviceConfiguration
+   driver.events
    driver.errors.MantisError
    driver.errors.FrameError
    driver.errors.ChecksumError
@@ -35,4 +49,6 @@ Mantis
    driver.errors.MantisCoordinateError
    driver.errors.MantisPrimeError
    resource_model.chip_rack
+   resource_model.z_column
+   resource_model.arm_link
    liquid_classes.MantisLiquidClass

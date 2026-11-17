@@ -433,7 +433,8 @@
     "name": "Mantis",
     "models": [
       {
-        "name": "v3"
+        "name": "v3",
+        "needs_hardware_testing": false
       },
       {
         "name": "v4"
@@ -449,7 +450,8 @@
     "code_slug": "formulatrix/mantis",
     "doc_slug": "formulatrix/mantis/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/"
+    "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/",
+    "notes": "V3 arm initialization, pneumatic plate clamping and LC3 carousel positioning; dispensing is not supported."
   },
   {
     "id": "hamilton-heater-shaker",
@@ -1835,7 +1837,11 @@
       "arm"
     ],
     "status": "mostly",
-    "api_version": "v0",
+    "api_version": "v1",
+    "api": "pylabrobot.paa.KX2",
+    "code_slug": "paa/kx2",
+    "doc_slug": "paa/kx2/hello-world",
+    "needs_hardware_testing": false,
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
   },
   {
@@ -2183,5 +2189,21 @@
     "code_slug": "thermo_fisher/kingfisher/presto",
     "doc_slug": "thermo_fisher/kingfisher/presto/hello-world",
     "notes": "USB HID protocol control; pending hardware and manufacturer-file verification."
+  },
+  {
+    "id": "gyger-certus-flex",
+    "vendor": "Fritz Gyger",
+    "name": "CERTUS FLEX",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing"
+    ],
+    "status": "mostly",
+    "needs_hardware_testing": false,
+    "api": "pylabrobot.gyger.CertusFlex",
+    "api_version": "v1",
+    "code_slug": "gyger/certus_flex",
+    "doc_slug": "gyger/certus_flex/hello-world",
+    "notes": "Plate plans, coordinated channels, calibration reuse, run controls, and maintenance. Angled FLEX8 tested over direct Ethernet; INCO server and other heads use offline fixtures."
   }
 ]
