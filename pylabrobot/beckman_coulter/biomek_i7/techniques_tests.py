@@ -7,8 +7,7 @@ from dataclasses import asdict
 from typing import Any, Dict
 
 from pylabrobot.beckman_coulter.biomek_i7 import units
-from pylabrobot.lib.liquid_handling.mix import Mix
-from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_pods
 from pylabrobot.beckman_coulter.biomek_i7.techniques import (
   BiomekLiquidType,
   BiomekTechnique,
@@ -20,7 +19,8 @@ from pylabrobot.beckman_coulter.biomek_i7.techniques import (
   for_channels,
   method_step_arguments,
 )
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_pods
+from pylabrobot.lib.liquid_handling.mix import Mix
+from pylabrobot.resources.coordinate import Coordinate
 
 SECTION = {"c__mix": False, "c__tiptouch": False, "c__blowout": False, "c__trailingairgap": False}
 GENERAL = {
