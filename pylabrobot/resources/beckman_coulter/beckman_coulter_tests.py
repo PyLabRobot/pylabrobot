@@ -6,8 +6,8 @@ import unittest
 
 from pylabrobot.resources import (
   BiomekTip,
-  Plate,
   BiomekWell,
+  Plate,
   Resource,
   WellSegment,
   beckman_coulter_biomek_24_wellplate_square_rb,
