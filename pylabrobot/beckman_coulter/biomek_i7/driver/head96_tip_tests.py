@@ -2,10 +2,10 @@
 Biomek's logs ran (a dilution), against what Biomek sent for the same operations."""
 
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
-from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
+from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.resources import set_tip_tracking
 
 # The `LT` Biomek sent for a full load of BC1025F tips at TL1 (2026-10-20).

@@ -4,13 +4,13 @@ an `LT` Biomek logged, request for request."""
 import dataclasses
 import struct
 
+from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   PLUNGER_RECIPES,
   AtValue,
   Home,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad
-from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_configuration
 
 # A logged `LT`: 20 µL tips on this instrument (2026-07-31), with no settling wait.

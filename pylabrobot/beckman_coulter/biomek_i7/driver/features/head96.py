@@ -31,8 +31,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7 import targeting
-from pylabrobot.beckman_coulter.biomek_i7 import units
+from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import PLUNGER_RECIPES, Homer
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.tip_load import TipLoad, load_tips
@@ -51,12 +50,12 @@ from pylabrobot.beckman_coulter.biomek_i7.units import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.units import optional_cm as _cm
 from pylabrobot.lib.liquid_handling.mix import Mix
+from pylabrobot.resources.beckman_coulter.tips import beckman_coulter_biomek_tip_1070uL
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.n_channel_pipettes import NChannelPipette
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.beckman_coulter.tips import beckman_coulter_biomek_tip_1070uL
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.volume_tracker import VolumeTracker, does_volume_tracking

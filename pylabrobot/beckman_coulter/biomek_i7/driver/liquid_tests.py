@@ -5,10 +5,10 @@ compared with the Master Controller's own log of that run."""
 import math
 from typing import Dict, List, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import ROWS, COLUMNS, mandrel_name
 from pylabrobot.beckman_coulter.biomek_i7 import units
+from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import COLUMNS, ROWS, mandrel_name
 from pylabrobot.beckman_coulter.biomek_i7.driver.liquid import (
   ContainerShape,
   PlungerMove,
@@ -17,12 +17,12 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.liquid import (
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import (
   biomek_labware,
   biomek_tip,
   biomek_touch_distance,
 )
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.beckman_coulter.biomek_i7.techniques import Conditioning, MixHeights, TipTouch
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb, set_volume_tracking

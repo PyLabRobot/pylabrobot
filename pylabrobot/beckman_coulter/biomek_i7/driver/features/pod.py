@@ -30,6 +30,7 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
   PodConfiguration,
 )
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import AceError, NotHomedError, english
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import Pipettes
 from pylabrobot.beckman_coulter.biomek_i7.driver.module import (
   read_analog_inputs,
@@ -42,7 +43,6 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   HOME_RECIPES,
   Homer,
 )
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import Head96
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
 
 if TYPE_CHECKING:
