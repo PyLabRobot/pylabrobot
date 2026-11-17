@@ -1159,6 +1159,7 @@ class Arm:
     *,
     steps: List[Dict[int, float]],
     profiles: Optional[Dict[int, Tuple[float, float]]] = None,
+    with_model_updates: bool = False,
   ) -> None:
     """Move to each step's targets in turn, each motor on its own (command 22), as in the
     recorded recoveries.
@@ -1167,12 +1168,15 @@ class Arm:
       steps: each route line's targets, from ``_get_route_targets``.
       profiles: each motor's (speed, acceleration) in device units, by motor; None the route
         profile.
+      with_model_updates: read and pass on the pose after every step, as ``_report_pose``.
     """
     if profiles is None:
       profiles = self._get_route_profiles()
     for targets in steps:
       if targets:
         await self._move_motors(targets=targets, profiles=profiles)
+        if with_model_updates:
+          await self._report_pose()
 
   def _get_queued_move(
     self, *, targets: Dict[int, float], profiles: Dict[int, Tuple[float, float]]
@@ -1189,17 +1193,32 @@ class Arm:
       for motor in (*ARM_MOTORS, Z_MOTOR)
     ]
 
-  async def _play_queued_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> None:
+  async def _play_queued_moves(
+    self,
+    *,
+    moves: List[List[Tuple[float, float, float]]],
+    with_model_updates: bool = False,
+  ) -> None:
     """Clear and start the sequencer, queue each move, then wait until the last is played.
 
     If the wait fails or is cancelled, the sequencer is aborted so nothing more plays, every
     motor is stopped so the item playing ends there, and where the motors stopped is logged.
+
+    Args:
+      moves: each queued move, from ``_get_queued_move``.
+      with_model_updates: play each move on its own, then read and pass on the pose, as
+        ``_report_pose``; each item ends with every motor's move done, so the path is the same.
 
     Raises:
       MantisMotionError: if a motor reports an error first.
       MantisTimeoutError: if the last move is not reported played within ``MOVE_TIMEOUT`` each.
     """
     if not moves:
+      return
+    if with_model_updates:
+      for move in moves:
+        await self._play_queued_moves(moves=[move], with_model_updates=False)
+        await self._report_pose()
       return
     await self._driver._unchecked_fw_clear_sequencer()
     await self._driver._unchecked_fw_start_sequencer()
@@ -1764,7 +1783,9 @@ class Arm:
       count += 1
     return count
 
-  async def _leave_approach_path(self, *, name: str, index: int, until: int) -> None:
+  async def _leave_approach_path(
+    self, *, name: str, index: int, until: int, with_model_updates: bool = False
+  ) -> None:
     """Move the head back along an approach path from the line it stands at to an earlier line:
     the path's lines played backwards, one queued move each at the route profile.
 
@@ -1775,6 +1796,7 @@ class Arm:
       name: the approach path's name.
       index: the line the head stands at.
       until: the line to stop at, 0 the path's start.
+      with_model_updates: as ``_play_queued_moves``.
     """
     assert self.configuration.approach_paths is not None
     path = self.configuration.approach_paths[name]
@@ -1794,14 +1816,17 @@ class Arm:
         here = dataclasses.replace(here, x=line.x, y=line.y)
       if line.z is not None:
         here = dataclasses.replace(here, z=line.z)
-    await self._play_queued_moves(moves=moves)
+    await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
 
-  async def _leave_approach_path_if_on_one(self, *, joint_state: JointState) -> JointState:
+  async def _leave_approach_path_if_on_one(
+    self, *, joint_state: JointState, with_model_updates: bool = False
+  ) -> JointState:
     """Move the head out to the start of the approach path it stands on, if it stands on one, and
     return where the motors stand then; else return ``joint_state`` as it is.
 
     Args:
       joint_state: where the motors stand, as ``request_joint_state`` reads them.
+      with_model_updates: as ``_play_queued_moves``.
     """
     place = self._get_place(joint_state=joint_state)
     if place is None:
@@ -1810,7 +1835,9 @@ class Arm:
     logger.info(
       "[%s] the head stands on the %s approach path; it leaves along it", self._driver.name, name
     )
-    await self._leave_approach_path(name=name, index=index, until=0)
+    await self._leave_approach_path(
+      name=name, index=index, until=0, with_model_updates=with_model_updates
+    )
     return await self.request_joint_state()
 
   def _get_arm_profiles(
@@ -2094,12 +2121,15 @@ class Arm:
     )
     await self.move_to_z_position(z=location.z, speed=z_speed, acceleration=z_acceleration)
 
-  async def _route_to_idle(self, *, z_joint_position: float) -> None:
+  async def _route_to_idle(
+    self, *, z_joint_position: float, with_model_updates: bool = False
+  ) -> None:
     """Rise to the traverse height if below it, then move along the route to idle from where the
     absolute encoders put the head, at the route profile.
 
     Args:
       z_joint_position: the traverse height as Z's position, mm down from its flag.
+      with_model_updates: as ``_move_along_route``.
 
     Raises:
       MantisMotionError: if a motor faults, Z does not read at the traverse height after rising,
@@ -2111,9 +2141,14 @@ class Arm:
     await self._rise_to_traverse_height(
       z_joint_position=z_joint_position, profiles=self._get_route_profiles()
     )
-    await self._move_along_route(steps=steps)
+    await self._move_along_route(steps=steps, with_model_updates=with_model_updates)
 
-  async def park(self, *, minimum_traverse_height_start: Optional[float] = None) -> None:
+  async def park(
+    self,
+    *,
+    minimum_traverse_height_start: Optional[float] = None,
+    with_model_updates: bool = True,
+  ) -> None:
     """Move the head to idle along its zone's route, from any zone; from an approach path, first out
     along it.
 
@@ -2123,6 +2158,8 @@ class Arm:
     Args:
       minimum_traverse_height_start: the nozzle's height above the deck to rise to first, mm;
         ``default_minimum_traverse_height`` when None.
+      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
+        plays the path in one go.
 
     Raises:
       MantisConfigurationError: for a height in the deck frame without the unit's ``stage`` block;
@@ -2139,14 +2176,17 @@ class Arm:
     )
     joint_state = await self.request_joint_state()
     if self._get_place(joint_state=joint_state) is not None:
-      await self._leave_approach_path_if_on_one(joint_state=joint_state)
+      await self._leave_approach_path_if_on_one(
+        joint_state=joint_state, with_model_updates=with_model_updates
+      )
       traverse = await self._get_park_traverse_z_joint_position(
         minimum_traverse_height=minimum_traverse_height_start
       )
-    await self._route_to_idle(z_joint_position=traverse)
-    await self._report_pose()
+    await self._route_to_idle(z_joint_position=traverse, with_model_updates=with_model_updates)
+    if not with_model_updates:  # else passed on after the route's last step
+      await self._report_pose()
 
-  async def _move_along_approach_path(self, *, name: str) -> None:
+  async def _move_along_approach_path(self, *, name: str, with_model_updates: bool) -> None:
     """Move the head to the end of an approach path, from wherever it stands.
 
     On that path, onward from where it stands. On a neighbouring path, one that shares this one's
@@ -2155,6 +2195,10 @@ class Arm:
     last line the two share, then along this one from there. In the open, to idle first as ``park``
     takes it, then along the path from its start. Where the head stands is read from the motors,
     never remembered.
+
+    Args:
+      name: the approach path's name.
+      with_model_updates: as ``_play_queued_moves``, for every path played and ``park``.
 
     Raises:
       MantisConfigurationError: without the path; nothing moves.
@@ -2181,37 +2225,53 @@ class Arm:
       shared = self._get_shared_length(first=other, second=path)
       safe_z_line = len(other) - 2
       if shared >= self._get_descent_start(path=other) and index >= safe_z_line >= 0:
-        await self._leave_approach_path(name=other_name, index=index, until=safe_z_line)
+        await self._leave_approach_path(
+          name=other_name, index=index, until=safe_z_line, with_model_updates=with_model_updates
+        )
         start = max(len(path) - 2, 0)
       else:
-        await self._leave_approach_path(name=other_name, index=index, until=max(shared - 1, 0))
+        await self._leave_approach_path(
+          name=other_name,
+          index=index,
+          until=max(shared - 1, 0),
+          with_model_updates=with_model_updates,
+        )
         start = shared
     else:
       if not await self.request_is_parked():
-        await self.park()
+        await self.park(with_model_updates=with_model_updates)
       start = 0
     moves = [
       self._get_queued_move(targets=targets, profiles=profiles)
       for targets in self._get_route_targets(route=path[start:])
     ]
-    await self._play_queued_moves(moves=moves)
-    await self._report_pose()
+    await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
+    if not (with_model_updates and moves):  # else passed on after the last move
+      await self._report_pose()
 
-  async def move_to_waste(self) -> None:
+  async def move_to_waste(self, *, with_model_updates: bool = True) -> None:
     """Move the head into the waste along the unit's approach path, from wherever it stands.
+
+    Args:
+      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
+        plays the path in one go.
 
     Raises:
       MantisConfigurationError: without the unit's approach path; nothing moves.
       MantisMotionError: if the arm is not brought up, or a motor faults.
     """
-    await self._move_along_approach_path(name=WASTE_APPROACH_PATH)
+    await self._move_along_approach_path(
+      name=WASTE_APPROACH_PATH, with_model_updates=with_model_updates
+    )
 
-  async def move_to_wash(self, *, position: int) -> None:
+  async def move_to_wash(self, *, position: int, with_model_updates: bool = True) -> None:
     """Move the head into a wash position along the unit's approach path, from wherever it stands;
     from the other wash position without leaving the wash.
 
     Args:
       position: 1 or 2.
+      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
+        plays the path in one go.
 
     Raises:
       MantisConfigurationError: without the unit's approach path; nothing moves.
@@ -2220,15 +2280,20 @@ class Arm:
     """
     if position not in WASH_POSITIONS:
       raise ValueError(f"position must be one of {WASH_POSITIONS}, got {position}")
-    await self._move_along_approach_path(name=WASH_APPROACH_PATH.format(position=position))
+    await self._move_along_approach_path(
+      name=WASH_APPROACH_PATH.format(position=position), with_model_updates=with_model_updates
+    )
 
-  async def _park(self) -> None:
+  async def _park(self, *, with_model_updates: bool = False) -> None:
     """Park at idle and lower Z to ``SHUTDOWN_Z``, as in the recorded close.
 
     From away from idle the head first moves to idle along its zone's route; without the unit's
     zones it is parked from near idle only. Then Z up on its own (command 22), read back by its
     encoder; then, queued, the arms with Z held, both; then Z down at idle. Where the head is comes
     from the absolute encoders. Every target is checked against its motor's limits first.
+
+    Args:
+      with_model_updates: as ``_play_queued_moves`` and ``_move_along_route``.
 
     Raises:
       MantisMotionError: if a motor reports a fault, or without zones the head is not near idle
@@ -2243,13 +2308,18 @@ class Arm:
       route_line=MantisArmCoordinate(x=None, y=None, z=SHUTDOWN_Z)
     )
     await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT)
-    await self._leave_approach_path_if_on_one(joint_state=await self.request_joint_state())
+    await self._leave_approach_path_if_on_one(
+      joint_state=await self.request_joint_state(), with_model_updates=with_model_updates
+    )
     try:
       self._check_near_idle(joint_state=await self._request_arm_joint_state())
     except MantisMotionError:
       if self.configuration.zone_rectangles is None:
         raise
-      await self._route_to_idle(z_joint_position=await self._get_park_traverse_z_joint_position())
+      await self._route_to_idle(
+        z_joint_position=await self._get_park_traverse_z_joint_position(),
+        with_model_updates=with_model_updates,
+      )
     profiles = self._get_route_profiles()
     await self._move_motors(targets=z_up, profiles=profiles)
     z = await self._request_measured_position(motor=Z_MOTOR)
@@ -2263,12 +2333,15 @@ class Arm:
       moves=[
         self._get_queued_move(targets=idle_targets, profiles=profiles),
         self._get_queued_move(targets={**idle_targets, **z_up}, profiles=profiles),
-      ]
+      ],
+      with_model_updates=with_model_updates,
     )
     await self._play_queued_moves(
-      moves=[self._get_queued_move(targets={**idle_targets, **z_down}, profiles=profiles)]
+      moves=[self._get_queued_move(targets={**idle_targets, **z_down}, profiles=profiles)],
+      with_model_updates=with_model_updates,
     )
-    await self._report_pose()
+    if not with_model_updates:  # else passed on after the last move
+      await self._report_pose()
 
   async def _halt(self) -> None:
     """Stop every motor at its default deceleration, then park a v4 arm if it was brought up and
@@ -2291,6 +2364,6 @@ class Arm:
       await self._log_where_it_stopped()
       return
     try:
-      await self._park()
+      await self._park(with_model_updates=False)  # a stop never slows down for the model
     except Exception:
       logger.warning("[%s] the arm was not parked", self._driver.name, exc_info=True)

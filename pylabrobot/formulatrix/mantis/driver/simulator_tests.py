@@ -418,12 +418,23 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     ) as leave:
       await self.arm.move_to_wash(position=2)
     last = len(SYNTHETIC_WASH_ROUTE) - 1
-    leave.assert_awaited_once_with(name="wash_1", index=last, until=last - 1)
+    leave.assert_awaited_once_with(
+      name="wash_1", index=last, until=last - 1, with_model_updates=True
+    )
     await self.assert_at_end_of(path=SYNTHETIC_WASH_2_ROUTE)
     await self.arm.park()
     self.assertTrue(await self.arm.request_is_parked())
     with self.assertRaisesRegex(ValueError, "position must be one of"):
       await self.arm.move_to_wash(position=3)
+
+  async def test_with_model_updates_the_pose_is_passed_on_after_every_segment(self):
+    for with_model_updates, calls in ((True, len(SYNTHETIC_WASH_ROUTE)), (False, 1)):
+      with self.subTest(with_model_updates=with_model_updates):
+        await self.arm.park()
+        with mock.patch.object(self.arm, "_pose_observer") as observer:
+          await self.arm.move_to_wash(position=1, with_model_updates=with_model_updates)
+        self.assertEqual(observer.call_count, calls)
+        await self.assert_at_end_of(path=SYNTHETIC_WASH_ROUTE)
 
   async def test_a_move_from_the_waste_leaves_along_its_path_first(self):
     # Where the head stands is read from the motors: nothing is remembered between moves.
@@ -432,7 +443,9 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
       self.arm, "_leave_approach_path", wraps=self.arm._leave_approach_path
     ) as leave:
       await self.move_head_to(x=-57.0, y=0.0)
-    leave.assert_awaited_once_with(name="waste", index=len(SYNTHETIC_WASTE_ROUTE) - 1, until=0)
+    leave.assert_awaited_once_with(
+      name="waste", index=len(SYNTHETIC_WASTE_ROUTE) - 1, until=0, with_model_updates=False
+    )
     await self.assert_head_at(x=-57.0, y=0.0, z=1.57)
 
   async def test_leaving_a_path_never_moves_the_arms_while_z_rises(self):

@@ -1502,7 +1502,7 @@ class ParkTests(ArmTestCase):
   async def test_park_follows_the_zones_route_to_idle(self):
     link = RouteLink(answers=make_answers(), encoders={2: Z_UP_ENCODER_REPLY})
     driver = await self.set_up_park(link=link)
-    await driver.arm.park()
+    await driver.arm.park(with_model_updates=False)
     sent = self.sent(link)
     self.assertEqual(
       [(board, command) for board, command, _ in sent[:9]],
@@ -1514,7 +1514,7 @@ class ParkTests(ArmTestCase):
   async def test_a_head_below_the_traverse_height_rises_first(self):
     link = RouteLink(answers=make_answers(), encoders={2: Z_RISING_ENCODER_REPLIES})
     driver = await self.set_up_park(link=link)
-    await driver.arm.park()
+    await driver.arm.park(with_model_updates=False)
     sent = self.sent(link)
     moves = [payload for _, command, payload in sent if command == 22]
     self.assertEqual(moves[0], Z_UP_MOVE)
@@ -1534,7 +1534,7 @@ class ParkTests(ArmTestCase):
     driver = await self.set_up_park(link=link)
     driver.arm.default_xy_speed = 100.0
     driver.arm.default_z_speed = 30.0
-    await driver.arm.park()
+    await driver.arm.park(with_model_updates=False)
     moves = [payload for _, command, payload in self.sent(link) if command == 22]
     self.assertEqual(moves, get_route_moves(route=SYNTHETIC_IDLE_ROUTES["LeftMiddle"]))
 
@@ -1544,6 +1544,35 @@ class ParkTests(ArmTestCase):
     with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
       await driver.arm.park()
     self.assertNotIn(22, [command for _, command, _ in self.sent(link)])
+
+  async def test_with_model_updates_the_pose_is_passed_on_after_every_route_step(self):
+    encoders = {**IDLE_ENCODER_REPLIES, 2: Z_UP_ENCODER_REPLY}
+    sent = {}
+    for with_model_updates in (True, False):
+      for observed in (True, False):
+        link = RouteLink(answers=make_answers(), encoders=encoders)
+        driver = await self.set_up_park(link=link)
+        if observed:
+          driver.arm._pose_observer = mock.Mock()
+        await driver.arm.park(with_model_updates=with_model_updates)
+        sent[with_model_updates, observed] = self.sent(link)
+        if observed:
+          calls = driver.arm._pose_observer.call_count
+          self.assertEqual(
+            calls, len(SYNTHETIC_IDLE_ROUTES["LeftMiddle"]) if with_model_updates else 1
+          )
+    # Z read before the rise; then, with an observer, the three encoders after every step.
+    reads = [84, 84, 84]
+    self.assertEqual(
+      [command for _, command, _ in sent[True, True] if command in (22, 84)],
+      [84] + [22] * 2 + reads + [22] * 3 + reads + [22] * 3 + reads,
+    )
+    self.assertEqual(
+      [command for _, command, _ in sent[False, True] if command in (22, 84)],
+      [84] + [22] * 8 + reads,
+    )
+    # Without an observer nothing more is read: the frames are the same either way.
+    self.assertEqual(sent[True, False], sent[False, False])
 
   async def test_stop_routes_to_idle_before_the_recorded_close(self):
     link = RouteLink(
@@ -1603,7 +1632,7 @@ class ApproachPathTests(ArmTestCase):
     )
     driver = await self.set_up_approach_paths(link=link)
     driver._next_item = first_item
-    await driver.arm.move_to_waste()
+    await driver.arm.move_to_waste(with_model_updates=False)
     queued = [payload for _, command, payload in self.sent(link) if command == 68]
     self.assertEqual(queued, expected)
     # The line naming no axis and Z alone at the safe height, queued as recorded.
@@ -1615,6 +1644,33 @@ class ApproachPathTests(ArmTestCase):
     self.assertEqual(sent[1:3] + sent[4:6] + sent[7:], recorded[1:3] + recorded[4:6] + recorded[7:])
     for index in (3, 6):
       self.assertAlmostEqual(sent[index], recorded[index], places=9)
+
+  async def test_with_model_updates_each_line_is_played_on_its_own(self):
+    expected = self.get_expected_waste_moves(first_item=1)
+    reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
+    for with_model_updates, observed in ((True, True), (True, False), (False, True)):
+      with self.subTest(with_model_updates=with_model_updates, observed=observed):
+        link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+        driver = await self.set_up_approach_paths(link=link)
+        driver._next_item = 1
+        # The played events are not recorded for these items: each wait returns at once.
+        driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+        if observed:
+          driver.arm._pose_observer = mock.Mock()
+        await driver.arm.move_to_waste(with_model_updates=with_model_updates)
+        sent = [frame for frame in self.sent(link) if frame[1] in (61, 62, 68, 84)]
+        sent = sent[sent.index((0, 61, b"")) :]  # from the first play, after the parked check
+        if with_model_updates:
+          after = reads if observed else []
+          play = [[(0, 61, b""), (0, 62, b""), (0, 68, move), *after] for move in expected]
+          self.assertEqual(sent, [frame for frames in play for frame in frames])
+          self.assertEqual(driver._wait_for_queue_item.await_count, len(expected))
+        else:
+          moves = [(0, 68, move) for move in expected]
+          self.assertEqual(sent, [(0, 61, b""), (0, 62, b""), *moves, *reads])
+        if observed:
+          calls = driver.arm._pose_observer.call_count
+          self.assertEqual(calls, len(expected) if with_model_updates else 1)
 
   async def test_without_an_approach_path_nothing_moves(self):
     link = RouteLink(answers=make_answers())

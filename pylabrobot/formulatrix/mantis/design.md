@@ -287,6 +287,13 @@ go back at the depth the path took them across before Z rises. Every other move 
 `park`, from a pose on a path first goes back along it to its start, every argument checked
 before; a move of Z alone there is refused.
 
+`park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (True by default): each queued
+item is played on its own (61, 62, 68) and each route step moved, then the pose read (84) and
+passed on, so the 3D model and the simulator follow every segment. Each item ends with every
+motor's move done before the next starts (seen in a capture), so the path is the same; without an
+observer nothing more is read. False plays a path in one go and reads the pose once at the end;
+the stop's park always does.
+
 On a v3, `Arm.initialize` (`_initialize_v3`) follows the captured cold start: it seats the arms
 against their stops (`_seat_arm_motors`, at most `SEAT_PASSES` passes) and backs them off from
 where command 27 reads them, homes Z with the unit's Z values (`_home_z`, its following-error
