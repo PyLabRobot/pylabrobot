@@ -10,7 +10,6 @@ from typing import Dict, List, Optional
 
 from pylabrobot.beckman_coulter.biomek_i7.driver.protocol import HardwareVersion, ModuleId
 
-
 # The firmware this driver has been run against (one instrument, 2026-10-24 through 2026-11-10):
 # every motion board and module the same image, and the other boards' application versions
 # (chassis 0.2.4, SAGIAN Motion 0.3.14, LLS 0.7.8, syringe pump 5.0.9). The Master Controller
