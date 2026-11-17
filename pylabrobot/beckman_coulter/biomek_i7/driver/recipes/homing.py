@@ -1,6 +1,6 @@
 """Home All, as the Master Controller does it: a recipe of steps per arm type.
 
-Each recipe was read off four Home Alls on one instrument (two after a power cycle, two with the
+Each recipe was read off four Home All runs on one instrument (two after a power cycle, two with the
 instrument already homed, one of those with the Span-8 Z channels not homed) and reproduces every
 request each arm's board was sent, in order. Every target was the same in all four runs whatever
 the axes' positions before homing. Where a Home All leaves X, the Multichannel's Y and the gripper

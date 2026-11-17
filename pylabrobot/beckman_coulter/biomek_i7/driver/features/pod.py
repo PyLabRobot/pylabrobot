@@ -19,26 +19,26 @@ from typing import (
 
 from pylabrobot.beckman_coulter.biomek_i7 import units
 from pylabrobot.beckman_coulter.biomek_i7.driver import motion
+from pylabrobot.beckman_coulter.biomek_i7.driver import pod_collision as pc
+from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.board import AceBoard
 from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
   ModuleConfiguration,
   PodConfiguration,
 )
+from pylabrobot.beckman_coulter.biomek_i7.driver.errors import AceError, NotHomedError, english
 from pylabrobot.beckman_coulter.biomek_i7.driver.module import (
   read_analog_inputs,
   read_module,
 )
+from pylabrobot.beckman_coulter.biomek_i7.driver.motors import Axis, AxisMove, MotorTables
 from pylabrobot.beckman_coulter.biomek_i7.driver.recipes.homing import (
   ENABLE_ORDER,
   ENABLE_PREFIX,
   HOME_RECIPES,
   Homer,
 )
-from pylabrobot.beckman_coulter.biomek_i7.driver.errors import AceError, NotHomedError, english
-from pylabrobot.beckman_coulter.biomek_i7.driver.motors import Axis, AxisMove, MotorTables
-from pylabrobot.beckman_coulter.biomek_i7.driver import pod_collision as pc
-from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.x_rail import PodPose, RailCollisionError, XRail
 
 logger = logging.getLogger(__name__)
