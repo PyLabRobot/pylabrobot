@@ -419,7 +419,7 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
       await self.arm.move_to_wash(position=2)
     last = len(SYNTHETIC_WASH_ROUTE) - 1
     leave.assert_awaited_once_with(
-      name="wash_1", index=last, until=last - 1, with_model_updates=True
+      name="wash_1", index=last, until=last - 1, with_model_updates=False
     )
     await self.assert_at_end_of(path=SYNTHETIC_WASH_2_ROUTE)
     await self.arm.park()
