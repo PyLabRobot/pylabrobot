@@ -315,6 +315,19 @@ class ArmTestCase(DriverTestCase):
     return [parse_frame(frame=frame)[1:] for frame in link.written[self.sent_before :]]
 
 
+def wait_briefly_for_unpower(*, driver):
+  """Only unpowering the arms (command 19), never answered, waits briefly: a slow runner cannot time
+  out a command that is answered."""
+  send_command = driver._send_command
+
+  async def send(**kwargs):
+    if kwargs["command"] == 19:
+      kwargs["timeout"] = 0.25
+    return await send_command(**kwargs)
+
+  return mock.patch.object(driver, "_send_command", side_effect=send)
+
+
 class InitializeTests(ArmTestCase):
   async def test_initialize_sends_the_recorded_startup(self):
     link = ArmLink(
@@ -377,9 +390,9 @@ class InitializeTests(ArmTestCase):
     for motor, reply in AWAY_POSITION_REPLIES.items():
       link.answers[(0, 27, struct.pack("<h", motor))] = [bytes.fromhex(reply)]
     driver = await self.set_up_arm(link=link)
-    driver.default_read_timeout = 0.25  # unpowering the arms is never answered
-    with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
-      await driver.arm.initialize()
+    with wait_briefly_for_unpower(driver=driver):
+      with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
+        await driver.arm.initialize()
     sent = self.sent(link)
     self.assertNotIn(22, [command for _, command, _ in sent])
     reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
@@ -393,16 +406,7 @@ class InitializeTests(ArmTestCase):
       events={(0, 21, home): [bytes.fromhex(RECORDED_MOTOR_ERROR_EVENTS[0])]},
     )
     driver = await self.set_up_arm(link=link)
-    send_command = driver._send_command
-
-    async def wait_briefly_for_unpower(**kwargs):
-      # Unpowering the arms (command 19) is never answered: only it waits briefly, so a slow
-      # runner cannot time out a command that is answered.
-      if kwargs["command"] == 19:
-        kwargs["timeout"] = 0.25
-      return await send_command(**kwargs)
-
-    with mock.patch.object(driver, "_send_command", side_effect=wait_briefly_for_unpower):
+    with wait_briefly_for_unpower(driver=driver):
       with self.assertRaisesRegex(MantisMotionError, "reported error 9") as caught:
         await driver.arm.initialize()
     self.assertEqual((caught.exception.motor, caught.exception.code), (0, 9))
@@ -931,9 +935,9 @@ class ZoneTests(ArmTestCase):
   async def test_without_zones_a_head_away_from_idle_still_refuses(self):
     link = RouteLink(answers=make_answers(), positions=AWAY_POSITION_REPLIES)
     driver = await self.set_up_arm(link=link)
-    driver.default_read_timeout = 0.25  # unpowering the arms is never answered
-    with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
-      await driver.arm.initialize()
+    with wait_briefly_for_unpower(driver=driver):
+      with self.assertRaisesRegex(MantisMotionError, "moved to idle only from x"):
+        await driver.arm.initialize()
     self.assertNotIn(22, [command for _, command, _ in self.sent(link)])
 
   async def test_recover_from_fault_stops_clears_and_recovers_as_recorded(self):
@@ -962,15 +966,7 @@ class ZoneTests(ArmTestCase):
     link = RaisingLink(answers=make_answers(), raises_on=(0, 17, b"\x02\x00"))
     driver = await self.set_up_routes(link=link)
     driver.arm._initialized = True
-    send_command = driver._send_command
-
-    async def wait_briefly_for_unpower(**kwargs):
-      # Unpowering the arms (command 19) is never answered: only it waits briefly.
-      if kwargs["command"] == 19:
-        kwargs["timeout"] = 0.25
-      return await send_command(**kwargs)
-
-    with mock.patch.object(driver, "_send_command", side_effect=wait_briefly_for_unpower):
+    with wait_briefly_for_unpower(driver=driver):
       with self.assertRaisesRegex(OSError, "device unplugged"):
         await driver.arm.recover_from_fault()
     reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
