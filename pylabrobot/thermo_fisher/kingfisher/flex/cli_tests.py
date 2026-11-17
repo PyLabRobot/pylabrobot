@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from .cli import _probe, main
-from .test_helpers import bdz_bytes
+from .test_helpers import HIDTestCase, bdz_bytes
 
 
 class FlexCLITests(unittest.TestCase):
@@ -48,19 +48,18 @@ class FlexCLITests(unittest.TestCase):
     self.assertEqual(error.exception.code, 0)
 
 
-class FlexProbeTests(unittest.IsolatedAsyncioTestCase):
+class FlexProbeTests(HIDTestCase):
   """Probe lifecycle with a simulated transport."""
 
   async def test_probe_identifies_and_closes(self) -> None:
     """The explicit probe sends only VER and closes its transport."""
     from .flex import KingFisherFlex
-    from .flex_tests import ScriptedHID
 
     flex = KingFisherFlex()
-    transport = ScriptedHID()
-    flex.io = transport
+    self.mock_hid()
+    flex.io = self.io
     with patch("pylabrobot.thermo_fisher.kingfisher.flex.cli.KingFisherFlex", return_value=flex):
       result = await _probe(None, None)
-    self.assertEqual(transport.commands, ["VER"])
-    self.assertEqual(transport.closed, 1)
+    self.assertEqual(self.commands, ["VER"])
+    self.io.stop.assert_awaited_once_with()
     self.assertEqual(result["firmware"], "1.01.0")

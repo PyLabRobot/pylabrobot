@@ -6,17 +6,16 @@ from dataclasses import replace
 
 from .connection import FlexError
 from .flex import KingFisherFlex
-from .flex_tests import ScriptedHID
 from .protocol import FlexPrompt, read_flex_bdz
-from .test_helpers import bdz_bytes
+from .test_helpers import HIDTestCase, bdz_bytes
 
 
-class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
+class HostConfirmationTests(HIDTestCase):
   """Verify confirmations gate every subsequent command and survive no session failure."""
 
   async def asyncSetUp(self) -> None:
     """Initialize an entirely simulated instrument and a two-prompt script."""
-    self.io = ScriptedHID()
+    self.mock_hid()
     self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
     self.flex.io = self.io
     self.original = read_flex_bdz(bdz_bytes())
@@ -52,12 +51,12 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
       seen.append(prompt)
       return True
 
-    before = len(self.io.commands)
+    before = len(self.commands)
     result = await self.flex.run_protocol(self.original, confirm_prompt=confirm)
     commands = [c.text for c in self.original.preflight() if c.opcode != "PAU"]
     expected = ["EAK", "MOI 0", "MOS 0", "MOM 0", "MOH 0 100", "TEM 0 300"]
     expected += commands + ['TXT "END_OF_RUN"', "TEM 0 300", "TEM 0 300"]
-    self.assertEqual(self.io.commands[before:], expected)
+    self.assertEqual(self.commands[before:], expected)
     self.assertEqual(tuple(seen), self.original.prompts())
     self.assertEqual(result.completed_commands, len(commands))
     self.assertEqual(result.host_confirmations, len(seen))
@@ -74,8 +73,8 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
       first = await asyncio.wait_for(self.entered.get(), 1)
       self.assertEqual((first.processing_slot, first.loading_slot), (7, 2))
       self.assertEqual(self.flex.state, "waiting")
-      self.assertNotIn("MOR 6", self.io.commands)
-      self.io.emit("TEM 24 23\r\n")
+      self.assertNotIn("MOR 6", self.commands)
+      self.emit("TEM 24 23\r\n")
       async for event in self.flex.events():
         if event.kind == "temperature":
           break
@@ -85,8 +84,8 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
       self.release.set()
       second = await asyncio.wait_for(self.entered.get(), 1)
       self.assertEqual((second.processing_slot, second.loading_slot), (6, 1))
-      self.assertNotIn('TXT "next"', self.io.commands)
-      self.assertFalse(any(c.startswith("PAU") for c in self.io.commands))
+      self.assertNotIn('TXT "next"', self.commands)
+      self.assertFalse(any(c.startswith("PAU") for c in self.commands))
       self.release.set()
       result = await asyncio.wait_for(task, 1)
       self.assertEqual(result.host_confirmations, 2)
@@ -104,11 +103,11 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
 
     with self.assertRaisesRegex(FlexError, "did not confirm"):
       await self.flex.run_protocol(self.protocol, confirm_prompt=reject)
-    self.assertEqual(self.io.commands[-1], "MOR 7")
+    self.assertEqual(self.commands[-1], "MOR 7")
     self.assertEqual(self.flex.state, "uncertain")
     with self.assertRaises(FlexError):
       await self.flex.initialize()
-    self.assertFalse(self.io.features)
+    self.io.send_feature_report.assert_not_awaited()
 
   async def test_callback_error_invalidates_without_motion(self) -> None:
     """Input/robot failures cannot be treated as a completed plate action."""
@@ -119,7 +118,7 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
 
     with self.assertRaises(EOFError):
       await self.flex.run_protocol(self.protocol, confirm_prompt=fail)
-    self.assertEqual(self.io.commands[-1], "MOR 7")
+    self.assertEqual(self.commands[-1], "MOR 7")
     self.assertEqual(self.flex.state, "uncertain")
 
   async def test_timeout_cancels_callback_without_advancing(self) -> None:
@@ -129,8 +128,8 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
         self.protocol, confirm_prompt=self.confirm, operator_timeout=0.01
       )
     self.assertTrue(self.cancelled.is_set())
-    self.assertEqual(self.io.commands[-1], "MOR 7")
-    self.assertFalse(self.io.features)
+    self.assertEqual(self.commands[-1], "MOR 7")
+    self.io.send_feature_report.assert_not_awaited()
 
   async def test_session_failure_wakes_host_wait_and_rejects_late_confirmation(self) -> None:
     """Abort, stop, disconnect, and cancellation release waits without replay."""
@@ -141,7 +140,7 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
         await self.flex.initialize()
         self.release.clear()
         self.cancelled.clear()
-        before = len(self.io.commands)
+        before = len(self.commands)
         task = asyncio.create_task(
           self.flex.run_protocol(self.protocol, confirm_prompt=self.confirm)
         )
@@ -151,24 +150,24 @@ class HostConfirmationTests(unittest.IsolatedAsyncioTestCase):
         elif failure == "stop":
           await asyncio.wait_for(self.flex.stop(), 1)
         elif failure == "disconnect":
-          self.io.incoming.put_nowait(OSError("unplugged"))
+          self.incoming.put_nowait(OSError("unplugged"))
         else:
           task.cancel()
         with self.assertRaises((FlexError, asyncio.CancelledError)):
           await asyncio.wait_for(task, 1)
         self.release.set()
         self.assertTrue(self.cancelled.is_set())
-        self.assertNotIn("MOR 6", self.io.commands[before:])
-        self.assertFalse(any(c.startswith("PAU") for c in self.io.commands[before:]))
+        self.assertNotIn("MOR 6", self.commands[before:])
+        self.assertFalse(any(c.startswith("PAU") for c in self.commands[before:]))
 
   async def test_confirmation_only_after_rotation_completion(self) -> None:
     """An acknowledged but unfinished rotation must not expose a load confirmation."""
-    self.io.responses["MOR 7"] = "MOR\r\n"
+    self.responses["MOR 7"] = "MOR\r\n"
     task = asyncio.create_task(self.flex.run_protocol(self.protocol, confirm_prompt=self.confirm))
     try:
-      await self.io.wait_sent("MOR 7")
+      await self.wait_sent("MOR 7")
       self.assertTrue(self.entered.empty())
-      self.io.emit("MOR END 0\r\n")
+      self.emit("MOR END 0\r\n")
       await asyncio.wait_for(self.entered.get(), 1)
       self.assertEqual(self.flex.processing_slot, 7)
     finally:
