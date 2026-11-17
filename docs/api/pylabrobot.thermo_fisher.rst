@@ -122,6 +122,7 @@ KingFisher Flex
     FlexProtocolIssue
     FlexCommand
     FlexPlate
+    FlexPlateHolder
     FlexDispense
     FlexTip
     FlexPrompt

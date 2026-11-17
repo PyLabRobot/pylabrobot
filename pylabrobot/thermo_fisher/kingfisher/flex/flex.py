@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional, Union
 
 from pylabrobot.io.hid import HID
+from pylabrobot.resources import PlateHolder, Resource
 from pylabrobot.thermo_fisher.kingfisher.flex.connection import (
   FlexConnection,
   FlexError,
@@ -21,8 +22,10 @@ from pylabrobot.thermo_fisher.kingfisher.flex.protocol import (
   FlexProtocol,
   ProtocolSource,
   _command_prompt,
+  loading_slot,
   read_flex_bdz,
 )
+from pylabrobot.thermo_fisher.kingfisher.flex.resource_model import create_carousel
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +78,7 @@ class KingFisherFlex:
     serial_number: Select one instrument when multiple Flex devices are attached.
     timeout: HID write/acknowledgment and abort deadline, in seconds.
     operation_timeout: Base motion deadline and margin for timed operations, in seconds.
+    name: Resource-name prefix. Use distinct names for instruments in the same resource tree.
   """
 
   _events_closed: bool
@@ -100,11 +104,16 @@ class KingFisherFlex:
   def _on_failure(self, error: FlexError) -> None:
     """Forget inferred geometry and initialization on every uncertain outcome."""
     self._initialized = False
+    self._inventory_verified = False
     self._processing_slot = None
     self.state = "uncertain"
     self._session_failed.set()
     self._publish(FlexEvent("failure", str(error)))
     self._close_events()
+
+  def _inventory_changed(self, resource: Resource) -> None:
+    """Require explicit reconciliation after changes to the carousel resource tree."""
+    self._inventory_verified = False
 
   def _prompt_for_command(self, command: FlexCommand, orientation: int) -> FlexPrompt:
     """Use validated source metadata while checking the completed physical orientation."""
@@ -137,10 +146,19 @@ class KingFisherFlex:
     serial_number: Optional[str] = None,
     timeout: float = 30.0,
     operation_timeout: float = 120.0,
+    *,
+    name: str = "kingfisher_flex",
   ) -> None:
     """Configure a Flex without enumerating or opening USB devices."""
     validate_timeout(timeout, "timeout")
     validate_timeout(operation_timeout, "operation_timeout")
+    if not name.strip():
+      raise ValueError("name must not be empty")
+    self.name = name
+    self.carousel = create_carousel(name)
+    self._inventory_verified = False
+    self.carousel.register_will_assign_resource_callback(self._inventory_changed)
+    self.carousel.register_will_unassign_resource_callback(self._inventory_changed)
     self.io = HID("KingFisher Flex", vid=0x0AB6, pid=0x02C7, serial_number=serial_number)
     self.timeout = timeout
     self.operation_timeout = operation_timeout
@@ -170,6 +188,44 @@ class KingFisherFlex:
     """Return the last completed MOR target, or None when physical state is unknown."""
     return self._processing_slot
 
+  @property
+  def loading_slot(self) -> Optional[int]:
+    """Return the printed tray at the loading station, or None during uncertain motion."""
+    return None if self._processing_slot is None else loading_slot(self._processing_slot)
+
+  @property
+  def processing_holder(self) -> Optional[PlateHolder]:
+    """Return the persistent holder at processing, without moving its assigned plate."""
+    return None if self._processing_slot is None else self.carousel[self._processing_slot]
+
+  @property
+  def loading_holder(self) -> Optional[PlateHolder]:
+    """Return the persistent holder accessible at the single loading station."""
+    slot = self.loading_slot
+    return None if slot is None else self.carousel[slot]
+
+  @property
+  def inventory_verified(self) -> bool:
+    """Whether the caller has reconciled the current tree with physical contents.
+
+    False means unknown contents, even if every holder is empty in the model.
+    This is caller confirmation, not an instrument sensor reading.
+    """
+    return self._inventory_verified
+
+  def reconcile_inventory(self) -> None:
+    """Confirm that every holder's assignment matches the physical carousel.
+
+    First assign/remove plates using the resource tree, then call this method
+    after checking all eight trays. An empty carousel also needs confirmation.
+    This performs no USB I/O and cannot run during a device operation or lifecycle
+    transition. Reconnection and protocol execution invalidate this confirmation;
+    current protocol callbacks do not automatically update resource assignments.
+    """
+    if self._operations.locked() or self._lifecycle.locked():
+      raise FlexError("Cannot reconcile inventory during an active Flex operation")
+    self._inventory_verified = True
+
   async def events(self) -> AsyncIterator[FlexEvent]:
     """Consume session events from one task until disconnect or failure.
 
@@ -190,6 +246,8 @@ class KingFisherFlex:
       if self._connected:
         self._connection.check_open()
         return
+      self._inventory_verified = False
+      self._processing_slot = None
       logger.warning(
         "KingFisher Flex is experimental. Hardware checks cover firmware 1.01.0 on macOS "
         "with 96DW mixing/bead methods, 37 C heating and host confirmations. "
@@ -253,6 +311,7 @@ class KingFisherFlex:
       return
     async with self._operations:
       self.state = "initializing"
+      self._processing_slot = None
       try:
         for command in ("EAK", "TEM 0 300", "MOI 0", "MOS 0", "MOM 0", "MOH 0 100", "MOR 1"):
           await self._connection.command(command, self.operation_timeout)
@@ -358,6 +417,7 @@ class KingFisherFlex:
       raise FlexError("Call initialize() explicitly before running a protocol")
     async with self._operations:
       self._run_prompts = prompts
+      self._inventory_verified = False
       self.state = "running"
       self._publish(FlexEvent("run_started", parsed.name))
       timer_duration = 0.0
@@ -446,6 +506,7 @@ class KingFisherFlex:
     self._check_operation()
     async with self._operations:
       self._initialized = False
+      self._inventory_verified = False
       self._processing_slot = None
       self.state = "running"
       logger.warning("Experimental onboard launch: %s; motion may begin immediately", name)
@@ -466,6 +527,7 @@ class KingFisherFlex:
   async def stop(self) -> None:
     """Disconnect and invalidate position; never claim that disconnect stops motion."""
     async with self._lifecycle:
+      self._inventory_verified = False
       if not self._connected and self.state == "disconnected":
         self._close_events()
         return

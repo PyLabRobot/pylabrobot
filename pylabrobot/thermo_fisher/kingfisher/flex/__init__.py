@@ -13,3 +13,4 @@ from .protocol import (
   FlexTip,
   read_flex_bdz,
 )
+from .resource_model import FlexPlateHolder
