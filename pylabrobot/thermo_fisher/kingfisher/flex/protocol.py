@@ -3,15 +3,14 @@
 import hashlib
 import math
 import re
-import struct
 import xml.etree.ElementTree as ET
-import zlib
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, Optional, Union
 
+from pylabrobot.thermo_fisher.kingfisher.bdz_container import parse_xml, read_container
+
 FLEX_TYPE_ID = "844c2ce4-e8cf-4c19-b8e6-c43037658b8c"
-MAX_XML_SIZE = 16 * 1024 * 1024
 ProtocolSource = Union[str, Path, bytes]
 
 
@@ -98,88 +97,11 @@ def loading_slot(processing_slot: int) -> int:
 
 
 def _xml(payload: bytes, root_name: str) -> ET.Element:
-  """Parse bounded XML without declarations that can expand external data."""
-  # BindIt exports are UTF-8; reject alternate encodings rather than bypass this check.
+  """Report shared XML validation failures as Flex protocol errors."""
   try:
-    text = payload.decode("utf-8-sig")
-    if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper() or "\x00" in text:
-      raise FlexProtocolError("Unsupported XML declaration or encoding")
-    root = ET.fromstring(text)
-  except (UnicodeError, ET.ParseError) as error:
-    raise FlexProtocolError("Invalid BindIt XML") from error
-  if root.tag != root_name:
-    raise FlexProtocolError(f"Expected {root_name}, got {root.tag}")
-  return root
-
-
-def _string(data: bytes, offset: int) -> tuple[str, int]:
-  """Read a length-prefixed UTF-8 container string with bounds checking."""
-  if offset + 2 > len(data):
-    raise FlexProtocolError("Truncated BindIt string length")
-  size = struct.unpack_from("<H", data, offset)[0]
-  end = offset + 2 + size
-  if end > len(data):
-    raise FlexProtocolError("Truncated BindIt string")
-  try:
-    return data[offset + 2 : end].decode("utf-8"), end
-  except UnicodeError as error:
-    raise FlexProtocolError("Invalid BindIt string") from error
-
-
-def _gzip(data: bytes, offset: int, size: int) -> tuple[bytes, int]:
-  """Validate a complete size-bounded gzip member, including CRC and EOF."""
-  end = offset + size
-  if size <= 0 or end > len(data):
-    raise FlexProtocolError("Invalid compressed stream size")
-  decoder = zlib.decompressobj(31)
-  try:
-    payload = decoder.decompress(data[offset:end], MAX_XML_SIZE + 1)
-  except zlib.error as error:
-    raise FlexProtocolError("Corrupt BindIt gzip member") from error
-  if len(payload) > MAX_XML_SIZE:
-    raise FlexProtocolError("BindIt XML exceeds the inspection size limit")
-  if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
-    raise FlexProtocolError("BindIt gzip member does not match its declared size")
-  return payload, end
-
-
-def _parts(data: bytes) -> tuple[str, str, bytes, bytes]:
-  """Parse variable-length header fields and validate both members and trailer."""
-  if len(data) < 16 or data[:12] != bytes.fromhex("b6751cf201000a0001000000"):
-    raise FlexProtocolError("Unsupported BindIt header")
-  strings_size = struct.unpack_from("<I", data, 12)[0]
-  vendor, offset = _string(data, 16)
-  version, offset = _string(data, offset)
-  if vendor != "BindIt Software" or offset - 16 != strings_size:
-    raise FlexProtocolError("Invalid BindIt vendor/version header")
-  if offset + 18 > len(data):
-    raise FlexProtocolError("Truncated BindIt header")
-  if data[offset : offset + 6] != bytes.fromhex("0b0001000000"):
-    raise FlexProtocolError("Unsupported BindIt object header")
-  content_size = struct.unpack_from("<I", data, offset + 6)[0]
-  if content_size != len(data) - (offset + 20):
-    raise FlexProtocolError("BindIt file size does not match its header")
-  if data[offset + 10 : offset + 14] != bytes.fromhex("00000001"):
-    raise FlexProtocolError("Invalid first stream marker")
-  size = struct.unpack_from("<I", data, offset + 14)[0]
-  props, offset = _gzip(data, offset + 18, size)
-  if data[offset : offset + 4] != bytes.fromhex("01000001") or offset + 8 > len(data):
-    raise FlexProtocolError("Invalid second stream marker")
-  size = struct.unpack_from("<I", data, offset + 4)[0]
-  exported, offset = _gzip(data, offset + 8, size)
-  trailer = data[offset:]
-  if len(trailer) < 42 or struct.unpack_from("<I", trailer)[0] != 2:
-    raise FlexProtocolError("Invalid BindIt trailer")
-  if struct.unpack_from("<I", trailer, 8)[0] != 711:
-    raise FlexProtocolError("Not a Flex instrument parameters trailer")
-  if trailer[12:30] != b"\x00" * 14 + b"\x01\x00\x00\x00":
-    raise FlexProtocolError("Unsupported BindIt trailer fields")
-  name, end = _string(trailer, 30)
-  if struct.unpack_from("<I", trailer, 4)[0] != end - 32 + 24:
-    raise FlexProtocolError("Invalid BindIt trailer name size")
-  if trailer[end:] != bytes.fromhex("01000100000000000000"):
-    raise FlexProtocolError("Invalid BindIt trailing bytes")
-  return version, name, props, exported
+    return parse_xml(payload, root_name)
+  except ValueError as error:
+    raise FlexProtocolError(str(error)) from error
 
 
 # Supported command syntax. TEM bounds: Flex service manual, section 7.1.11.16.
@@ -586,22 +508,25 @@ class FlexProtocol:
 def read_flex_bdz(source: ProtocolSource) -> FlexProtocol:
   """Read a path or bytes, validating Flex identity without rewriting the export."""
   data = source if isinstance(source, bytes) else Path(source).read_bytes()
-  if len(data) > 2 * MAX_XML_SIZE:
-    raise FlexProtocolError("BindIt file exceeds the inspection size limit")
-  version, trailer_name, props, exported = _parts(data)
-  properties = _xml(props, "Properties")
+  try:
+    container = read_container(data)
+    properties = parse_xml(container.properties, "Properties")
+    root = parse_xml(container.exported, "ExportedData")
+  except ValueError as error:
+    raise FlexProtocolError(str(error)) from error
+  if container.parameters_type != 711:
+    raise FlexProtocolError("Not a Flex instrument parameters trailer")
   objects = properties.findall("ExportedObject")
   parameters = properties.find("InstrumentParameters")
   if len(objects) != 1 or objects[0].findtext("InstrumentTypeId") != FLEX_TYPE_ID:
     raise FlexProtocolError("Expected exactly one Flex exported object")
   if parameters is None or parameters.get("type") != "711":
     raise FlexProtocolError("Expected Flex InstrumentParameters type 711")
-  root = _xml(exported, "ExportedData")
   protocols = root.findall("./Protocol/Run/Protocol")
   if len(protocols) != 1:
     raise FlexProtocolError("Expected exactly one protocol")
   name = objects[0].get("name", "")
-  if not name or name != trailer_name or name != protocols[0].get("name"):
+  if not name or name != container.name or name != protocols[0].get("name"):
     raise FlexProtocolError("Protocol names disagree across container sections")
   scripts = root.findall("CommandScript")
   if len(scripts) != 1 or not scripts[0].text:
@@ -637,4 +562,13 @@ def read_flex_bdz(source: ProtocolSource) -> FlexProtocol:
   for reference in protocols[0].findall(".//Plates/Plate"):
     if reference.get("id") not in plate_ids:
       raise FlexProtocolError("Protocol references a plate absent from its layout")
-  return FlexProtocol(name, version, data, props, exported, scripts[0].text, plates, tips)
+  return FlexProtocol(
+    name,
+    container.version,
+    data,
+    container.properties,
+    container.exported,
+    scripts[0].text,
+    plates,
+    tips,
+  )

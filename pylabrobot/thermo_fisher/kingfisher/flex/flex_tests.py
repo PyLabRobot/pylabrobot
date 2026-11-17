@@ -8,7 +8,8 @@ from typing import Optional
 from pylabrobot.io.hid import HID
 from pylabrobot.thermo_fisher import KingFisherFlex
 from pylabrobot.thermo_fisher.kingfisher.flex import FlexError, FlexProtocolError, read_flex_bdz
-from pylabrobot.thermo_fisher.kingfisher.flex.connection import FlexLines, reports
+from pylabrobot.thermo_fisher.kingfisher.flex.connection import FlexLines
+from pylabrobot.thermo_fisher.kingfisher.hid import encode_reports
 
 from .test_helpers import bdz_bytes
 
@@ -33,7 +34,7 @@ class ScriptedHID(HID):
 
   def emit(self, text: str) -> None:
     """Deliver CRLF lines in real 64-byte report framing."""
-    for report in reports(text.encode("ascii")):
+    for report in encode_reports(text.encode("ascii")):
       self.incoming.put_nowait(report)
 
   async def setup(self) -> None:

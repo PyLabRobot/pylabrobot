@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional
 
 from pylabrobot.io.hid import HID
+from pylabrobot.thermo_fisher.kingfisher.hid import decode_report, encode_reports
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +37,6 @@ def validate_timeout(value: Optional[float], name: str, allow_none: bool = False
     raise ValueError(f"{name} must be positive and finite")
 
 
-def reports(payload: bytes) -> tuple[bytes, ...]:
-  """Encode payload bytes into 64-byte reports, excluding the HID report ID."""
-  if not payload:
-    raise ValueError("Cannot encode an empty payload")
-  return tuple(
-    bytes([len(payload[offset : offset + 63])]) + payload[offset : offset + 63].ljust(63, b"\x00")
-    for offset in range(0, len(payload), 63)
-  )
-
-
 class FlexLines:
   """Reassemble CRLF lines, ignoring all bytes beyond a report's length prefix."""
 
@@ -55,9 +46,10 @@ class FlexLines:
 
   def feed(self, report: bytes) -> tuple[str, ...]:
     """Return complete ASCII lines from a bounded HID report."""
-    if not report or len(report) > 64 or report[0] > 63 or report[0] > len(report) - 1:
-      raise FlexError("Invalid Flex HID report length")
-    self._buffer.extend(report[1 : 1 + report[0]])
+    try:
+      self._buffer.extend(decode_report(report))
+    except ValueError as error:
+      raise FlexError(str(error)) from error
     lines = []
     while b"\r\n" in self._buffer:
       end = self._buffer.index(b"\r\n")
@@ -238,7 +230,7 @@ class FlexConnection:
   async def _write(self, payload: bytes, check_session: bool = True) -> None:
     """Write all fragments atomically with respect to other commands and abort."""
     async with self._writes:
-      for report in reports(payload):
+      for report in encode_reports(payload):
         if check_session:
           self.check_open()
         written = await self.io.write(report, report_id=b"\x00")

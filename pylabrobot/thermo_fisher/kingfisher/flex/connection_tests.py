@@ -2,7 +2,9 @@
 
 import unittest
 
-from .connection import FlexError, FlexLines, parse_message, reports
+from pylabrobot.thermo_fisher.kingfisher.hid import encode_reports
+
+from .connection import FlexError, FlexLines, parse_message
 
 
 class FlexFramingTests(unittest.TestCase):
@@ -24,7 +26,7 @@ class FlexFramingTests(unittest.TestCase):
     for invalid in (b"", b"\x40" + b"x" * 63, b"\x02x", b"\x01" + b"x" * 64):
       with self.assertRaises(FlexError):
         FlexLines().feed(invalid)
-    self.assertEqual(reports(b"\x1b")[0][:3], b"\x01\x1b\x00")
+    self.assertEqual(encode_reports(b"\x1b")[0][:3], b"\x01\x1b\x00")
 
   def test_response_types_and_invalid_lines(self) -> None:
     """Keep ACK, telemetry, interruption and terminal error codes distinct."""
