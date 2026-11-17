@@ -15,6 +15,7 @@ pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp
    .. autosummary::
       :toctree: .
    
+      ~MantisSimulationPlateClamp.auxiliary_output
       ~MantisSimulationPlateClamp.default_lock_level
    
    

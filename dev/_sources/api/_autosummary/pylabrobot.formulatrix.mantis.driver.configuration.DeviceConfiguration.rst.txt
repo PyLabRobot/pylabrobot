@@ -17,7 +17,6 @@ pylabrobot.formulatrix.mantis.driver.configuration.DeviceConfiguration
    
       ~DeviceConfiguration.generation
       ~DeviceConfiguration.firmware_versions
-      ~DeviceConfiguration.motor_limits
       ~DeviceConfiguration.feedback_sensor_parameters
    
    

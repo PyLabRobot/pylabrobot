@@ -590,17 +590,15 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm.initialize">
 <span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisSimulationArm.</span></span><span class="sig-name descname"><span class="pre">initialize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm.initialize" title="Link to this definition">#</a></dt>
-<dd><p>Bring the arm and Z up from power-on, as in the recorded v4 startup.</p>
-<p>Energise the arm motors, declare them where their absolute encoders read, set their following
-error, move them to idle, home Z, then twice declare and move to idle again, and home Z. A
-failure from energising on leaves the arm motors unpowered again.</p>
+<dd><p>Bring the arm and Z up from power-on: a v4 from where its absolute encoders read, a v3 from
+its stops and flags.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – without the unit’s <code class="docutils literal notranslate"><span class="pre">arm</span></code> block; nothing is sent.</p></li>
-<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError"><strong>MantisMotionError</strong></a> – if the head is not where it is moved straight to idle from, or a motor
-    faults.</p></li>
-<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisTimeoutError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisTimeoutError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisTimeoutError"><strong>MantisTimeoutError</strong></a> – if a move or the home does not end in time.</p></li>
+<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError"><strong>MantisMotionError</strong></a> – if the head is not where it is moved to idle from, or a motor faults.</p></li>
+<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisTimeoutError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisTimeoutError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisTimeoutError"><strong>MantisTimeoutError</strong></a> – if a move or a home does not end in time.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – on a v3, if a target is outside its motor’s limits; nothing is sent.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>

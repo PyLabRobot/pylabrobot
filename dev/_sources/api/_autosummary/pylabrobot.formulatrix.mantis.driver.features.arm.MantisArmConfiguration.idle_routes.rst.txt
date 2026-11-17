@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisArmConfiguration.idle\_routes
+=====================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoattribute:: MantisArmConfiguration.idle_routes

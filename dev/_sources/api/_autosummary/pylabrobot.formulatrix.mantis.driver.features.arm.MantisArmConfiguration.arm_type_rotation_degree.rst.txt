@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisArmConfiguration.arm\_type\_rotation\_degree
+====================================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoattribute:: MantisArmConfiguration.arm_type_rotation_degree

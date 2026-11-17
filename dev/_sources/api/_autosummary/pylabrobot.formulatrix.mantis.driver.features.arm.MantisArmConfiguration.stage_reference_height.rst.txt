@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisArmConfiguration.stage\_reference\_height
+=================================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoattribute:: MantisArmConfiguration.stage_reference_height

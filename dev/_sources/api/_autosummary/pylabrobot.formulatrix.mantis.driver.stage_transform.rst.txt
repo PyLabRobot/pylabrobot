@@ -1,0 +1,31 @@
+﻿:orphan:
+
+pylabrobot.formulatrix.mantis.driver.stage\_transform
+=====================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver
+
+.. automodule:: pylabrobot.formulatrix.mantis.driver.stage_transform
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      compute_arm_frame_position
+   
+   
+
+   
+   
+   
+
+   
+   
+   

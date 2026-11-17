@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.Arm.move\_to\_xy\_position
+============================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. automethod:: Arm.move_to_xy_position

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisArmConfiguration.safe\_xy\_routes
+=========================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoattribute:: MantisArmConfiguration.safe_xy_routes

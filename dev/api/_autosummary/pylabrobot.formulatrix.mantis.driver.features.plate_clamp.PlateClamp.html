@@ -63,8 +63,8 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level.html" />
-    <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.arm_kinematics.compute_wrapped_angle" href="pylabrobot.formulatrix.mantis.driver.arm_kinematics.compute_wrapped_angle.html" />
+    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output.html" />
+    <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.sequence_files.parse_move_sequence" href="pylabrobot.formulatrix.mantis.driver.sequence_files.parse_move_sequence.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
@@ -586,13 +586,20 @@
 <h1>pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp<a class="headerlink" href="#pylabrobot-formulatrix-mantis-driver-features-plate-clamp-plateclamp" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.formulatrix.mantis.driver.features.plate_clamp.</span></span><span class="sig-name descname"><span class="pre">PlateClamp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">driver</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver"><span class="pre">MantisDriver</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.formulatrix.mantis.driver.features.plate_clamp.</span></span><span class="sig-name descname"><span class="pre">PlateClamp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">driver</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver"><span class="pre">MantisDriver</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auxiliary_output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pump</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.pump.Pump.html#pylabrobot.formulatrix.mantis.driver.features.pump.Pump" title="pylabrobot.formulatrix.mantis.driver.features.pump.Pump"><span class="pre">Pump</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The plate clamp. Locking waits until the device reports clamping done.</p>
+<p>The plate clamp, on board 12 or on a pressure-board output, with the same methods.</p>
+<p>On board 12, locking waits until the device reports clamping done. On a pressure-board output
+the valve’s readback is read, never plate contact; it has no lock levels and no clamp state.
+Locking it starts the pump when needed, and unlocking restores a pump this clamp started; a
+failed lock and shutdown release the valve.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_lock_level</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output"><code class="xref py py-obj docutils literal notranslate"><span class="pre">auxiliary_output</span></code></a></p></td>
+<td><p>The pressure-board output switching the clamp's valve; None for a clamp on board 12.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_lock_level</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -601,20 +608,20 @@
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.__init__.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.__init__" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(*, driver, levels)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.__init__.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.__init__" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.__init__"><code class="xref py py-obj docutils literal notranslate"><span class="pre">__init__</span></code></a>(*, driver[, levels, ...])</p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.lock.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.lock" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.lock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lock</span></code></a>(*[, level])</p></td>
-<td><p>Release the clamp, lock it at <code class="docutils literal notranslate"><span class="pre">level</span></code> and wait until it reads clamping done.</p></td>
+<td><p>On board 12, release the clamp, lock it at <code class="docutils literal notranslate"><span class="pre">level</span></code> and wait until it reads clamping done; if it does not, it is released again before raising.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.request_locked.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.request_locked" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.request_locked"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_locked</span></code></a>(*[, attempts])</p></td>
-<td><p>Whether the motor controller reports clamping done.</p></td>
+<td><p>Whether the clamp holds: on board 12 whether it reports clamping done; on a pressure-board output whether its valve reads switched on, which is not plate contact.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.request_state.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.request_state" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.request_state"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_state</span></code></a>(*[, attempts])</p></td>
 <td><p>The clamp's state (GetMotorClampState); <code class="docutils literal notranslate"><span class="pre">CLAMP_STATE_DESCRIPTIONS</span></code> says what each means.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.unlock.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.unlock" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.unlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unlock</span></code></a>()</p></td>
-<td><p>Release the clamp and wait until it reads unclamping done.</p></td>
+<td><p>Release the clamp: on board 12 wait until it reads unclamping done; on a pressure-board output switch the valve off and restore a pump this clamp started.</p></td>
 </tr>
 </tbody>
 </table>
@@ -624,6 +631,8 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>driver</strong> (<a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.master.MantisDriver.html#pylabrobot.formulatrix.mantis.driver.master.MantisDriver" title="pylabrobot.formulatrix.mantis.driver.master.MantisDriver"><em>MantisDriver</em></a>)</p></li>
 <li><p><strong>levels</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>auxiliary_output</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>pump</strong> (<a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.pump.Pump.html#pylabrobot.formulatrix.mantis.driver.features.pump.Pump" title="pylabrobot.formulatrix.mantis.driver.features.pump.Pump"><em>Pump</em></a><em> | </em><em>None</em>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -642,20 +651,20 @@
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="pylabrobot.formulatrix.mantis.driver.arm_kinematics.compute_wrapped_angle.html"
+       href="pylabrobot.formulatrix.mantis.driver.sequence_files.parse_move_sequence.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.arm_kinematics.compute_wrapped_angle</p>
+        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.sequence_files.parse_move_sequence</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level.html"
+       href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.default_lock_level</p>
+        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.auxiliary_output</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

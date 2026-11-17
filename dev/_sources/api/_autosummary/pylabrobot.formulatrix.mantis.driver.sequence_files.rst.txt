@@ -1,0 +1,31 @@
+﻿:orphan:
+
+pylabrobot.formulatrix.mantis.driver.sequence\_files
+====================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver
+
+.. automodule:: pylabrobot.formulatrix.mantis.driver.sequence_files
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      parse_move_sequence
+   
+   
+
+   
+   
+   
+
+   
+   
+   

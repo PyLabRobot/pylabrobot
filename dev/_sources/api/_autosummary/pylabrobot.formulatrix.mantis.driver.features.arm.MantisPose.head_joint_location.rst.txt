@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisPose.head\_joint\_location
+==================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoattribute:: MantisPose.head_joint_location
