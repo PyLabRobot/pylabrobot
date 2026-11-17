@@ -1307,6 +1307,7 @@ class Arm:
     self, *, speed: float = Z_HOMING_SPEED, acceleration: float = Z_HOMING_ACCELERATION
   ) -> None:
     """Home Z on its flag, as recorded: check no motor slipped, clear Z's faults, search, wait.
+    A failure from the search on logs where the motors are before it raises.
 
     Args:
       speed: the fast search, mm/s; the slow search at a tenth of it.
@@ -1343,18 +1344,19 @@ class Arm:
         fast_speed=fast_speed,
         acceleration=compute_device_rate(motor=Z_MOTOR, rate=acceleration),
       )
+      await self._driver._wait_for_event(waiter=waiter, timeout=HOME_TIMEOUT)
+      status = await self._driver.request_motor_status(motor=Z_MOTOR)
+      self._check_status(motor=Z_MOTOR, status=status)
+      if not status & MOTOR_HOMED:
+        raise MantisMotionError(
+          f"{self._driver.name}: Z does not read homed (status 0x{status:04x})",
+          motor=Z_MOTOR,
+          status=status,
+        )
     except BaseException:
       waiter.cancel()
+      await self._log_where_it_stopped()
       raise
-    await self._driver._wait_for_event(waiter=waiter, timeout=HOME_TIMEOUT)
-    status = await self._driver.request_motor_status(motor=Z_MOTOR)
-    self._check_status(motor=Z_MOTOR, status=status)
-    if not status & MOTOR_HOMED:
-      raise MantisMotionError(
-        f"{self._driver.name}: Z does not read homed (status 0x{status:04x})",
-        motor=Z_MOTOR,
-        status=status,
-      )
 
   async def _recover_to_idle(self) -> None:
     """Bring the head to idle from where the arms are declared, as in a recorded recovery.
@@ -1385,7 +1387,8 @@ class Arm:
 
     Energise the arm motors, declare them where their absolute encoders read, set their following
     error, then recover to idle: along the zone's routes, or without the unit's zones from near
-    idle only. A failure from energising on leaves the arm motors unpowered again.
+    idle only. A failure from energising on leaves the arm motors unpowered again, and logs where
+    the motors are.
     """
     self._initialized = False
     try:
@@ -1400,6 +1403,7 @@ class Arm:
       await self._recover_to_idle()
     except BaseException:
       await self._unpower_arm_motors()
+      await self._log_where_it_stopped()
       raise
     self._initialized = True
 
@@ -1595,7 +1599,8 @@ class Arm:
     and recover to idle as ``initialize`` does: a v4 from its absolute encoders, a v3 by its whole
     bring-up again. This moves the arm.
 
-    A failure leaves a v4's arm motors unpowered, a v3's stopped; set up again.
+    A failure leaves a v4's arm motors unpowered, where the motors are logged, a v3's stopped; set
+    up again.
 
     Raises:
       MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
@@ -1621,6 +1626,7 @@ class Arm:
     except BaseException:
       if self._get_generation() == "v4":
         await self._unpower_arm_motors()
+        await self._log_where_it_stopped()
       raise
     self._initialized = True
     await self._report_pose()
@@ -2044,12 +2050,11 @@ class Arm:
     z_speed: Optional[float] = None,
     z_acceleration: Optional[float] = None,
   ) -> None:
-    """Move the nozzle to a deck-frame location: rise to the traverse height if below it, move
-    across with Z held, then move Z to the location's height.
+    """Move the nozzle to a deck-frame location: across as ``move_to_xy_position``, then down as
+    ``move_to_z_position``.
 
-    Every target is checked before anything moves, and Z is read back at the traverse height by
-    its encoder before the arms move. The arms move in one joint move: nothing here avoids the
-    chip racks. From an approach path the head first leaves along it.
+    Every target is checked at the location before anything moves; Z's target is then taken
+    where the head stands after the move across. Nothing here avoids the chip racks.
 
     Args:
       location: the nozzle's x, y and height above the deck, mm.
@@ -2062,59 +2067,32 @@ class Arm:
 
     Raises:
       MantisConfigurationError: without the unit's ``arm`` or ``stage`` block; nothing is sent.
-      MantisMotionError: if the arm is not brought up, a motor faults, or Z does not read at the traverse height after rising to it.
+      MantisMotionError: if the arm is not brought up, a motor faults, or Z does not read at the
+        traverse height after rising to it.
       MantisKinematicsError: if the location is out of the arm's reach.
       ValueError: if a target is outside its motor's limits, or a speed or acceleration out of
         range.
     """
     self._check_initialized()
     self._check_stage()
-    z_profile = self._get_profile(motor=Z_MOTOR, speed=z_speed, acceleration=z_acceleration)
+    self._get_profile(motor=Z_MOTOR, speed=z_speed, acceleration=z_acceleration)
     for name, value in (("xy_speed", xy_speed), ("xy_acceleration", xy_acceleration)):
       if value is not None:
         self._check_positive(name=name, value=value)
     arm_frame_location = self._get_arm_frame_location(location=location)
-    arm_targets = self._get_arm_targets(location=arm_frame_location)
-    arm_joint_state = {
-      motor: compute_position(motor=motor, device_position=target)
-      for motor, target in arm_targets.items()
-    }
-    z_target = cast(float, arm_frame_location.z)
     for motor, target in (
-      *arm_targets.items(),
-      (Z_MOTOR, compute_device_position(motor=Z_MOTOR, position=z_target)),
+      *self._get_arm_targets(location=arm_frame_location).items(),
+      (Z_MOTOR, compute_device_position(motor=Z_MOTOR, position=cast(float, arm_frame_location.z))),
     ):
       self._check_reachable(motor=motor, position=target)
-    start = await self.request_joint_state()
-    on_path = self._get_place(joint_state=start) is not None
-    # Checked where the head stands before anything moves; on a path, again where leaving it ends.
-    while True:
-      head = self._get_head_position(joint_state=start)
-      traverse = self._get_traverse_z_joint_position(
-        minimum_traverse_height=minimum_traverse_height_start,
-        points=[
-          self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y)),
-          (location.x, location.y),
-        ],
-      )
-      arm_profiles = self._get_arm_profiles(
-        start=start, target=arm_joint_state, xy_speed=xy_speed, xy_acceleration=xy_acceleration
-      )
-      if not on_path:
-        break
-      start = await self._leave_approach_path_if_on_one(joint_state=start)
-      on_path = False
-    await self._rise_to_traverse_height(z_joint_position=traverse, profiles={Z_MOTOR: z_profile})
-    z_device_target = compute_device_position(motor=Z_MOTOR, position=z_target)
-    await self._play_queued_moves(
-      moves=[self._get_queued_move(targets=arm_targets, profiles=arm_profiles)]
+    await self.move_to_xy_position(
+      x=location.x,
+      y=location.y,
+      minimum_traverse_height_start=minimum_traverse_height_start,
+      speed=xy_speed,
+      acceleration=xy_acceleration,
     )
-    await self._play_queued_moves(
-      moves=[
-        self._get_queued_move(targets={Z_MOTOR: z_device_target}, profiles={Z_MOTOR: z_profile})
-      ]
-    )
-    await self._report_pose()
+    await self.move_to_z_position(z=location.z, speed=z_speed, acceleration=z_acceleration)
 
   async def _route_to_idle(self, *, z_joint_position: float) -> None:
     """Rise to the traverse height if below it, then move along the route to idle from where the
@@ -2297,18 +2275,22 @@ class Arm:
     every motor stopped; a v3 arm is not parked until a v3 has run its moves.
 
     Each stop runs whether or not the one before it succeeded, its failure logged; the arm is no
-    longer brought up after it.
+    longer brought up after it. Without a park, where the motors stopped is read and logged.
     """
     initialized, self._initialized = self._initialized, False
     if self._get_generation() == "v3":
       await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR))
+      await self._log_where_it_stopped()
       return
     if not await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR)):
       if initialized:
         logger.warning("[%s] a motor did not stop; the arm is not parked", self._driver.name)
+      await self._log_where_it_stopped()
       return
-    if initialized:
-      try:
-        await self._park()
-      except Exception:
-        logger.warning("[%s] the arm was not parked", self._driver.name, exc_info=True)
+    if not initialized:
+      await self._log_where_it_stopped()
+      return
+    try:
+      await self._park()
+    except Exception:
+      logger.warning("[%s] the arm was not parked", self._driver.name, exc_info=True)

@@ -76,6 +76,8 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (0, 82, "0200"): "01000000000000005940",
   (0, 84, "0000"): "00000000b42350bf",
   (0, 84, "0100"): "0000000090b8d73f",
+  # Z's encoder at its flag (-0.25 device units), as the v4 answered: a stop reads where it stopped.
+  (0, 84, "0200"): "000000000000d0bf",
   # The absolute encoders, valid.
   (11, 30, "0000"): "010000000000f43f6740",
   (11, 30, "0100"): "010000000000a0d73940",

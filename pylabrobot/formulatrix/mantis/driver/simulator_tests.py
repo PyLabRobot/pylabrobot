@@ -479,8 +479,7 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.arm._positions, positions)
 
   async def test_move_to_xy_position_and_move_to_location_send_the_same_arm_targets(self):
-    # (-60, 14) mm in the arm frame: move_to_xy_position's targets go through the joint state and
-    # back, so they may differ in the last bit; move_to_location sends them as computed.
+    # (-60, 14) mm in the arm frame: move_to_location moves across through move_to_xy_position.
     location = Coordinate(*self.arm._get_deck_frame_xy(x=-60.0, y=14.0), z=60.0)
     driver = self.arm._driver
     sent = []
@@ -492,8 +491,7 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
       with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
         await move
       sent.append(queue.call_args_list[0].kwargs["targets"][:2])
-    for xy_target, location_target in zip(sent[0], sent[1]):
-      self.assertAlmostEqual(xy_target[0], location_target[0], places=12)
+    self.assertEqual(sent[0], sent[1])
 
   async def test_stop_from_a_back_zone_parks_along_its_route_and_lowers_z(self):
     await self.arm.move_to_waste()

@@ -26,12 +26,16 @@ LOCK_AT_LEVEL_2 = (12, 30, bytes.fromhex("0000000000000000e17a14ae47e1ca3fe80300
 STATE_READ = (12, 33, b"")
 # The LED bar's commands on board 12: a colour, the animation stopped, the animation started.
 LED_BAR_COMMANDS = ((12, 13), (12, 16), (12, 17))
-# What a stop sends before the clamp: the sequencer aborted, each motor stopped.
+# What a stop sends before the clamp: the sequencer aborted, each motor stopped, then where each
+# stopped read by its encoder, as the arm was not brought up.
 HALT = [
   (0, 64, b""),
   (0, 24, bytes.fromhex("0000814e1be8b40a8a40")),
   (0, 24, bytes.fromhex("0100814e1be8b40a8a40")),
   (0, 24, bytes.fromhex("0200bb34be4f05c2be40")),
+  (0, 84, bytes.fromhex("0000")),
+  (0, 84, bytes.fromhex("0100")),
+  (0, 84, bytes.fromhex("0200")),
 ]
 # The states the device read after each command, as recorded.
 STATES_AFTER_RELEASE_WHILE_RELEASED = ["0600", "0600"]

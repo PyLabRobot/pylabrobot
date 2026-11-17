@@ -350,7 +350,8 @@ class InitializeTests(ArmTestCase):
     driver.default_read_timeout = 0.25
     with self.assertRaises(MantisTimeoutError):
       await driver.arm.initialize()
-    self.assertEqual(self.sent(link)[-2:], UNPOWER)
+    reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
+    self.assertEqual(self.sent(link)[-5:], UNPOWER + reads)
     self.assertFalse(driver.arm.is_initialized)
 
   async def test_without_the_arm_block_nothing_is_sent(self):
@@ -381,7 +382,8 @@ class InitializeTests(ArmTestCase):
       await driver.arm.initialize()
     sent = self.sent(link)
     self.assertNotIn(22, [command for _, command, _ in sent])
-    self.assertEqual(sent[-2:], UNPOWER)
+    reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
+    self.assertEqual(sent[-5:], UNPOWER + reads)
     self.assertFalse(driver.arm.is_initialized)
 
   async def test_a_motor_error_while_z_homes_fails_at_once_and_unpowers_the_arms(self):
@@ -404,7 +406,11 @@ class InitializeTests(ArmTestCase):
       with self.assertRaisesRegex(MantisMotionError, "reported error 9") as caught:
         await driver.arm.initialize()
     self.assertEqual((caught.exception.motor, caught.exception.code), (0, 9))
-    self.assertEqual(self.sent(link)[-2:], UNPOWER)
+    # Where the motors are, read as Z's home fails, then again after the arms are unpowered.
+    reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
+    sent = self.sent(link)
+    self.assertEqual(sent[-9][:2], (0, 21))
+    self.assertEqual(sent[-8:], reads + UNPOWER + reads)
 
   async def test_a_motor_that_slipped_stops_z_homing_before_it_starts(self):
     link = ArmLink(answers=make_answers())
@@ -681,7 +687,8 @@ class StopTests(ArmTestCase):
     link = self.close_link()
     driver = await self.set_up_arm(link=link)
     await driver.stop()
-    self.assertEqual(self.sent(link)[:4], HALT)
+    reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
+    self.assertEqual(self.sent(link)[:7], HALT + reads)
     self.assertNotIn(68, [command for _, command, _ in self.sent(link)])
 
   async def test_without_a_led_bar_stop_halts_and_shows_nothing(self):
@@ -951,6 +958,25 @@ class ZoneTests(ArmTestCase):
     )
     self.assertTrue(driver.arm.is_initialized)
 
+  async def test_a_failed_recover_from_fault_unpowers_the_arms_then_reads_where_they_are(self):
+    link = RaisingLink(answers=make_answers(), raises_on=(0, 17, b"\x02\x00"))
+    driver = await self.set_up_routes(link=link)
+    driver.arm._initialized = True
+    send_command = driver._send_command
+
+    async def wait_briefly_for_unpower(**kwargs):
+      # Unpowering the arms (command 19) is never answered: only it waits briefly.
+      if kwargs["command"] == 19:
+        kwargs["timeout"] = 0.25
+      return await send_command(**kwargs)
+
+    with mock.patch.object(driver, "_send_command", side_effect=wait_briefly_for_unpower):
+      with self.assertRaisesRegex(OSError, "device unplugged"):
+        await driver.arm.recover_from_fault()
+    reads = [(0, 84, struct.pack("<h", motor)) for motor in (0, 1, 2)]
+    self.assertEqual(self.sent(link)[-6:], [(0, 17, b"\x02\x00")] + UNPOWER + reads)
+    self.assertFalse(driver.arm.is_initialized)
+
   async def test_recover_from_fault_refuses_an_arm_not_brought_up(self):
     link = RouteLink(answers=make_answers())
     driver = await self.set_up_routes(link=link)
@@ -1193,10 +1219,12 @@ class MoveTests(ArmTestCase):
     driver._next_item = 15
     self.set_traverse_at_flag(driver=driver)
     await driver.arm.move_to_location(location=Coordinate(*DECK_POINT, REFERENCE_HEIGHT))
+    # As move_to_xy_position, then move_to_z_position, which reads where the head stands.
     self.assertEqual(
       tokens(self.sent(link)),
       ["0:27:0000", "0:27:0100", "0:27:0200", "0:84:0200", f"0:22:{Z_UP_MOVE.hex()}"]
-      + ["0:84:0200", "0:61:", "0:62:", f"0:68:{arms.hex()}", "0:61:", "0:62:", f"0:68:{z.hex()}"],
+      + ["0:84:0200", "0:61:", "0:62:", f"0:68:{arms.hex()}"]
+      + ["0:27:0000", "0:27:0100", "0:27:0200", "0:61:", "0:62:", f"0:68:{z.hex()}"],
     )
 
 
