@@ -1,8 +1,7 @@
 """The Mantis's parts, as resources, from the manufacturer's model.
 
 Sizes and positions come from ``manifest.json``. Each part's ``mesh`` is its ``.glb``: mm, Z up,
-in the part's own frame; the base's is the main box's frame. An arm link has no model file and is
-drawn as its box.
+in the part's own frame; the base's is the main box's frame.
 """
 
 import json
@@ -16,6 +15,16 @@ from pylabrobot.resources.resource import Resource
 with open(os.path.join(os.path.dirname(__file__), "manifest.json"), encoding="utf-8") as f:
   # The device frame of ``manifest.json``: its size, base file and modules.
   MANIFEST: Dict[str, Any] = dict(json.load(f)["frames"]["Mantis"])
+
+# The main box's size, in mm, from the manufacturer's model: up to the top plate's surface.
+SIZE_X, SIZE_Y, SIZE_Z = MANIFEST["size"]
+# The plate holder on the deck: an SBS footprint pushed into the back-left of the pin nest, in mm.
+PLATE_HOLDER_LOCATION = Coordinate(23.62, 15.02, 0.0)
+PLATE_HOLDER_SIZE_X, PLATE_HOLDER_SIZE_Y = 127.76, 85.48
+# Where the right motor turns, x and y in the device frame, and the arm's height, in mm; the arm
+# frame is the device frame moved there and mirrored in y.
+ARM_BASE_X, ARM_BASE_Y = MANIFEST["joints"]["base_right"]
+ARM_Z = MANIFEST["joints"]["arm_z"]
 
 
 def _mesh(*, file: str) -> Dict[str, str]:
@@ -65,7 +74,7 @@ def z_column(name: str) -> Resource:
 
 
 def arm_link(name: str, *, link: str) -> LinkBody:
-  """One of the arm's four links, drawn as its box. Motor 0 turns the right pair, motor 1 the left.
+  """One of the arm's four links. Motor 0 turns the right pair, motor 1 the left.
 
   Args:
     name: the resource name.
@@ -74,7 +83,7 @@ def arm_link(name: str, *, link: str) -> LinkBody:
   """
   part = MANIFEST["arm_links"][link]
   size_x, size_y, size_z = part["size"]
-  return LinkBody(
+  body = LinkBody(
     name=name,
     size_x=size_x,
     size_y=size_y,
@@ -82,8 +91,24 @@ def arm_link(name: str, *, link: str) -> LinkBody:
     proximal_joint=Coordinate(*part["proximal_joint"]),
     distal_joint=Coordinate(*part["distal_joint"]),
     category="mantis_arm_link",
-    model=f"formulatrix_mantis_{link}",
+    model=part["file"][: -len(".glb")],
   )
+  body.mesh = _mesh(file=part["file"])  # type: ignore[attr-defined]
+  return body
 
 
-__all__ = ["MANIFEST", "arm_link", "chip_rack", "z_column"]
+__all__ = [
+  "ARM_BASE_X",
+  "ARM_BASE_Y",
+  "ARM_Z",
+  "MANIFEST",
+  "PLATE_HOLDER_LOCATION",
+  "PLATE_HOLDER_SIZE_X",
+  "PLATE_HOLDER_SIZE_Y",
+  "SIZE_X",
+  "SIZE_Y",
+  "SIZE_Z",
+  "arm_link",
+  "chip_rack",
+  "z_column",
+]
