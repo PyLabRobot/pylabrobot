@@ -6,8 +6,8 @@ from typing import Dict, List, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_tip
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 
 # The logged prime: the probes into the wash station, each pump's full stroke and the air gap.
 LOGGED_Z = [-72401, -72247, -72407, -72736, -72571, -72338, -72298, -72356]

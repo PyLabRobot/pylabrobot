@@ -4,12 +4,12 @@ ran (BC190F tips at P24, 2026-10-20), against what Biomek sent for the same load
 from typing import Dict, List, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
-from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import shaft_of
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import TipCheckError
 from pylabrobot.beckman_coulter.biomek_i7.driver.features.pipettes import press_groups
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.layouts import place_labware
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import shaft_of
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_deck
 from pylabrobot.resources import set_tip_tracking
 from pylabrobot.resources.errors import HasTipError
 

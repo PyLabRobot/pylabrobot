@@ -48,12 +48,11 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7 import targeting
-from pylabrobot.beckman_coulter.biomek_i7.driver import motion
+from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
+from pylabrobot.beckman_coulter.biomek_i7.driver import liquid, motion
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import NotHomedError, TipCheckError
-from pylabrobot.beckman_coulter.biomek_i7 import units
-from pylabrobot.beckman_coulter.biomek_i7.driver import liquid
+from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import shaft_of, show_tip
 from pylabrobot.beckman_coulter.biomek_i7.techniques import (
   Conditioning,
   HeightFrom,
@@ -67,7 +66,6 @@ from pylabrobot.beckman_coulter.biomek_i7.units import (
   rate_to_field,
 )
 from pylabrobot.lib.liquid_handling.mix import Mix
-from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import shaft_of, show_tip
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.errors import HasTipError
