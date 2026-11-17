@@ -26,18 +26,17 @@ from pylabrobot.beckman_coulter.biomek_i7.deck import (
   deck_x,
   deck_y,
 )
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
-from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
-
-from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import RECORDING_ENV, simulated_boards
-from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.defaults import GENERIC_CONFIGURATION, GENERIC_RECORDING
+from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import (
   DeviceConfiguration,
   PodConfiguration,
 )
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.chassis import Chassis
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.door import Door
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
+from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
+from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import RECORDING_ENV, simulated_boards
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import cm, pod_model
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.heads import PROBES
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import (
@@ -553,9 +552,7 @@ def BiomekI7(
       path=simulator_recording,
       time_scale=motion_time_scale if simulate_motion_time else 0.0,
     )
-    driver = BiomekI7Driver(
-      declared_configuration_json=declared_configuration_json, boards=boards
-    )
+    driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json, boards=boards)
   elif driver is None:
     driver = BiomekI7Driver(declared_configuration_json=declared_configuration_json)
   return BiomekI7Device(driver=driver, deck=deck, name=name, state_json=state_json)

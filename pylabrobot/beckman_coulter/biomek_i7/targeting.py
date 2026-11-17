@@ -17,10 +17,14 @@ from typing import Optional, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck
 from pylabrobot.beckman_coulter.biomek_i7.driver.configuration import DeviceConfiguration
+from pylabrobot.beckman_coulter.biomek_i7.units import (  # noqa: F401  (re-exported)
+  MM_PER_CM,
+  BiomekPoint,
+  to_biomek,
+)
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
-from pylabrobot.beckman_coulter.biomek_i7.units import MM_PER_CM, BiomekPoint, to_biomek  # noqa: F401  (re-exported)
 
 
 def deck_position_of(deck: BiomekI7Deck, resource: Resource) -> Optional[ResourceHolder]:

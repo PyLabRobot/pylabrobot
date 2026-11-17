@@ -6,11 +6,11 @@ import unittest
 from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
-from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   generic_configuration,
   generic_deck,
 )
+from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 
 
 class ObstacleTests(unittest.TestCase):

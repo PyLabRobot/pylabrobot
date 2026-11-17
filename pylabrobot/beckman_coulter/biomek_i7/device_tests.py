@@ -4,8 +4,8 @@ import json
 import os
 import struct
 import unittest
-from unittest import mock
 from typing import Dict
+from unittest import mock
 
 from pylabrobot.beckman_coulter.biomek_i7.device import DECK_Z, RAIL_TOP_Z, BiomekI7
 from pylabrobot.beckman_coulter.biomek_i7.driver.simulator import RECORDING_ENV

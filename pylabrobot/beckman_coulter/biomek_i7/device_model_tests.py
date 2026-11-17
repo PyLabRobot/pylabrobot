@@ -15,14 +15,14 @@ from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.resource_model import MM_PER_CM
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.pods import gripper_model
-from pylabrobot.resources import Resource
-from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.rotation import Rotation
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
   generic_biomek,
   generic_configuration,
   generic_deck,
 )
+from pylabrobot.resources import Resource
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.rotation import Rotation
 
 
 def biomek_x_range(lh: BiomekI7Device, resource: Resource) -> g.Range:
