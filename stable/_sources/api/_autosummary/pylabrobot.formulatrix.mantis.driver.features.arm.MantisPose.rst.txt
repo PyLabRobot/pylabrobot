@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisPose
+============================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoclass:: MantisPose
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisPose.right_elbow_joint_location
+      ~MantisPose.left_elbow_joint_location
+      ~MantisPose.head_joint_location
+      ~MantisPose.nozzle_location
+      ~MantisPose.joints
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisPose.__init__
+   
+   

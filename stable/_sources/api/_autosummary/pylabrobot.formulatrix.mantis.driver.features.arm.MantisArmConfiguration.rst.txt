@@ -1,0 +1,46 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.features.arm.MantisArmConfiguration
+========================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. autoclass:: MantisArmConfiguration
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisArmConfiguration.approach_paths
+      ~MantisArmConfiguration.arm_type_rotation_degree
+      ~MantisArmConfiguration.arm_type_translation
+      ~MantisArmConfiguration.encoder_correction
+      ~MantisArmConfiguration.homing_position_a
+      ~MantisArmConfiguration.idle_routes
+      ~MantisArmConfiguration.offsets
+      ~MantisArmConfiguration.safe_xy_routes
+      ~MantisArmConfiguration.stage_offset_x
+      ~MantisArmConfiguration.stage_offset_y
+      ~MantisArmConfiguration.stage_origin
+      ~MantisArmConfiguration.stage_reference_height
+      ~MantisArmConfiguration.stage_transformation_matrix
+      ~MantisArmConfiguration.v3_arm_configuration
+      ~MantisArmConfiguration.zone_rectangles
+      ~MantisArmConfiguration.motor_limits
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisArmConfiguration.__init__
+   
+   

@@ -32,6 +32,14 @@ pylabrobot.formulatrix.mantis.driver.arm\_kinematics
 
    
    
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: class.rst
+   
+      MantisArmCoordinate
+   
    
 
    

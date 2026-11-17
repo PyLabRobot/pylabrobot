@@ -15,8 +15,9 @@ pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm
    .. autosummary::
       :toctree: .
    
-      ~MantisSimulationArm.default_arm_acceleration
-      ~MantisSimulationArm.default_arm_speed
+      ~MantisSimulationArm.default_minimum_traverse_height
+      ~MantisSimulationArm.default_xy_acceleration
+      ~MantisSimulationArm.default_xy_speed
       ~MantisSimulationArm.default_z_acceleration
       ~MantisSimulationArm.default_z_speed
       ~MantisSimulationArm.is_initialized
@@ -33,9 +34,17 @@ pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationArm
       ~MantisSimulationArm.__init__
       ~MantisSimulationArm.initialize
       ~MantisSimulationArm.is_xy_reachable
-      ~MantisSimulationArm.request_absolute_joint_position
-      ~MantisSimulationArm.request_head_position
-      ~MantisSimulationArm.request_joint_position
-      ~MantisSimulationArm.request_link_angles
+      ~MantisSimulationArm.move_to_joint_state
+      ~MantisSimulationArm.move_to_location
+      ~MantisSimulationArm.move_to_wash
+      ~MantisSimulationArm.move_to_waste
+      ~MantisSimulationArm.move_to_xy_position
+      ~MantisSimulationArm.move_to_z_position
+      ~MantisSimulationArm.park
+      ~MantisSimulationArm.recover_from_fault
+      ~MantisSimulationArm.request_absolute_joint_state
+      ~MantisSimulationArm.request_is_parked
+      ~MantisSimulationArm.request_joint_state
+      ~MantisSimulationArm.request_pose
    
    

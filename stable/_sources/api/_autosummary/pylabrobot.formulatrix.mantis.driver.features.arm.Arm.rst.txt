@@ -15,8 +15,9 @@ pylabrobot.formulatrix.mantis.driver.features.arm.Arm
    .. autosummary::
       :toctree: .
    
-      ~Arm.default_arm_acceleration
-      ~Arm.default_arm_speed
+      ~Arm.default_minimum_traverse_height
+      ~Arm.default_xy_acceleration
+      ~Arm.default_xy_speed
       ~Arm.default_z_acceleration
       ~Arm.default_z_speed
       ~Arm.is_initialized
@@ -33,9 +34,17 @@ pylabrobot.formulatrix.mantis.driver.features.arm.Arm
       ~Arm.__init__
       ~Arm.initialize
       ~Arm.is_xy_reachable
-      ~Arm.request_absolute_joint_position
-      ~Arm.request_head_position
-      ~Arm.request_joint_position
-      ~Arm.request_link_angles
+      ~Arm.move_to_joint_state
+      ~Arm.move_to_location
+      ~Arm.move_to_wash
+      ~Arm.move_to_waste
+      ~Arm.move_to_xy_position
+      ~Arm.move_to_z_position
+      ~Arm.park
+      ~Arm.recover_from_fault
+      ~Arm.request_absolute_joint_state
+      ~Arm.request_is_parked
+      ~Arm.request_joint_state
+      ~Arm.request_pose
    
    

@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.stage\_transform.compute\_arm\_frame\_position
+===================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.stage_transform
+
+.. autofunction:: compute_arm_frame_position

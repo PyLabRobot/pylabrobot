@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.arm.Arm.request\_is\_parked
+=========================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.arm
+
+.. automethod:: Arm.request_is_parked
