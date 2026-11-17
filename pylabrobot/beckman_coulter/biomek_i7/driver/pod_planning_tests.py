@@ -5,13 +5,13 @@ position a pod was left standing in."""
 import unittest
 from typing import List, Tuple
 
-from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
-from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import ROWS, COLUMNS, mandrel_name
 from pylabrobot.beckman_coulter.biomek_i7.driver import liquid_tests
+from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.head96 import COLUMNS, ROWS, mandrel_name
+from pylabrobot.beckman_coulter.biomek_i7.driver.planning import check, obstacles, pod_model, search
 from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 from pylabrobot.beckman_coulter.biomek_i7.resource_model.labware import biomek_tip
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_configuration
-from pylabrobot.beckman_coulter.biomek_i7.driver.planning import check, obstacles, pod_model, search
 
 Move = Tuple[dict, Tuple[str, ...]]
 
@@ -36,7 +36,11 @@ class PlannedMoveTests(PodMoveTest):
     head = self.pod(driver, "left").head96
     assert head is not None
     head._set_tips(
-      {mandrel_name(r, c): biomek_tip("T230", f"t_{r}_{c}") for r in range(ROWS) for c in range(COLUMNS)}
+      {
+        mandrel_name(r, c): biomek_tip("T230", f"t_{r}_{c}")
+        for r in range(ROWS)
+        for c in range(COLUMNS)
+      }
     )
 
   async def test_the_approach_exempts_nothing_and_the_descent_its_position(self) -> None:
@@ -143,9 +147,11 @@ class OpenSetTests(unittest.TestCase):
     open_set = search.OpenSet()
     for node, cost in pushes:
       open_set.push(node, cost)
-    out = []
+    out: List[str] = []
     while open_set:
-      out.append(open_set.pop())
+      node = open_set.pop()
+      assert isinstance(node, str)
+      out.append(node)
     return out
 
   def test_cheapest_first_and_equal_costs_in_arrival_order(self) -> None:
@@ -195,7 +201,9 @@ class OtherPodTests(PodMoveTest):
     limits = left._planning_x_limits()
     assert limits is not None
     bridge = g.bridge_x_range(d.geometry, limits[1])
-    self.assertAlmostEqual(bridge[1], g.bridge_x_range(od.geometry, od.limits["X"][1])[0] - (1 / 16 + 1 / 64))
+    self.assertAlmostEqual(
+      bridge[1], g.bridge_x_range(od.geometry, od.limits["X"][1])[0] - (1 / 16 + 1 / 64)
+    )
 
   async def test_a_busy_pod_is_walled_where_it_stands(self) -> None:
     driver = await self.homed()
@@ -242,7 +250,9 @@ class EscapeTests(unittest.TestCase):
     return obstacles.Obstacles((), (box,), positions)
 
   def test_a_part_in_a_position_rises_to_its_top(self) -> None:
-    out = check.escape(self.config, pod_model.PodState(30.0, None, self.pipettor), self.world(("P1",)))
+    out = check.escape(
+      self.config, pod_model.PodState(30.0, None, self.pipettor), self.world(("P1",))
+    )
     assert out is not None
     self.assertEqual((out.holders, out.gripper), (("P1",), 0.0))
     world = self.world(("P1",))
@@ -260,7 +270,9 @@ class EscapeTests(unittest.TestCase):
     self.assertEqual(out, check.Escape((), (0.0,), 0.0))
 
   def test_no_way_out_of_anything_but_a_position(self) -> None:
-    self.assertIsNone(check.escape(self.config, pod_model.PodState(30.0, None, self.pipettor), self.world(())))
+    self.assertIsNone(
+      check.escape(self.config, pod_model.PodState(30.0, None, self.pipettor), self.world(()))
+    )
 
   def test_only_the_span8_probes_inside_rise(self) -> None:
     # As the logged escapes: probes 2-4 left in the plate rise, the others stay.

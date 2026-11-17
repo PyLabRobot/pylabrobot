@@ -4,15 +4,8 @@ keeps per pod, and the deck model's clearance."""
 import unittest
 from typing import List
 
-from pylabrobot.beckman_coulter.biomek_i7.device import BiomekI7
-from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
-from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
-from pylabrobot.resources.corning.plates import cor_96_wellplate_360uL_Fb
 from pylabrobot.beckman_coulter.biomek_i7.driver.planning import traverse
-from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import (
-  generic_configuration,
-  generic_deck,
-)
+from pylabrobot.beckman_coulter.biomek_i7.driver.pod_move_tests import PodMoveTest
 
 
 class MoveOverTests(PodMoveTest):
@@ -134,13 +127,14 @@ class SpanTests(PodMoveTest):
     await pod.move_axes({"S": d.to_counts("S", 20.0), "Z1": d.to_counts("Z1", 20.0)})
     tops = pod._max_traverse_heights()
     clear = pod._clear
-    # Narrowing is not clear until the probes are at the top.
-    pod._clear = lambda moves, start=None: (
-      (  # type: ignore[method-assign]
+
+    def not_clear_until_probes_up(moves, start=None):  # type: ignore[no-untyped-def]
+      return (
         "S" not in moves[0] or pod.cpositions["Z1"][1] >= d.to_counts("Z1", tops["Z1"])
-      )
-      and clear(moves, start)
-    )
+      ) and clear(moves, start)
+
+    # Narrowing is not clear until the probes are at the top.
+    pod._clear = not_clear_until_probes_up  # type: ignore[method-assign]
     moves = record(pod)
     await pod._travel_gripper({"GY": d.to_counts("GY", 50.0)})
     self.assertEqual(moves[0], {"Z1": d.to_counts("Z1", tops["Z1"])})  # the one below the top
