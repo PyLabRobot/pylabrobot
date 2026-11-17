@@ -4,6 +4,7 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton import hamilton_core_gripper_tool, hamilton_tip_300uL
 from pylabrobot.resources.n_channel_pipettes import TipMountingShaft
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip import Tip
 
 
 class TestTipMountingShaft(unittest.TestCase):
@@ -35,6 +36,7 @@ class ShaftSavesItsTip(unittest.TestCase):
     other.load_all_state(state)
     self.assertTrue(other.has_tip())
     assert other.tip is not None
+    assert isinstance(other.tip, Tip)
     self.assertEqual(other.tip.serialize(), tip.serialize())
     self.assertEqual(other.tip.location, tip.location)
     self.assertEqual(other.tip.tracker.get_used_volume(), 120)  # the tip's own state, after it
