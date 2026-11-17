@@ -4,8 +4,8 @@ import asyncio
 import unittest
 
 from pylabrobot.beckman_coulter.biomek_i7 import units as u
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_driver
+from pylabrobot.resources.coordinate import Coordinate
 
 
 class LengthAndFrameTests(unittest.TestCase):
