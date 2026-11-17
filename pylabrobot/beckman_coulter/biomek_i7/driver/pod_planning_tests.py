@@ -149,9 +149,9 @@ class OpenSetTests(unittest.TestCase):
       open_set.push(node, cost)
     out: List[str] = []
     while open_set:
-      node = open_set.pop()
-      assert isinstance(node, str)
-      out.append(node)
+      popped = open_set.pop()
+      assert isinstance(popped, str)
+      out.append(popped)
     return out
 
   def test_cheapest_first_and_equal_costs_in_arrival_order(self) -> None:
