@@ -1,13 +1,13 @@
 """What the package's tests build their simulated Biomek i7 from: the generic one in `defaults/`,
 named explicitly (never through `$BIOMEK_I7_SIMULATOR_RECORDING`). Not a test module itself."""
 
+import asyncio
 import atexit
 import copy
 import json
 import shutil
 import tempfile
 from pathlib import Path
-import asyncio
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 from pylabrobot.beckman_coulter.biomek_i7.deck import BiomekI7Deck

@@ -42,8 +42,8 @@ from pylabrobot.beckman_coulter.biomek_i7.driver.protocol import (
 from pylabrobot.io.usb import USB
 
 if TYPE_CHECKING:
-  from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
   from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
+  from pylabrobot.beckman_coulter.biomek_i7.driver.master import BiomekI7Driver
 
 # Names the recording the simulator answers from (identity and sensor reads, recorded at an
 # instrument's cold start) when no path is given. A generic one ships in `defaults/`

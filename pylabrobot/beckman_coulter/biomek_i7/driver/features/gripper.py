@@ -24,10 +24,9 @@ import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pylabrobot.beckman_coulter.biomek_i7 import targeting
+from pylabrobot.beckman_coulter.biomek_i7 import targeting, units
 from pylabrobot.beckman_coulter.biomek_i7.driver import pod_geometry as g
 from pylabrobot.beckman_coulter.biomek_i7.driver import protocol as p
-from pylabrobot.beckman_coulter.biomek_i7 import units
 from pylabrobot.beckman_coulter.biomek_i7.driver.errors import GripCheckError
 from pylabrobot.beckman_coulter.biomek_i7.units import MM_PER_CM
 from pylabrobot.beckman_coulter.biomek_i7.units import optional_cm as _cm
