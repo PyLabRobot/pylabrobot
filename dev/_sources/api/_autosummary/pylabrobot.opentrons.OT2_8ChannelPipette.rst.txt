@@ -15,10 +15,12 @@ pylabrobot.opentrons.OT2\_8ChannelPipette
    .. autosummary::
       :toctree: .
    
+      ~OT2_8ChannelPipette.empty_nozzle_clearance
       ~OT2_8ChannelPipette.has_tip
       ~OT2_8ChannelPipette.maximum_volume
       ~OT2_8ChannelPipette.minimum_volume
       ~OT2_8ChannelPipette.num_channels
+      ~OT2_8ChannelPipette.tip_channels
       ~OT2_8ChannelPipette.tips
    
    

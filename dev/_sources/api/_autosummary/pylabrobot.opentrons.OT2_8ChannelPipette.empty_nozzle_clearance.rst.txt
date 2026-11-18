@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2\_8ChannelPipette.empty\_nozzle\_clearance
+==================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: OT2_8ChannelPipette.empty_nozzle_clearance

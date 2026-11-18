@@ -63,7 +63,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip" href="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip.html" />
+    <link rel="next" title="pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance" href="pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance.html" />
     <link rel="prev" title="pylabrobot.opentrons.OT2SingleChannelPipette.return_tip" href="pylabrobot.opentrons.OT2SingleChannelPipette.return_tip.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
@@ -590,23 +590,31 @@
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_OT2Pipette</span></code></p>
 <p>An eight-channel OT-2 pipette with a rigid nozzle layout.</p>
 <p>Instances are discovered and created by <a class="reference internal" href="pylabrobot.opentrons.OT2.setup.html#pylabrobot.opentrons.OT2.setup" title="pylabrobot.opentrons.OT2.setup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">OT2.setup()</span></code></a>. Pickup targets run
-consecutively from nozzle 0 toward nozzle 7. Subsequent targets match the mounted
-tips in nozzle order. Volume, flow rate, liquid height, and offset
-apply equally to every mounted tip.</p>
+consecutively from nozzle 0 toward nozzle 7, on the back nozzles or on the front ones
+(<code class="docutils literal notranslate"><span class="pre">use_channels</span></code>). Subsequent targets match the mounted tips in nozzle order. Volume,
+flow rate, liquid height, and offset apply equally to every mounted tip.</p>
+<p>With fewer than eight tips, every move keeps the nozzles without a tip
+<code class="docutils literal notranslate"><span class="pre">empty_nozzle_clearance</span></code> above whatever stands under them in the deck model.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip.html#pylabrobot.opentrons.OT2_8ChannelPipette.has_tip" title="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_tip</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance.html#pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance" title="pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">empty_nozzle_clearance</span></code></a></p></td>
+<td><p>How far above whatever stands under them the nozzles without a tip are kept, in mm.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip.html#pylabrobot.opentrons.OT2_8ChannelPipette.has_tip" title="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_tip</span></code></a></p></td>
 <td><p>Whether the pipette holds a tip according to commands issued by this object.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.maximum_volume.html#pylabrobot.opentrons.OT2_8ChannelPipette.maximum_volume" title="pylabrobot.opentrons.OT2_8ChannelPipette.maximum_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">maximum_volume</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.maximum_volume.html#pylabrobot.opentrons.OT2_8ChannelPipette.maximum_volume" title="pylabrobot.opentrons.OT2_8ChannelPipette.maximum_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">maximum_volume</span></code></a></p></td>
 <td><p>Maximum supported transfer volume, in µL.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.minimum_volume.html#pylabrobot.opentrons.OT2_8ChannelPipette.minimum_volume" title="pylabrobot.opentrons.OT2_8ChannelPipette.minimum_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">minimum_volume</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.minimum_volume.html#pylabrobot.opentrons.OT2_8ChannelPipette.minimum_volume" title="pylabrobot.opentrons.OT2_8ChannelPipette.minimum_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">minimum_volume</span></code></a></p></td>
 <td><p>Minimum supported transfer volume, in µL.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.num_channels.html#pylabrobot.opentrons.OT2_8ChannelPipette.num_channels" title="pylabrobot.opentrons.OT2_8ChannelPipette.num_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_channels</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.num_channels.html#pylabrobot.opentrons.OT2_8ChannelPipette.num_channels" title="pylabrobot.opentrons.OT2_8ChannelPipette.num_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_channels</span></code></a></p></td>
 <td><p>Eight nozzles at 9 mm pitch.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.tip_channels.html#pylabrobot.opentrons.OT2_8ChannelPipette.tip_channels" title="pylabrobot.opentrons.OT2_8ChannelPipette.tip_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tip_channels</span></code></a></p></td>
+<td><p>The nozzles carrying the mounted tips, back to front, or an empty tuple without tips.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tips</span></code></a></p></td>
 <td><p>Mounted tips in nozzle order, or an empty tuple when no tips are mounted.</p></td>
@@ -641,8 +649,8 @@ apply equally to every mounted tip.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.move_to.html#pylabrobot.opentrons.OT2_8ChannelPipette.move_to" title="pylabrobot.opentrons.OT2_8ChannelPipette.move_to"><code class="xref py py-obj docutils literal notranslate"><span class="pre">move_to</span></code></a>(location[, speed, minimum_z_height, ...])</p></td>
 <td><p>Move to an absolute robot-frame coordinate, then retract to at least traversal height.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips</span></code></a>(tip_spots[, offset])</p></td>
-<td><p>Pick up consecutive tips using nozzles starting at 0, then retract.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.pick_up_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_tips</span></code></a>(tip_spots[, offset, use_channels])</p></td>
+<td><p>Pick up consecutive tips on the back or the front nozzles, then retract.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.opentrons.OT2_8ChannelPipette.return_tips.html#pylabrobot.opentrons.OT2_8ChannelPipette.return_tips" title="pylabrobot.opentrons.OT2_8ChannelPipette.return_tips"><code class="xref py py-obj docutils literal notranslate"><span class="pre">return_tips</span></code></a>([offset, allow_nonzero_volume])</p></td>
 <td><p>Return all mounted tips to their pickup positions, then retract.</p></td>
@@ -684,11 +692,11 @@ apply equally to every mounted tip.</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.opentrons.OT2_8ChannelPipette.has_tip.html"
+       href="pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.opentrons.OT2_8ChannelPipette.has_tip</p>
+        <p class="prev-next-title">pylabrobot.opentrons.OT2_8ChannelPipette.empty_nozzle_clearance</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

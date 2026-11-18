@@ -30,6 +30,7 @@ pylabrobot.opentrons.OpentronsRun
    
       ~OpentronsRun.__init__
       ~OpentronsRun.aspirate_in_place
+      ~OpentronsRun.configure_nozzle_layout
       ~OpentronsRun.define_labware
       ~OpentronsRun.discard_tip_in_fixed_trash
       ~OpentronsRun.dispense_in_place
