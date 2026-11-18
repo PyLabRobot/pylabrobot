@@ -347,8 +347,48 @@ sensor temperature or that post-heating is disabled.
 
 Internal preparation, upload, and execution helpers do not emit extra lifecycles during a public
 execution. `stop()` calls public `stop_protocol()` when connected, producing a nested stop-control
-lifecycle followed by the outer transport-lifecycle result. Reads, progress callbacks, and
-`wait_for_completion()` are not instrumented; late callbacks do not reopen a failed lifecycle.
+lifecycle followed by the outer transport-lifecycle result. Reads and `wait_for_completion()`
+do not emit operation lifecycles; late callbacks do not reopen a failed lifecycle.
+
+### Thermocycler temperature observations
+
+`thermocycler.temperature_samples` is an instantaneous observation, with **no lifecycle suffix**.
+ODTC emits one event per validated SiLA data callback while its firmware method remains pending.
+Consumers may ignore this event without losing the operation-level execution lifecycle.
+
+| Field | Meaning |
+| --- | --- |
+| `device` | Named controller, using the same device reference as its operation events. |
+| `resources` | Directly loaded resource references captured when this method was dispatched; empty if unloaded. |
+| `execution_id` | Unique opaque ID for one firmware method invocation, distinct from the enclosing public operation ID. |
+| `method_name` | The actual firmware method name. |
+| `method_kind` | `"preparation"` or `"protocol"`; identifies the method's role without inspecting reserved names. |
+| `samples` | Ordered list of samples from this callback, in the shape below. |
+
+Each sample contains `elapsed` in **seconds** and `target_temperature`, `current_temperature`,
+and `lid_temperature` in **degrees Celsius**. `current_temperature` is the reported block
+measurement, not sample-liquid temperature. Firmware milliseconds and hundredths of a degree
+are converted at the XML boundary. All samples are preserved; the driver neither interpolates
+nor infers a cycle, step, ramp, or hold. It does not deduplicate overlapping batches.
+
+`elapsed` is the device-reported method-relative time. Preparation and protocol execution have
+separate `execution_id` values and may restart their elapsed clock even within one public
+`execute_protocol` operation. Event `timestamp` is host receipt/publication time, not the
+measurement time of each sample. Do not plot all samples at that receipt timestamp or assume
+elapsed time starts at the public operation's `started` timestamp.
+
+The observation retains the originating operation's `context.operation_id` and caller context
+(for example a run ID), even when delivered by an unrelated HTTP callback task. The driver
+captures its event bus and resource references at method dispatch with observation active.
+No bus/subscriber is required for execution or latest-progress caching. Telemetry does not
+enable additional instrument traffic: the driver already requests method data callbacks.
+
+Cancelling or timing out the public waiter does not stop the instrument. Its pending command
+may continue to emit observations with the original correlation after the operation's `failed`
+event. Command completion, an acknowledged stop, a session fault, or disconnect ends that
+command's telemetry routing; late callbacks do not emit more samples for the ended execution.
+The driver keeps only the latest progress sample for `request_progress()`; consumers own any
+history. No per-sample Slack, plotting, or other presentation policy is part of this contract.
 
 ## Shaking and environmental control
 

@@ -3,9 +3,16 @@
 import asyncio
 import json
 import unittest
+from contextvars import Context
 from unittest.mock import AsyncMock, patch
 
-from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
+from pylabrobot.events import (
+  EventBus,
+  PLREvent,
+  event_context,
+  set_default_event_bus,
+  use_event_bus,
+)
 from pylabrobot.inheco.odtc import (
   ODTC,
   ODTCProtocol,
@@ -14,7 +21,8 @@ from pylabrobot.inheco.odtc import (
   ODTCStep,
   compile_protocol,
 )
-from pylabrobot.inheco.odtc.tests.odtc_tests import MockODTC, profile
+from pylabrobot.inheco.odtc.tests.odtc_tests import FIXTURES, MockODTC, profile
+from pylabrobot.inheco.soap import soap_encode
 from pylabrobot.inheco.transport.sila import SiLAError
 from pylabrobot.resources import Plate
 
@@ -288,3 +296,140 @@ class ODTCEventTests(unittest.IsolatedAsyncioTestCase):
     _, failed = self.lifecycle("execute_protocol", "failed")
     self.assertEqual(failed.data["error_type"], "SiLAError")
     self.assertEqual(failed.data["error_message"], str(raised.exception))
+
+  async def send_samples(self, request_id: int) -> None:
+    """Deliver a real-format callback through the SiLA dispatcher."""
+    await self.odtc._sila._handle_event(
+      soap_encode(
+        "DataEvent",
+        {
+          "requestId": request_id,
+          "dataValue": (FIXTURES / "firmware_manual_data_event.xml").read_text(),
+        },
+        method_ns="http://sila.coop",
+      ).encode()
+    )
+
+  async def test_early_telemetry_separates_preparation_and_protocol_executions(self) -> None:
+    """Callbacks before HTTP acceptance retain every sample and the parent operation ID."""
+    plate = Plate("pcr_plate", 127.76, 85.48, 15, ordered_items={})
+    self.odtc.plate_holder.assign_child_resource(plate)
+    self.fake.emit_progress = True
+    with use_event_bus(self.bus), event_context(frame_run_id="pcr-run"):
+      await self.odtc.run_protocol(profile(), volume=60, lid_temperature=110)
+    start = self.events[0]
+    batches = [e for e in self.events if e.name == "thermocycler.temperature_samples"]
+    self.assertEqual(len(batches), 2)
+    self.assertNotEqual(batches[0].data["execution_id"], batches[1].data["execution_id"])
+    self.assertEqual([e.data["method_kind"] for e in batches], ["preparation", "protocol"])
+    self.assertEqual(
+      [e.data["method_name"] for e in batches], ["plr_currentPreMethod", "plr_currentProtocol"]
+    )
+    for batch in batches:
+      self.assertEqual(batch.context["frame_run_id"], "pcr-run")
+      self.assertEqual(batch.context["operation_id"], start.context["operation_id"])
+      self.assertEqual(batch.data["device"], {"name": "odtc", "type": "ODTC"})
+      self.assertEqual(batch.data["resources"][0]["name"], plate.name)
+      self.assertEqual(len(batch.data["samples"]), 5)
+      self.assertEqual(
+        batch.data["samples"][0],
+        {
+          "elapsed": 0.19,
+          "target_temperature": 21.42,
+          "current_temperature": 21.39,
+          "lid_temperature": 23.68,
+        },
+      )
+      json.dumps(batch.as_dict())
+    latest = await self.odtc.request_progress()
+    assert latest is not None
+    self.assertEqual(latest.elapsed, 4.355)
+    self.assertEqual(latest.current_temperature, 16.56)
+    self.assertEqual(self.events[-1].name, "thermocycler.execute_protocol.completed")
+
+  async def test_telemetry_restores_origin_after_cancellation_and_ignores_late_callbacks(
+    self,
+  ) -> None:
+    """A callback task's unrelated bus/run cannot steal samples from a still-running method."""
+    self.fake.hold_name = "plr_currentPreMethod"
+    other_bus = EventBus()
+    other_events: list[PLREvent] = []
+    other_bus.subscribe(other_events.append)
+    # Exercise capture of the process default bus, not only a task-local use_event_bus.
+    previous = set_default_event_bus(self.bus)
+    self.addCleanup(set_default_event_bus, previous)
+    with event_context(frame_run_id="original-run"):
+      task = asyncio.create_task(self.odtc.prepare(98, 110))
+    await asyncio.wait_for(self.fake.started.wait(), 1)
+    request_id = self.fake.running_id
+    assert request_id is not None
+    task.cancel()
+    with self.assertRaises(asyncio.CancelledError):
+      await task
+    parent_id = self.events[0].context["operation_id"]
+    set_default_event_bus(other_bus)
+
+    async def callback() -> None:
+      """Model an HTTP server callback with an unrelated caller context."""
+      with use_event_bus(other_bus), event_context(frame_run_id="other-run"):
+        await self.send_samples(request_id)
+
+    # create_task(context=...) requires Python 3.11; Context.run also supports PLR's 3.10 floor.
+    await Context().run(asyncio.create_task, callback())
+    self.assertEqual(other_events, [])
+    batch = self.events[-1]
+    self.assertEqual(batch.name, "thermocycler.temperature_samples")
+    self.assertEqual(batch.context["frame_run_id"], "original-run")
+    self.assertEqual(batch.context["operation_id"], parent_id)
+    self.assertNotIn("StopMethod", self.fake.commands)
+    count = len(self.events)
+    await self.fake.complete()
+    await self.send_samples(request_id)
+    await self.send_samples(request_id + 999)
+    self.assertEqual(len(self.events), count)
+    self.assertEqual(other_events, [])
+
+  async def test_acknowledged_stop_ends_telemetry_before_future_cleanup_runs(self) -> None:
+    """Late callbacks cannot emit observations after an acknowledged stop."""
+    self.fake.hold_name = "plr_currentPreMethod"
+    with use_event_bus(self.bus):
+      task = asyncio.create_task(self.odtc.prepare(98, 110))
+      await asyncio.wait_for(self.fake.started.wait(), 1)
+      request_id = self.fake.running_id
+      assert request_id is not None
+      await self.send_samples(request_id)
+      await self.odtc.stop_protocol()
+      await self.send_samples(request_id)
+      with self.assertRaises(ODTCProtocolStopped):
+        await task
+    batches = [event for event in self.events if event.name == "thermocycler.temperature_samples"]
+    self.assertEqual(len(batches), 1)
+
+  async def test_telemetry_listener_failure_and_no_bus_leave_progress_and_commands_unchanged(
+    self,
+  ) -> None:
+    """Telemetry is optional observation and creates no additional hardware queries."""
+    self.fake.emit_progress = True
+
+    def broken_listener(event: PLREvent) -> None:
+      """Fail only telemetry consumption, leaving lifecycle observation intact."""
+      if event.name == "thermocycler.temperature_samples":
+        raise RuntimeError("telemetry subscriber failed")
+
+    self.bus.subscribe(broken_listener)
+    with use_event_bus(self.bus), self.assertLogs("pylabrobot.events.bus", level="ERROR"):
+      await self.odtc.run_protocol(profile(), volume=60, lid_temperature=110)
+    self.assertEqual(self.events[-1].name, "thermocycler.execute_protocol.completed")
+    commands = list(self.fake.commands[5:])  # Exclude initial setup.
+    self.fake.commands.clear()
+    self.events.clear()
+    previous = set_default_event_bus(None)
+    try:
+      await self.odtc.run_protocol(profile(), volume=60, lid_temperature=110)
+    finally:
+      set_default_event_bus(previous)
+    self.assertEqual(self.events, [])
+    self.assertEqual(self.fake.commands, commands)
+    latest = await self.odtc.request_progress()
+    assert latest is not None
+    self.assertEqual(latest.current_temperature, 16.56)

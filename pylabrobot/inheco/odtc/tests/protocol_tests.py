@@ -27,7 +27,7 @@ from pylabrobot.inheco.odtc.protocol import (
   calculate_overshoot,
   volume_to_fluid_quantity,
 )
-from pylabrobot.inheco.odtc.xml import parse_progress, parse_sensor_values
+from pylabrobot.inheco.odtc.xml import parse_progress, parse_progress_samples, parse_sensor_values
 
 FIXTURES = Path(__file__).with_name("fixtures")
 
@@ -171,6 +171,30 @@ class ProtocolTests(unittest.TestCase):
       ),
       (4.355, 15.66, 16.56, 24.63),
     )
+
+  def test_progress_preserves_all_samples_and_latest_api(self) -> None:
+    """Batched firmware values retain ordering and convert native units exactly once."""
+    xml = (FIXTURES / "firmware_manual_data_event.xml").read_text()
+    samples = parse_progress_samples(xml)
+    self.assertEqual([s.elapsed for s in samples], [0.19, 1.286, 2.314, 3.335, 4.355])
+    self.assertEqual([s.target_temperature for s in samples], [21.42, 20.0, 17.8, 15.8, 15.66])
+    self.assertEqual([s.current_temperature for s in samples], [21.39, 20.64, 19.31, 17.91, 16.56])
+    self.assertEqual([s.lid_temperature for s in samples], [23.68, 23.74, 23.97, 24.23, 24.63])
+    self.assertEqual(parse_progress(xml), samples[-1])
+
+  def test_progress_rejects_malformed_earlier_sample_and_unequal_series(self) -> None:
+    """An otherwise valid last sample cannot hide a malformed batch."""
+    xml = (FIXTURES / "firmware_manual_data_event.xml").read_text()
+    with self.assertRaises(ValueError):
+      parse_progress_samples(xml.replace("190&lt;", "invalid&lt;", 1))
+    outer = ET.fromstring(xml)
+    data = ET.fromstring(outer[0].text)
+    values = data.find(".//seriesValueSet")
+    assert values is not None
+    values.remove(values[0])
+    outer[0].text = ET.tostring(data, encoding="unicode")
+    with self.assertRaisesRegex(ValueError, "matching nonempty"):
+      parse_progress_samples(ET.tostring(outer, encoding="unicode"))
 
   def test_malformed_progress_is_not_reported_as_zero(self):
     xml = (FIXTURES / "firmware_manual_data_event.xml").read_text()

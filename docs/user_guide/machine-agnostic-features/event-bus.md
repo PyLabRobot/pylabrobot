@@ -112,7 +112,7 @@ diagnostic events preserve controller and transport activity for debugging.
 
 EventBus adoption is incremental. The current implementation instruments the following public
 frontends. Each listed semantic operation emits `started`, `completed`, and `failed` lifecycle
-events.
+events; separately listed observations have no lifecycle suffix.
 
 | Frontend | Canonical semantic operations |
 | --- | --- |
@@ -124,7 +124,7 @@ events.
 | `legacy.plate_reading.Imager` | `imager.capture` |
 | `legacy.plate_reading.ImageReader` | inherited PlateReader and Imager operations, without duplicate lifecycle records |
 | `legacy.thermocycling.Thermocycler` | lid open/close; block/lid temperature set/deactivate; protocol submission |
-| `inheco.ODTC` | setup/stop; drawer open/close; block/lid preparation; protocol upload/execution; temperature-control stop |
+| `inheco.ODTC` | setup/stop; drawer open/close; block/lid preparation; protocol upload/execution; temperature-control stop; `thermocycler.temperature_samples` observations |
 | `legacy.shaking.Shaker` | `shaker.shake`, `shaker.stop_shaking` |
 | `legacy.temperature_controlling.TemperatureController` | set temperature, wait for temperature, deactivate |
 | `legacy.centrifuge.Centrifuge` | `centrifuge.spin` |
@@ -190,9 +190,14 @@ The direct Inheco ODTC uses `thermocycler.open_door` and `close_door` for drawer
 `prepare` for combined block/lid preparation, and `execute_protocol` for an awaited thermal run.
 Its execution completion means the method finished, although configured post-heating may remain
 active. `stop_protocol` records an acknowledged temperature-control stop. Cancelling a wait or
-timing out emits a failed operation but does not stop the device. Read-only polling and SiLA
-progress callbacks do not emit semantic events. See the
+timing out emits a failed operation but does not stop the device. Read-only polling does not
+emit semantic events. SiLA data callbacks emit `thermocycler.temperature_samples` batches with
+method-relative elapsed seconds and target/block/lid temperatures in degrees Celsius. They
+retain the originating run/operation context and identify preparation and protocol executions
+separately. Subscribe before dispatching the method to collect observations; `request_progress()`
+continues to return just the latest sample. See the
 [ODTC event contract](../../contributor_guide/event-schemas.md#direct-thermocycler-operations-odtc)
+and [temperature observations](../../contributor_guide/event-schemas.md#thermocycler-temperature-observations)
 for payloads, units, cached calls, and completion semantics.
 
 ### Shaker and environmental controllers

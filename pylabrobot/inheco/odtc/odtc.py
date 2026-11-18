@@ -6,13 +6,19 @@ import asyncio
 import logging
 import math
 import xml.etree.ElementTree as ET
-from typing import Any
+from contextvars import copy_context
+from typing import Any, Literal
+from uuid import uuid4
 
 from pylabrobot.events import (
+  EventBus,
   device_reference,
+  emit_event,
   event_operation,
+  get_event_bus,
   is_event_bus_active,
   resource_reference,
+  use_event_bus,
 )
 from pylabrobot.inheco.odtc.protocol import (
   DEFAULT_APPLY_OVERSHOOT,
@@ -35,7 +41,7 @@ from pylabrobot.inheco.odtc.protocol import (
 from pylabrobot.inheco.odtc.xml import (
   method_set_to_xml,
   parse_method_set,
-  parse_progress,
+  parse_progress_samples,
   parse_sensor_values,
 )
 from pylabrobot.inheco.transport.sila import (
@@ -96,14 +102,37 @@ class ODTC:
     """Last command-confirmed door state; None means unknown, not a sensor reading."""
     return self._door_open
 
-  def _on_data(self, request_id: int, data: str) -> None:
-    """Store one measured sample, including callbacks that precede HTTP acceptance."""
+  def _on_data(
+    self,
+    request_id: int,
+    data: str,
+    *,
+    observation: dict[str, Any] | None = None,
+    event_bus: EventBus | None = None,
+  ) -> None:
+    """Cache the latest sample and publish an observed batch on its originating bus."""
     current = self._execution
     if self._sila.pending_command_name(request_id) != "ExecuteMethod" and (
       current is None or current.request_id != request_id
     ):
       return
-    self._progress_by_request[request_id] = parse_progress(data)
+    samples = parse_progress_samples(data)
+    self._progress_by_request[request_id] = samples[-1]
+    if observation and event_bus is not None:
+      with use_event_bus(event_bus):
+        emit_event(
+          "thermocycler.temperature_samples",
+          **observation,
+          samples=[
+            {
+              "elapsed": sample.elapsed,
+              "target_temperature": sample.target_temperature,
+              "current_temperature": sample.current_temperature,
+              "lid_temperature": sample.lid_temperature,
+            }
+            for sample in samples
+          ],
+        )
 
   def _on_status(self, event: ET.Element) -> None:
     """Surface device-wide faults and invalidate state that can no longer be trusted."""
@@ -358,11 +387,30 @@ class ODTC:
     if generation != self._stop_generation:
       raise ODTCProtocolStopped("ODTC workflow was stopped")
 
-  async def _execute(self, name: str, timeout: float | None, generation: int) -> None:
+  async def _execute(
+    self,
+    name: str,
+    timeout: float | None,
+    generation: int,
+    *,
+    method_kind: Literal["preparation", "protocol"],
+  ) -> None:
     """Execute a named method and retain its result for subsequent waiters."""
     self._progress_by_request = {}
     self._check_stopped(generation)
-    self._execution = await self._sila.start_command("ExecuteMethod", methodName=name)
+    observation = self._event_data(
+      execution_id=uuid4().hex, method_name=name, method_kind=method_kind
+    )
+    event_bus = get_event_bus()
+    context = copy_context()
+
+    def on_data(request_id: int, data: str) -> None:
+      """Restore invocation context even when an HTTP callback runs in an unrelated task."""
+      context.run(self._on_data, request_id, data, observation=observation, event_bus=event_bus)
+
+    self._execution = await self._sila.start_command(
+      "ExecuteMethod", methodName=name, on_data=on_data
+    )
     if generation != self._stop_generation and not self._execution.future.done():
       self._execution.future.set_exception(ODTCProtocolStopped("ODTC protocol was stopped"))
     self._check_stopped(generation)
@@ -391,7 +439,7 @@ class ODTC:
     await self._upload(
       ODTCMethodSet(premethods=[premethod]), dynamic_pre_method_duration=dynamic_pre_method_duration
     )
-    await self._execute(premethod.name, timeout, generation)
+    await self._execute(premethod.name, timeout, generation, method_kind="preparation")
     self._prepared = targets
 
   async def prepare(
@@ -435,7 +483,7 @@ class ODTC:
         method.start_temperature, method.start_lid_temperature, timeout, dynamic, generation
       )
       self._prepared = None
-      await self._execute(method.name, timeout, generation)
+      await self._execute(method.name, timeout, generation, method_kind="protocol")
       if method.post_heating:
         final_step = method.steps[-1]
         self._prepared = (final_step.temperature, final_step.lid_temperature)
