@@ -1,5 +1,6 @@
 """Mantis device tests: the parts tree, and the arm model following the moves."""
 
+import math
 import os
 import unittest
 from unittest import mock
@@ -49,6 +50,39 @@ class ArmModelTests(unittest.IsolatedAsyncioTestCase):
       with self.subTest(link=name):
         self.assertAlmostEqual(link.rotation.z, posed.arm_links[name].rotation.z)
         self.assertNotAlmostEqual(link.rotation.z, idle.arm_links[name].rotation.z)
+
+  def test_the_five_bar_published_places_every_link(self):
+    device = Mantis(simulation=True)
+    theta_1, theta_2 = compute_joint_angles(location=MantisArmCoordinate(x=-30.0, y=45.0, z=None))
+    device._update_arm_model(theta_1=theta_1, theta_2=theta_2, z=0.0)
+    five_bar = device.serialize_state()["five_bar"]
+    lengths, bases, angles = five_bar["lengths"], five_bar["bases"], five_bar["angles"]
+    ends = {
+      side: (
+        bases[side][0] + lengths[f"{side}_short_arm"] * math.cos(math.radians(angles[side])),
+        bases[side][1] + lengths[f"{side}_short_arm"] * math.sin(math.radians(angles[side])),
+      )
+      for side in ("right", "left")
+    }
+    for side in ("right", "left"):
+      short = device.arm_links[f"{side}_short_arm"]
+      with self.subTest(side=side):
+        self.assertAlmostEqual(short.rotation.z, angles[side] % 360)
+        elbow = short.get_location_wrt(device.z_column)
+        turned = short.rotation.z
+        distal = short.distal_joint
+        assert distal is not None
+        self.assertAlmostEqual(
+          elbow.x
+          + distal.x * math.cos(math.radians(turned))
+          - distal.y * math.sin(math.radians(turned)),
+          ends[side][0],
+          places=3,
+        )
+    # The head's side picks the solution the device drew: both long links reach it.
+    gap = math.dist(ends["right"], ends["left"])
+    self.assertLess(gap, lengths["right_long_arm"] + lengths["left_long_arm"])
+    self.assertIn(five_bar["side_of_head"], (-1.0, 1.0))
 
 
 if __name__ == "__main__":
