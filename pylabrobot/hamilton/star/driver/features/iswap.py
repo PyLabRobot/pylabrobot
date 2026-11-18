@@ -25,10 +25,22 @@ from typing import (
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import NoElementError, STARFirmwareError
 from pylabrobot.hamilton.star.resource_model import iSWAPHead
+from pylabrobot.lib.pick_and_place.assignment import assign_placed_resource
+from pylabrobot.lib.pick_and_place.locations import (
+  get_grip_height,
+  get_grip_location,
+  get_pick_location,
+  get_place_location,
+  get_rotation_wrt,
+  get_rotation_wrt_destination,
+)
+from pylabrobot.lib.spatial.occupancy import get_resource_at_location
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.manipulator import LinkBody
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 if TYPE_CHECKING:
   from pylabrobot.hamilton.star.driver.features.x_arm import XArm
@@ -739,6 +751,9 @@ class iSWAP:
     can infer from the commands it sent."""
     self.link_1: Optional[LinkBody] = None
     self.gripper: Optional[MechanicalGripper] = None
+    self._grip_height: Optional[float] = None
+    self._holding_resource_width: Optional[float] = None
+    self._held_resource: Optional[Resource] = None
 
   @property
   def arm(self) -> "XArm":
@@ -2994,6 +3009,47 @@ class iSWAP:
       joints=joints,
     )
 
+  @staticmethod
+  def _compute_inverse_kinematics(
+    gripper_center_location: Coordinate,
+    gripper_deck_angle: float,
+    link_1_deck_angle: float,
+    link_1_length: float,
+    tool_center_point_distance: float,
+    wrist_straight_angle: float,
+    elbow_z_offset_above_finger: float,
+  ) -> JointState:
+    """The joint state that puts the grip centre at a location. Pure arithmetic: nothing is read.
+
+    The inverse of `_forward_kinematics`. X and Y both slide, so every link 1 angle has a solution:
+    the angle is chosen by the caller, not solved for.
+
+    Args:
+      gripper_center_location: where the grip centre is to be, in mm on the deck.
+      gripper_deck_angle: which way the gripper is to face on the deck, in degrees.
+      link_1_deck_angle: which way link 1 is to lie on the deck, in degrees.
+      link_1_length: elbow joint to wrist joint, in mm.
+      tool_center_point_distance: wrist joint to the grip centre, in mm.
+      wrist_straight_angle: what the wrist reports when it is straight, in degrees.
+      elbow_z_offset_above_finger: how far the drive's bottom sits above the fingers, in mm.
+
+    Returns:
+      X, Y, Z, elbow and wrist, in each axis's own units; no gripper width.
+    """
+    alpha_1 = math.radians(link_1_deck_angle)
+    alpha_2 = math.radians(gripper_deck_angle)
+    wrist_x = gripper_center_location.x - tool_center_point_distance * math.cos(alpha_2)
+    wrist_y = gripper_center_location.y - tool_center_point_distance * math.sin(alpha_2)
+    return {
+      iSWAPAxis.X: wrist_x - link_1_length * math.cos(alpha_1),
+      iSWAPAxis.Y: wrist_y - link_1_length * math.sin(alpha_1),
+      iSWAPAxis.Z: gripper_center_location.z + elbow_z_offset_above_finger,
+      iSWAPAxis.ELBOW: (link_1_deck_angle + 90.0 + 180.0) % 360.0 - 180.0,
+      iSWAPAxis.WRIST: (gripper_deck_angle - link_1_deck_angle + wrist_straight_angle + 180.0)
+      % 360.0
+      - 180.0,
+    }
+
   async def _unchecked_fw_request_gripper_tcp(self) -> Coordinate:
     """Ask the master where the gripper's tool centre point is. Nothing is guarded.
 
@@ -3160,7 +3216,14 @@ class iSWAP:
     Args:
       traverse_height: how high to lift to before travelling, in mm.
         `default_minimum_traverse_height` when None.
+
+    Raises:
+      RuntimeError: If the arm holds something: parking closes the jaws onto it.
     """
+    # The model's word and the arm's: something gripped by anything other than this driver too.
+    if self._held_resource is not None or await self.request_plate_gripped():
+      held = "something" if self._held_resource is None else self._held_resource.name
+      raise RuntimeError(f"the iSWAP holds {held}; place it before parking")
     try:
       return await self._unchecked_fw_park(traverse_height)
     finally:
@@ -3171,3 +3234,437 @@ class iSWAP:
         await self.request_joint_state()
       except Exception:
         logger.warning("could not read where the iSWAP parked; its model is stale")
+
+  # ----------------------------------------
+  # Resources
+  # ----------------------------------------
+
+  # -- what is held ----------------------------------------------------------------------------------
+
+  def _clear_held_state(self) -> None:
+    self._holding_resource_width = None
+    self._grip_height = None
+    self._held_resource = None
+
+  def _hang_held_resource_on_the_gripper(self) -> None:
+    """Hang the held resource from the gripper where it stands, so it rides with the arm.
+
+    Its deck location and rotation are kept: only its parent changes. Nothing happens while
+    nothing models them.
+    """
+    held, gripper = self._held_resource, self.gripper
+    if held is None or gripper is None or held.location is None or gripper.location is None:
+      return
+    offset = held.get_absolute_location() - gripper.get_absolute_location()
+    # Along the gripper's axes: its rotation matrix is orthonormal, so the transpose undoes it.
+    inverse = list(zip(*gripper.get_absolute_rotation().get_rotation_matrix()))
+    rotation = get_rotation_wrt(resource=held, other=gripper)
+    held.unassign()
+    held.rotation = rotation
+    gripper.assign_child_resource(
+      held, location=Coordinate(*matrix_vector_multiply_3x3(A=inverse, v=offset.vector()))
+    )
+
+  # -- by resource -----------------------------------------------------------------------------------
+
+  def _get_joint_state_for_grip_location(
+    self,
+    gripper_center_location: Coordinate,
+    gripper_absolute_angle: Union[str, float],
+    elbow_absolute_angle: Optional[Union[str, float]],
+  ) -> JointState:
+    """The joint state that grips at a location, every check passed. Nothing is read or moved.
+
+    With no elbow angle given, the elbow stays where the model has it; when that cannot reach, the
+    error names the elbow stops that can.
+
+    Args:
+      gripper_center_location: where the grip centre is to be, in mm on the deck.
+      gripper_absolute_angle: where the gripper is to point, as `rotate_to_angles` takes it.
+      elbow_absolute_angle: where link 1 is to point, as `rotate_to_angles` takes it.
+
+    Returns:
+      X, Y, Z, elbow and wrist, at the increments the drives will be sent.
+
+    Raises:
+      RuntimeError: If the arm is not modelled, or its lengths, stops or angles were not read.
+      ValueError: If the location cannot be reached at that elbow angle.
+    """
+    c = self.configuration
+    gripper = self.gripper
+    if self.elbow_get_reference_point_location() is None or gripper is None:
+      raise RuntimeError("the iSWAP's arm is not modelled; the driver was given no deck")
+    if c.link_1_length is None or c.wrist_drive_predefined_increments is None:
+      raise RuntimeError("the arm's link length or the wrist's stops were not read")
+    straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
+    candidates: List[Union[str, float]]
+    if elbow_absolute_angle is None:
+      current = self.elbow_drive_get_angle()
+      if current is None:
+        raise RuntimeError("the elbow's angle has not been read; have you called `star.setup()`?")
+      candidates = [current - 90.0, "left", "front", "right"]
+    else:
+      candidates = [elbow_absolute_angle]
+
+    results: List[Tuple[Union[str, float], Optional[JointState], Optional[ValueError]]] = []
+    for candidate in candidates:
+      try:
+        elbow_increments = self._resolve_elbow_absolute_increments(angle=candidate)
+        wrist_increments = self._resolve_gripper_direction_increments(
+          angle=gripper_absolute_angle, elbow_increments=elbow_increments
+        )
+        elbow = c.elbow_drive_increments_to_angle(elbow_increments)
+        wrist = c.wrist_increments_to_deg(wrist_increments)
+        joints = self._compute_inverse_kinematics(
+          gripper_center_location=gripper_center_location,
+          gripper_deck_angle=elbow - 90.0 + wrist - straight,
+          link_1_deck_angle=elbow - 90.0,
+          link_1_length=c.link_1_length,
+          tool_center_point_distance=gripper.tool_center_point.x,
+          wrist_straight_angle=straight,
+          elbow_z_offset_above_finger=c.elbow_z_offset_above_finger,
+        )
+        # The drives are sent the increments, so the angles are theirs rather than the solution's.
+        joints[iSWAPAxis.ELBOW], joints[iSWAPAxis.WRIST] = elbow, wrist
+        self._check_reachable(axis="x", value=joints[iSWAPAxis.X])
+        self._check_reachable(axis="y", value=joints[iSWAPAxis.Y])
+        # The arm's own front stop is not the drive's: the channels ride in front of it.
+        if joints[iSWAPAxis.Y] < c.elbow_y_min:
+          raise ValueError(
+            f"y must be at least {c.elbow_y_min} mm for the elbow, the front stop the channels "
+            f"leave it, is {round(joints[iSWAPAxis.Y], 1)}"
+          )
+        self._check_reachable(axis="z", value=joints[iSWAPAxis.Z])
+        self._check_pose_reachable(
+          elbow_angle=elbow, gripper_relative_angle=wrist, y=joints[iSWAPAxis.Y]
+        )
+        results.append((candidate, joints, None))
+      except ValueError as refused:
+        results.append((candidate, None, refused))
+
+    candidate, chosen, error = results[0]
+    if chosen is not None:
+      logger.info(
+        "gripping at %s with the elbow at %.2f deg and the wrist at %.2f deg",
+        gripper_center_location,
+        chosen[iSWAPAxis.ELBOW],
+        chosen[iSWAPAxis.WRIST],
+      )
+      return chosen
+    passing = [str(name) for name, joints, _ in results[1:] if joints is not None]
+    hint = (
+      f"elbow_absolute_angle {passing} would reach it"
+      if passing
+      else "no elbow stop reaches it either"
+      if elbow_absolute_angle is None
+      else "pass another elbow_absolute_angle"
+    )
+    pointing = candidate if isinstance(candidate, str) else f"{candidate:.2f} deg"
+    raise ValueError(
+      f"link 1 pointing {pointing} on the deck cannot grip at {gripper_center_location}: {error}; "
+      f"{hint}"
+    )
+
+  async def _move_to_joint_state(self, joints: JointState, make_space: bool) -> None:
+    """Bring the arm over a joint state at safe Z: X, Y, elbow and wrist. This moves it.
+
+    The channels and any head are raised first, since the arm drags them along X. Of turning
+    before or after the Y move, the order whose pose in between passes `_check_pose_reachable`.
+
+    Args:
+      joints: where to go, from `_get_joint_state_for_grip_location`. Its Z is left to the caller.
+      make_space: whether the channels may be moved aside for the Y move.
+
+    Raises:
+      ValueError: If neither order keeps the arm clear of the rail and the channels' front stop.
+    """
+    elbow, wrist = self.elbow_drive_get_angle(), self.wrist_drive_get_angle()
+    if elbow is None or wrist is None:
+      raise RuntimeError("the arm's angles have not been read; have you called `star.setup()`?")
+    # Decided before anything moves: Z and X leave both poses in between as they are.
+    try:
+      self._check_pose_reachable(
+        elbow_angle=joints[iSWAPAxis.ELBOW], gripper_relative_angle=joints[iSWAPAxis.WRIST]
+      )
+      turn_first = True
+    except ValueError as turning:
+      try:
+        self._check_pose_reachable(
+          elbow_angle=elbow, gripper_relative_angle=wrist, y=joints[iSWAPAxis.Y]
+        )
+      except ValueError as moving:
+        raise ValueError(
+          f"neither turning first ({turning}) nor moving in Y first ({moving}) keeps the arm clear"
+        ) from moving
+      turn_first = False
+
+    await self.elbow_move_to_safe_z_height()
+    arm = self.arm
+    if arm.pipettes is not None:
+      await arm.pipettes.move_to_safe_z()
+    for head in (arm.head96, arm.head384):
+      if head is not None:
+        await head.move_to_safe_z()
+    await self.elbow_move_to_x_position(x=joints[iSWAPAxis.X])
+    if not turn_first:
+      await self.elbow_move_to_y_position(y=joints[iSWAPAxis.Y], make_space=make_space)
+    await self.rotate_to_angles(
+      elbow_relative_angle=joints[iSWAPAxis.ELBOW],
+      gripper_relative_angle=joints[iSWAPAxis.WRIST],
+      raise_features=False,
+    )
+    if turn_first:
+      await self.elbow_move_to_y_position(y=joints[iSWAPAxis.Y], make_space=make_space)
+
+  async def pick_up_resource(
+    self,
+    resource: Resource,
+    offset: Coordinate = Coordinate.zero(),
+    pickup_distance_from_top: Optional[float] = None,
+    pickup_distance_from_bottom: Optional[float] = None,
+    *,
+    gripper_absolute_angle: Union[str, float] = "back",
+    elbow_absolute_angle: Optional[Union[str, float]] = None,
+    resource_width: Optional[float] = None,
+    open_gripper_position: Optional[float] = None,
+    grip_strength: int = 5,
+    width_tolerance: float = 2.0,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+    make_space: bool = False,
+  ) -> None:
+    """Grip a resource where the tree has it, and hang it from the gripper. This moves the arm.
+
+    Composed of the joint moves alone: every drive is guarded, and the model follows each step.
+    The arm comes over the grip point at safe Z, opens, goes down, closes and goes back up.
+
+    Args:
+      resource: what to grip.
+      offset: added to the grip point, in mm.
+      pickup_distance_from_top: how far below its top the fingers close, in mm. Exactly one of the
+        two is given.
+      pickup_distance_from_bottom: how far above its bottom the fingers close, in mm.
+      gripper_absolute_angle: where the fingers point, as `rotate_to_angles` takes it. `back`
+        grips from the front.
+      elbow_absolute_angle: where link 1 points, as `rotate_to_angles` takes it. Where the
+        elbow is now when None.
+      resource_width: its size across the jaws, in mm. Read from the resource when None.
+      open_gripper_position: how far the jaws open before going down, in mm. `resource_width`
+        plus 3.0 when None.
+      grip_strength: how hard to hold, 0 the weakest and 9 the strongest.
+      width_tolerance: how far off `resource_width` it may be found, in mm.
+      z_speed: how fast to go down and up, in mm/s. The Z drive's default when None.
+      z_acceleration: how hard, in mm/s2. The Z drive's default when None.
+      make_space: whether the channels may be moved aside for the Y move.
+
+    Raises:
+      RuntimeError: If something is already held, the arm is not modelled, or nothing was gripped.
+      ValueError: If the grip point cannot be reached, the gripper is not square to the resource,
+        or a width, strength or tolerance is out of range. All before anything moves.
+    """
+    if self._held_resource is not None:
+      raise RuntimeError(f"the iSWAP already holds {self._held_resource.name}; place it first")
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("the iSWAP picks up from the deck; this driver was given none")
+    c = self.configuration
+    if isinstance(gripper_absolute_angle, str):
+      if gripper_absolute_angle not in GRIPPER_DECK_DIRECTIONS:
+        raise ValueError(
+          f"{gripper_absolute_angle!r} is not one of {tuple(GRIPPER_DECK_DIRECTIONS)}"
+        )
+      gripper_deck_angle = GRIPPER_DECK_DIRECTIONS[gripper_absolute_angle]
+    else:
+      gripper_deck_angle = gripper_absolute_angle
+
+    if resource_width is None:
+      # The jaws close across the way the fingers point.
+      across = (gripper_deck_angle - get_rotation_wrt(resource=resource, other=deck).z) % 180.0
+      if abs(across - 90.0) <= 0.1:
+        resource_width = resource.get_size_x()
+      elif min(across, 180.0 - across) <= 0.1:
+        resource_width = resource.get_size_y()
+      else:
+        raise ValueError(
+          f"the gripper at {gripper_deck_angle} deg is not square to {resource.name}; pass "
+          "resource_width"
+        )
+    if open_gripper_position is None:
+      open_gripper_position = resource_width + 3.0
+    if not 0 <= grip_strength <= 9:
+      raise ValueError(f"grip_strength must be between 0 and 9, is {grip_strength}")
+    if not 0.5 <= width_tolerance <= 9.9:
+      raise ValueError(f"width_tolerance must be between 0.5 and 9.9 mm, is {width_tolerance}")
+    widest = c.gripper_increments_to_mm(c.gripper_range_increments[1])
+    # The master's own floor for a force-sensed close, as `gripper_close_...` checks it.
+    if not 76.0 < resource_width <= widest:
+      raise ValueError(f"resource_width must be between 76.0 and {widest} mm, is {resource_width}")
+    if not resource_width + width_tolerance < open_gripper_position <= widest:
+      raise ValueError(
+        f"open_gripper_position must be wider than {resource_width + width_tolerance} mm and at "
+        f"most {widest} mm, is {open_gripper_position}"
+      )
+
+    grip_height = get_grip_height(
+      resource,
+      pickup_distance_from_top=pickup_distance_from_top,
+      pickup_distance_from_bottom=pickup_distance_from_bottom,
+    )
+    grip = (
+      get_grip_location(
+        resource=resource,
+        location=get_pick_location(resource=resource, deck=deck),
+        deck=deck,
+        grip_height=grip_height,
+      )
+      + offset
+    )
+    joints = self._get_joint_state_for_grip_location(
+      gripper_center_location=grip,
+      gripper_absolute_angle=gripper_absolute_angle,
+      elbow_absolute_angle=elbow_absolute_angle,
+    )
+
+    await self._move_to_joint_state(joints=joints, make_space=make_space)
+    await self.gripper_move_to_jaw_position(width=open_gripper_position)
+    await self.elbow_move_to_z_position(
+      z=joints[iSWAPAxis.Z], speed=z_speed, acceleration=z_acceleration
+    )
+    await self.gripper_close_with_force_sensed_width_window(
+      width=resource_width, grip_strength=grip_strength, width_tolerance=width_tolerance
+    )
+    # Held as the close is answered, and the arm's own word on it is the last.
+    source, source_location, source_rotation = resource.parent, resource.location, resource.rotation
+    self._grip_height = grip_height
+    self._holding_resource_width = resource_width
+    self._held_resource = resource
+    self._hang_held_resource_on_the_gripper()
+    if not await self.request_plate_gripped():
+      self._clear_held_state()
+      if source is not None and resource.parent is not source:
+        resource.unassign()
+        resource.rotation = source_rotation
+        source.assign_child_resource(resource, location=source_location)
+      raise RuntimeError(
+        f"the iSWAP reports nothing between its fingers after closing on {resource.name}; the arm "
+        "is left where it stopped"
+      )
+    await self.elbow_move_to_safe_z_height(speed=z_speed, acceleration=z_acceleration)
+
+  async def place_resource(
+    self,
+    to: Union[Resource, Coordinate],
+    offset: Coordinate = Coordinate.zero(),
+    *,
+    gripper_absolute_angle: Optional[Union[str, float]] = None,
+    elbow_absolute_angle: Optional[Union[str, float]] = None,
+    open_gripper_position: Optional[float] = None,
+    z_speed: Optional[float] = None,
+    z_acceleration: Optional[float] = None,
+    make_space: bool = False,
+  ) -> None:
+    """Set the held resource down and let go, and the tree follows. This moves the arm.
+
+    Args:
+      to: the resource it goes into, e.g. a plate carrier site, or a `Coordinate`, the deck
+        position its centre-centre-bottom goes to, where it joins the deck.
+      offset: added to where it is let go, in mm.
+      gripper_absolute_angle: where the fingers point, as `rotate_to_angles` takes it. The way
+        they point now when None; turning them turns what they hold.
+      elbow_absolute_angle: where link 1 points, as `rotate_to_angles` takes it. Where the
+        elbow is now when None.
+      open_gripper_position: how far the jaws open to let go, in mm. The held width plus 3.0
+        when None.
+      z_speed: how fast to go down, in mm/s. The Z drive's default when None.
+      z_acceleration: how hard, in mm/s2. The Z drive's default when None.
+      make_space: whether the channels may be moved aside for the Y move.
+
+    Raises:
+      RuntimeError: If nothing is held, or the destination refuses it.
+      ValueError: If the release point cannot be reached, the width is out of range, a
+        `Coordinate` falls inside a resource on the deck, or the destination refuses it. All
+        before anything moves.
+    """
+    held, grip_height, width = self._held_resource, self._grip_height, self._holding_resource_width
+    if held is None or grip_height is None or width is None:
+      raise RuntimeError("Not holding anything; pick_up_resource first")
+    deck = self._driver.deck
+    elbow, wrist = self.elbow_drive_get_angle(), self.wrist_drive_get_angle()
+    if deck is None or elbow is None or wrist is None:
+      raise RuntimeError("the iSWAP's arm is not modelled or its angles were not read")
+    c = self.configuration
+
+    now = self._compute_pose_at_angles(
+      elbow_angle=elbow, gripper_relative_angle=wrist
+    ).gripper_deck_orientation.z
+    if gripper_absolute_angle is None:
+      gripper_absolute_angle = now
+    if isinstance(gripper_absolute_angle, str):
+      if gripper_absolute_angle not in GRIPPER_DECK_DIRECTIONS:
+        raise ValueError(
+          f"{gripper_absolute_angle!r} is not one of {tuple(GRIPPER_DECK_DIRECTIONS)}"
+        )
+      target = GRIPPER_DECK_DIRECTIONS[gripper_absolute_angle]
+    else:
+      target = gripper_absolute_angle
+    if open_gripper_position is None:
+      open_gripper_position = width + 3.0
+    widest = c.gripper_increments_to_mm(c.gripper_range_increments[1])
+    if not width < open_gripper_position <= widest:
+      raise ValueError(
+        f"open_gripper_position must be wider than {width} mm and at most {widest} mm, is "
+        f"{open_gripper_position}"
+      )
+
+    if isinstance(to, Coordinate):
+      # The arms move, and what they carry goes with them: only what stands on the deck is in
+      # the way.
+      arms = [child for child in deck.children if child.category == "x_arm"]
+      occupant = get_resource_at_location(location=to, reference_frame=deck, exclude=[held, *arms])
+      if occupant is not None:
+        raise ValueError(
+          f"{to} is inside '{occupant.name}': a coordinate puts {held.name} on the deck. To put it "
+          f"into '{occupant.name}' or what holds it, pass that resource as `to`."
+        )
+      deck.check_can_drop_resource_here(resource=held)
+    else:
+      to.check_can_drop_resource_here(resource=held)
+    # The model's angles carry a few increments of read-back noise, so the rotation it lands at is
+    # rounded to a tenth of a degree: a quarter turn stays a quarter turn.
+    frame: Union[Resource, Coordinate] = deck if isinstance(to, Coordinate) else to
+    held_now = get_rotation_wrt_destination(resource=held, destination=frame, deck=deck)
+    rotation = round(held_now + (target - now + 180.0) % 360.0 - 180.0, 1)
+    turned = Rotation(z=get_rotation_wrt(resource=held, other=deck).z + rotation - held_now)
+    center = held.center().rotated(rotation=turned)
+    destination: Union[Resource, Coordinate] = (
+      to - Coordinate(center.x, center.y, 0) if isinstance(to, Coordinate) else to
+    )
+    location = get_place_location(
+      resource=held,
+      destination=destination,
+      deck=deck,
+      rotation_applied_by_move=rotation - held_now,
+    )
+    # As `get_grip_location` works it out, at the rotation the move leaves it at.
+    release = location + center + Coordinate(0, 0, grip_height) + offset
+    joints = self._get_joint_state_for_grip_location(
+      gripper_center_location=release,
+      gripper_absolute_angle=gripper_absolute_angle,
+      elbow_absolute_angle=elbow_absolute_angle,
+    )
+
+    await self._move_to_joint_state(joints=joints, make_space=make_space)
+    await self.elbow_move_to_z_position(
+      z=joints[iSWAPAxis.Z], speed=z_speed, acceleration=z_acceleration
+    )
+    await self.gripper_move_to_jaw_position(width=open_gripper_position)
+    assign_placed_resource(
+      resource=held,
+      destination=destination,
+      deck=deck,
+      location=location,
+      rotation_applied_by_move=rotation
+      - get_rotation_wrt_destination(resource=held, destination=frame, deck=deck),
+    )
+    self._clear_held_state()
+    await self.elbow_move_to_safe_z_height()

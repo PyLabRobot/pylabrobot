@@ -15,7 +15,7 @@ import dataclasses
 import datetime
 import logging
 import math
-from typing import Any, Dict, List, Literal, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 from pylabrobot.hamilton.protocol.text.framing import (
   assemble_channel_command,
@@ -93,6 +93,10 @@ SIMULATED_COVER_INPUTS = (True, False, False)
 
 # What a channel's drive holds after a power cycle, as the device read.
 SIMULATED_CHANNEL_DRIVE_PARAMETERS = {"zv": 12_000, "zr": 75, "yv": 6_000, "yr": 4}
+
+# How often a move owed with an animation steps the model while its time is waited out, in seconds:
+# 20 frames a second, as often as a viewer is worth sending to.
+SIMULATED_MOTION_FRAME_INTERVAL = 0.05
 
 # What its scanner reads. A simulated deck holds no carriers, so nothing.
 SIMULATED_BARCODE: Optional[str] = None
@@ -1241,6 +1245,102 @@ class SimulatedISWAP(_Simulated, iSWAP):
     self.gripper_update_width(c.gripper_increments_to_mm(gripper_stops.home))
     return resp
 
+  async def _unchecked_fw_gripper_close_with_force_sensed_width_window_increments(
+    self,
+    grip_strength: int,
+    width_increments: int,
+    width_tolerance_increments: int,
+  ):
+    """Close, and leave the jaws on the walls of the width named: the object a grip is told of."""
+    resp = await super()._unchecked_fw_gripper_close_with_force_sensed_width_window_increments(
+      grip_strength=grip_strength,
+      width_increments=width_increments,
+      width_tolerance_increments=width_tolerance_increments,
+    )
+    self.gripper_update_width(width_increments / 10)
+    return resp
+
+  # A simulated device answers at once, so each record below charges the device for the time the
+  # drive would take, at its default speed, and moves the model there in frames while it waits.
+
+  def update_location_by_reference_point(
+    self, y: Optional[float] = None, z: Optional[float] = None
+  ) -> None:
+    """Record where the elbow is, and charge the device for the time the drives would take."""
+    here = self.elbow_get_reference_point_location()
+    if self.device.simulate_motion_time and here is not None:
+      c = self.configuration
+
+      def frame(share: float) -> None:
+        iSWAP.update_location_by_reference_point(
+          self,
+          y=None if y is None else here.y + share * (y - here.y),
+          z=None if z is None else here.z + share * (z - here.z),
+        )
+
+      self.device.owe_motion_time(
+        SimulatedPipettes._get_travel_time(
+          distance=0.0 if y is None else y - here.y, speed=c.y_speed_default, acceleration=None
+        ),
+        SimulatedPipettes._get_travel_time(
+          distance=0.0 if z is None else z - here.z,
+          speed=c.z_speed_default,
+          acceleration=c.z_acceleration_default,
+        ),
+        animation=frame,
+      )
+    super().update_location_by_reference_point(y=y, z=z)
+
+  def elbow_drive_update_angle(self, angle: float) -> None:
+    """Record which way the arm points, and charge the device for the turn."""
+    before = self.elbow_drive_get_angle()
+    if self.device.simulate_motion_time and before is not None:
+      c = self.configuration
+      self.device.owe_motion_time(
+        SimulatedPipettes._get_travel_time(
+          distance=angle - before,
+          speed=c.elbow_speed_default,
+          acceleration=c.elbow_acceleration_default,
+        ),
+        animation=lambda share: iSWAP.elbow_drive_update_angle(
+          self, before + share * (angle - before)
+        ),
+      )
+    super().elbow_drive_update_angle(angle)
+
+  def wrist_drive_update_angle(self, angle: float) -> None:
+    """Record which way the wrist is turned, and charge the device for the turn."""
+    before = self.wrist_drive_get_angle()
+    if self.device.simulate_motion_time and before is not None:
+      c = self.configuration
+      self.device.owe_motion_time(
+        SimulatedPipettes._get_travel_time(
+          distance=angle - before,
+          speed=c.wrist_speed_default,
+          acceleration=c.wrist_acceleration_default,
+        ),
+        animation=lambda share: iSWAP.wrist_drive_update_angle(
+          self, before + share * (angle - before)
+        ),
+      )
+    super().wrist_drive_update_angle(angle)
+
+  def gripper_update_width(self, width: float) -> None:
+    """Record how far apart the jaws stand, and charge the device for the move."""
+    gripper = self.gripper
+    if self.device.simulate_motion_time and gripper is not None and gripper.jaw_width is not None:
+      c = self.configuration
+      before = gripper.jaw_width
+      self.device.owe_motion_time(
+        SimulatedPipettes._get_travel_time(
+          distance=width - before,
+          speed=c.gripper_speed_default,
+          acceleration=c.gripper_acceleration_default,
+        ),
+        animation=lambda share: iSWAP.gripper_update_width(self, before + share * (width - before)),
+      )
+    super().gripper_update_width(width)
+
   async def answer(self, module: str, command: str, **kwargs: Any) -> Optional[Tuple[Any, str]]:
     """Answer a read from the model.
 
@@ -1920,6 +2020,7 @@ class STARSimulationDriver(STARDriver):
     # What the drives would still be doing, in seconds: the longest move recorded since the last
     # command, waited out before the next one goes.
     self._motion_owed = 0.0
+    self._motion_animations: List[Callable[[float], None]] = []
     # How far a tip of each defined type stands below the stop disc, by tip type index, as
     # `define_tip_needle` was told. A tip command names one of these, and what it collects hangs
     # that far down: the traverse height it ends at is the tip's, so the stop disc ends higher.
@@ -2049,15 +2150,41 @@ class STARSimulationDriver(STARDriver):
 
   async def pay_motion_time(self) -> None:
     """Wait out what the moves recorded since the last wait would have taken. Nothing owed, nothing
-    waited, so this costs nothing on a device that is not keeping time."""
-    owed, self._motion_owed = self._motion_owed, 0.0
-    if owed:
-      await asyncio.sleep(owed * self.motion_time_scale)
+    waited, so this costs nothing on a device that is not keeping time.
 
-  def owe_motion_time(self, *seconds: float) -> None:
+    A move owed with an animation is shown on the way: the model goes back to where the move
+    started and steps to its target, a frame every `SIMULATED_MOTION_FRAME_INTERVAL` seconds.
+    """
+    owed, self._motion_owed = self._motion_owed, 0.0
+    animations, self._motion_animations = self._motion_animations, []
+    if not owed:
+      return
+    duration = owed * self.motion_time_scale
+    if not animations:
+      await asyncio.sleep(duration)
+      return
+    frames = max(1, math.ceil(duration / SIMULATED_MOTION_FRAME_INTERVAL))
+    for animation in animations:
+      animation(0.0)
+    for frame in range(1, frames + 1):
+      await asyncio.sleep(duration / frames)
+      for animation in animations:
+        animation(frame / frames)
+
+  def owe_motion_time(
+    self, *seconds: float, animation: Optional[Callable[[float], None]] = None
+  ) -> None:
     """Charge the device for a move, in seconds. The longest one owed stands: the drives move at
-    once, so a command takes as long as its slowest axis."""
+    once, so a command takes as long as its slowest axis.
+
+    Args:
+      seconds: how long each drive of the move takes.
+      animation: puts the model the given share of the way along the move, 0.0 to 1.0, so the
+        wait can show it. None jumps to the target, as a move recorded without one does.
+    """
     self._motion_owed = max(self._motion_owed, *seconds)
+    if animation is not None:
+      self._motion_animations.append(animation)
 
   def _describe_link(self) -> str:
     return "simulation (no link)"

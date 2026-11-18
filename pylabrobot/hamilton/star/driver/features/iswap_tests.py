@@ -10,7 +10,8 @@ from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPAxis
 from pylabrobot.hamilton.star.driver.simulator import SimulatedISWAP, STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
-from pylabrobot.resources.hamilton import STARDeck
+from pylabrobot.resources.hamilton import STARDeck, hamilton_plate_carrier_L5_ac
+from pylabrobot.resources.hamilton.tip_racks import hamilton_96_tiprack_300uL_NTR
 from pylabrobot.resources.resource import Resource
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
@@ -683,6 +684,163 @@ class TestSafeZ(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(len([command for command in sent if command.startswith("R0RZ")]), 1)
     self.assertEqual(height, await iswap.elbow_request_z_position())
+
+
+class TestInverseKinematics(unittest.TestCase):
+  """The inverse against the forward kinematics it undoes."""
+
+  def test_the_forward_kinematics_land_where_the_inverse_was_asked_to(self):
+    """Any grip centre, gripper direction and link 1 direction round-trips, so the joint state
+    the arm is sent puts the grip centre where it was asked to be."""
+    target = Coordinate(512.3, 287.4, 231.15)
+    for gripper_deck_angle in (-90.0, 0.0, 90.0, 180.0, 37.0):
+      for link_1_deck_angle in (-90.0, -45.0, 0.0, 90.0):
+        with self.subTest(gripper=gripper_deck_angle, link_1=link_1_deck_angle):
+          joints = iSWAP._compute_inverse_kinematics(
+            gripper_center_location=target,
+            gripper_deck_angle=gripper_deck_angle,
+            link_1_deck_angle=link_1_deck_angle,
+            link_1_length=138.0,
+            tool_center_point_distance=138.0,
+            wrist_straight_angle=-45.0,
+            elbow_z_offset_above_finger=13.0,
+          )
+          pose = iSWAP._forward_kinematics(
+            joints=joints,
+            link_1_length=138.0,
+            tool_center_point_distance=138.0,
+            wrist_straight_angle=-45.0,
+            elbow_z_offset_above_finger=13.0,
+          )
+          self.assertAlmostEqual(pose.gripper_center_location.x, target.x, places=3)
+          self.assertAlmostEqual(pose.gripper_center_location.y, target.y, places=3)
+          self.assertAlmostEqual(pose.gripper_center_location.z, target.z, places=3)
+          turn = (pose.gripper_deck_orientation.z - gripper_deck_angle) % 360.0
+          self.assertAlmostEqual(min(turn, 360.0 - turn), 0.0, places=6)
+
+
+class TestResources(unittest.IsolatedAsyncioTestCase):
+  """Picking up and placing a tip rack with the joint moves alone."""
+
+  async def asyncSetUp(self):
+    deck = STARDeck()
+    self.carrier = hamilton_plate_carrier_L5_ac(name="carrier")
+    deck.assign_child_resource(self.carrier, track=20)
+    self.rack = hamilton_96_tiprack_300uL_NTR(name="rack", with_tips=False)
+    self.carrier[2] = self.rack
+    driver = STARSimulationDriver(deck=deck, declared_configuration_json=RECORDING_STAR)
+    await driver.setup()
+    assert driver.iswap is not None
+    self.iswap = driver.iswap
+    self.sent: List[str] = []
+    answer = driver.send_command
+
+    async def recorded(
+      module: str,
+      command: str,
+      fmt: Optional[Any] = None,
+      subsystem: Optional[str] = None,
+      **kwargs: Any,
+    ):
+      self.sent.append(module + command)
+      return await answer(module=module, command=command, fmt=fmt, subsystem=subsystem, **kwargs)
+
+    driver.send_command = recorded  # type: ignore[assignment]
+
+  async def test_a_rack_picked_up_and_placed_back_lands_where_it_was(self):
+    """While held it hangs from the gripper and rides the lift; placed, it is back on its site
+    at the same location and rotation."""
+    site = self.carrier[2]
+    before = self.rack.get_location_wrt(site)
+
+    await self.iswap.pick_up_resource(
+      self.rack, pickup_distance_from_top=10.0, elbow_absolute_angle="front", make_space=True
+    )
+    self.assertIs(self.rack.parent, self.iswap.gripper)
+    self.assertGreater(self.rack.get_absolute_location().z, site.get_absolute_location().z)
+    # The jaws rest on its walls, the width it is gripped across.
+    self.assertAlmostEqual(
+      cast(MechanicalGripper, self.iswap.gripper).jaw_width, self.rack.get_size_x(), places=1
+    )
+
+    await self.iswap.place_resource(site, make_space=True)
+    self.assertIs(self.rack.parent, site)
+    after = self.rack.get_location_wrt(site)
+    for axis in ("x", "y", "z"):
+      self.assertAlmostEqual(getattr(after, axis), getattr(before, axis), places=1)
+    self.assertEqual(self.rack.rotation.z, 0.0)
+
+  async def test_parking_while_holding_is_refused_before_anything_is_sent(self):
+    """Parking closes the jaws, which would crush what they hold."""
+    await self.iswap.pick_up_resource(
+      self.rack, pickup_distance_from_top=10.0, elbow_absolute_angle="front", make_space=True
+    )
+    self.sent.clear()
+    with self.assertRaises(RuntimeError):
+      await self.iswap.park()
+    self.assertEqual(self.sent, [])
+
+  async def test_an_unreachable_grip_is_refused_before_anything_is_sent(self):
+    """Link 1 pointing left cannot bring the elbow far enough forward for this site, which is
+    known from the model alone."""
+    with self.assertRaises(ValueError):
+      await self.iswap.pick_up_resource(
+        self.rack, pickup_distance_from_top=10.0, elbow_absolute_angle="left", make_space=True
+      )
+    self.assertEqual(self.sent, [])
+
+  async def test_a_close_that_holds_nothing_leaves_the_rack_on_its_site(self):
+    """The arm's own answer has the last word: reporting nothing held puts the model back."""
+    site = self.carrier[2]
+    before = self.rack.get_location_wrt(site)
+    with patch.object(self.iswap, "request_plate_gripped", new=AsyncMock(return_value=False)):
+      with self.assertRaises(RuntimeError):
+        await self.iswap.pick_up_resource(
+          self.rack, pickup_distance_from_top=10.0, elbow_absolute_angle="front", make_space=True
+        )
+    self.assertIs(self.rack.parent, site)
+    self.assertEqual(self.rack.get_location_wrt(site), before)
+    with self.assertRaises(RuntimeError):
+      await self.iswap.place_resource(site)
+
+
+class TestMotionTime(unittest.IsolatedAsyncioTestCase):
+  """A simulated iSWAP's moves take time only when the device keeps it."""
+
+  async def test_a_turn_is_charged_only_when_the_device_keeps_time(self):
+    """Charged, a move gives whatever watches the model a turn to show it; uncharged, a run is
+    over at once, as tests need."""
+    iswap, _ = await gripper()
+    device = cast(STARSimulationDriver, iswap._driver)
+    elbow = cast(float, iswap.elbow_drive_get_angle())
+
+    iswap.elbow_drive_update_angle(elbow + 10.0)
+    self.assertEqual(device._motion_owed, 0.0)
+
+    device.simulate_motion_time = True
+    iswap.elbow_drive_update_angle(elbow + 100.0)
+    self.assertGreater(device._motion_owed, 0.0)
+
+  async def test_a_charged_turn_steps_the_model_from_start_to_target(self):
+    """While its time is waited out the model passes through the angles between, so a viewer
+    shows the turn rather than a jump, and it ends on the target."""
+    iswap, _ = await gripper()
+    device = cast(STARSimulationDriver, iswap._driver)
+    device.simulate_motion_time = True
+    start = cast(float, iswap.elbow_drive_get_angle())
+    seen: List[float] = []
+    record = iSWAP.elbow_drive_update_angle
+
+    def watched(feature: iSWAP, angle: float) -> None:
+      seen.append(angle)
+      record(feature, angle)
+
+    iswap.elbow_drive_update_angle(start + 90.0)
+    with patch.object(iSWAP, "elbow_drive_update_angle", new=watched):
+      await device.pay_motion_time()
+    self.assertAlmostEqual(seen[0], start)
+    self.assertAlmostEqual(seen[-1], start + 90.0)
+    self.assertTrue(any(start < angle < start + 90.0 for angle in seen))
 
 
 if __name__ == "__main__":
