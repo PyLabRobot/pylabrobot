@@ -20,6 +20,7 @@ pylabrobot.opentrons.OT2SingleChannelPipette
       ~OT2SingleChannelPipette.minimum_volume
       ~OT2SingleChannelPipette.num_channels
       ~OT2SingleChannelPipette.tip
+      ~OT2SingleChannelPipette.tip_channels
    
    
 
