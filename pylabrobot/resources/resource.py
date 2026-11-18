@@ -480,7 +480,8 @@ class Resource(SerializableMixin):
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
     root = self.get_root()
-    arriving = root._check_naming_conflicts(resource=resource)
+    # A resource that comes from another parent in this tree already holds its names here.
+    arriving = root._check_naming_conflicts(resource=resource, moving=resource.parent is not self)
 
     # Call "will assign" callbacks
     for callback in self._will_assign_resource_callbacks:
@@ -655,7 +656,9 @@ class Resource(SerializableMixin):
       raise RuntimeError(f"root '{root.name}' is not holding a map of names")
     return root._subtree_resources
 
-  def _check_naming_conflicts(self, resource: Resource) -> Dict[str, Resource]:
+  def _check_naming_conflicts(
+    self, resource: Resource, moving: bool = False
+  ) -> Dict[str, Resource]:
     """Raise if anything in `resource`'s subtree is already named in this one.
 
     Names identify a resource across the whole tree - `get_resource` finds one by name, and
@@ -663,6 +666,8 @@ class Resource(SerializableMixin):
 
     Args:
       resource: The resource arriving, with everything beneath it.
+      moving: `resource` goes to a parent other than its own. A name that this tree holds for the
+        same object is then not a conflict: that resource moves from another spot in this tree.
 
     Returns:
       What arrived, by name, so the caller does not walk the same subtree again to record it.
@@ -673,7 +678,7 @@ class Resource(SerializableMixin):
     held = self._resources()
     arriving: Dict[str, Resource] = {}
     for res in [resource] + resource.get_all_children():
-      if res.name in held:
+      if res.name in held and not (moving and held[res.name] is res):
         raise ValueError(f"Resource with name '{res.name}' already exists in the tree.")
       arriving[res.name] = res
     return arriving
