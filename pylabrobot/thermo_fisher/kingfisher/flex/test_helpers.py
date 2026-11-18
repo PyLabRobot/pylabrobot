@@ -5,11 +5,15 @@ import gzip
 import struct
 import unittest
 import xml.etree.ElementTree as ET
+from typing import Optional
 from unittest.mock import MagicMock, create_autospec
 
 from pylabrobot.io.hid import HID
+from pylabrobot.resources import thermo_TS_kingfisher_96_wellplate_2000uL_Vb
 from pylabrobot.thermo_fisher.kingfisher.hid import decode_report, encode_reports
 
+from .actions import FlexAction
+from .flex import KingFisherFlex
 from .protocol import FLEX_TYPE_ID
 
 
@@ -18,6 +22,7 @@ def bdz_bytes(
   *,
   steps: str = "",
   version: str = "4.1.0.2",
+  plates: tuple[tuple[str, str], ...] = (("plate", "plate"),),
 ) -> bytes:
   """Construct minimal BDZ sections for parser and transport tests only."""
   name = "unit test"
@@ -27,15 +32,28 @@ def bdz_bytes(
     '</ExportedObject><InstrumentParameters type="711" /></Properties>'
   ).encode()
   root = ET.fromstring(
-    "<ExportedData><Protocol><Run><PlateLayout><Plates>"
-    '<Plate id="plate" name="plate" plateTypeID="8b7d7c98-275f-4285-8129-5f8ed46fb01e">'
-    '<Wells><Group name="Plate"><Region x="0" y="0" columns="12" rows="8" />'
-    "</Group></Wells></Plate></Plates></PlateLayout>"
+    "<ExportedData><Protocol><Run><PlateLayout><Plates /></PlateLayout>"
     '<Protocol name="unit test" IsExecutable="true" enabled="true"><Steps>'
     '<Tip name="tips" id="2ab24e9a-b88e-4d3b-8fc3-babbc5a7c742">'
     '<Plates><Plate id="plate" /></Plates><Steps>'
     f"{steps}</Steps></Tip></Steps></Protocol></Run></Protocol></ExportedData>"
   )
+  layout = root.find("./Protocol/Run/PlateLayout/Plates")
+  assert layout is not None
+  for plate_id, plate_name in plates:
+    plate = ET.SubElement(
+      layout,
+      "Plate",
+      id=plate_id,
+      name=plate_name,
+      plateTypeID="8b7d7c98-275f-4285-8129-5f8ed46fb01e",
+    )
+    group = ET.SubElement(ET.SubElement(plate, "Wells"), "Group", name="Plate")
+    ET.SubElement(group, "Region", x="0", y="0", columns="12", rows="8")
+  tip_plate = root.find("./Protocol/Run/Protocol/Steps/Tip/Plates/Plate")
+  assert tip_plate is not None
+  if plates:
+    tip_plate.set("id", plates[0][0])
   ET.SubElement(root, "CommandScript").text = script
 
   def string(value: str) -> bytes:
@@ -76,9 +94,20 @@ class HIDTestCase(unittest.IsolatedAsyncioTestCase):
 
   io: MagicMock
 
+  def complete_transfer(self, action: FlexAction) -> None:
+    """Model a synthetic operator transfer; used only by explicit test handlers."""
+    if action.action == "load" and action.plate is not None:
+      if action.holder.resource is not action.plate:
+        action.plate.unassign()
+        action.holder.assign_child_resource(action.plate)
+    elif action.action == "unload" and action.plate is not None:
+      action.plate.unassign()
+
   def mock_hid(self) -> None:
     """Mock the real transport API; keep response controls in the test fixture."""
     self.io = create_autospec(HID, instance=True, spec_set=True)
+    self.plate_bindings = {"plate": thermo_TS_kingfisher_96_wellplate_2000uL_Vb("fixture_plate")}
+    self.physical_flex: Optional[KingFisherFlex] = None
     self.incoming: asyncio.Queue[bytes | Exception] = asyncio.Queue()
     self.commands: list[str] = []
     self.responses: dict[str, str | None] = {}
@@ -124,6 +153,15 @@ class HIDTestCase(unittest.IsolatedAsyncioTestCase):
       del self.pending_output[: end + 2]
       self.commands.append(line)
       self.sent.put_nowait(line)
+      if self.physical_flex is not None and line.startswith(("PAU 1 ", "PAU 2 ")):
+        holder = self.physical_flex.loading_holder
+        assert holder is not None
+        plate = self.plate_bindings[line.split('"')[1]]
+        if line.startswith("PAU 1 ") and holder.resource is not plate:
+          plate.unassign()
+          holder.assign_child_resource(plate)
+        elif line.startswith("PAU 2 "):
+          plate.unassign()
       if line in self.responses:
         response = self.responses[line]
       elif line == "VER":

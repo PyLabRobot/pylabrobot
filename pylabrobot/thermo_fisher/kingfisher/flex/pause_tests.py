@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import replace
 
+from .actions import FlexAction
 from .connection import FlexError
 from .flex import KingFisherFlex
 from .protocol import FlexPrompt, FlexProtocolError, read_flex_bdz
@@ -17,6 +18,7 @@ class PauseTests(HIDTestCase):
     self.mock_hid()
     self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
     self.flex.io = self.io
+    self.physical_flex = self.flex
     self.protocol = read_flex_bdz(
       bdz_bytes(
         'MOR 6\nPAU 1 "plate"\nTXT 11 "addition"\nMOR 6\nPAU 0 "add liquid"\n'
@@ -29,21 +31,35 @@ class PauseTests(HIDTestCase):
     )
     await self.flex.setup()
     await self.flex.initialize()
+    self.flex.reconcile_inventory()
 
   async def asyncTearDown(self) -> None:
     """Close the simulated reader."""
     await self.flex.stop()
 
-  async def confirm_plate(self, prompt: FlexPrompt) -> bool:
+  async def confirm_plate(self, prompt: FlexAction) -> bool:
     """Accept only loading/unloading actions."""
     self.assertIn(prompt.action, ("load", "unload"))
+    self.complete_transfer(prompt)
     return True
 
-  async def test_plate_handler_does_not_release_manual_pause(self) -> None:
-    """PAU 0 needs its own handler or an instrument completion."""
+  async def test_physical_intervention_with_host_transfers(self) -> None:
+    """Explicit mode selection preserves PAU for interventions only."""
+
+    async def handle(action: FlexAction) -> bool:
+      """Confirm transfers in software and wait for physical Start on an intervention."""
+      if action.action == "pause":
+        await self.flex.wait_for_physical_start(action)
+        return True
+      return await self.confirm_plate(action)
+
     self.responses['PAU 0 "add liquid"'] = "PAU\r\nTEM 37 22\r\n"
     task = asyncio.create_task(
-      self.flex.run_protocol(self.protocol, confirm_prompt=self.confirm_plate)
+      self.flex.run_protocol(
+        self.protocol.bind_plates(self.plate_bindings),
+        handle_action=handle,
+        acknowledgement=lambda action: "instrument" if action.action == "pause" else "host",
+      )
     )
     try:
       await self.wait_sent('PAU 0 "add liquid"')
@@ -61,17 +77,18 @@ class PauseTests(HIDTestCase):
     entered: asyncio.Queue[FlexPrompt] = asyncio.Queue()
     release = asyncio.Event()
 
-    async def confirm(prompt: FlexPrompt) -> bool:
-      """Hold a single addition confirmation."""
+    async def confirm(prompt: FlexAction) -> bool:
+      """Fulfill transfers and hold a single addition confirmation."""
+      if prompt.action != "pause":
+        return await self.confirm_plate(prompt)
       entered.put_nowait(prompt)
       await release.wait()
       return True
 
     task = asyncio.create_task(
       self.flex.run_protocol(
-        self.protocol,
-        confirm_prompt=self.confirm_plate,
-        confirm_pause=confirm,
+        self.protocol.bind_plates(self.plate_bindings),
+        handle_action=confirm,
       )
     )
     try:
@@ -109,7 +126,7 @@ class PauseTests(HIDTestCase):
     cycle = "MOH 630 200 0 3000 0\nWAI 1 3000\nWAI 1\n"
     protocol = read_flex_bdz(bdz_bytes(cycle * 2 + 'TXT "finished"\n'))
     self.responses["WAI 1"] = "WAI\r\n"
-    task = asyncio.create_task(self.flex.run_protocol(protocol))
+    task = asyncio.create_task(self.flex.run_protocol(protocol.bind_plates(self.plate_bindings)))
     try:
       for count in (1, 2):
         await self.wait_sent("WAI 1")
@@ -128,7 +145,7 @@ class PauseTests(HIDTestCase):
     protocol = read_flex_bdz(bdz_bytes("TEM 37 100\nMOI 310\nMOH 630 200 0 3000 0\n"))
     self.responses["MOI 310"] = "MOI\r\nMOI END 9\r\n"
     with self.assertRaises(FlexError) as error:
-      await self.flex.run_protocol(protocol)
+      await self.flex.run_protocol(protocol.bind_plates(self.plate_bindings))
     self.assertEqual(error.exception.code, 9)
     self.assertNotIn("MOH 630 200 0 3000 0", self.commands)
     self.assertEqual(self.flex.state, "uncertain")
@@ -137,5 +154,5 @@ class PauseTests(HIDTestCase):
     """TEM END permits the next command even if telemetry is below the target."""
     protocol = read_flex_bdz(bdz_bytes("TEM 37 100\nMOI 310\n"))
     self.responses["TEM 37 100"] = "TEM\r\nTEM 29 22\r\nTEM END 0\r\n"
-    await self.flex.run_protocol(protocol)
+    await self.flex.run_protocol(protocol.bind_plates(self.plate_bindings))
     self.assertIn("MOI 310", self.commands)

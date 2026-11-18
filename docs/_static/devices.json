@@ -2171,7 +2171,7 @@
     "api_version": "v1",
     "code_slug": "thermo_fisher/kingfisher/flex",
     "doc_slug": "thermo_fisher/kingfisher/flex/hello-world",
-    "notes": "96DW local BDZ execution tested on macOS/firmware 1.01.0, including 37 C heating, beads, drying and PLR confirmations. Partial tip pickup remains unresolved; broader formats/features and general protocol authoring remain unsupported."
+    "notes": "96DW local BDZ execution tested on macOS/firmware 1.01.0, including 37 C heating, beads, drying and PLR confirmations. Requires plate bindings and reconciled inventory. Resource-aware ManualOperator host and physical-Start transfers tested in two-plate runs, plus a host-confirmed reagent-addition intervention. Robotic transfers are application-owned. Partial tip pickup remains unresolved; other formats, onboard protocol management and general protocol authoring remain unsupported."
   },
   {
     "id": "thermo-fisher-kingfisher-presto",

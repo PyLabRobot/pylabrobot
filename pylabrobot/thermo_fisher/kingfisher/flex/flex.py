@@ -2,13 +2,17 @@
 
 import asyncio
 import logging
-import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
 from pylabrobot.io.hid import HID
 from pylabrobot.resources import PlateHolder, Resource
+from pylabrobot.thermo_fisher.kingfisher.flex.actions import (
+  FlexAction,
+  create_actions,
+  expected_inventory,
+)
 from pylabrobot.thermo_fisher.kingfisher.flex.connection import (
   FlexConnection,
   FlexError,
@@ -17,13 +21,10 @@ from pylabrobot.thermo_fisher.kingfisher.flex.connection import (
   validate_timeout,
 )
 from pylabrobot.thermo_fisher.kingfisher.flex.protocol import (
+  FlexBoundProtocol,
   FlexCommand,
-  FlexPrompt,
-  FlexProtocol,
-  ProtocolSource,
-  _command_prompt,
+  FlexProtocolError,
   loading_slot,
-  read_flex_bdz,
 )
 from pylabrobot.thermo_fisher.kingfisher.flex.resource_model import create_carousel
 
@@ -50,7 +51,7 @@ class FlexEvent:
     "failure",
   ]
   text: str
-  prompt: Optional[FlexPrompt] = None
+  prompt: Optional[FlexAction] = None
 
 
 @dataclass(frozen=True)
@@ -72,7 +73,7 @@ class KingFisherFlex:
   Firmware completion does not verify correct tip-comb attachment.
   ``setup`` identifies the device; ``initialize`` moves its axes.
   Commands execute serially. ``stop`` disconnects; ``abort`` requests a motion stop.
-  Protocol upload and remote advancement of onboard pauses are unsupported.
+  Execution uses local BDZ exports; onboard protocol management is unsupported.
 
   Args:
     serial_number: Select one instrument when multiple Flex devices are attached.
@@ -85,8 +86,9 @@ class KingFisherFlex:
   _events: asyncio.Queue[Optional[FlexEvent]]
   _processing_slot: Optional[int]
   _current_command: Optional[FlexCommand]
-  _current_prompt: Optional[FlexPrompt]
-  _run_prompts: dict[int, FlexPrompt]
+  _current_prompt: Optional[FlexAction]
+  _run_actions: dict[int, FlexAction]
+  _action_acknowledgement: Optional[Literal["host", "instrument"]]
   state: Literal["disconnected", "idle", "initializing", "ready", "running", "waiting", "uncertain"]
 
   def _publish(self, event: FlexEvent) -> None:
@@ -114,15 +116,40 @@ class KingFisherFlex:
   def _inventory_changed(self, resource: Resource) -> None:
     """Require explicit reconciliation after changes to the carousel resource tree."""
     self._inventory_verified = False
+    if self._operations.locked() and self.state == "running" and self._current_prompt is None:
+      self._connection.invalidate(
+        FlexError("Inventory is uncertain: resource tree changed outside an active action")
+      )
 
-  def _prompt_for_command(self, command: FlexCommand, orientation: int) -> FlexPrompt:
+  def _prompt_for_command(self, command: FlexCommand, orientation: int) -> FlexAction:
     """Use validated source metadata while checking the completed physical orientation."""
-    prompt = self._run_prompts.get(command.line_number)
-    if prompt is None:
-      return _command_prompt(command, orientation)
+    prompt = self._run_actions[command.line_number]
     if prompt.processing_slot != orientation:
       raise FlexError("Completed orientation differs from the validated prompt")
     return prompt
+
+  def _inventory_snapshot(self) -> tuple[Optional[Resource], ...]:
+    """Read current occupancy directly from the eight persistent holders."""
+    return tuple(self.carousel[tray].resource for tray in range(1, 9))
+
+  def _require_inventory(self) -> None:
+    """Reject execution until the current resource tree is explicitly trusted."""
+    if not self._inventory_verified:
+      raise FlexError("Inventory is uncertain; inspect the carousel and call reconcile_inventory()")
+
+  def _complete_action(self, action: FlexAction, expected: tuple[Optional[Resource], ...]) -> None:
+    """Verify modeled transfers after explicit completion, never from assignment events."""
+    self._connection.check_open()
+    actual = self._inventory_snapshot()
+    for tray, (resource, wanted) in enumerate(zip(actual, expected), 1):
+      if resource is not wanted:
+        raise FlexError(
+          f"Line {action.line_number}: {action.action} {action.plate_name!r} completed with "
+          f"incorrect occupancy in tray {tray}; expected "
+          f"{wanted.name if wanted is not None else 'empty'}, found "
+          f"{resource.name if resource is not None else 'empty'}"
+        )
+    self._inventory_verified = True
 
   def _on_message(self, message: FlexMessage) -> None:
     """Publish telemetry and prompt/step events only after command acknowledgment."""
@@ -173,7 +200,10 @@ class KingFisherFlex:
     self._processing_slot = None
     self._current_command = None
     self._current_prompt = None
-    self._run_prompts = {}
+    self._run_actions = {}
+    self._action_acknowledgement = None
+    self._physical_pause_started = False
+    self._physical_pause_completed = False
     self.state = "disconnected"
     self.version: Optional[str] = None
     self.serial: Optional[str] = None
@@ -219,8 +249,8 @@ class KingFisherFlex:
     First assign/remove plates using the resource tree, then call this method
     after checking all eight trays. An empty carousel also needs confirmation.
     This performs no USB I/O and cannot run during a device operation or lifecycle
-    transition. Reconnection and protocol execution invalidate this confirmation;
-    current protocol callbacks do not automatically update resource assignments.
+    transition. Reconnection and interruption invalidate this confirmation.
+    Protocol handlers must update resource assignments before confirming transfers.
     """
     if self._operations.locked() or self._lifecycle.locked():
       raise FlexError("Cannot reconcile inventory during an active Flex operation")
@@ -252,7 +282,8 @@ class KingFisherFlex:
         "KingFisher Flex is experimental. Hardware checks cover firmware 1.01.0 on macOS "
         "with 96DW mixing/bead methods, 37 C heating and host confirmations. "
         "Partial tip pickup remains unresolved. "
-        "See the Flex validation guide for tested scope and remaining limitations."
+        "Resource-aware host and physical-Start transfers and a host reagent-addition "
+        "intervention are tested. See the Flex guide for tested scope."
       )
       self._events = asyncio.Queue()
       self._session_failed = asyncio.Event()
@@ -280,25 +311,6 @@ class KingFisherFlex:
     if self._operations.locked():
       raise FlexError("Another Flex operation is active")
 
-  async def list_protocols(self) -> tuple[str, ...]:
-    """Read onboard names with REP 4 without initialization or motion.
-
-    Includes maintenance and factory entries. Numeric inventory metadata is
-    retained in ``transcript`` without interpreting its undocumented fields.
-    Unexpected formats fail explicitly instead of returning an incomplete list.
-    """
-    self._check_operation()
-    async with self._operations:
-      response = await self._connection.command("REP 4", self.timeout)
-      names = []
-      for line in response:
-        match = re.fullmatch(r'REP 4 [0-9]+ [0-9]+ "((?:[^"\r\n]|"")+)" [0-9]+\s*', line)
-        if match:
-          names.append(match[1].replace('""', '"'))
-        elif re.fullmatch(r"REP 4(?: [0-9]+){5}\s*", line) is None:
-          raise FlexError(f"Unrecognized protocol inventory response: {line!r}", "REP")
-      return tuple(names)
-
   async def initialize(self) -> None:
     """Initialize axes and disable heating; this can move axes and present tray 4 for loading.
 
@@ -324,30 +336,48 @@ class KingFisherFlex:
         self.state = "uncertain"
         raise
 
-  async def _confirm_host_prompt(
+  async def wait_for_physical_start(self, action: FlexAction) -> None:
+    """Send the selected action's original PAU and await its firmware completion once.
+
+    Only callable while handling this exact active action with instrument
+    acknowledgment selected. An acknowledgment adapter can await this inside a
+    ManualOperator action, so model updates occur after PAU END 0. No unsolicited
+    Start event is assumed, and this cannot release an already active PAU.
+    """
+    self._connection.check_open()
+    if self._current_prompt is not action or self._action_acknowledgement != "instrument":
+      raise FlexError("Physical Start requires the active action with instrument acknowledgment")
+    if self._physical_pause_started:
+      raise FlexError("Physical acknowledgment has already been requested for this action")
+    self._physical_pause_started = True
+    # The enclosing action wait supplies the operator deadline and failure monitoring.
+    await self._connection.command(action.command.text, None)
+    self._physical_pause_completed = True
+
+  async def _await_action_handler(
     self,
-    command: FlexCommand,
-    confirm: Callable[[FlexPrompt], Awaitable[bool]],
+    prompt: FlexAction,
+    confirm: Callable[[FlexAction], Awaitable[bool]],
     timeout: Optional[float],
   ) -> None:
-    """Wait for positive host confirmation while monitoring session failure."""
+    """Await explicit handler completion while monitoring the session and action deadline."""
     self._connection.check_open()
     if self._processing_slot is None:
-      raise FlexError("Host confirmation requires a completed carousel orientation")
-    prompt = self._prompt_for_command(command, self._processing_slot)
+      raise FlexError("Action confirmation requires a completed carousel orientation")
     self._current_prompt = prompt
     self.state = "waiting"
-    self._publish(
-      FlexEvent(
-        "host_pause"
-        if prompt.action == "pause"
-        else "host_load"
-        if prompt.action == "load"
-        else "host_unload",
-        prompt.label,
-        prompt,
+    if self._action_acknowledgement == "host":
+      self._publish(
+        FlexEvent(
+          "host_pause"
+          if prompt.action == "pause"
+          else "host_load"
+          if prompt.action == "load"
+          else "host_unload",
+          prompt.label,
+          prompt,
+        )
       )
-    )
 
     async def confirmation() -> bool:
       """Call the operator handler inside a cancellable task."""
@@ -361,14 +391,15 @@ class KingFisherFlex:
       )
       self._connection.check_open()
       if self._session_failed.is_set():
-        raise FlexError("Session ended while awaiting host confirmation")
+        raise FlexError("Session ended while awaiting action completion")
       if confirmed not in done:
-        raise asyncio.TimeoutError("Host confirmation timed out")
+        raise asyncio.TimeoutError("Action confirmation timed out")
       if await confirmed is not True:
-        raise FlexError("Host did not confirm the requested action")
-      self._publish(FlexEvent("host_prompt_completed", prompt.label, prompt))
-      self._current_prompt = None
-      self.state = "running"
+        raise FlexError("Handler did not confirm the requested action")
+      if self._action_acknowledgement == "instrument" and not self._physical_pause_completed:
+        raise FlexError(
+          "Physical handler must await wait_for_physical_start(action) before completing"
+        )
     finally:
       for task in (confirmed, failed):
         if not task.done():
@@ -377,22 +408,35 @@ class KingFisherFlex:
 
   async def run_protocol(
     self,
-    protocol: Union[FlexProtocol, ProtocolSource],
+    protocol: FlexBoundProtocol,
     *,
     operator_timeout: Optional[float] = None,
-    confirm_prompt: Optional[Callable[[FlexPrompt], Awaitable[bool]]] = None,
-    confirm_pause: Optional[Callable[[FlexPrompt], Awaitable[bool]]] = None,
+    handle_action: Optional[Callable[[FlexAction], Awaitable[bool]]] = None,
+    acknowledgement: Optional[
+      Literal["host", "instrument"] | Callable[[FlexAction], Literal["host", "instrument"]]
+    ] = None,
   ) -> FlexRunResult:
     """Stream a supported BindIt export and await terminal completion.
 
+    Requires ``read_flex_bdz(source).bind_plates({bdz_name: plr_plate, ...})``.
+    Every BDZ layout plate must be designated, including the tip-comb plate.
+    Raw exports and paths cannot be executed without bindings. Reconcile initial
+    inventory explicitly, even when empty. Plates may be loaded as the run proceeds.
+    ``handle_action`` handles every load, unload and intervention.
+    ``acknowledgement`` selects host confirmation or physical Start, either for the
+    run or through a synchronous per-action selector. The default is host when a
+    handler is supplied, otherwise instrument. Selection occurs before sending PAU.
+    Instrument-mode handlers must await ``wait_for_physical_start(action)`` exactly
+    once, directly or through an acknowledgment provider, before returning True.
+    Requests include the bound plate, presented holder and original script line.
+    Handlers must update modeled transfers and clear the motion envelope before
+    returning True. Occupancy is checked before any subsequent command. Assignment
+    events alone never advance the script. Preloaded matching plates are accepted,
+    but still require confirmation. Without a handler, the original PAU is sent;
+    resource updates must be completed externally before physical Start.
     Preflight finishes before any I/O. Initialization must have been requested
-    separately. By default PAU waits for physical Start. Supplying ``confirm_prompt``
-    opts into experimental host confirmation: PAU 1/2 are NOT sent, and the async
-    callback must return exactly True after each load/unload before streaming continues.
-    Standalone PAU 0 requires a separate ``confirm_pause`` callback to replace its
-    instrument wait. Otherwise PAU 0 is sent even when plate confirmations use PLR.
-    Its message is descriptive text, never a timer. Host pause handling emits
-    host_pause followed by host_prompt_completed.
+    separately. Host acknowledgment omits PAU; instrument
+    acknowledgment preserves it. Pause messages are descriptive text, not timers.
     This does not release an instrument PAU already in progress. Host waits emit
     host_load/host_unload and host_prompt_completed, never a fictitious PAU completion.
     Dispensing pauses include required per-well additions in both the prompt label
@@ -405,19 +449,30 @@ class KingFisherFlex:
     abort hardware: it invalidates the session and requires explicit recovery.
     """
     validate_timeout(operator_timeout, "operator_timeout", allow_none=True)
-    if confirm_prompt is not None and not callable(confirm_prompt):
-      raise TypeError("confirm_prompt must be an async callable")
-    if confirm_pause is not None and not callable(confirm_pause):
-      raise TypeError("confirm_pause must be an async callable")
-    parsed = protocol if isinstance(protocol, FlexProtocol) else read_flex_bdz(protocol)
+    if acknowledgement is not None and not callable(acknowledgement):
+      if acknowledgement not in ("host", "instrument"):
+        raise ValueError("acknowledgement must be 'host', 'instrument', or a selector")
+    if handle_action is not None and not callable(handle_action):
+      raise TypeError("handle_action must be an async callable")
+    if acknowledgement == "host" and handle_action is None:
+      raise ValueError("Host acknowledgment requires an action handler")
+    if not isinstance(protocol, FlexBoundProtocol):
+      raise FlexProtocolError(
+        "Plate bindings are required before execution; use "
+        "read_flex_bdz(source).bind_plates({bdz_plate_name: plr_plate, ...})"
+      )
+    parsed = protocol.protocol
     commands = parsed.preflight()
-    prompts = {p.line_number: p for p in parsed.prompts()}
+    actions = create_actions(protocol, self.carousel, commands)
     self._check_operation()
     if not self._initialized:
       raise FlexError("Call initialize() explicitly before running a protocol")
+    self._require_inventory()
+    planned = self._inventory_snapshot()
+    for action in actions.values():
+      planned = expected_inventory(action, planned)
     async with self._operations:
-      self._run_prompts = prompts
-      self._inventory_verified = False
+      self._run_actions = actions
       self.state = "running"
       self._publish(FlexEvent("run_started", parsed.name))
       timer_duration = 0.0
@@ -426,20 +481,56 @@ class KingFisherFlex:
       try:
         # BindIt repeats this preamble at run start, separately from connection startup.
         for line in ("EAK", "MOI 0", "MOS 0", "MOM 0", "MOH 0 100", "TEM 0 300"):
+          self._require_inventory()
           await self._connection.command(line, self.operation_timeout)
+          self._require_inventory()
         for command in commands:
+          self._require_inventory()
           self._current_command = command
           if command.opcode == "PAU":
-            handler = confirm_pause if command.text.startswith("PAU 0 ") else confirm_prompt
+            if self._processing_slot is None:
+              raise FlexError("Action requires a completed carousel orientation")
+            action = self._prompt_for_command(command, self._processing_slot)
+            expected = expected_inventory(action, self._inventory_snapshot())
+            self._current_prompt = action
+            self._inventory_verified = False
+            handler = handle_action
+            if callable(acknowledgement):
+              mode = acknowledgement(action)
+            elif acknowledgement is None:
+              mode = "host" if handler is not None else "instrument"
+            else:
+              mode = acknowledgement
+            if mode not in ("host", "instrument"):
+              raise ValueError("Acknowledgment selector must return 'host' or 'instrument'")
+            if mode == "host" and handler is None:
+              raise FlexError("Host acknowledgment requires an action handler")
+            self._action_acknowledgement = mode
+            self._physical_pause_started = False
+            self._physical_pause_completed = False
             if handler is not None:
-              await self._confirm_host_prompt(command, handler, operator_timeout)
+              await self._await_action_handler(action, handler, operator_timeout)
+            else:
+              await asyncio.wait_for(self.wait_for_physical_start(action), operator_timeout)
+            if mode == "instrument":
+              completed += 1
+            else:
               host_confirmations += 1
-              continue
+            self._complete_action(action, expected)
+            self._publish(
+              FlexEvent(
+                "host_prompt_completed" if mode == "host" else "prompt_completed",
+                action.label,
+                action,
+              )
+            )
+            self._current_prompt = None
+            self._action_acknowledgement = None
+            self.state = "running"
+            continue
           fields = command.text.split()
           deadline: Optional[float] = self.operation_timeout
-          if command.opcode == "PAU":
-            deadline = operator_timeout
-          elif command.opcode == "MOH" and len(fields) == 6:
+          if command.opcode == "MOH" and len(fields) == 6:
             deadline = int(fields[4]) / 100 + self.operation_timeout
           elif command.opcode == "WAI":
             if len(fields) == 3:
@@ -449,16 +540,15 @@ class KingFisherFlex:
           if command.opcode == "MOR":
             self._processing_slot = None
           await self._connection.command(command.text, deadline)
+          self._require_inventory()
           completed += 1
           if command.opcode == "MOR":
             self._processing_slot = int(fields[1])
-          if command.opcode == "PAU":
-            self._publish(FlexEvent("prompt_completed", command.text, self._current_prompt))
-            self._current_prompt = None
-            self.state = "running"
         self._current_command = None
         for line in ('TXT "END_OF_RUN"', "TEM 0 300", "TEM 0 300"):
+          self._require_inventory()
           await self._connection.command(line, self.operation_timeout)
+          self._require_inventory()
         self._connection.check_open()
         self.state = "ready"
         self._publish(FlexEvent("run_completed", parsed.name))
@@ -472,53 +562,10 @@ class KingFisherFlex:
       finally:
         self._current_command = None
         self._current_prompt = None
-        self._run_prompts = {}
-
-  async def resume(self) -> None:
-    """Refuse to invent a software equivalent of the physical Start button."""
-    raise NotImplementedError("Flex remote Start is unverified; press physical Start at the prompt")
-
-  async def start_stored_protocol(
-    self, name: str, *, completion_timeout: Optional[float] = None
-  ) -> None:
-    """Start an onboard sequence using BGN and wait for its terminal response.
-
-    Experimental, based on the Flex Service Manual v1.1, section 7.1.11.2;
-    validated through the first loading prompt only. Motion may begin immediately. The exact name
-    must occur once in a fresh onboard inventory and is sent without truncation.
-    Name length acceptance is determined by the instrument firmware.
-
-    Internal commands and loading pauses are not reported individually by BGN.
-    Host prompt callbacks therefore cannot advance them. Acknowledgment alone
-    is not completion. Timeout or cancellation invalidates the session but does
-    not stop motion; explicitly call ``abort`` from a supervising task.
-
-    Args:
-      name: Exact stored name (nonblank printable ASCII).
-      completion_timeout: Seconds to wait for BGN END, or None for operator waits.
-    """
-    if not isinstance(name, str) or re.fullmatch(r"[ -~]+", name) is None or not name.strip():
-      raise ValueError("Stored protocol name must be nonblank printable ASCII")
-    validate_timeout(completion_timeout, "completion_timeout", allow_none=True)
-    names = await self.list_protocols()
-    if names.count(name) != 1:
-      raise FlexError("Stored protocol name must occur exactly once in the onboard inventory")
-    self._check_operation()
-    async with self._operations:
-      self._initialized = False
-      self._inventory_verified = False
-      self._processing_slot = None
-      self.state = "running"
-      logger.warning("Experimental onboard launch: %s; motion may begin immediately", name)
-      self._publish(FlexEvent("run_started", name))
-      try:
-        quoted_name = name.replace('"', '""')
-        await self._connection.command(f'BGN "{quoted_name}"', completion_timeout)
-        self.state = "idle"
-        self._publish(FlexEvent("run_completed", name))
-      except BaseException:
-        self.state = "uncertain"
-        raise
+        self._run_actions = {}
+        self._action_acknowledgement = None
+        self._physical_pause_started = False
+        self._physical_pause_completed = False
 
   async def abort(self) -> None:
     """Request PC abort without waiting for the active command or operator pause."""

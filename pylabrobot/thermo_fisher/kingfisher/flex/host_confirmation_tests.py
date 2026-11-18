@@ -2,11 +2,13 @@
 
 import asyncio
 import unittest
-from dataclasses import replace
 
+from pylabrobot.resources import thermo_TS_kingfisher_96_wellplate_2000uL_Vb
+
+from .actions import FlexAction
 from .connection import FlexError
 from .flex import KingFisherFlex
-from .protocol import FlexPrompt, read_flex_bdz
+from .protocol import read_flex_bdz
 from .test_helpers import HIDTestCase, bdz_bytes
 
 
@@ -19,25 +21,33 @@ class HostConfirmationTests(HIDTestCase):
     self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
     self.flex.io = self.io
     self.original = read_flex_bdz(bdz_bytes())
-    self.protocol = replace(
-      self.original, script='MOR 7\nPAU 1 "tips"\nMOR 6\nPAU 1 "sample"\nTXT "next"\n'
+    self.protocol = read_flex_bdz(
+      bdz_bytes(
+        'MOR 7\nPAU 1 "tips"\nMOR 6\nPAU 1 "sample"\nTXT "next"\n',
+        plates=(("tips-id", "tips"), ("sample-id", "sample")),
+      )
     )
-    self.entered: asyncio.Queue[FlexPrompt] = asyncio.Queue()
+    self.plate_bindings.update(
+      {name: thermo_TS_kingfisher_96_wellplate_2000uL_Vb(name) for name in ("tips", "sample")}
+    )
+    self.entered: asyncio.Queue[FlexAction] = asyncio.Queue()
     self.release = asyncio.Event()
     self.cancelled = asyncio.Event()
     await self.flex.setup()
     await self.flex.initialize()
+    self.flex.reconcile_inventory()
 
   async def asyncTearDown(self) -> None:
     """Close simulation and wake pending operations."""
     await self.flex.stop()
 
-  async def confirm(self, prompt: FlexPrompt) -> bool:
+  async def confirm(self, prompt: FlexAction) -> bool:
     """Wait for this prompt's explicit confirmation and track cancellation."""
     self.entered.put_nowait(prompt)
     try:
       await self.release.wait()
       self.release.clear()
+      self.complete_transfer(prompt)
       return True
     finally:
       self.cancelled.set()
@@ -46,18 +56,23 @@ class HostConfirmationTests(HIDTestCase):
     """Host mode changes only PAU execution and reports its confirmations separately."""
     seen = []
 
-    async def confirm(prompt: FlexPrompt) -> bool:
+    async def confirm(prompt: FlexAction) -> bool:
       """Record a simulated operator confirmation."""
       seen.append(prompt)
+      self.complete_transfer(prompt)
       return True
 
     before = len(self.commands)
-    result = await self.flex.run_protocol(self.original, confirm_prompt=confirm)
+    result = await self.flex.run_protocol(
+      self.original.bind_plates({"plate": self.plate_bindings["plate"]}), handle_action=confirm
+    )
     commands = [c.text for c in self.original.preflight() if c.opcode != "PAU"]
     expected = ["EAK", "MOI 0", "MOS 0", "MOM 0", "MOH 0 100", "TEM 0 300"]
     expected += commands + ['TXT "END_OF_RUN"', "TEM 0 300", "TEM 0 300"]
     self.assertEqual(self.commands[before:], expected)
-    self.assertEqual(tuple(seen), self.original.prompts())
+    self.assertEqual(
+      [p.line_number for p in seen], [p.line_number for p in self.original.prompts()]
+    )
     self.assertEqual(result.completed_commands, len(commands))
     self.assertEqual(result.host_confirmations, len(seen))
     await self.flex.stop()
@@ -68,7 +83,12 @@ class HostConfirmationTests(HIDTestCase):
 
   async def test_each_confirmation_gates_motion_and_reader_stays_live(self) -> None:
     """A confirmation releases only its own prompt; telemetry never releases either."""
-    task = asyncio.create_task(self.flex.run_protocol(self.protocol, confirm_prompt=self.confirm))
+    task = asyncio.create_task(
+      self.flex.run_protocol(
+        self.protocol.bind_plates({name: self.plate_bindings[name] for name in ("tips", "sample")}),
+        handle_action=self.confirm,
+      )
+    )
     try:
       first = await asyncio.wait_for(self.entered.get(), 1)
       self.assertEqual((first.processing_slot, first.loading_slot), (7, 2))
@@ -81,6 +101,7 @@ class HostConfirmationTests(HIDTestCase):
       self.assertFalse(task.done())
       with self.assertRaisesRegex(FlexError, "active"):
         await self.flex.initialize()
+        self.flex.reconcile_inventory()
       self.release.set()
       second = await asyncio.wait_for(self.entered.get(), 1)
       self.assertEqual((second.processing_slot, second.loading_slot), (6, 1))
@@ -97,27 +118,34 @@ class HostConfirmationTests(HIDTestCase):
   async def test_rejected_confirmation_invalidates_without_motion(self) -> None:
     """A negative answer prevents every subsequent command and requires reconnect."""
 
-    async def reject(prompt: FlexPrompt) -> bool:
+    async def reject(prompt: FlexAction) -> bool:
       """Reject the requested plate action."""
       return False
 
     with self.assertRaisesRegex(FlexError, "did not confirm"):
-      await self.flex.run_protocol(self.protocol, confirm_prompt=reject)
+      await self.flex.run_protocol(
+        self.protocol.bind_plates({name: self.plate_bindings[name] for name in ("tips", "sample")}),
+        handle_action=reject,
+      )
     self.assertEqual(self.commands[-1], "MOR 7")
     self.assertEqual(self.flex.state, "uncertain")
     with self.assertRaises(FlexError):
       await self.flex.initialize()
+      self.flex.reconcile_inventory()
     self.io.send_feature_report.assert_not_awaited()
 
   async def test_callback_error_invalidates_without_motion(self) -> None:
     """Input/robot failures cannot be treated as a completed plate action."""
 
-    async def fail(prompt: FlexPrompt) -> bool:
+    async def fail(prompt: FlexAction) -> bool:
       """Simulate an operator interface failure."""
       raise EOFError("operator input closed")
 
     with self.assertRaises(EOFError):
-      await self.flex.run_protocol(self.protocol, confirm_prompt=fail)
+      await self.flex.run_protocol(
+        self.protocol.bind_plates({name: self.plate_bindings[name] for name in ("tips", "sample")}),
+        handle_action=fail,
+      )
     self.assertEqual(self.commands[-1], "MOR 7")
     self.assertEqual(self.flex.state, "uncertain")
 
@@ -125,7 +153,9 @@ class HostConfirmationTests(HIDTestCase):
     """The timeout aborts the software run rather than confirming a plate."""
     with self.assertRaises(asyncio.TimeoutError):
       await self.flex.run_protocol(
-        self.protocol, confirm_prompt=self.confirm, operator_timeout=0.01
+        self.protocol.bind_plates({name: self.plate_bindings[name] for name in ("tips", "sample")}),
+        handle_action=self.confirm,
+        operator_timeout=0.01,
       )
     self.assertTrue(self.cancelled.is_set())
     self.assertEqual(self.commands[-1], "MOR 7")
@@ -138,11 +168,17 @@ class HostConfirmationTests(HIDTestCase):
         await self.flex.stop()
         await self.flex.setup()
         await self.flex.initialize()
+        self.flex.reconcile_inventory()
         self.release.clear()
         self.cancelled.clear()
         before = len(self.commands)
         task = asyncio.create_task(
-          self.flex.run_protocol(self.protocol, confirm_prompt=self.confirm)
+          self.flex.run_protocol(
+            self.protocol.bind_plates(
+              {name: self.plate_bindings[name] for name in ("tips", "sample")}
+            ),
+            handle_action=self.confirm,
+          )
         )
         await asyncio.wait_for(self.entered.get(), 1)
         if failure == "abort":
@@ -163,7 +199,12 @@ class HostConfirmationTests(HIDTestCase):
   async def test_confirmation_only_after_rotation_completion(self) -> None:
     """An acknowledged but unfinished rotation must not expose a load confirmation."""
     self.responses["MOR 7"] = "MOR\r\n"
-    task = asyncio.create_task(self.flex.run_protocol(self.protocol, confirm_prompt=self.confirm))
+    task = asyncio.create_task(
+      self.flex.run_protocol(
+        self.protocol.bind_plates({name: self.plate_bindings[name] for name in ("tips", "sample")}),
+        handle_action=self.confirm,
+      )
+    )
     try:
       await self.wait_sent("MOR 7")
       self.assertTrue(self.entered.empty())

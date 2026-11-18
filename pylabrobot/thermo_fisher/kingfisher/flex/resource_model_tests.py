@@ -28,6 +28,7 @@ class FlexResourceTests(HIDTestCase):
     self.flex.io = self.io
     self.plate = thermo_TS_kingfisher_96_wellplate_2000uL_Vb("sample")
     self.flex.carousel[2] = self.plate
+    self.plate_bindings = {"plate": self.plate}
     self.holders = tuple(self.flex.carousel.sites.values())
     self.protocol = read_flex_bdz(bdz_bytes())
 
@@ -54,6 +55,7 @@ class FlexResourceTests(HIDTestCase):
     """Initialize only the mock instrument."""
     await self.flex.setup()
     await self.flex.initialize()
+    self.flex.reconcile_inventory()
 
   async def test_logical_tree_and_normal_assignment(self) -> None:
     """Eight explicit holders use standard assignment without issuing USB commands."""
@@ -148,11 +150,13 @@ class FlexResourceTests(HIDTestCase):
         self.responses[command] = "MOR\r\n"
         self.flex.reconcile_inventory()
         task = asyncio.create_task(
-          self.flex.run_protocol(replace(self.protocol, script=command + "\n"))
+          self.flex.run_protocol(
+            replace(self.protocol, script=command + "\n").bind_plates(self.plate_bindings)
+          )
         )
         await self.wait_sent(command)
         self.assert_orientation_unknown()
-        self.assertFalse(self.flex.inventory_verified)
+        self.assertTrue(self.flex.inventory_verified)
         # A telemetry event after the ACK proves that the reader processed it.
         self.emit("TEM 24 22\r\n")
         async for event in self.flex.events():
@@ -185,7 +189,11 @@ class FlexResourceTests(HIDTestCase):
       with self.subTest(interruption=interruption):
         await self.ready()
         self.responses["MOR 7"] = "MOR\r\n"
-        task = asyncio.create_task(self.flex.run_protocol(replace(self.protocol, script="MOR 7\n")))
+        task = asyncio.create_task(
+          self.flex.run_protocol(
+            replace(self.protocol, script="MOR 7\n").bind_plates(self.plate_bindings)
+          )
+        )
         await self.wait_sent("MOR 7")
         if interruption == "cancel":
           task.cancel()
@@ -208,7 +216,9 @@ class FlexResourceTests(HIDTestCase):
     await self.ready()
     self.flex.reconcile_inventory()
     with self.assertRaises(FlexProtocolError):
-      await self.flex.run_protocol(replace(self.protocol, script="REC 0\n"))
+      await self.flex.run_protocol(
+        replace(self.protocol, script="REC 0\n").bind_plates(self.plate_bindings)
+      )
     self.assertTrue(self.flex.inventory_verified)
     self.assert_occupancy_preserved()
 
@@ -224,4 +234,4 @@ class FlexResourceTests(HIDTestCase):
     self.assertTrue(other.inventory_verified)
     self.assertIsNone(other.processing_slot)
     self.assertIsNone(other.loading_slot)
-    self.assertFalse(self.flex.inventory_verified)
+    self.assertTrue(self.flex.inventory_verified)

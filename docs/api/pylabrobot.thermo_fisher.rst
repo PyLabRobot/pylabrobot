@@ -118,6 +118,10 @@ KingFisher Flex
     FlexRunResult
     FlexTranscriptEntry
     FlexProtocol
+    FlexBoundProtocol
+    FlexAction
+    FlexManualHandler
+    FlexStartAcknowledgement
     FlexProtocolError
     FlexProtocolIssue
     FlexCommand

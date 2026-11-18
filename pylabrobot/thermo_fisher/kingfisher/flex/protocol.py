@@ -4,10 +4,13 @@ import hashlib
 import math
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, Optional, Union
 
+from pylabrobot.resources import Plate
 from pylabrobot.thermo_fisher.kingfisher.bdz_container import parse_xml, read_container
 
 FLEX_TYPE_ID = "844c2ce4-e8cf-4c19-b8e6-c43037658b8c"
@@ -87,6 +90,7 @@ class FlexPrompt:
   processing_slot: int
   loading_slot: int
   additions: tuple[FlexDispense, ...] = ()
+  plate_id: Optional[str] = None
 
 
 def loading_slot(processing_slot: int) -> int:
@@ -296,15 +300,18 @@ def _dispensing_prompts(
       or block[4].opcode != "MOR"
     ):
       raise FlexProtocolError("Dispense requires the supported plate-presentation pause sequence")
-    loads = [
+    transfers = [
       p
       for p in prompts
-      if p.action == "load" and p.label == plate.name and p.line_number < block[0].line_number
+      if p.action in ("load", "unload")
+      and p.label == plate.name
+      and p.line_number < block[0].line_number
     ]
     if (
-      len(loads) != 1
-      or loads[0].loading_slot != loading_slot(int(block[1].text.split()[1]))
-      or int(block[4].text.split()[1]) != loads[0].loading_slot
+      not transfers
+      or transfers[-1].action != "load"
+      or transfers[-1].loading_slot != loading_slot(int(block[1].text.split()[1]))
+      or int(block[4].text.split()[1]) != transfers[-1].loading_slot
     ):
       raise FlexProtocolError("Dispense orientation does not match the target plate's loaded tray")
     if block[0].line_number in used_markers:
@@ -314,6 +321,109 @@ def _dispensing_prompts(
   if used_markers != markers:
     raise FlexProtocolError("TXT 11 requires matching standalone Dispense metadata")
   return result
+
+
+class FlexBoundProtocol:
+  """One export with a complete, read-only mapping of BDZ plate IDs to PLR plates.
+
+  Construct through ``protocol.bind_plates({bdz_name: plr_plate, ...})`` before
+  running. This associates identities; it does not rename, move or assign the
+  plates, verify their physical contents, or validate their physical geometry.
+  """
+
+  def __init__(self, protocol: "FlexProtocol", plates_by_name: Mapping[str, Plate]) -> None:
+    """Resolve exact BDZ names once and retain the original PLR object references."""
+    if not isinstance(plates_by_name, Mapping):
+      raise FlexProtocolError("Plate bindings must map BDZ plate names to PLR Plate objects")
+    bindings = dict(plates_by_name)
+    if any(not isinstance(name, str) for name in bindings):
+      raise FlexProtocolError("Plate binding keys must be BDZ plate names (strings)")
+    names = [plate.name for plate in protocol.plates]
+    if not names or any(not name.strip() for name in names):
+      raise FlexProtocolError("Binding requires nonempty BDZ plate names")
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+      raise FlexProtocolError(f"Ambiguous duplicate BDZ plate names: {duplicates!r}")
+    ids = [plate.id for plate in protocol.plates]
+    if any(not plate_id for plate_id in ids) or len(set(ids)) != len(ids):
+      raise FlexProtocolError("Binding requires unique, nonempty BDZ plate IDs")
+    missing = sorted(set(names) - bindings.keys())
+    extra = sorted(bindings.keys() - set(names))
+    if missing or extra:
+      details = []
+      if missing:
+        details.append(f"Missing PLR plate bindings for BDZ plates: {missing!r}")
+      if extra:
+        details.append(f"Unknown BDZ plate names in bindings: {extra!r}")
+      raise FlexProtocolError("; ".join(details))
+    seen: dict[int, str] = {}
+    by_id: dict[str, Plate] = {}
+    for plate in protocol.plates:
+      resource = bindings[plate.name]
+      if not isinstance(resource, Plate):
+        raise FlexProtocolError(f"BDZ plate {plate.name!r} must bind to a PLR Plate object")
+      if id(resource) in seen:
+        raise FlexProtocolError(
+          f"BDZ plates {seen[id(resource)]!r} and {plate.name!r} bind to the same PLR Plate"
+        )
+      seen[id(resource)] = plate.name
+      by_id[plate.id] = resource
+    self._protocol = protocol
+    self._plates_by_id = MappingProxyType(by_id)
+
+  @property
+  def protocol(self) -> "FlexProtocol":
+    """The exact parsed export associated with these bindings."""
+    return self._protocol
+
+  @property
+  def plates_by_id(self) -> Mapping[str, Plate]:
+    """Read-only BDZ plate ID to PLR Plate associations; objects retain their names."""
+    return self._plates_by_id
+
+  def prompts(self) -> tuple[FlexPrompt, ...]:
+    """Resolve transfer labels and explicit intervention metadata to stable plate IDs.
+
+    Free-text pauses without plate-presentation metadata have no inferred target.
+    Load/unload labels must exactly match a unique plate in the selected export.
+    """
+    by_name = {plate.name: plate.id for plate in self.protocol.plates}
+    commands = self.protocol.preflight()
+    positions = {command.line_number: i for i, command in enumerate(commands)}
+    root = _xml(self.protocol.exported_xml, "ExportedData")
+    result = []
+    for prompt in self.protocol.prompts():
+      plate_id = None
+      if prompt.action in ("load", "unload"):
+        plate_id = by_name.get(prompt.label)
+        if plate_id is None:
+          raise FlexProtocolError(
+            f"Line {prompt.line_number}: unknown BDZ plate in {prompt.action}: {prompt.label!r}"
+          )
+      elif prompt.additions:
+        ids = {addition.plate_id for addition in prompt.additions}
+        if len(ids) != 1:
+          raise FlexProtocolError("A presented intervention must target exactly one plate")
+        plate_id = next(iter(ids))
+      else:
+        i = positions[prompt.line_number]
+        if i >= 2 and commands[i - 2].text.startswith('TXT 10 "'):
+          marker = commands[i - 2].text.split('"')[1]
+          matches = [
+            pause
+            for pause in root.findall("./Protocol/Run/Protocol/.//Steps/Pause")
+            if pause.get("name") == marker and pause.findtext("Message", "") == prompt.label
+          ]
+          if len(matches) != 1 or commands[i - 1].opcode != "MOR":
+            raise FlexProtocolError(f"Line {prompt.line_number}: ambiguous intervention metadata")
+          refs = matches[0].findall("Plates/Plate")
+          if len(refs) != 1:
+            raise FlexProtocolError("A presented intervention must target exactly one plate")
+          plate_id = refs[0].get("id")
+          if plate_id not in self.plates_by_id:
+            raise FlexProtocolError("Intervention references an unbound plate")
+      result.append(replace(prompt, plate_id=plate_id))
+    return tuple(result)
 
 
 @dataclass(frozen=True)
@@ -338,6 +448,16 @@ class FlexProtocol:
   def sha256(self) -> str:
     """Return the digest of the immutable original export."""
     return hashlib.sha256(self.original_bytes).hexdigest()
+
+  def bind_plates(self, plates_by_name: Mapping[str, Plate]) -> FlexBoundProtocol:
+    """Bind every BDZ plate by its exact, case-sensitive name before execution.
+
+    Missing/unknown names, ambiguous duplicate BDZ names, non-Plate values and
+    reuse of one PLR Plate for distinct BDZ plates raise ``FlexProtocolError``.
+    The mapping is copied; later caller edits cannot change a prepared run.
+    Protocol inspection remains available without bindings or hardware access.
+    """
+    return FlexBoundProtocol(self, plates_by_name)
 
   def compatibility_issues(self) -> tuple[FlexProtocolIssue, ...]:
     """Report all detected execution blockers without device access or script changes.

@@ -18,6 +18,7 @@ class FlexTests(HIDTestCase):
     self.mock_hid()
     self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
     self.flex.io = self.io
+    self.physical_flex = self.flex
     self.protocol = read_flex_bdz(bdz_bytes())
 
   async def asyncTearDown(self) -> None:
@@ -28,6 +29,7 @@ class FlexTests(HIDTestCase):
     """Explicitly initialize the fixture for motion tests."""
     await self.flex.setup()
     await self.flex.initialize()
+    self.flex.reconcile_inventory()
 
   async def test_identification_is_idempotent_and_motion_free(self) -> None:
     """Setup sends VER only, and initialization must be requested separately."""
@@ -38,7 +40,7 @@ class FlexTests(HIDTestCase):
     self.assertEqual(self.flex.serial, "fixture")
     self.assertIsNone(self.flex.processing_slot)
     with self.assertRaisesRegex(FlexError, "initialize"):
-      await self.flex.run_protocol(self.protocol)
+      await self.flex.run_protocol(self.protocol.bind_plates(self.plate_bindings))
     self.assertEqual(self.commands, ["VER"])
 
   async def test_wrong_device_closes_connection(self) -> None:
@@ -53,8 +55,9 @@ class FlexTests(HIDTestCase):
     """Preserve script commands between initialization and successful finalization."""
     await self.ready()
     await self.flex.initialize()
+    self.flex.reconcile_inventory()
     before = len(self.commands)
-    result = await self.flex.run_protocol(self.protocol)
+    result = await self.flex.run_protocol(self.protocol.bind_plates(self.plate_bindings))
     self.assertEqual(result.completed_commands, 3)
     self.assertEqual(result.source_sha256, self.protocol.sha256)
     self.assertEqual(
@@ -86,15 +89,19 @@ class FlexTests(HIDTestCase):
     await self.ready()
     before = list(self.commands)
     with self.assertRaises(FlexProtocolError):
-      await self.flex.run_protocol(replace(self.protocol, script=self.protocol.script + "REC 0\n"))
+      await self.flex.run_protocol(
+        replace(self.protocol, script=self.protocol.script + "REC 0\n").bind_plates(
+          self.plate_bindings
+        )
+      )
     self.assertEqual(self.commands, before)
 
   async def test_pause_waits_for_instrument_completion(self) -> None:
-    """Temperature reports and a software resume call cannot complete PAU."""
+    """Temperature reports cannot complete PAU."""
     await self.ready()
     self.responses['PAU 1 "plate"'] = "PAU\r\nTEM 24 22\r\n"
     protocol = replace(self.protocol, script='MOR 7\nPAU 1 "plate"\nTXT "done"\n')
-    task = asyncio.create_task(self.flex.run_protocol(protocol))
+    task = asyncio.create_task(self.flex.run_protocol(protocol.bind_plates(self.plate_bindings)))
     await self.wait_sent('PAU 1 "plate"')
     async for event in self.flex.events():
       if event.kind == "load":
@@ -104,8 +111,6 @@ class FlexTests(HIDTestCase):
         break
     self.assertFalse(task.done())
     self.assertEqual(self.flex.state, "waiting")
-    with self.assertRaises(NotImplementedError):
-      await self.flex.resume()
     self.assertNotIn('TXT "done"', self.commands)
     self.emit("PAU END 0\r\n")
     await task
@@ -115,10 +120,13 @@ class FlexTests(HIDTestCase):
     """A timed mix survives past both the base motion and acceptance deadlines."""
     self.flex = KingFisherFlex(timeout=0.01, operation_timeout=0.01)
     self.flex.io = self.io
+    self.physical_flex = self.flex
     await self.ready()
     self.responses["MOH 547 669 0 60000 0"] = "MOH\r\nTEM 24 22\r\n"
     task = asyncio.create_task(
-      self.flex.run_protocol(replace(self.protocol, script="MOH 547 669 0 60000 0\n"))
+      self.flex.run_protocol(
+        replace(self.protocol, script="MOH 547 669 0 60000 0\n").bind_plates(self.plate_bindings)
+      )
     )
     await self.wait_sent("MOH 547 669 0 60000 0")
     with self.assertRaises(asyncio.TimeoutError):
@@ -133,7 +141,9 @@ class FlexTests(HIDTestCase):
         await self.ready()
         self.responses[command] = command[:3] + "\r\n"
         task = asyncio.create_task(
-          self.flex.run_protocol(replace(self.protocol, script=f"MOR 1\n{command}\n"))
+          self.flex.run_protocol(
+            replace(self.protocol, script=f"MOR 1\n{command}\n").bind_plates(self.plate_bindings)
+          )
         )
         await self.wait_sent(command)
         await self.flex.abort()
@@ -144,7 +154,7 @@ class FlexTests(HIDTestCase):
         self.assertIsNone(self.flex.processing_slot)
         before = len(self.commands)
         with self.assertRaises(FlexError):
-          await self.flex.run_protocol(self.protocol)
+          await self.flex.run_protocol(self.protocol.bind_plates(self.plate_bindings))
         self.assertEqual(len(self.commands), before)
         await self.flex.stop()
         self.responses.clear()
@@ -155,7 +165,9 @@ class FlexTests(HIDTestCase):
     await self.ready()
     self.responses['PAU 1 "plate"'] = "PAU\r\n"
     task = asyncio.create_task(
-      self.flex.run_protocol(replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n'))
+      self.flex.run_protocol(
+        replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n').bind_plates(self.plate_bindings)
+      )
     )
     await self.wait_sent('PAU 1 "plate"')
     task.cancel()
@@ -182,7 +194,9 @@ class FlexTests(HIDTestCase):
     await self.ready()
     self.responses["MOR 7"] = "MOR\r\nMOR END 9876\r\n"
     with self.assertRaises(FlexError) as raised:
-      await self.flex.run_protocol(replace(self.protocol, script='MOR 7\nPAU 1 "plate"\n'))
+      await self.flex.run_protocol(
+        replace(self.protocol, script='MOR 7\nPAU 1 "plate"\n').bind_plates(self.plate_bindings)
+      )
     self.assertEqual(raised.exception.code, 9876)
     self.assertNotIn('PAU 1 "plate"', self.commands)
 
@@ -191,7 +205,9 @@ class FlexTests(HIDTestCase):
     await self.ready()
     self.responses['PAU 1 "plate"'] = "PAU\r\n"
     task = asyncio.create_task(
-      self.flex.run_protocol(replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n'))
+      self.flex.run_protocol(
+        replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n').bind_plates(self.plate_bindings)
+      )
     )
     await self.wait_sent('PAU 1 "plate"')
     self.incoming.put_nowait(OSError("unplugged"))
@@ -204,7 +220,9 @@ class FlexTests(HIDTestCase):
     await self.ready()
     self.responses['PAU 1 "plate"'] = "PAU\r\n"
     task = asyncio.create_task(
-      self.flex.run_protocol(replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n'))
+      self.flex.run_protocol(
+        replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n').bind_plates(self.plate_bindings)
+      )
     )
     await self.wait_sent('PAU 1 "plate"')
     await asyncio.wait_for(self.flex.stop(), 1)
@@ -218,7 +236,9 @@ class FlexTests(HIDTestCase):
     await self.ready()
     self.responses["MOR 7"] = "MOR\r\nQIT\r\n"
     with self.assertRaises(FlexError):
-      await self.flex.run_protocol(replace(self.protocol, script="MOR 7\n"))
+      await self.flex.run_protocol(
+        replace(self.protocol, script="MOR 7\n").bind_plates(self.plate_bindings)
+      )
     self.assertEqual(self.flex.state, "uncertain")
 
   async def test_short_write_and_wrong_completion_fail(self) -> None:
@@ -232,26 +252,22 @@ class FlexTests(HIDTestCase):
     with self.assertRaises(FlexError):
       await self.flex.setup()
 
-  async def test_unknown_remote_commands_send_nothing(self) -> None:
-    """Unavailable remote resume fails before any hardware access."""
-    with self.assertRaises(NotImplementedError):
-      await self.flex.resume()
-    self.io.setup.assert_not_awaited()
-    self.io.write.assert_not_awaited()
-
   async def test_concurrent_run_is_rejected_without_queueing(self) -> None:
     """A second run cannot start later merely because the first was waiting."""
     await self.ready()
     self.responses['PAU 1 "plate"'] = "PAU\r\n"
     task = asyncio.create_task(
-      self.flex.run_protocol(replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n'))
+      self.flex.run_protocol(
+        replace(self.protocol, script='MOR 1\nPAU 1 "plate"\n').bind_plates(self.plate_bindings)
+      )
     )
     await self.wait_sent('PAU 1 "plate"')
     before = list(self.commands)
     with self.assertRaisesRegex(FlexError, "active"):
-      await self.flex.run_protocol(self.protocol)
+      await self.flex.run_protocol(self.protocol.bind_plates(self.plate_bindings))
     with self.assertRaisesRegex(FlexError, "active"):
       await self.flex.initialize()
+      self.flex.reconcile_inventory()
     self.assertEqual(self.commands, before)
     self.emit("PAU END 0\r\n")
     await task
@@ -272,7 +288,9 @@ class FlexTests(HIDTestCase):
     self.responses['PAU 1 "plate"'] = "PAU\r\n"
     with self.assertRaises(asyncio.TimeoutError):
       await self.flex.run_protocol(
-        replace(self.protocol, script='MOR 1\nPAU 1 "plate"\nTXT "next"\n'),
+        replace(self.protocol, script='MOR 1\nPAU 1 "plate"\nTXT "next"\n').bind_plates(
+          self.plate_bindings
+        ),
         operator_timeout=0.01,
       )
     self.assertNotIn('TXT "next"', self.commands)
@@ -283,7 +301,9 @@ class FlexTests(HIDTestCase):
     await self.ready()
     self.responses["MOR 7"] = "MOR\r\nMOR\r\nMOR END 0\r\n"
     with self.assertRaisesRegex(FlexError, "Duplicate"):
-      await self.flex.run_protocol(replace(self.protocol, script="MOR 7\n"))
+      await self.flex.run_protocol(
+        replace(self.protocol, script="MOR 7\n").bind_plates(self.plate_bindings)
+      )
 
 
 if __name__ == "__main__":
