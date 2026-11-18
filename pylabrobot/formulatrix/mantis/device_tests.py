@@ -3,6 +3,7 @@
 import math
 import os
 import unittest
+from typing import cast
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis import Mantis, MantisDevice
@@ -12,6 +13,7 @@ from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources import Coordinate
 
 RESOURCE_MODEL = os.path.join(os.path.dirname(__file__), "resource_model")
 
@@ -51,38 +53,36 @@ class ArmModelTests(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(link.rotation.z, posed.arm_links[name].rotation.z)
         self.assertNotAlmostEqual(link.rotation.z, idle.arm_links[name].rotation.z)
 
-  def test_the_five_bar_published_places_every_link(self):
+  async def test_the_five_bar_follows_the_motors_and_places_every_link(self):
     device = Mantis(simulation=True)
+    with mock.patch.object(LedBar, "_sleep", autospec=True):
+      await device.setup()
+    self.addAsyncCleanup(device.stop)
+    assert device.arm is not None
     theta_1, theta_2 = compute_joint_angles(location=MantisArmCoordinate(x=-30.0, y=45.0, z=None))
-    device._update_arm_model(theta_1=theta_1, theta_2=theta_2, z=0.0)
+    await device.arm.move_to_joint_state(joint_state={0: theta_1, 1: theta_2, 2: 10.0})
     five_bar = device.serialize_state()["five_bar"]
-    lengths, bases, angles = five_bar["lengths"], five_bar["bases"], five_bar["angles"]
-    ends = {
-      side: (
-        bases[side][0] + lengths[f"{side}_short_arm"] * math.cos(math.radians(angles[side])),
-        bases[side][1] + lengths[f"{side}_short_arm"] * math.sin(math.radians(angles[side])),
-      )
-      for side in ("right", "left")
-    }
+    # Unwrapped as the motors turn: a viewer turns each short link the way its motor does.
+    self.assertEqual(five_bar["angles"], {"right": theta_1 - 180.0, "left": -theta_2})
     for side in ("right", "left"):
       short = device.arm_links[f"{side}_short_arm"]
+      angle = math.radians(five_bar["angles"][side])
+      length = five_bar["lengths"][f"{side}_short_arm"]
+      base = five_bar["bases"][side]
+      distal = cast(Coordinate, short.distal_joint)
+      turned = math.radians(short.rotation.z)
+      location = cast(Coordinate, short.location)
       with self.subTest(side=side):
-        self.assertAlmostEqual(short.rotation.z, angles[side] % 360)
-        elbow = short.get_location_wrt(device.z_column)
-        turned = short.rotation.z
-        distal = short.distal_joint
-        assert distal is not None
         self.assertAlmostEqual(
-          elbow.x
-          + distal.x * math.cos(math.radians(turned))
-          - distal.y * math.sin(math.radians(turned)),
-          ends[side][0],
-          places=3,
+          base[0] + length * math.cos(angle),
+          location.x + distal.x * math.cos(turned) - distal.y * math.sin(turned),
+          places=6,
         )
-    # The head's side picks the solution the device drew: both long links reach it.
-    gap = math.dist(ends["right"], ends["left"])
-    self.assertLess(gap, lengths["right_long_arm"] + lengths["left_long_arm"])
-    self.assertIn(five_bar["side_of_head"], (-1.0, 1.0))
+        self.assertAlmostEqual(
+          base[1] + length * math.sin(angle),
+          location.y + distal.x * math.sin(turned) + distal.y * math.cos(turned),
+          places=6,
+        )
 
 
 if __name__ == "__main__":

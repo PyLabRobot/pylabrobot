@@ -2,7 +2,7 @@
 
 import math
 import os
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Dict, Optional, cast
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Deck, Resource
@@ -47,11 +47,6 @@ class MantisDevice(Resource):
   arm. The generation is read at setup (``driver.configuration.generation``).
   """
 
-  # Each side's short and long link angles in the device frame, degrees, as last posed.
-  _arm_angles: Dict[str, Tuple[float, float]]
-  # Each short link's angle, degrees, as its motor turns it: never wrapped.
-  _driven_angles: Dict[str, float]
-
   def _update_arm_model(self, *, theta_1: float, theta_2: float, z: float) -> None:
     """Turn the arm's links to two link angles, the geometry's own, in degrees, and raise or lower
     the Z column with the arm on it to a height.
@@ -65,7 +60,6 @@ class MantisDevice(Resource):
     self.z_column.location = Coordinate(x=column_x, y=column_y, z=column_z + z)
     right_elbow, left_elbow = compute_elbow_positions(theta_1=theta_1, theta_2=theta_2)
     head = compute_head_position(theta_1=theta_1, theta_2=theta_2)
-    angles: Dict[str, Tuple[float, float]] = {}
     for side, base, elbow in (
       ("right", RIGHT_BASE, right_elbow),
       ("left", LEFT_BASE, left_elbow),
@@ -80,56 +74,18 @@ class MantisDevice(Resource):
       short, long = self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"]
       short.rotate_to(z=short_angle, pivot_coordinate=short.proximal_joint)
       long.rotate_to(z=long_angle - short_angle, pivot_coordinate=long.proximal_joint)
-      angles[side] = (short_angle, long_angle)
-    self._arm_angles = angles
-    # The short links' angles as the motors turn them, unwrapped: a viewer turns them the same way.
-    self._driven_angles = {"right": theta_1 - 180.0, "left": -theta_2}
-    # The viewer places the links from the two driven angles, so a glide keeps the head pinned.
-    self._state_updated()
-
-  def _get_five_bar(self) -> Dict[str, Any]:
-    """The arm as a five-bar linkage, for a viewer: its links, where each short link turns in the
-    Z column's frame, the link lengths, the two short links' angles and the head's side."""
-    side_of_head = 1.0
-    if self._arm_angles:
-      (right_angle, right_long_angle), (left_angle, _) = (
-        self._arm_angles["right"],
-        self._arm_angles["left"],
-      )
-      ends = {}
-      for side, angle in (("right", right_angle), ("left", left_angle)):
-        base_x, base_y = self._arm_link_bases[side]
-        length = cast(float, self.arm_links[f"{side}_short_arm"].length)
-        ends[side] = (
-          base_x + length * math.cos(math.radians(angle)),
-          base_y + length * math.sin(math.radians(angle)),
-        )
-      long_length = cast(float, self.arm_links["right_long_arm"].length)
-      head_x = ends["right"][0] + long_length * math.cos(math.radians(right_long_angle))
-      head_y = ends["right"][1] + long_length * math.sin(math.radians(right_long_angle))
-      across_x, across_y = ends["left"][0] - ends["right"][0], ends["left"][1] - ends["right"][1]
-      cross = across_x * (head_y - ends["right"][1]) - across_y * (head_x - ends["right"][0])
-      side_of_head = 1.0 if cross >= 0 else -1.0
-    return {
-      "links": {key: link.name for key, link in self.arm_links.items()},
-      "joints": {
-        key: {
-          "proximal": [link.proximal_joint.x, link.proximal_joint.y],
-          "distal": [cast(Coordinate, link.distal_joint).x, cast(Coordinate, link.distal_joint).y],
-        }
-        for key, link in self.arm_links.items()
-      },
-      "bases": {side: list(base) for side, base in self._arm_link_bases.items()},
-      "lengths": {key: link.length for key, link in self.arm_links.items()},
-      "angles": dict(self._driven_angles),
-      "side_of_head": side_of_head,
-    }
+    self._state_updated()  # the arm's five-bar, in this state, moved
 
   def serialize_state(self) -> Dict[str, Any]:
-    """The resource state and, once the arm is posed, its five-bar (``_get_five_bar``)."""
+    """The resource state, with the arm's five-bar once it has a pose (``Arm._get_five_bar``)."""
     state = super().serialize_state()
-    if getattr(self, "_arm_angles", None):
-      state["five_bar"] = self._get_five_bar()
+    arm, links = (
+      self.driver.arm if hasattr(self, "driver") else None,
+      getattr(self, "arm_links", {}),
+    )
+    five_bar = arm._get_five_bar(links=links) if arm is not None and links else None
+    if five_bar is not None:
+      state["five_bar"] = five_bar
     return state
 
   def __init__(
@@ -237,20 +193,18 @@ class MantisDevice(Resource):
     self.z_column = z_column(name=f"{name}_z_column")
     self.assign_child_resource(self.z_column, location=measured_at["z_column"])
     self.arm_links: Dict[str, LinkBody] = {}
-    # Where each short link turns, x and y in the Z column's frame, mm.
-    self._arm_link_bases: Dict[str, Tuple[float, float]] = {}
-    self._arm_angles = {}
-    self._driven_angles = {}
     for side, base in (("right", RIGHT_BASE), ("left", LEFT_BASE)):
       short = arm_link(name=f"{name}_{side}_short_arm", link=f"{side}_short_arm")
       long = arm_link(name=f"{name}_{side}_long_arm", link=f"{side}_long_arm")
       assert short.distal_joint is not None
-      pivot = (
-        Coordinate(ARM_BASE_X + cast(float, base.x), ARM_BASE_Y - cast(float, base.y), ARM_Z)
+      self.z_column.assign_child_resource(
+        short,
+        location=Coordinate(
+          ARM_BASE_X + cast(float, base.x), ARM_BASE_Y - cast(float, base.y), ARM_Z
+        )
         - measured_at["z_column"]
+        - short.proximal_joint,
       )
-      self._arm_link_bases[side] = (pivot.x, pivot.y)
-      self.z_column.assign_child_resource(short, location=pivot - short.proximal_joint)
       above = MANIFEST["arm_links"][f"{side}_long_arm"]["above"]
       short.assign_child_resource(
         long,
