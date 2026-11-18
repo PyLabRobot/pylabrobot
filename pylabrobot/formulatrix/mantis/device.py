@@ -2,7 +2,7 @@
 
 import math
 import os
-from typing import Dict, Optional, cast
+from typing import Any, Dict, Optional, cast
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate, Deck, Resource
@@ -74,6 +74,16 @@ class MantisDevice(Resource):
       short, long = self.arm_links[f"{side}_short_arm"], self.arm_links[f"{side}_long_arm"]
       short.rotate_to(z=short_angle, pivot_coordinate=short.proximal_joint)
       long.rotate_to(z=long_angle - short_angle, pivot_coordinate=long.proximal_joint)
+    self._state_updated()  # the arm's five-bar, in this state, moved
+
+  def serialize_state(self) -> Dict[str, Any]:
+    """The resource state, with the arm's five-bar once it has a pose (``Arm._get_five_bar``)."""
+    state = super().serialize_state()
+    arm = self.driver.arm
+    five_bar = arm._get_five_bar(links=self.arm_links) if arm is not None else None
+    if five_bar is not None:
+      state["five_bar"] = five_bar
+    return state
 
   def __init__(
     self,
