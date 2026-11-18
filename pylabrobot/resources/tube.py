@@ -70,9 +70,14 @@ class Tube(Container):
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
     )
+    self.bottom_type = bottom_type
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "max_volume": self.max_volume}
+    return {
+      **super().serialize(),
+      "max_volume": self.max_volume,
+      "bottom_type": self.bottom_type.value,
+    }
 
   def set_volume(self, volume: float):
     """Set the volume in the tube.

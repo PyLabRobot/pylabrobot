@@ -22,11 +22,11 @@ from typing import (
   Optional,
   Set,
   Tuple,
-  Union,
 )
 
 from pylabrobot.io.ftdi import FTDI
 
+from .arm_kinematics import MantisArmCoordinate
 from .configuration import (
   FITTED_FIELDS,
   MOTION_CALIBRATION_BLOCKS,
@@ -60,11 +60,9 @@ from .events import (
   decode_sequence_progress,
   describe_event,
 )
-from .features.arm import Arm
-from .features.arm_v3 import V3Arm
+from .features.arm import Arm, MantisArmConfiguration
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
-from .features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .features.pump import Pump
 from .features.rfid import RFID_BAUD_RATE, RFID_FTDI_INTERFACE, Rfid, _initialize_rfid_module
 from .framing import (
@@ -78,7 +76,14 @@ from .framing import (
   parse_frame,
   split_frames,
 )
-from .oem_config import _load_unit_configuration
+from .oem_config import (
+  UNKNOWN_ZONE,
+  WASH_APPROACH_PATH,
+  WASH_POSITIONS,
+  WASTE_APPROACH_PATH,
+  ZONES,
+  _load_unit_configuration,
+)
 from .v3_arm_configuration import V3ArmConfiguration
 
 logger = logging.getLogger(__name__)
@@ -189,7 +194,7 @@ class MantisDriver:
       if rfid_io is not None or io is not None
       else self._build_rfid_io(device_id=device_id, ftdi_library=ftdi_library)
     )
-    self.plate_clamp: Optional[Union[PlateClamp, PneumaticPlateClamp]] = None
+    self.plate_clamp: Optional[PlateClamp] = None
     self.pump: Optional[Pump] = None
     self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
@@ -826,17 +831,19 @@ class MantisDriver:
   # -- discovery and setup --------------------------------------------------
 
   async def _request_configuration(self) -> DeviceConfiguration:
-    """Read the firmware versions and the motor limits off the device.
+    """Read the firmware versions off the device.
 
-    Only the motion board must answer. Each other board gets one attempt; one that times out,
-    refuses or answers a malformed version is absent, not a fault.
+    Only the motion board must answer. Board 11 gets a second attempt, as its silence makes a unit
+    a v3; each other board gets one. A board that times out, refuses or answers a malformed version
+    is absent, not a fault.
     """
     firmware_versions: Dict[int, Optional[str]] = {
       MOTION_BOARD: await self.request_firmware_version(board=MOTION_BOARD)
     }
     for board in (PRESSURE_BOARD, ABSOLUTE_POSITION_SENSOR_BOARD, LC3_BOARD):
+      attempts = 2 if board == ABSOLUTE_POSITION_SENSOR_BOARD else 1
       try:
-        reply = await self._send_command(board=board, command=1, attempts=1)
+        reply = await self._send_command(board=board, command=1, attempts=attempts)
         firmware_versions[board] = decode_string(payload=reply)
       except (TimeoutError, CommandRefusedError, FrameError, UnicodeDecodeError) as error:
         logger.info("[%s] board %d taken as absent: %r", self.name, board, error)
@@ -844,7 +851,6 @@ class MantisDriver:
     return DeviceConfiguration(
       generation=compute_generation(firmware_versions=firmware_versions),
       firmware_versions=firmware_versions,
-      motor_limits={motor: await self.request_motor_limits(motor=motor) for motor in MOTORS},
     )
 
   def _get_arm_calibration(self) -> Dict[str, Any]:
@@ -880,33 +886,147 @@ class MantisDriver:
         )
     return calibration
 
-  def _discover_features(self) -> None:
+  def _get_route_blocks(self) -> Dict[str, Any]:
+    """The ``zones`` and ``approach_paths`` blocks as the arm takes them, by argument; each None
+    without its block.
+
+    Raises:
+      MantisConfigurationError: if a block is malformed: a zone missing, a rectangle not four
+        numbers, a route line not three numbers or None, or a route to safe XY that moves Z.
+    """
+
+    def to_route(lines: Any) -> List[MantisArmCoordinate]:
+      route = []
+      for line in lines:
+        x, y, z = (None if value is None else float(value) for value in line)
+        route.append(MantisArmCoordinate(x=x, y=y, z=z))
+      return route
+
+    routes: Dict[str, Any] = {
+      "zone_rectangles": None,
+      "safe_xy_routes": None,
+      "idle_routes": None,
+      "approach_paths": None,
+    }
+    zones = self._unit_blocks.get("zones")
+    approach_paths = self._unit_blocks.get("approach_paths")
+    try:
+      if zones is not None:
+        rectangles = {}
+        for zone in ZONES:
+          minimum_x, maximum_x, minimum_y, maximum_y = (float(v) for v in zones["rectangles"][zone])
+          rectangles[zone] = (
+            MantisArmCoordinate(x=minimum_x, y=minimum_y, z=None),
+            MantisArmCoordinate(x=maximum_x, y=maximum_y, z=None),
+          )
+        routes["zone_rectangles"] = rectangles
+        for field in ("safe_xy_routes", "idle_routes"):
+          routes[field] = {zone: to_route(zones[field][zone]) for zone in (*ZONES, UNKNOWN_ZONE)}
+      if approach_paths is not None:
+        routes["approach_paths"] = {
+          str(name): to_route(lines) for name, lines in approach_paths.items()
+        }
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+      raise MantisConfigurationError(
+        f"malformed zones or approach_paths block: {error!r}"
+      ) from error
+    if routes["safe_xy_routes"] is not None and any(
+      line.x is None or line.z is not None
+      for route in routes["safe_xy_routes"].values()
+      for line in route
+    ):
+      raise MantisConfigurationError("zones block: a route to safe XY moves the arms only")
+    known = {WASTE_APPROACH_PATH, *(WASH_APPROACH_PATH.format(position=p) for p in WASH_POSITIONS)}
+    if routes["approach_paths"] is not None and not set(routes["approach_paths"]) <= known:
+      raise MantisConfigurationError(
+        f"approach_paths block: the paths are {sorted(known)}, got {sorted(routes['approach_paths'])}"
+      )
+    return routes
+
+  def _get_stage_calibration(self) -> Dict[str, Any]:
+    """The ``stage`` block as the arm takes it, by argument; each None without the block.
+
+    Raises:
+      MantisConfigurationError: if the block is malformed: a vector not three numbers or the
+        matrix not three rows of three.
+    """
+    block = self._unit_blocks.get("stage")
+    if block is None:
+      return dict.fromkeys(
+        (
+          "stage_origin",
+          "stage_transformation_matrix",
+          "stage_offset_x",
+          "stage_offset_y",
+          "arm_type_rotation_degree",
+          "arm_type_translation",
+          "stage_reference_height",
+        )
+      )
+    vector_fields = ("origin", "offset_x", "offset_y", "arm_type_translation")
+    try:
+      vectors = {field: tuple(float(value) for value in block[field]) for field in vector_fields}
+      matrix = tuple(tuple(float(value) for value in row) for row in block["transformation_matrix"])
+      rotation = float(block["arm_type_rotation_degree"])
+      reference_height = float(block["reference_height"])
+    except (KeyError, TypeError, ValueError) as error:
+      raise MantisConfigurationError(f"malformed stage block: {error!r}") from error
+    if any(len(vector) != 3 for vector in vectors.values()):
+      raise MantisConfigurationError(f"stage block: {', '.join(vector_fields)} are x, y and z")
+    if len(matrix) != 3 or any(len(row) != 3 for row in matrix):
+      raise MantisConfigurationError("stage block: the transformation matrix is 3 by 3")
+    return {
+      "stage_origin": vectors["origin"],
+      "stage_transformation_matrix": matrix,
+      "stage_offset_x": vectors["offset_x"],
+      "stage_offset_y": vectors["offset_y"],
+      "arm_type_rotation_degree": rotation,
+      "arm_type_translation": vectors["arm_type_translation"],
+      "stage_reference_height": reference_height,
+    }
+
+  def _discover_features(self, *, motor_limits: Dict[int, Tuple[float, float]]) -> None:
     """Build the features the configuration says are fitted, with the unit's values.
 
     A feature already built is kept.
 
+    Args:
+      motor_limits: each motor's (lower, upper) limit, by motor, read for the arm.
+
     Raises:
-      MantisConfigurationError: if the ``plate_clamp``, ``led_bar`` or ``arm`` block is malformed.
+      MantisConfigurationError: if the ``plate_clamp``, ``led_bar``, ``arm``, ``zones``,
+        ``approach_paths`` or ``stage`` block is malformed.
     """
     if self.configuration.firmware_versions.get(PRESSURE_BOARD) is not None and self.pump is None:
       self.pump = Pump(driver=self)
     block = self._unit_blocks.get("plate_clamp")
-    if block is not None and block.get("controller") == "pressure_regulator":
+    lc3_answered = self.configuration.firmware_versions.get(LC3_BOARD) is not None
+    pneumatic = block is not None and block.get("controller") == "pressure_regulator"
+    # A clamp on a pressure-board output where board 12 answers, or with levels where it does not.
+    if pneumatic and lc3_answered:
+      raise MantisConfigurationError(
+        f"{self.name}: the plate_clamp block names a pressure-board output, but board 12 answers"
+      )
+    if (
+      block is not None
+      and not pneumatic
+      and not lc3_answered
+      and "plate_clamp" not in self._unit_blocks_from_recording
+    ):
+      raise MantisConfigurationError(
+        f"{self.name}: the plate_clamp block has lock levels, but board 12 does not answer"
+      )
+    if pneumatic and block is not None:
       if self.pump is not None and self.plate_clamp is None:
         try:
           output = block["auxiliary_output"]
-          self.plate_clamp = PneumaticPlateClamp(
-            driver=self, pump=self.pump, auxiliary_output=output
-          )
+          self.plate_clamp = PlateClamp(driver=self, auxiliary_output=output, pump=self.pump)
         except (KeyError, TypeError, ValueError) as error:
           raise MantisConfigurationError(
             f"malformed pneumatic plate_clamp block: {error}"
           ) from error
-    elif (
-      self.configuration.firmware_versions.get(LC3_BOARD) is not None and self.plate_clamp is None
-    ):
+    elif lc3_answered and self.plate_clamp is None:
       levels: Optional[Dict[int, Tuple[float, int]]] = None
-      block = self._unit_blocks.get("plate_clamp")
       if block is not None:
         try:
           levels = {
@@ -934,16 +1054,35 @@ class MantisDriver:
       self.led_bar = LedBar(
         driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
       )
-    sensor_board = self.configuration.firmware_versions.get(ABSOLUTE_POSITION_SENSOR_BOARD)
-    if self.arm is None:
-      if sensor_board is not None:
-        self.arm = Arm(driver=self, **self._get_arm_calibration())
-      else:
-        block = self._unit_blocks.get("arm")
-        self.arm = V3Arm(
-          driver=self,
-          configuration=V3ArmConfiguration.from_block(block) if block is not None else None,
+    if self.arm is None and self.configuration.generation == "v4":
+      self.arm = Arm(
+        driver=self,
+        configuration=MantisArmConfiguration(
+          motor_limits=motor_limits,
+          **self._get_arm_calibration(),
+          **self._get_route_blocks(),
+          **self._get_stage_calibration(),
+        ),
+      )
+    elif self.arm is None and self.configuration.generation == "v3":
+      block = self._unit_blocks.get("arm")
+      # Absolute-encoder references are a v4's: never seat a v4's arms against their stops.
+      if block is not None and ("homing_position_a" in block or "encoder_correction" in block):
+        raise MantisConfigurationError(
+          f"{self.name}: board 11 did not answer, but the arm block has absolute-encoder "
+          "references, as a v4's has; refusing to treat this unit as a v3"
         )
+      v3_arm_configuration = (
+        V3ArmConfiguration.from_block(block=block) if block is not None else None
+      )
+      self.arm = Arm(
+        driver=self,
+        configuration=MantisArmConfiguration(
+          motor_limits=motor_limits,
+          offsets=v3_arm_configuration.offsets if v3_arm_configuration is not None else None,
+          v3_arm_configuration=v3_arm_configuration,
+        ),
+      )
 
   def _show_action(
     self, *, action: str, show_inner_actions: bool = True, only_when_idle: bool = False
@@ -1065,7 +1204,10 @@ class MantisDriver:
     self._unit_blocks_from_recording = {
       block for block in UNIT_BLOCKS if taken.get(block) in recordings
     }
-    self._discover_features()
+    motor_limits: Dict[int, Tuple[float, float]] = {}
+    if self.arm is None:  # a v3's arm checks its targets against them too
+      motor_limits = {motor: await self.request_motor_limits(motor=motor) for motor in MOTORS}
+    self._discover_features(motor_limits=motor_limits)
     if self.pump is not None:
       # Nothing uses the calibration yet: a board 10 that does not answer it does not fail setup.
       try:
@@ -1221,7 +1363,7 @@ class MantisDriver:
 
   async def setup(self, *, skip_arm: bool = False) -> None:
     """Open the link if it is not open, read the device's configuration and check it, then bring
-    the arm and Z up (``Arm.initialize`` or ``V3Arm.initialize``). This moves the device.
+    the arm and Z up (``Arm.initialize``). This moves the device.
 
     On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
     ``SETUP_DONE_HOLD``, then idle.
