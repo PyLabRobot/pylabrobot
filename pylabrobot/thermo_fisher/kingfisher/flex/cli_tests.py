@@ -8,6 +8,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from pylabrobot.cli import main as plr_main
+
 from .cli import _probe, main
 from .test_helpers import HIDTestCase, bdz_bytes
 
@@ -29,23 +31,70 @@ class FlexCLITests(unittest.TestCase):
       path.write_bytes(bdz_bytes())
       out = io.StringIO()
       with contextlib.redirect_stdout(out):
-        main(["inspect", str(path)])
+        plr_main(["dev", "kingfisher-flex", "bdz", "inspect", str(path)])
       self.assertTrue(json.loads(out.getvalue())["execution_supported"])
       (folder / "unsupported.BDZ").write_bytes(bdz_bytes("ABC 1\n"))
       (folder / "invalid.bdz").write_bytes(b"invalid")
       out = io.StringIO()
       with contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as error:
-        main(["audit", str(folder)])
+        main(["bdz", "audit", str(folder)])
       self.assertEqual(error.exception.code, 1)
       result = json.loads(out.getvalue())
       self.assertEqual((result["supported"], result["unsupported"], result["invalid"]), (1, 1, 1))
       self.assertFalse(result["hardware_accessed"])
 
   def test_help_requires_no_hardware(self) -> None:
-    """Help exits without importing or constructing a live transport."""
-    with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as error:
-      main(["--help"])
-    self.assertEqual(error.exception.code, 0)
+    """Device, BDZ and leaf-command help never construct a live transport."""
+    for args, expected in (
+      (["--help"], "{bdz,probe}"),
+      (["bdz", "--help"], "{inspect,audit}"),
+      (["bdz", "inspect", "--help"], "path"),
+      (["bdz", "audit", "--help"], "paths"),
+      (["probe", "--help"], "--serial-number"),
+    ):
+      with self.subTest(args=args):
+        out = io.StringIO()
+        with (
+          patch("pylabrobot.thermo_fisher.kingfisher.flex.cli.KingFisherFlex") as hardware,
+          contextlib.redirect_stdout(out),
+          self.assertRaises(SystemExit) as error,
+        ):
+          main(args)
+        self.assertEqual(error.exception.code, 0)
+        self.assertIn(expected, out.getvalue())
+        hardware.assert_not_called()
+
+  def test_invalid_or_incomplete_commands_do_not_access_hardware(self) -> None:
+    """File commands require the BDZ group and their arguments before dispatch."""
+    for args in (
+      ["inspect", "input.bdz"],
+      ["audit", "input.bdz"],
+      ["bdz"],
+      ["bdz", "inspect"],
+      ["bdz", "audit"],
+      ["bdz", "probe"],
+    ):
+      with self.subTest(args=args):
+        with (
+          patch("pylabrobot.thermo_fisher.kingfisher.flex.cli.KingFisherFlex") as hardware,
+          contextlib.redirect_stderr(io.StringIO()),
+          self.assertRaises(SystemExit) as error,
+        ):
+          main(args)
+        self.assertEqual(error.exception.code, 2)
+        hardware.assert_not_called()
+
+  def test_probe_remains_a_top_level_command(self) -> None:
+    """The device probe forwards its arguments without entering BDZ dispatch."""
+    result = {"model": "KingFisherFlex", "firmware": "1.01.0", "serial": "test"}
+    out = io.StringIO()
+    with (
+      patch("pylabrobot.thermo_fisher.kingfisher.flex.cli._probe", return_value=result) as probe,
+      contextlib.redirect_stdout(out),
+    ):
+      main(["probe", "--serial-number", "test", "--transcript", "output.json"])
+    probe.assert_awaited_once_with("test", Path("output.json"))
+    self.assertEqual(json.loads(out.getvalue()), result)
 
 
 class FlexProbeTests(HIDTestCase):

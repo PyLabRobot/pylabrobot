@@ -107,22 +107,30 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
   """Dispatch offline commands or an explicitly selected identification-only probe."""
   parser = argparse.ArgumentParser(description=__doc__)
   commands = parser.add_subparsers(dest="operation", required=True)
-  inspect = commands.add_parser("inspect", help="Inspect a Flex .bdz without USB access")
+  bdz = commands.add_parser("bdz", help="Inspect and audit local BindIt exports without USB access")
+  bdz_commands = bdz.add_subparsers(dest="bdz_operation", required=True)
+  inspect = bdz_commands.add_parser("inspect", help="Inspect a Flex .bdz without USB access")
   inspect.add_argument("path", type=Path)
-  audit = commands.add_parser("audit", help="Check all BDZ files in folders, without USB access")
+  audit = bdz_commands.add_parser(
+    "audit", help="Check all BDZ files in folders, without USB access"
+  )
   audit.add_argument("paths", type=Path, nargs="+", help="Files or nonrecursive directories")
   probe = commands.add_parser("probe", help="Connect to real hardware and send VER only")
   probe.add_argument("--serial-number")
   probe.add_argument("--transcript", type=Path)
   args = parser.parse_args(argv)
-  if args.operation == "inspect":
-    result = inspect_protocol(args.path)
-  elif args.operation == "audit":
-    result = audit_protocols(args.paths)
-  else:
+  if args.operation == "probe":
     result = asyncio.run(_probe(args.serial_number, args.transcript))
+  elif args.bdz_operation == "inspect":
+    result = inspect_protocol(args.path)
+  else:
+    result = audit_protocols(args.paths)
   print(json.dumps(result, indent=2))
-  if args.operation == "audit" and (result["unsupported"] or result["invalid"]):
+  if (
+    args.operation == "bdz"
+    and args.bdz_operation == "audit"
+    and (result["unsupported"] or result["invalid"])
+  ):
     raise SystemExit(1)
 
 
