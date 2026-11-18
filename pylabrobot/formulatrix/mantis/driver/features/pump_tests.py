@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from typing import List, Tuple
+from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
@@ -114,8 +115,18 @@ class PumpDiscoveryTests(DriverTestCase):
     answers = make_answers()
     for board, command, request in CALIBRATION_READS:
       del answers[(board, command, request)]
-    self.default_read_timeout = 0.25
-    driver = await self.set_up_driver(link=FakeLink(answers=answers))
+    driver = self.make_driver(link=FakeLink(answers=answers))
+    send_command = driver._send_command
+
+    async def send(**kwargs):
+      # Only the calibration reads, never answered, wait briefly: an answered read cannot time out.
+      if (kwargs["board"], kwargs["command"]) == (10, 20):
+        kwargs["timeout"] = 0.25
+      return await send_command(**kwargs)
+
+    with mock.patch.object(driver, "_send_command", side_effect=send):
+      await driver.setup(skip_arm=True)
+    self.addAsyncCleanup(driver.stop)
     self.assertIsNotNone(driver.pump)
     self.assertEqual(driver.configuration.feedback_sensor_parameters, {})
 
