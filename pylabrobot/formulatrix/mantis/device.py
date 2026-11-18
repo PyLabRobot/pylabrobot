@@ -79,11 +79,8 @@ class MantisDevice(Resource):
   def serialize_state(self) -> Dict[str, Any]:
     """The resource state, with the arm's five-bar once it has a pose (``Arm._get_five_bar``)."""
     state = super().serialize_state()
-    arm, links = (
-      self.driver.arm if hasattr(self, "driver") else None,
-      getattr(self, "arm_links", {}),
-    )
-    five_bar = arm._get_five_bar(links=links) if arm is not None and links else None
+    arm = self.driver.arm
+    five_bar = arm._get_five_bar(links=self.arm_links) if arm is not None else None
     if five_bar is not None:
       state["five_bar"] = five_bar
     return state
