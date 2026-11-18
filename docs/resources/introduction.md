@@ -32,6 +32,8 @@ child = Resource(name="child", size_x=5, size_y=5, size_z=5)
 resource.assign_child_resource(child, Coordinate(x=0, y=0, z=0))
 ```
 
+See {doc}`assigning-resources` for the other ways to assign a child, such as `assign_child_by_anchor`.
+
 ## Resource Metadata
 
 You can attach generic key-value metadata to any `Resource` via the `metadata` parameter during initialization or by modifying `resource.metadata`:
