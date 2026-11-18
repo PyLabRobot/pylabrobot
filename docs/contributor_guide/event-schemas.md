@@ -304,6 +304,52 @@ instrumented primitive calls emit their normal events. Thermocycler status queri
 are not yet instrumented because their polling and completion semantics need to be stabilized
 before they can define canonical EventBus operations.
 
+### Direct thermocycler operations (ODTC)
+
+`inheco.ODTC` emits the following operations at its public API boundary. Each has
+`device=device_reference(controller, name=controller.name)` and `resources` containing the
+directly loaded plate at invocation, or an empty list. Opening a drawer is not a resource
+transfer: these events have no `source` or `destination`.
+
+| Operation | Additional fields | Completion semantics |
+| --- | --- | --- |
+| `thermocycler.setup` | `simulation_mode`, `already_satisfied` | Connection, callback registration, and initialization succeeded, or the session was already connected. |
+| `thermocycler.stop` | — | Temperature stop and transport cleanup returned successfully. |
+| `thermocycler.open_door` | `already_satisfied` | Drawer opening completed, or the last confirmed command state already matched. |
+| `thermocycler.close_door` | `already_satisfied` | Drawer closing completed, or the last confirmed command state already matched. |
+| `thermocycler.prepare` | `target_temperatures`, `target_lid_temperatures`, `timeout`; **completed only:** `already_satisfied` | Thermal preparation finished, or the cached prepared targets matched after acquiring the workflow lock. |
+| `thermocycler.execute_protocol` | `protocol_source`, `method_name`, `timeout`; profile-only invocation fields: `block_max_volume`, `lid_temperature`, `post_heating`; **completed only for profiles:** `stage_count`, `step_definition_count`, `step_execution_count`, `temperature_zone_count`; **completed only for stored methods:** `post_heating` | Preparation and thermal execution finished. Optional post-heating may remain active. |
+| `thermocycler.upload_protocol` | `method_name`, `overwrite` | Upload of a validated compiled method finished. |
+| `thermocycler.stop_protocol` | — | The instrument acknowledged the temperature-control stop. |
+
+`prepare` controls block and lid together and waits for a firmware premethod. It does not emit
+separate setpoint, sensor-tolerance, or timed-hold events. Its two target lists each contain one
+temperature for ODTC. Temperatures use degrees Celsius, `timeout` uses seconds, and
+`block_max_volume` uses microliters. `already_satisfied` describes cached command/preparation
+state, not a fresh sensor measurement.
+
+`execute_protocol` is distinct from the legacy submission-only `run_protocol` lifecycle above.
+`protocol_source` is `"profile"` for `run_protocol()` and `"stored"` for
+`run_stored_protocol()`. `method_name=None` selects the driver's working slot. For profiles,
+`stage_count` counts top-level stages, `step_definition_count` counts authored leaf steps, and
+`step_execution_count` includes all nested repeats. Counts are computed after successful profile
+validation, before hardware I/O, and published only on completion. `temperature_zone_count` is 1.
+Stored native methods do not retain authored stages or exact sample volume; these fields are
+omitted rather than inferred from firmware compensation settings. No full profiles, XML, PID
+tables, or raw responses are included.
+
+Every scope emits `started` followed by exactly one `completed` or `failed` record. Validation,
+firmware errors, timeouts, and cancellation retain invocation data on failure. A failed execution
+or preparation wait does **not** prove that temperature control stopped: the physical method may
+continue after timeout or cancellation. An explicit stop emits its own lifecycle; interrupted
+waiters fail with `ODTCProtocolStopped`. Completion never asserts that sample liquid reached a
+sensor temperature or that post-heating is disabled.
+
+Internal preparation, upload, and execution helpers do not emit extra lifecycles during a public
+execution. `stop()` calls public `stop_protocol()` when connected, producing a nested stop-control
+lifecycle followed by the outer transport-lifecycle result. Reads, progress callbacks, and
+`wait_for_completion()` are not instrumented; late callbacks do not reopen a failed lifecycle.
+
 ## Shaking and environmental control
 
 Controllers that are `ResourceHolder`s include their directly loaded resource in `resources` when
