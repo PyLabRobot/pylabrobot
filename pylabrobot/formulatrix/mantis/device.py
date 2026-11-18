@@ -49,6 +49,8 @@ class MantisDevice(Resource):
 
   # Each side's short and long link angles in the device frame, degrees, as last posed.
   _arm_angles: Dict[str, Tuple[float, float]]
+  # Each short link's angle, degrees, as its motor turns it: never wrapped.
+  _driven_angles: Dict[str, float]
 
   def _update_arm_model(self, *, theta_1: float, theta_2: float, z: float) -> None:
     """Turn the arm's links to two link angles, the geometry's own, in degrees, and raise or lower
@@ -80,6 +82,8 @@ class MantisDevice(Resource):
       long.rotate_to(z=long_angle - short_angle, pivot_coordinate=long.proximal_joint)
       angles[side] = (short_angle, long_angle)
     self._arm_angles = angles
+    # The short links' angles as the motors turn them, unwrapped: a viewer turns them the same way.
+    self._driven_angles = {"right": theta_1 - 180.0, "left": -theta_2}
     # The viewer places the links from the two driven angles, so a glide keeps the head pinned.
     self._state_updated()
 
@@ -117,7 +121,7 @@ class MantisDevice(Resource):
       },
       "bases": {side: list(base) for side, base in self._arm_link_bases.items()},
       "lengths": {key: link.length for key, link in self.arm_links.items()},
-      "angles": {side: pair[0] for side, pair in self._arm_angles.items()},
+      "angles": dict(self._driven_angles),
       "side_of_head": side_of_head,
     }
 
@@ -236,6 +240,7 @@ class MantisDevice(Resource):
     # Where each short link turns, x and y in the Z column's frame, mm.
     self._arm_link_bases: Dict[str, Tuple[float, float]] = {}
     self._arm_angles = {}
+    self._driven_angles = {}
     for side, base in (("right", RIGHT_BASE), ("left", LEFT_BASE)):
       short = arm_link(name=f"{name}_{side}_short_arm", link=f"{side}_short_arm")
       long = arm_link(name=f"{name}_{side}_long_arm", link=f"{side}_long_arm")

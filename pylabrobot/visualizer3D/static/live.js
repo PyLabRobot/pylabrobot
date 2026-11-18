@@ -223,7 +223,7 @@ function glideAt(glide, share) {
 }
 
 // A five-bar arm (two driven links, two that hang from them and meet at a pin) is published as its
-// two driven angles; every link is placed from them, so no glide can open the pin.
+// two driven angles, unwrapped; every link is placed from them, so no glide can open the pin.
 const fiveBars = new Map(); // owner index -> { spec, angles, glide }
 const drivenLinks = new Set(); // the indices fiveBars place
 
@@ -308,7 +308,8 @@ function updateFiveBars(delta) {
     glide.left -= delta;
     const share = glide.left <= 0 ? 1 : 1 - glide.left / glide.seconds;
     for (const side of ["right", "left"]) {
-      bar.angles[side] = glide.from[side] + turnAbout(glide.from[side], glide.to[side]) * share;
+      // As the motor turns: never the short way round, which can swing a link the wrong way.
+      bar.angles[side] = glide.from[side] + (glide.to[side] - glide.from[side]) * share;
     }
     placeFiveBar(bar.spec, bar.angles);
     if (glide.left <= 0) bar.glide = null;
