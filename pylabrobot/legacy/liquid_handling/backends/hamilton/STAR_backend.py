@@ -6795,8 +6795,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
     This value is maintained internally by the STAR/STARlet firmware and is
     updated **whenever a liquid level is detected**, regardless of whether the
     detection method used was:
-    - capacitive LLD (cLLD == 'STAR.LLDMode(1)'), or
-    - pressure-based LLD (pLLD == 'STAR.LLDMode(2)').
+    - capacitive LLD (cLLD == 'STARBackend.LLDMode(1)'), or
+    - pressure-based LLD (pLLD == 'STARBackend.LLDMode(2)').
 
     Heights are returned in millimeters, one value per channel, ordered by
     channel index.
@@ -12828,8 +12828,8 @@ class STARBackend(HamiltonLiquidHandler, HamiltonHeaterShakerInterface):
         )
 
     # Convert mm to increments
-    max_y_search_pos_increments = STAR.mm_to_y_drive_increment(max_y_search_pos)
-    channel_speed_increments = STAR.mm_to_y_drive_increment(channel_speed)
+    max_y_search_pos_increments = STARBackend.mm_to_y_drive_increment(max_y_search_pos)
+    channel_speed_increments = STARBackend.mm_to_y_drive_increment(channel_speed)
 
     # Machine-compatibility check of calculated parameters
     assert 0 <= max_y_search_pos_increments <= 13_714, (
@@ -14316,18 +14316,3 @@ class UnSafe:
       Consider this method an easter egg. Not for serious use.
     """
     await self.star.send_command(module=STARBackend.channel_id(channel_idx), command="SI")
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class STAR(STARBackend):
-  def __init__(self, *args, **kwargs):
-    warnings.warn(
-      "`STAR` is deprecated and will be removed in a future release. "
-      "Please use `STARBackend` instead.",
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    super().__init__(*args, **kwargs)

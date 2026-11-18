@@ -534,14 +534,3 @@ class MettlerToledoWXS205SDUBackend(ScaleBackend):
       stacklevel=2,
     )
     return await self.read_weight(timeout)
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class MettlerToledoWXS205SDU:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`MettlerToledoWXS205SDU` is deprecated. Please use `MettlerToledoWXS205SDUBackend` instead."
-    )

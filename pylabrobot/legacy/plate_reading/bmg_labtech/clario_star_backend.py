@@ -416,19 +416,3 @@ class CLARIOstarBackend(PlateReaderBackend):
     focal_height: float,
   ) -> List[Dict[Tuple[int, int], Dict]]:
     raise NotImplementedError("Not implemented yet")
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class CLARIOStar:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError("`CLARIOStar` is deprecated. Please use `CLARIOStarBackend` instead.")
-
-
-class CLARIOStarBackend:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`CLARIOStarBackend` (capital 'S') is deprecated. Please use `CLARIOstarBackend` instead."
-    )

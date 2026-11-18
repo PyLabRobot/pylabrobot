@@ -440,12 +440,3 @@ class CytomatChatterbox(CytomatBackend):
   async def wait_for_transfer_station(self, occupied: bool = False):
     # send the command, but don't wait when we are in chatting mode.
     _ = await self.get_overview_register()
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class Cytomat:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError("`Cytomat` is deprecated. Please use `CytomatBackend` instead. ")

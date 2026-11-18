@@ -204,14 +204,3 @@ class AgrowPumpArrayBackend(PumpArrayBackend):
       self._keep_alive_thread.join()
     self.modbus.close()
     assert not self.modbus.connected, "Modbus failing to disconnect"
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class AgrowPumpArray:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`AgrowPumpArray` is deprecated. Please use `AgrowPumpArrayBackend` instead."
-    )

@@ -80,12 +80,3 @@ class MasterflexBackend(PumpBackend):
 
   async def halt(self):
     await self.send_command("H")
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class Masterflex:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError("`Masterflex` is deprecated. Please use `MasterflexBackend` instead.")

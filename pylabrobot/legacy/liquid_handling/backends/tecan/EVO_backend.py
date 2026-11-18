@@ -279,7 +279,7 @@ class EVOBackend(TecanLiquidHandler):
       # move to home position (TBD) after initialization
       await self._park_roma()
     if self.mca_connected:
-      self.mca = Mca(self, EVO.MCA)
+      self.mca = Mca(self, EVOBackend.MCA)
       # await self.mca.position_initialization_x() # function does not work for mca.
       await self._park_mca()
 
@@ -305,7 +305,7 @@ class EVOBackend(TecanLiquidHandler):
 
   async def setup_arm(self, module):
     try:
-      if module == EVO.MCA:
+      if module == EVOBackend.MCA:
         await self.send_command(module, command="PIB")
 
       await self.send_command(module, command="PIA")
@@ -314,7 +314,7 @@ class EVOBackend(TecanLiquidHandler):
         return False
       raise e
 
-    if module != EVO.MCA:
+    if module != EVOBackend.MCA:
       await self.send_command(module, command="BMX", params=[2])
 
     return True
@@ -332,19 +332,19 @@ class EVOBackend(TecanLiquidHandler):
     # TODO CHANGE TO USE CORRECT FUNCTIONS
 
     # Ensure MCA is initialized before moving
-    await self.send_command(EVO.MCA, command="PIA")
+    await self.send_command(EVOBackend.MCA, command="PIA")
     await asyncio.sleep(0.5)
 
     # Raise MCA Z-axis first to avoid collision
-    await self.send_command(EVO.MCA, command="PAA", params=[None, None, 2000])  # Raise Z-axis
+    await self.send_command(EVOBackend.MCA, command="PAA", params=[None, None, 2000])
     await asyncio.sleep(1)
 
     # Move MCA to parking position (adjust X, Y as needed)
-    await self.send_command(EVO.MCA, command="PAA", params=[6000, 1000, None])
+    await self.send_command(EVOBackend.MCA, command="PAA", params=[6000, 1000, None])
     await asyncio.sleep(1)
 
     # Stop movement to prevent drifting
-    await self.send_command(EVO.MCA, command="BMA", params=[0, 0, 0])
+    await self.send_command(EVOBackend.MCA, command="BMA", params=[0, 0, 0])
     await asyncio.sleep(0.5)
 
   # ============== LiquidHandlerBackend methods ==============
@@ -1390,14 +1390,3 @@ class RoMa(EVOArm):
     """
 
     await self.backend.send_command(module=self.module, command="STW", params=[wc, x, y, z, r, g])
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class EVO(EVOBackend):
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`EVO` is deprecated. Please use `EVOBackend` instead.",
-    )

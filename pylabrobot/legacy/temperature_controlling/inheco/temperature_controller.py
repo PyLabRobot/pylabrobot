@@ -70,14 +70,3 @@ class InhecoTemperatureControllerBackend(TemperatureControllerBackend, metaclass
 
     assert info_type in range(5), "Info type must be in the range 0 to 4"
     return await self.interface.send_command(f"{self.index}RFV{info_type}")
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class InhecoThermoShake:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`InhecoThermoShake` is deprecated. Please use `InhecoThermoShakeBackend` instead. "
-    )

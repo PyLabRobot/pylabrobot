@@ -656,12 +656,3 @@ class VSpinBackend(CentrifugeBackend):
         await _reset_to_zero()
       if num_tries > 100:
         raise RuntimeError("Home position did not change after spin.")
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class VSpin:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError("`VSpin` is deprecated. Please use `VSpinBackend` instead. ")

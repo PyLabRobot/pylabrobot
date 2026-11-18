@@ -149,14 +149,3 @@ class HamiltonHepaFanBackend(FanBackend):
     await self.io.write(command)
     await asyncio.sleep(0.1)
     await self.io.read(64)
-
-
-# Deprecated alias with warning # TODO: remove mid May 2025 (giving people 1 month to update)
-# https://github.com/PyLabRobot/pylabrobot/issues/466
-
-
-class HamiltonHepaFan:
-  def __init__(self, *args, **kwargs):
-    raise RuntimeError(
-      "`HamiltonHepaFan` is deprecated. Please use `HamiltonHepaFanBackend` instead."
-    )

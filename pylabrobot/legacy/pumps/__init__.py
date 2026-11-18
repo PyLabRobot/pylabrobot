@@ -1,4 +1,4 @@
-from .agrowpumps import AgrowPumpArray
+from .agrowpumps import AgrowPumpArrayBackend
 from .calibration import PumpCalibration
 from .cole_parmer import MasterflexBackend
 from .errors import NotCalibratedError

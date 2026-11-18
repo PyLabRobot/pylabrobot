@@ -1,11 +1,11 @@
-from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import STAR
+from pylabrobot.legacy.liquid_handling.backends.hamilton.STAR_backend import STARBackend
 from pylabrobot.resources import Coordinate, Resource
 
 
 class Pump(Resource):
   """Pump is the washer. Will rename later."""
 
-  def __init__(self, backend: STAR, name="pump"):
+  def __init__(self, backend: STARBackend, name="pump"):
     super().__init__(name, size_x=1, size_y=1, size_z=1, category="pump")
     self.backend = backend
 
