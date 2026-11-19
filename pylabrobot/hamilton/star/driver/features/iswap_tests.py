@@ -7,6 +7,11 @@ from unittest.mock import AsyncMock, patch
 from pylabrobot.hamilton.protocol.text.framing import assemble_command
 from pylabrobot.hamilton.star.device import RECORDING_STAR
 from pylabrobot.hamilton.star.driver.features.iswap import iSWAP, iSWAPAxis
+from pylabrobot.hamilton.star.driver.features.iswap_planning import (
+  compute_box_corners,
+  compute_boxes_overlap,
+)
+from pylabrobot.hamilton.star.driver.features.pipettes import Pipettes
 from pylabrobot.hamilton.star.driver.simulator import SimulatedISWAP, STARSimulationDriver
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
@@ -36,9 +41,10 @@ async def gripper() -> Tuple[iSWAP, List[str]]:
     subsystem: Optional[str] = None,
     **kwargs: Any,
   ):
-    # `fmt` and `subsystem` are the driver's own rather than firmware parameters, so they are taken
-    # as `send_command` takes them and never reach the assembler.
-    sent.append(assemble_command(module=module, command=command, id_=None, **kwargs))
+    # `fmt`, `subsystem` and `read_timeout` are the driver's own rather than firmware parameters,
+    # so they are taken as `send_command` takes them and never reach the assembler.
+    parameters = {key: value for key, value in kwargs.items() if key != "read_timeout"}
+    sent.append(assemble_command(module=module, command=command, id_=None, **parameters))
     return await answer(module=module, command=command, fmt=fmt, subsystem=subsystem, **kwargs)
 
   driver.send_command = recorded  # type: ignore[assignment]
@@ -683,6 +689,111 @@ class TestSafeZ(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(len([command for command in sent if command.startswith("R0RZ")]), 1)
     self.assertEqual(height, await iswap.elbow_request_z_position())
+
+
+class TestMotionPlanning(unittest.IsolatedAsyncioTestCase):
+  """The planner's geometry against the resource model, and its moves on a simulated device."""
+
+  async def test_the_part_boxes_are_the_resource_models(self):
+    """The planner checks boxes it works out from a joint state; they are only worth checking if
+    they are where the resource model puts the same parts."""
+    iswap, _ = await gripper()
+    deck = cast(Resource, iswap._driver.deck)
+    boxes = iswap._get_part_boxes(await iswap.request_joint_state())
+    gripper_model = cast(MechanicalGripper, iswap.gripper)
+    for name, resource in (
+      ("link 1", iswap.link_1),
+      ("gripper body", gripper_model.body),
+      ("left finger", gripper_model.fingers[0]),
+      ("right finger", gripper_model.fingers[1]),
+    ):
+      with self.subTest(part=name):
+        assert resource is not None
+        where = resource.get_location_wrt(deck)
+        turn = math.radians(resource.get_absolute_rotation().z)
+        model = [
+          (
+            where.x + math.cos(turn) * a - math.sin(turn) * b,
+            where.y + math.sin(turn) * a + math.cos(turn) * b,
+          )
+          for a, b in (
+            (0, 0),
+            (resource.get_size_x(), 0),
+            (resource.get_size_x(), resource.get_size_y()),
+            (0, resource.get_size_y()),
+          )
+        ]
+        for corner in compute_box_corners(boxes[name]):
+          self.assertAlmostEqual(min(math.dist(corner, other) for other in model), 0.0, places=2)
+        self.assertAlmostEqual(boxes[name][5], where.z, places=2)
+        self.assertAlmostEqual(boxes[name][6], where.z + resource.get_size_z(), places=2)
+
+  def test_boxes_closer_than_the_clearance_overlap(self):
+    """Two boxes 4.9 mm apart are a collision at 5 mm clearance; 5.1 mm apart are not."""
+    a = (0.0, 0.0, 10.0, 10.0, 0.0, 0.0, 10.0)
+    for gap, expected in ((4.9, True), (5.1, False)):
+      with self.subTest(gap=gap):
+        b = (20.0 + gap, 0.0, 10.0, 10.0, 0.0, 0.0, 10.0)
+        self.assertEqual(compute_boxes_overlap(a, b, clearance=5.0), expected)
+
+  async def test_the_channels_pack_forward_and_the_arm_arrives(self):
+    """Before the iSWAP moves, every channel goes as far forward as it goes; then the arm
+    arrives where it was sent, at the traverse height."""
+    iswap, _ = await gripper()
+    pipettes = cast(Pipettes, iswap.arm.pipettes)
+    target = {iSWAPAxis.X: 550.5, iSWAPAxis.Y: 306.0, iSWAPAxis.ELBOW: 0.0, iSWAPAxis.WRIST: 135.0}
+
+    await iswap.move_to_joint_state(joint_state=target)
+
+    ys = await pipettes.request_y_positions()
+    self.assertAlmostEqual(ys[-1], 6.0, delta=0.1)
+    reached = await iswap.request_joint_state()
+    for axis, value in target.items():
+      self.assertAlmostEqual(reached[axis], value, delta=0.1)
+    self.assertAlmostEqual(
+      reached[iSWAPAxis.Z],
+      iswap.default_minimum_traverse_height + iswap.configuration.elbow_z_offset_above_finger,
+      delta=0.1,
+    )
+
+  async def test_tips_keep_the_arm_out_from_under_the_channels(self):
+    """Without tips the arm passes under the packed channels; with tips the same target is
+    refused before anything moves sideways."""
+    target = {iSWAPAxis.X: 400.0, iSWAPAxis.Y: 260.0, iSWAPAxis.ELBOW: 0.0, iSWAPAxis.WRIST: -45.0}
+    iswap, _ = await gripper()
+    await iswap.move_to_joint_state(joint_state=target)
+
+    iswap, sent = await gripper()
+    pipettes = cast(Pipettes, iswap.arm.pipettes)
+    with patch.object(pipettes, "sense_tip_presence", new=AsyncMock(return_value=[1] * 8)):
+      with self.assertRaisesRegex(ValueError, "which carries tips"):
+        await iswap.move_to_joint_state(joint_state=target)
+    self.assertEqual([c for c in sent if c[:4] in ("R0YA", "R0PA", "X0XP")], [])
+
+  async def test_the_front_carrier_position_is_reached_as_the_firmware_reaches_it(self):
+    """A plate on a carrier's front site, gripped from the front: the elbow comes to y 114.0, with
+    channel 0 packed at 69.0 - the pose the firmware's own pick-up has used for months. The rail
+    gap is the column's front face, not a circle around the drive."""
+    iswap, _ = await gripper()
+    grip_y = 71.2 + 85.48 / 2
+    target = {
+      iSWAPAxis.X: 486.6 + 127.76 / 2,
+      iSWAPAxis.Y: grip_y - 137.7 + 137.8,
+      iSWAPAxis.ELBOW: 0.0,
+      iSWAPAxis.WRIST: 135.0,
+    }
+
+    await iswap.move_to_joint_state(joint_state=target)
+
+    self.assertAlmostEqual((await iswap.request_joint_state())[iSWAPAxis.Y], 114.0, delta=0.2)
+
+  async def test_a_route_behind_the_x_arm_is_refused(self):
+    """A target that would put the arm behind the X-arm is refused before any sideways move."""
+    iswap, sent = await gripper()
+    target = {iSWAPAxis.Y: 600.0, iSWAPAxis.ELBOW: 90.0, iSWAPAxis.WRIST: 45.0}
+    with self.assertRaises(ValueError):
+      await iswap.move_to_joint_state(joint_state=target)
+    self.assertEqual([c for c in sent if c[:4] in ("R0YA", "R0PA", "X0XP")], [])
 
 
 if __name__ == "__main__":

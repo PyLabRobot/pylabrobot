@@ -2,6 +2,7 @@
 with a mechanical gripper as end-effector that moves resources.
 """
 
+import asyncio
 import dataclasses
 import datetime
 import enum
@@ -13,6 +14,7 @@ from typing import (
   Callable,
   ClassVar,
   Dict,
+  Iterator,
   List,
   Literal,
   Optional,
@@ -24,10 +26,16 @@ from typing import (
 
 from pylabrobot.hamilton.protocol.text.framing import parse_firmware_version_date
 from pylabrobot.hamilton.star.driver.errors import NoElementError, STARFirmwareError
-from pylabrobot.hamilton.star.resource_model import iSWAPHead
+from pylabrobot.hamilton.star.driver.features.iswap_planning import (
+  Box,
+  compute_boxes_overlap,
+  compute_iswap_part_boxes,
+)
+from pylabrobot.hamilton.star.resource_model import COLUMN_JOINT, iSWAPHead
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.end_effector import MechanicalGripper
 from pylabrobot.resources.manipulator import LinkBody
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:
@@ -53,7 +61,10 @@ RECORDED_FIRMWARE_PREFIX = "4."
 # The elbow drive's own dimensions, in mm. Module constants rather than field defaults alone,
 # because the front limit below is worked out from them before any configuration exists.
 ELBOW_DRIVE_DIAMETER = 30.5
-ELBOW_DRIVE_SAFETY_RADIUS = 90.0
+# On the rail, the column's front face is what meets the channels: it stands `COLUMN_JOINT.y` ahead
+# of the drive's axis, and 5 mm more is the clearance every planned move keeps. The links pass
+# under the channels at the traverse height, so they are not what limits the drive.
+ELBOW_DRIVE_SAFETY_RADIUS = COLUMN_JOINT.y + 5.0 - ELBOW_DRIVE_DIAMETER / 2
 
 # The arm this driver assumes it is on until it has read the one it is actually on. Twelve channels
 # is more than most arms carry, and every extra channel in front of the drive holds the drive
@@ -343,8 +354,8 @@ class iSWAPConfiguration:
   """How wide the elbow drive is, in mm."""
 
   elbow_drive_safety_radius: float = ELBOW_DRIVE_SAFETY_RADIUS
-  """How far past the drive's own edge anything it carries reaches, in mm. A clearance that holds
-  at every elbow angle is the drive's radius plus this."""
+  """How far past the drive's own edge the iSWAP must stay from the backmost channel, in mm: the
+  column's front face ahead of the drive's axis, plus the clearance, less the drive's radius."""
 
   elbow_y_min: float = elbow_front_limit(
     ASSUMED_ARM_FRONT_LIMIT,
@@ -460,10 +471,11 @@ class iSWAPConfiguration:
 
   @property
   def elbow_drive_swept_radius(self) -> float:
-    """How far from the elbow drive's centre anything it carries can reach, in mm.
+    """How far ahead of the elbow drive's centre the iSWAP must stay from the backmost channel, mm.
 
-    The drive and its arm are treated as one circle, so a clearance measured against it holds
-    whichever way the arm happens to be turned.
+    The column's front face, which rides the rail with the channels, plus the clearance. The links
+    pass under the channels at the traverse height, so whichever way the arm is turned, the column
+    is what meets them.
     """
     return self.elbow_drive_diameter / 2 + self.elbow_drive_safety_radius
 
@@ -716,11 +728,14 @@ class iSWAP:
   The top is what the command itself accepts; the floor is this driver's, and parking is refused
   below it."""
 
-  default_minimum_traverse_height: float = 284.0
-  """How high the arm lifts to before it travels, in mm, when a caller names no height.
+  default_minimum_traverse_height: float = 280.0
+  """How high the finger plane lifts to before the arm travels, in mm, when a caller names no height.
 
-  What legacy sends. Parking drives the arm down to its nest, so this is what holds it clear of the
-  deck until it is home."""
+  What legacy sends. There link 1 passes 6.1 mm under a channel's stop disc at safe Z and 7.4 mm
+  under the 96-head; at 284, which legacy sent before, it ran into the channels."""
+
+  default_clearance: float = 5.0
+  """How far, seen from above, the iSWAP stays from a channel or head carrying tips, in mm."""
 
   def __init__(self, driver: "STARDriver", configuration: Optional[iSWAPConfiguration] = None):
     """
@@ -1271,10 +1286,8 @@ class iSWAP:
   ):
     """Move the elbow along Y. This moves it.
 
-    The backmost channel is what the drive can run into, so how far back it may go depends on
-    where that channel is. The drive and its arm are treated as one circle of
-    `configuration.elbow_drive_swept_radius`, which keeps the clearance true whichever way the
-    arm is turned.
+    The backmost channel is what the column can run into, so how far forward it may go depends on
+    where that channel is: `configuration.elbow_drive_swept_radius` ahead of the drive's axis.
 
     Args:
       y: where to put the elbow, in mm.
@@ -3171,3 +3184,374 @@ class iSWAP:
         await self.request_joint_state()
       except Exception:
         logger.warning("could not read where the iSWAP parked; its model is stale")
+
+  # ----------------------------------------
+  # Motion planning
+  # ----------------------------------------
+
+  def _get_part_boxes(self, joints: JointState) -> Dict[str, Box]:
+    """Every part of the iSWAP as a box, at a joint state. Nothing is read or moved.
+
+    Raises:
+      RuntimeError: If the link length or the wrist's stops were not read.
+    """
+    c = self.configuration
+    if c.link_1_length is None or c.wrist_drive_predefined_increments is None:
+      raise RuntimeError("the arm's link length or the wrist's stops were not read")
+    straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
+    link_1_deck_angle = joints[iSWAPAxis.ELBOW] - 90.0
+    return compute_iswap_part_boxes(
+      elbow_x=joints[iSWAPAxis.X],
+      elbow_y=joints[iSWAPAxis.Y],
+      elbow_z=joints[iSWAPAxis.Z],
+      link_1_deck_angle=link_1_deck_angle,
+      gripper_deck_angle=link_1_deck_angle + joints[iSWAPAxis.WRIST] - straight,
+      link_1_length=c.link_1_length,
+      jaw_width=joints[iSWAPAxis.GRIPPER],
+      elbow_drive_diameter=c.elbow_drive_diameter,
+      elbow_drive_size_z=c.elbow_drive_size_z,
+    )
+
+  def _get_route_samples(self, waypoints: List[JointState]) -> List[JointState]:
+    """The joint states the arm passes through between waypoints, a millimetre apart at most.
+
+    X is held at the first waypoint's: the channels and heads ride the same arm, so an X move
+    never changes where the iSWAP stands relative to them.
+    """
+    c = self.configuration
+    reach = (c.link_1_length or 0.0) + (self.gripper.tool_center_point.x if self.gripper else 0.0)
+    samples = [dict(waypoints[0])]
+    for start, end in zip(waypoints, waypoints[1:]):
+      turn = max(
+        abs(end[iSWAPAxis.ELBOW] - start[iSWAPAxis.ELBOW]),
+        abs(end[iSWAPAxis.WRIST] - start[iSWAPAxis.WRIST]),
+      )
+      # The furthest any point of the arm travels: a turn sweeps the whole reach and the fingers.
+      travel = max(
+        abs(end[iSWAPAxis.Y] - start[iSWAPAxis.Y]),
+        abs(end[iSWAPAxis.Z] - start[iSWAPAxis.Z]),
+        math.radians(turn) * (reach + 150.0),
+      )
+      steps = max(1, math.ceil(travel))
+      for step in range(1, steps + 1):
+        share = step / steps
+        sample = {axis: start[axis] + share * (end[axis] - start[axis]) for axis in start}
+        sample[iSWAPAxis.X] = waypoints[0][iSWAPAxis.X]
+        samples.append(sample)
+    return samples
+
+  def _check_route(self, waypoints: List[JointState], keep_outs: List[Tuple[str, Box]]) -> None:
+    """Check a route against every constraint. Nothing is read or moved.
+
+    Each drive within its travel, and as its guarded move will check it; no joint further behind
+    the X-arm than it already stands; the elbow behind channel 0 on the rail; and nothing of the
+    iSWAP, seen from above, within `default_clearance` of a keep-out anywhere along the way.
+
+    Args:
+      waypoints: START, then the joint state after each move.
+      keep_outs: the bodies the iSWAP may never be under, seen from above, by name.
+
+    Raises:
+      ValueError: If the route breaks a constraint, naming which and where.
+    """
+    c = self.configuration
+    clearance = self.default_clearance
+    y_max = c.elbow_y_max
+    if y_max is None or c.link_1_length is None or c.wrist_drive_predefined_increments is None:
+      raise RuntimeError("the iSWAP's stored tables were not read; have you called `star.setup()`?")
+
+    for before, joints in zip(waypoints, waypoints[1:]):
+      self._check_reachable(axis="x", value=joints[iSWAPAxis.X])
+      self._check_reachable(axis="y", value=joints[iSWAPAxis.Y])
+      self._check_reachable(axis="z", value=joints[iSWAPAxis.Z])
+      self._resolve_elbow_increments(angle=joints[iSWAPAxis.ELBOW])
+      self._resolve_wrist_increments(angle=joints[iSWAPAxis.WRIST])
+      if any(
+        abs(joints[k] - before[k]) > 1e-6 for k in (iSWAPAxis.Y, iSWAPAxis.ELBOW, iSWAPAxis.WRIST)
+      ):
+        self._check_pose_reachable(
+          elbow_angle=joints[iSWAPAxis.ELBOW],
+          gripper_relative_angle=joints[iSWAPAxis.WRIST],
+          y=joints[iSWAPAxis.Y],
+        )
+
+    samples = self._get_route_samples(waypoints)
+
+    # The X-arm is a wall behind the elbow's back stop: no joint may go further behind it than it
+    # already stands, which only a parked arm does.
+    tool = cast(MechanicalGripper, self.gripper).tool_center_point.x
+    straight = c.wrist_increments_to_deg(c.wrist_drive_predefined_increments.straight)
+    excess = []
+    for joints in samples:
+      pose = self._forward_kinematics(
+        joints=joints,
+        link_1_length=c.link_1_length,
+        tool_center_point_distance=tool,
+        wrist_straight_angle=straight,
+        elbow_z_offset_above_finger=c.elbow_z_offset_above_finger,
+      )
+      excess.append(max(pose.wrist_joint_location.y, pose.gripper_center_location.y) - y_max)
+    for joints, beyond in zip(samples[1:], excess[1:]):
+      if beyond > max(0.0, excess[0]) + 1e-6:
+        raise ValueError(
+          f"the arm would reach behind the X-arm at elbow y {joints[iSWAPAxis.Y]:.1f}, elbow "
+          f"{joints[iSWAPAxis.ELBOW]:.1f} deg, wrist {joints[iSWAPAxis.WRIST]:.1f} deg"
+        )
+
+    # The rail: the elbow stays behind channel 0 by the drive's swept radius and half its width.
+    pipettes = self.arm.pipettes
+    if pipettes is not None and pipettes.configuration.channels:
+      channel_0 = pipettes.get_reference_point_location(0)
+      width = cast(float, pipettes.configuration.channels[0].width)
+      if channel_0 is not None:
+        for joints in samples:
+          if joints[iSWAPAxis.Y] - channel_0.y < c.elbow_drive_swept_radius + width / 2:
+            raise ValueError(
+              f"the elbow at y {joints[iSWAPAxis.Y]:.1f} would run into channel 0 at "
+              f"y {channel_0.y:.1f} on the rail"
+            )
+
+    for joints in samples:
+      for part, box in self._get_part_boxes(joints).items():
+        flat = box[:5] + (-math.inf, math.inf)
+        for name, keep_out in keep_outs:
+          if compute_boxes_overlap(flat, keep_out, clearance):
+            raise ValueError(
+              f"the iSWAP's {part} would come within {clearance} mm of {name}, which carries tips, "
+              f"at elbow y {joints[iSWAPAxis.Y]:.1f}, elbow {joints[iSWAPAxis.ELBOW]:.1f} deg, "
+              f"wrist {joints[iSWAPAxis.WRIST]:.1f} deg"
+            )
+
+  def _get_route(
+    self, start: JointState, end: JointState, keep_outs: List[Tuple[str, Box]]
+  ) -> List[JointState]:
+    """The first route, in order of preference, that every constraint allows. Nothing moves.
+
+    Every route goes to the traverse height first and travels there. Then, in order: X with Y,
+    then the turn; X with the turn, then Y; and X with an evasion move in Y, away from the X-arm
+    and from channel 0, then the turn, then Y, the evasion the least distance that lets the turn
+    through. X runs alongside the iSWAP move it is paired with, as the firmware lock allows. Last,
+    Z to END's.
+
+    Args:
+      start: where every drive stands, as read.
+      end: where every drive is to stand.
+      keep_outs: as `_check_route` takes them.
+
+    Returns:
+      The waypoints, START first.
+
+    Raises:
+      ValueError: If no route is allowed, with the reason the first route was refused.
+    """
+    c = self.configuration
+    traverse = self.default_minimum_traverse_height + c.elbow_z_offset_above_finger
+    risen = {**start, iSWAPAxis.Z: traverse}
+    goal = {**end, iSWAPAxis.Z: traverse}
+    turned = {iSWAPAxis.ELBOW: goal[iSWAPAxis.ELBOW], iSWAPAxis.WRIST: goal[iSWAPAxis.WRIST]}
+    x, y = goal[iSWAPAxis.X], goal[iSWAPAxis.Y]
+
+    def get_candidates() -> Iterator[List[JointState]]:
+      yield [start, risen, {**risen, iSWAPAxis.X: x, iSWAPAxis.Y: y}, goal, end]
+      yield [start, risen, {**risen, iSWAPAxis.X: x, **turned}, goal, end]
+      low, high = c.elbow_y_min, cast(float, c.elbow_y_max)
+      here = risen[iSWAPAxis.Y]
+      for distance in range(5, round(high - low) + 5, 5):
+        for evasion in (here - distance, here + distance):
+          if low <= evasion <= high:
+            yield [
+              start,
+              risen,
+              {**risen, iSWAPAxis.X: x, iSWAPAxis.Y: evasion},
+              {**risen, iSWAPAxis.X: x, iSWAPAxis.Y: evasion, **turned},
+              goal,
+              end,
+            ]
+
+    first: Optional[ValueError] = None
+    tried = 0
+    for candidate in get_candidates():
+      tried += 1
+      # A move that changes nothing is no move: dropped, so the route reads as what will happen.
+      waypoints = candidate[:1] + [
+        b for a, b in zip(candidate, candidate[1:]) if any(abs(b[k] - a[k]) > 1e-6 for k in b)
+      ]
+      try:
+        self._check_route(waypoints=waypoints, keep_outs=keep_outs)
+      except ValueError as refused:
+        first = first or refused
+        continue
+      return waypoints
+    raise ValueError(f"no route reaches the target; the first was refused: {first} ({tried} tried)")
+
+  async def _move_along_route(self, waypoints: List[JointState]) -> None:
+    """Move through the waypoints with the existing guarded moves. This moves the arm.
+
+    X runs alongside the iSWAP move it is paired with; two iSWAP moves never overlap.
+    """
+    for start, end in zip(waypoints, waypoints[1:]):
+      moves = []
+      if abs(end[iSWAPAxis.X] - start[iSWAPAxis.X]) > 1e-6:
+        moves.append(self.elbow_move_to_x_position(x=end[iSWAPAxis.X]))
+      if abs(end[iSWAPAxis.Z] - start[iSWAPAxis.Z]) > 1e-6:
+        moves.append(self.elbow_move_to_z_position(z=end[iSWAPAxis.Z]))
+      elif abs(end[iSWAPAxis.Y] - start[iSWAPAxis.Y]) > 1e-6:
+        moves.append(self.elbow_move_to_y_position(y=end[iSWAPAxis.Y]))
+      elif any(abs(end[k] - start[k]) > 1e-6 for k in (iSWAPAxis.ELBOW, iSWAPAxis.WRIST)):
+        moves.append(
+          self.rotate_to_angles(
+            elbow_relative_angle=end[iSWAPAxis.ELBOW],
+            gripper_relative_angle=end[iSWAPAxis.WRIST],
+            raise_features=False,
+          )
+        )
+      await asyncio.gather(*moves)
+
+  def _get_body_box(self, resource: Resource) -> Box:
+    """A channel's or a head's body as a box seen from above, from the deck model."""
+    where = resource.get_location_wrt(cast(Resource, self._driver.deck))
+    size_x, size_y = resource.get_size_x(), resource.get_size_y()
+    return (
+      where.x + size_x / 2,
+      where.y + size_y / 2,
+      size_x / 2,
+      size_y / 2,
+      0.0,
+      -math.inf,
+      math.inf,
+    )
+
+  async def _move_neighbours_to_safe_z(self) -> None:
+    """Raise the channels and any head that is not at its safe Z. This moves them."""
+    pipettes = self.arm.pipettes
+    if pipettes is not None:
+      top = pipettes.configuration.z_range[1]
+      if any(z < top - 0.05 for z in await pipettes.request_stop_disc_z_positions()):
+        await pipettes.move_to_safe_z()
+    for head in (self.arm.head96, self.arm.head384):
+      if (
+        head is not None and await head.request_z_position() < head.configuration.z_range[1] - 0.05
+      ):
+        await head.move_to_safe_z()
+
+  async def move_to_joint_state(self, *, joint_state: JointState) -> None:
+    """Move the iSWAP to a joint state, planned and checked before it moves. This moves it.
+
+    Conservative first version. The channels and heads go to safe Z, the channels pack forward
+    and the 96-head parks. The iSWAP travels at the minimum traverse height, where it passes
+    under the channels and heads; never under one carrying tips, which it keeps
+    `default_clearance` from, seen from above. What stands on the deck is not checked.
+
+    The drives not named hold, but Z: not named, the iSWAP stays at the traverse height. A
+    failure brings the iSWAP up to the traverse height; the pose is read whatever happens.
+
+    Args:
+      joint_state: each drive's target: X, Y, Z, elbow and wrist. Z at most the traverse height.
+
+    Raises:
+      ValueError: If a drive is unknown, Z is above the traverse height, or no route reaches the
+        target, with the reason the first route was refused.
+      RuntimeError: If the driver was given no deck, or the arm's tables were not read.
+    """
+    unknown = set(joint_state) - {
+      iSWAPAxis.X,
+      iSWAPAxis.Y,
+      iSWAPAxis.Z,
+      iSWAPAxis.ELBOW,
+      iSWAPAxis.WRIST,
+    }
+    if unknown:
+      raise ValueError(f"only X, Y, Z, elbow and wrist are planned, got {sorted(unknown)}")
+    deck = self._driver.deck
+    if deck is None or self.gripper is None:
+      raise RuntimeError("the iSWAP plans from the deck model; this driver was given no deck")
+    traverse = self.default_minimum_traverse_height + self.configuration.elbow_z_offset_above_finger
+    # Above the traverse height, link 1 no longer clears the channels and heads it passes under.
+    if joint_state.get(iSWAPAxis.Z, traverse) > traverse + 1e-6:
+      raise ValueError(
+        f"Z must be at most the traverse height, {traverse} mm, is {joint_state[iSWAPAxis.Z]}"
+      )
+    arrived, rise_is_clear = False, False
+    try:
+      await self._move_neighbours_to_safe_z()
+      start = (await self.request_pose()).joints
+
+      # Where the channels and heads are to go, and which carry tips: read before any of them
+      # moves, so one carrying tips is never moved over the iSWAP where it stands.
+      moving: List[Tuple[str, Box, float]] = []  # name, body, how far it moves in Y
+      packed: Dict[int, float] = {}
+      pipettes = self.arm.pipettes
+      if pipettes is not None and pipettes.configuration.channels:
+        device = self._driver.configuration
+        if device is None:
+          raise RuntimeError("no configuration read; have you called `star.setup()`?")
+        # As far forward as they go: the frontmost on the arm's front stop, each behind it by its
+        # spacing.
+        front = (
+          device.left_arm_min_y_position
+          if self.arm.side == "left"
+          else device.right_arm_min_y_position
+        )
+        last = len(pipettes.configuration.channels) - 1
+        packed = {last: front}
+        for channel in range(last - 1, -1, -1):
+          spacing = pipettes._min_spacing_between(channel, channel + 1)
+          packed[channel] = round(packed[channel + 1] + spacing, 1)
+        current = await pipettes.request_y_positions()
+        tips = await pipettes.sense_tip_presence()
+        for channel, (resource, tip) in enumerate(zip(pipettes.resources, tips)):
+          if tip:
+            body = self._get_body_box(resource)
+            moving.append((f"channel {channel}", body, packed[channel] - current[channel]))
+      parked: Optional[float] = None
+      for name, head in (("96-head", self.arm.head96), ("384-head", self.arm.head384)):
+        if head is None or head.resource is None:
+          continue
+        shift = 0.0
+        if head is self.arm.head96:
+          parked = (await head.request_predefined_y_positions())[0]
+          shift = parked - await head.request_y_position()
+        if await head.request_tip_presence():
+          moving.append((name, self._get_body_box(head.resource), shift))
+
+      # Each one carrying tips, over everything it covers on its way, seen from above.
+      parts = [box[:5] + (-math.inf, math.inf) for box in self._get_part_boxes(start).values()]
+      keep_outs: List[Tuple[str, Box]] = []
+      # Nothing carrying tips over the iSWAP where it stands: only then may a failure raise it.
+      rise_is_clear = not any(
+        compute_boxes_overlap(part, body, self.default_clearance)
+        for part in parts
+        for _, body, _ in moving
+      )
+      for name, body, shift in moving:
+        swept = (body[0], body[1] + shift / 2, body[2], body[3] + abs(shift) / 2, 0.0) + body[5:]
+        if any(compute_boxes_overlap(part, swept, self.default_clearance) for part in parts):
+          raise ValueError(
+            f"{name}, which carries tips, would be over the iSWAP where it stands, or pass over "
+            "it on its way out of the way"
+          )
+        keep_outs.append((name, (body[0], body[1] + shift) + body[2:]))
+
+      if pipettes is not None and packed:
+        current = await pipettes.request_y_positions()
+        if any(abs(current[channel] - y) > 0.05 for channel, y in packed.items()):
+          await pipettes.move_to_y_positions(packed)
+      if self.arm.head96 is not None and parked is not None:
+        await self.arm.head96.park()
+
+      end = {**start, iSWAPAxis.Z: traverse, **joint_state}
+      waypoints = self._get_route(start=start, end=end, keep_outs=keep_outs)
+      logger.info("iSWAP route: %d moves, keeping out from %s", len(waypoints) - 1, keep_outs)
+      await self._move_along_route(waypoints=waypoints)
+      arrived = True
+    finally:
+      # A failure here is logged and never replaces the one raised.
+      try:
+        await self._move_neighbours_to_safe_z()
+        if not arrived and rise_is_clear and await self.elbow_request_z_position() < traverse:
+          await self.elbow_move_to_z_position(z=traverse)
+        elif not arrived:
+          logger.warning("the iSWAP is left where it stopped: tips may be above it")
+        await self.request_pose()
+      except Exception:
+        logger.warning("could not bring the iSWAP to its traverse height and read its pose")

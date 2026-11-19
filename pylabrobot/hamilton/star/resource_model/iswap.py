@@ -88,6 +88,11 @@ GRIPPER_FINGER_LOCATION = GRIPPER_JOINT + Coordinate(6.5, 0.0, 4.0)
 GRIPPER_PAD_SIZE = (37.0, 4.0, 17.0)
 GRIPPER_PAD_LOCATION = Coordinate(109.0, 1.5, -17.0)
 
+# Where the elbow axis sits in the column's own frame, in mm from its left front bottom corner: the
+# rotation collar's centre, read from the scene the column's mesh was exported from. The column's
+# front face stands this far ahead of the axis in Y, and it is what meets the channels on the rail.
+COLUMN_JOINT = Coordinate(132.89, 14.5, -43.6)
+
 # How far the elbow drive's own column stands above the height the Z drive reports, in mm. The
 # arm hangs below that: the drive reports where the material it carries is, not where its column
 # begins. The column stands on link 1 with nothing between them, so this follows link 1's own top

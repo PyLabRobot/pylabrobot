@@ -1,5 +1,6 @@
 from pylabrobot.hamilton.star.resource_model.heads import head96, head384
 from pylabrobot.hamilton.star.resource_model.iswap import (
+  COLUMN_JOINT,
   ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z,
   iswap_gripper,
   iswap_head,
@@ -8,6 +9,7 @@ from pylabrobot.hamilton.star.resource_model.iswap import (
 )
 
 __all__ = [
+  "COLUMN_JOINT",
   "ELBOW_DRIVE_COLUMN_ABOVE_REPORTED_Z",
   "iSWAPHead",
   "iswap_head",

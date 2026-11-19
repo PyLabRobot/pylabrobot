@@ -324,7 +324,7 @@
           8000
         ],
         "elbow_drive_diameter": 30.5,
-        "elbow_drive_safety_radius": 90.0,
+        "elbow_drive_safety_radius": 4.25,
         "elbow_drive_size_z": 120.0,
         "z_range_increments": [
           -187,
