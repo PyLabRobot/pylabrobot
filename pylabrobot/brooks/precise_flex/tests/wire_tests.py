@@ -197,7 +197,12 @@ _Case = Tuple[
 
 # (name, call, commands sent, exception raised or None), each on an arm already set up.
 _CASES: List[_Case] = [
-  ("stop", lambda arm: arm.stop(), ["attach 0", "hp 0", "<io.write> exit"], None),
+  (
+    "stop",
+    lambda arm: arm.stop(with_light_farewell=False),
+    ["attach 0", "hp 0", "<io.write> exit"],
+    None,
+  ),
   ("request_mode", lambda arm: arm.request_mode(), ["mode"], None),
   ("set_response_mode_pc", lambda arm: arm.set_response_mode("pc"), ["mode 0"], None),
   ("set_response_mode_verbose", lambda arm: arm.set_response_mode("verbose"), ["mode 1"], None),

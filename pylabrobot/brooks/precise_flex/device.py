@@ -100,9 +100,13 @@ class PreciseFlexDevice(Resource):
     """
     await self.driver.setup(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
 
-  async def stop(self):
-    """Put the device down."""
-    await self.driver.stop()
+  async def stop(self, with_light_farewell: bool = True):
+    """Put the device down.
+
+    Args:
+      with_light_farewell: as `PreciseFlexDriver.stop` takes it.
+    """
+    await self.driver.stop(with_light_farewell=with_light_farewell)
 
 
 def PreciseFlex400(

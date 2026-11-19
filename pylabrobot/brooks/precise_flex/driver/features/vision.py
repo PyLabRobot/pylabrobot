@@ -611,6 +611,14 @@ class PreciseFlexVision:
     """
     await self.start_led(camera, 0, use_server=use_server)
 
+  async def _flash_leds(self, flashes: int) -> None:
+    """Flash the front, then the bottom LEDs, `flashes` times each, and leave both off."""
+    for _ in range(flashes):
+      for camera in ("front", "bottom"):
+        await self.start_led(camera=camera, brightness=100)
+        await asyncio.sleep(0.1)
+        await self.stop_led(camera=camera)
+
   # -- camera image (Acquire) ----------------------------------------------
 
   @requires_vision_tool_type("Acquire")

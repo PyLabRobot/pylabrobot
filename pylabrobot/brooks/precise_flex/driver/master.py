@@ -688,10 +688,31 @@ class PreciseFlexDriver:
 
   @evented_operation(
     "precise_flex.stop",
-    lambda self: {"device": self._controller_reference()},
+    lambda self, with_light_farewell=True: {
+      "device": self._controller_reference(),
+      "with_light_farewell": with_light_farewell,
+    },
   )
-  async def stop(self):
-    """Hand the arm back and close every connection (``disconnect``)."""
+  async def stop(self, with_light_farewell: bool = True):
+    """Hand the arm back and close every connection (``disconnect``).
+
+    Args:
+      with_light_farewell: flash the front and the bottom LEDs twice first, where vision can.
+    """
+    vision = self.vision
+    if (
+      with_light_farewell
+      and self._connected
+      and vision is not None
+      and (
+        not vision.configuration.discovered
+        or vision.configuration.has_vision_tool_type("LightControl")
+      )
+    ):
+      try:
+        await vision._flash_leds(flashes=2)
+      except Exception as exc:  # a failed farewell must not leave the arm attached and powered
+        logger.warning("[PreciseFlex %s] the light farewell failed: %s", self.io._host, exc)
     await self.disconnect()
 
   # -- device-level commands -------------------------------------------------
