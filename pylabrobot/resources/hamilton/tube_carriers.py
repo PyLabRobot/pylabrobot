@@ -51,8 +51,9 @@ def hamilton_tube_carrier_32_a00(name: str) -> TubeCarrier:
   1 track(T) wide.
 
   The 15 mm site pitch and centerline are inherited from the verified
-  insert-specific definition. The bare-hole diameter and tube-support Z were
-  measured directly.
+  insert-specific definition. The bare-hole diameter was measured directly.
+  The VENUS rack definition SMP_CAR_32_12x75_A00.rck places the outside bottom
+  of the tube 10 mm above the carrier base (Cntr.1.base).
   """
   hole_diameter = 13.4
   return TubeCarrier(
@@ -66,7 +67,7 @@ def hamilton_tube_carrier_32_a00(name: str) -> TubeCarrier:
         Coordinate(
           14.5 - hole_diameter / 2,
           14.5 - hole_diameter / 2 + x * 15,
-          50.2,
+          10.0,
         )
         for x in range(32)
       ],
