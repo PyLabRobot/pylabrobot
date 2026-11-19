@@ -26,6 +26,7 @@ from .diy import *
 from .end_effector import MechanicalGripper
 from .eppendorf import *
 from .errors import ResourceNotFoundError
+from .formulatrix import *
 from .greiner import *
 from .hamilton import *
 from .head_tool import HeadTool

@@ -110,6 +110,19 @@ Corning Falcon
     corning.falcon.tubes
 
 
+Formulatrix
+-----------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    formulatrix.mantis_chips.MantisChip
+    formulatrix.mantis_chips.MantisChipNozzle
+    formulatrix.mantis_chips
+
+
 Hamilton
 --------
 
