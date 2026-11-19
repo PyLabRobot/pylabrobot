@@ -116,7 +116,18 @@ class ODTC:
       current is None or current.request_id != request_id
     ):
       return
-    samples = parse_progress_samples(data)
+    try:
+      samples = parse_progress_samples(data)
+    except (ValueError, ET.ParseError, KeyError) as error:
+      # Observations cannot determine command success or stop the physical method.
+      logger.warning(
+        "Ignoring invalid ODTC temperature data for request %s: %s; "
+        "method completion is still pending. Payload (first 2048 characters): %r",
+        request_id,
+        error,
+        data[:2048],
+      )
+      return
     self._progress_by_request[request_id] = samples[-1]
     if observation and event_bus is not None:
       with use_event_bus(event_bus):

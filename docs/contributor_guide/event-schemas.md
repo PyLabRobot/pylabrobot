@@ -355,6 +355,9 @@ do not emit operation lifecycles; late callbacks do not reopen a failed lifecycl
 `thermocycler.temperature_samples` is an instantaneous observation, with **no lifecycle suffix**.
 ODTC emits one event per validated SiLA data callback while its firmware method remains pending.
 Consumers may ignore this event without losing the operation-level execution lifecycle.
+Invalid temperature batches are logged and skipped without changing the latest valid progress
+or failing the pending method. Device completion/error responses still govern command success;
+missing telemetry must not be interpreted as stopped temperature control.
 
 | Field | Meaning |
 | --- | --- |

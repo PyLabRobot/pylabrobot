@@ -3,6 +3,7 @@
 import asyncio
 import json
 import unittest
+import xml.etree.ElementTree as ET
 from contextvars import Context
 from unittest.mock import AsyncMock, patch
 
@@ -309,6 +310,61 @@ class ODTCEventTests(unittest.IsolatedAsyncioTestCase):
         method_ns="http://sila.coop",
       ).encode()
     )
+
+  async def test_invalid_telemetry_does_not_finish_preparation(self) -> None:
+    """Bad observations preserve progress and leave completion to the device response."""
+    xml = (FIXTURES / "firmware_manual_data_event.xml").read_text()
+    invalid_batches = ["<invalid"]
+    for empty in (False, True):
+      outer = ET.fromstring(xml)
+      assert outer[0].text is not None
+      capture = ET.fromstring(outer[0].text)
+      values = capture.find(".//seriesValueSet")
+      assert values is not None
+      if empty:
+        values.clear()
+      else:
+        values.remove(values[0])
+      outer[0].text = ET.tostring(capture, encoding="unicode")
+      invalid_batches.append(ET.tostring(outer, encoding="unicode"))
+
+    self.fake.hold_name = "plr_currentPreMethod"
+    for completion_code, target in ((3, 98), (9, 97)):
+      self.events.clear()
+      self.fake.started.clear()
+      with use_event_bus(self.bus):
+        task = asyncio.create_task(self.odtc.prepare(target, 110))
+        await asyncio.wait_for(self.fake.started.wait(), 1)
+        request_id = self.fake.running_id
+        assert request_id is not None
+        await self.send_samples(request_id)
+        latest = await self.odtc.request_progress()
+        event_count = len(self.events)
+        for data in invalid_batches:
+          with self.assertLogs("pylabrobot.inheco.odtc.odtc", level="WARNING"):
+            ack = await self.odtc._sila._handle_event(
+              soap_encode(
+                "DataEvent",
+                {"requestId": request_id, "dataValue": data},
+                method_ns="http://sila.coop",
+              ).encode()
+            )
+          self.assertIn(b"DataEventResponse", ack)
+          self.assertEqual(self.odtc._sila.pending_command_name(request_id), "ExecuteMethod")
+          self.assertFalse(task.done())
+          self.assertEqual(await self.odtc.request_progress(), latest)
+          self.assertEqual(len(self.events), event_count)
+        await self.send_samples(request_id)
+        self.assertEqual(len(self.events), event_count + 1)
+        await self.fake.complete(code=completion_code)
+        if completion_code == 3:
+          await task
+          self.assertEqual(self.events[-1].name, "thermocycler.prepare.completed")
+        else:
+          with self.assertRaises(SiLAError):
+            await task
+          self.assertEqual(self.events[-1].name, "thermocycler.prepare.failed")
+    self.assertNotIn("StopMethod", self.fake.commands)
 
   async def test_early_telemetry_separates_preparation_and_protocol_executions(self) -> None:
     """Callbacks before HTTP acceptance retain every sample and the parent operation ID."""
