@@ -1843,13 +1843,13 @@ class RouteDiscoveryTests(ArmTestCase):
 # words are the captured cold start's, in its order, one per read of each phase.
 CAPTURED_STATUS_RUNS = {
   0: [
-    ("0000", 1),
+    ("0000", 3),
     ("0100", 2),
     ("0001", 1),
     ("0100", 2),
     ("0001", 1),
     ("0100", 2),
-    ("0000", 2),
+    ("0000", 4),
     ("0100", 2),
     ("0001", 1),
     ("0100", 2),
@@ -1867,13 +1867,13 @@ CAPTURED_STATUS_RUNS = {
     ("0400", 2),
   ],
   1: [
-    ("0000", 1),
+    ("0000", 3),
     ("0100", 2),
     ("0000", 1),
     ("0100", 2),
     ("0000", 1),
     ("0100", 2),
-    ("0000", 2),
+    ("0000", 4),
     ("0100", 2),
     ("0000", 1),
     ("0100", 2),
@@ -1890,7 +1890,7 @@ CAPTURED_STATUS_RUNS = {
     ("0500", 2),
     ("0400", 2),
   ],
-  2: [("0000", 8), ("0400", 13), ("0500", 1), ("0400", 12)],
+  2: [("0000", 10), ("0400", 15), ("0500", 1), ("0400", 12)],
 }
 # board, command, request payload, reply payload; "-" is an empty payload. Each following-error
 # configuration read (command 82) answers as captured: enabled, at most 4.0.
@@ -2102,16 +2102,27 @@ class V3ArmTests(DriverTestCase):
         expected.append((int(command), request))
     self.assertEqual(get_motion_commands(link=link), expected)
     self.assertFalse(driver.arm.is_initialized)
-    # Each Z home follows a following-error check of every motor, as captured.
-    homes = [
+    # Each seat checks every motor twice after clearing the arms' faults, and each Z home once
+    # before its search, as captured.
+    checks = [
       (command, payload[:2].hex())
       for _, board, command, payload in (parse_frame(frame=frame) for frame in link.written)
-      if board == 0 and command in (82, 21)
+      if board == 0 and command in (17, 82, 20, 21)
     ]
-    precheck = [(82, "0000"), (82, "0100"), (82, "0200")]
-    self.assertEqual(
-      homes, precheck + [(21, "0200")] + precheck + [(21, "0200"), (21, "0100"), (21, "0000")]
-    )
+    precheck = [(82, "0000"), (20, "0000"), (82, "0100"), (20, "0100"), (82, "0200"), (20, "0200")]
+    seat = [(17, "0000"), (17, "0100")] + precheck * 2
+    z_home = precheck + [(17, "0200"), (21, "0200")]
+    seat_starts = [
+      index for index in range(len(checks)) if checks[index : index + len(seat)] == seat
+    ]
+    z_home_starts = [
+      index for index in range(len(checks)) if checks[index : index + len(z_home)] == z_home
+    ]
+    self.assertEqual(len(seat_starts), 2)
+    self.assertEqual(len(z_home_starts), 2)
+    self.assertLess(seat_starts[0], z_home_starts[0])
+    self.assertLess(z_home_starts[0], seat_starts[1])
+    self.assertLess(seat_starts[1], z_home_starts[1])
 
   async def test_stop_sends_three_stops_and_no_park(self):
     driver, link = await self.set_up_arm()
