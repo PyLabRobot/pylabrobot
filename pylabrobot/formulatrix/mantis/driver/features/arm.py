@@ -1501,6 +1501,13 @@ class Arm:
     }
     for motor in ARM_MOTORS:
       await self._unchecked_fw_clear_motor_faults(motor=motor)
+    # Every motor checked for a slip twice before the seat, as captured.
+    for _ in range(2):
+      for motor in (*ARM_MOTORS, Z_MOTOR):
+        enabled, _ = await self._driver.request_following_error_configuration(motor=motor)
+        if enabled:
+          status = await self._driver.request_motor_status(motor=motor)
+          self._check_status(motor=motor, status=status)
     seated_once = False
     for _ in range(SEAT_PASSES):
       for motor in ARM_MOTORS:
