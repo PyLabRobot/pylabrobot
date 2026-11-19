@@ -184,6 +184,7 @@ library/cellvis
 library/corning
 library/eppendorf
 library/falcon
+library/formulatrix
 library/greiner
 library/hamilton
 library/imcs
