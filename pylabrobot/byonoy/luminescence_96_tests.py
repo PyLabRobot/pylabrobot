@@ -57,16 +57,38 @@ class TestByonoyLuminescenceProtocol(AnyioTestBase):
     reader, fake = make_reader(replies)
     plate = cellvis_96_wellplate_350uL_Fb(name="plate")
 
-    result = await reader.read_luminescence(plate, plate["A1"] + plate["H12"], mode="rapid")
+    selected_wells = plate["A1"] + plate["A2"] + plate["B1"] + plate["C6"] + plate["H12"]
+    result = await reader.read_luminescence(plate, selected_wells, mode="rapid")
 
     trigger = fake.writes[2]
     assert report_ids(fake.writes) == [0x0010, 0x0200, 0x0340, 0x0300]
     assert all(timeout is None for _, timeout in fake.reads)
     assert trigger[2:6] == struct.pack("<i", 100000)
-    assert trigger[6:18] == b"\x01" + b"\x00" * 10 + b"\x80"
-    assert result[0].data[0][0] == 0.0
-    assert result[0].data[7][11] == 95.0
-    assert result[0].data[0][1] is None
+    # Row-major indices: A1=0 (byte 0 bit 0), A2=1 (byte 0 bit 1), B1=12 (byte 1 bit 4),
+    # C6=29 (byte 3 bit 5), H12=95 (byte 11 bit 7).
+    assert trigger[6:18] == b"\x03\x10\x00\x20" + b"\x00" * 7 + b"\x80"
+    expected: list[list[float | None]] = [[None] * 12 for _ in range(8)]
+    expected[0][0] = 0.0  # A1
+    expected[0][1] = 1.0  # A2
+    expected[1][0] = 12.0  # B1
+    expected[2][5] = 29.0  # C6
+    expected[7][11] = 95.0  # H12
+    assert result[0].data == expected
+
+  async def test_column_selection_encodes_row_major_bitmask_and_masks_other_columns(self) -> None:
+    rows = [[float(row * 12 + col + 100) for col in range(12)] for row in range(8)]
+    replies = [luminescence_chunk(seq, 8, rows[seq]) for seq in range(8)] + [status_report()]
+    reader, fake = make_reader(replies)
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
+
+    result = await reader.read_luminescence(plate, plate["A1:H1"], mode="rapid")
+
+    # Column 1 is indices 0, 12, 24, 36, 48, 60, 72, 84 in row-major order.
+    assert fake.writes[2][6:18] == b"\x01\x10\x00" * 4
+    expected: list[list[float | None]] = [
+      [float(r * 12 + 100) if c == 0 else None for c in range(12)] for r in range(8)
+    ]
+    assert result[0].data == expected
 
   async def test_explicit_integration_forces_custom_mode(self) -> None:
     replies = [luminescence_chunk(seq, 8, [0.0] * 12) for seq in range(8)] + [status_report()]

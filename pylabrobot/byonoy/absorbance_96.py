@@ -417,9 +417,8 @@ class ByonoyAbsorbance96(ByonoyAbsorbanceBaseUnit, ByonoyDriver):
     )
 
     selected = {id(well) for well in wells}
-    masked = [
-      value if id(well) in selected else None for value, well in zip(rows, plate.get_all_items())
-    ]
+    row_major_wells = [well for r in range(plate.num_items_y) for well in plate.row(r)]
+    masked = [value if id(well) in selected else None for value, well in zip(rows, row_major_wells)]
     matrix = reshape_2d(masked, (8, 12))
 
     return [

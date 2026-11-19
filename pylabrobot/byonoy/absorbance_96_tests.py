@@ -87,13 +87,41 @@ class TestByonoyAbsorbanceProtocol(AnyioTestBase):
     reader.available_wavelengths = [450]
     plate = cellvis_96_wellplate_350uL_Fb(name="plate")
 
-    result = await reader.read_absorbance(plate, plate["A1"] + plate["H12"], 450)
+    selected_wells = plate["A1"] + plate["A2"] + plate["B1"] + plate["C6"] + plate["H12"]
+    result = await reader.read_absorbance(plate, selected_wells, 450)
 
-    assert result[0].data[0][0] == 0.0
-    assert result[0].data[7][11] == 95.0
-    assert result[0].data[0][1] is None
+    expected: list[list[float | None]] = [[None] * 12 for _ in range(8)]
+    expected[0][0] = 0.0  # A1
+    expected[0][1] = 1.0  # A2
+    expected[1][0] = 12.0  # B1
+    expected[2][5] = 29.0  # C6
+    expected[7][11] = 95.0  # H12
+    assert result[0].data == expected
     assert report_ids(fake.writes) == [0x0010, 0x0200, 0x0320, 0x0300]
     assert all(timeout is None for _, timeout in fake.reads)
+
+  @pytest.mark.parametrize(
+    ("selection", "expected_coords"),
+    [
+      ("A1:H1", {(r, 0) for r in range(8)}),
+      ("A1:A12", {(0, c) for c in range(12)}),
+    ],
+  )
+  async def test_partial_row_and_column_selections_mask_row_major_positions(
+    self, selection: str, expected_coords: set[tuple[int, int]]
+  ) -> None:
+    rows = [[float(row * 12 + col + 100) for col in range(12)] for row in range(8)]
+    reader, _ = make_reader(complete_absorbance(rows) + [status_report()])
+    reader.available_wavelengths = [450]
+    plate = cellvis_96_wellplate_350uL_Fb(name="plate")
+
+    result = await reader.read_absorbance(plate, plate[selection], 450)
+
+    expected: list[list[float | None]] = [
+      [float(r * 12 + c + 100) if (r, c) in expected_coords else None for c in range(12)]
+      for r in range(8)
+    ]
+    assert result[0].data == expected
 
   async def test_nonzero_chunk_flags_are_warned(
     self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch

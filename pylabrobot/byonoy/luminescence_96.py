@@ -93,7 +93,8 @@ class ByonoyLuminescence96(Resource, ByonoyDriver):
     # Firmware always scans all 96 wells; this mask only filters which are
     # reported (others come back as 0.0). Single source of truth: the wells arg.
     well_set = set(id(w) for w in wells)
-    mask_bools = [id(w) in well_set for w in plate.get_all_items()]
+    row_major_wells = [w for r in range(plate.num_items_y) for w in plate.row(r)]
+    mask_bools = [id(w) in well_set for w in row_major_wells]
 
     well_mask = encode_well_bitmask(mask_bools, n=96)
     logger.info(
