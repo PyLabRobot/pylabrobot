@@ -583,6 +583,27 @@ _CASES: List[_Case] = [
     ["state", "state", "wherej", "MoveOneAxis 5 70.0 1", "state", "state", "wherej"],
     None,
   ),
+  (
+    "open",
+    lambda arm: arm.gripper.open(),
+    ["state", "state", "wherej", "ReleasePlate 133.5 50.0", "state", "state", "wherej"],
+    None,
+  ),
+  (
+    "close",
+    lambda arm: arm.gripper.close(),
+    [
+      "state",
+      "state",
+      "wherej",
+      "GraspPlate 69.5 50.0 10.0",
+      "ReleasePlate 69.5 50.0",
+      "state",
+      "state",
+      "wherej",
+    ],
+    None,
+  ),
   ("sense_fully_closed", lambda arm: arm.gripper.sense_fully_closed(), ["IsFullyClosed"], None),
   ("sense_each_fully_closed", lambda arm: arm.gripper.sense_each_fully_closed(), [], ValueError),
   (
