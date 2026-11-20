@@ -1,0 +1,206 @@
+# How the Biomek i7 integration is built
+
+The patterns this driver follows. It follows the STAR's (`pylabrobot/hamilton/star/design.md`,
+P1-P20); this says only where the Biomek differs or adds something.
+
+## What makes the Biomek different
+
+A STAR takes operations ("pick up tips here") and plans the motion itself. A Biomek's boards take
+one axis at a time, in encoder counts. Three layers of Beckman software sit between a method and the
+boards: **Biomek** (the application) plans operations, safe heights, collisions and liquid handling;
+**the Master Controller** (MC) takes host commands in counts (`AM`, `HM`, `LT`...), coordinates each
+pod's axes and keeps their positions; **the ACE boards** (a chassis and one per pod) take
+single-axis commands over USB. This driver replaces the top two and talks to the boards directly.
+
+| Layer | What it reproduces | Where |
+|---|---|---|
+| L1 wire | the ACE messages | `driver/framing.py`, `board.py`, `protocol.py` |
+| L2 board commands | one board request each | `_unchecked_fw_*` on the pods and chassis |
+| L3 MC | one MC host command each | the pods' public primitives, `driver/recipes/` |
+| L4 planning | Biomek's planning | `driver/planning/`, `motion.py`, `pod_geometry.py`, `liquid.py` (no I/O) |
+| L5 PyLabRobot | the PLR API | `device.py`, the operation features, `resource_model/` |
+
+Each layer calls only the one below it.
+
+**I1. The boards say what is fitted.** `discover()` (read-only) asks each board its module type and
+side; that places it, not the USB serial number or the enumeration order. An unknown type or side,
+two boards claiming one place, or no chassis is refused. `driver/simulator.py` simulates the boards
+at the wire, answering identity reads from a recording of a real instrument's.
+
+**I2. The configuration is declared.** What the boards cannot report (motor tables, each axis's home
+position and hysteresis, per pod the counts conversions, limits, geometry, calibration and settings)
+is a `DeviceConfiguration`, read only from `declared_configuration_json` and written by
+`save_configuration`. It describes what is fitted; it never decides what is present.
+
+**I3. Units: a Biomek-unit core behind one boundary.** The public API is in PyLabRobot's units (mm,
+uL, s, degrees, the deck's frame). Planning, recipes and the counts layer work in Biomek's (cm, its
+frame with Y towards the front, the per-mille speed field), which is what its logs and files are
+compared in. A public method converts its arguments once, in `units.py`, and calls its `_`-prefixed
+Biomek-unit twin; nothing is converted back and forth inside.
+
+**I4. One way to make a configuration, checked against the instrument.**
+`DeviceConfiguration.from_biomek` (`biomek_files/`) makes it from the instrument's Biomek instrument
+file (`.bif`) and the Master Controller's instrument record, read-only; the two must describe one
+instrument. Each source's values are fingerprinted: a file changed after import is refused at load;
+on the instrument, discovery refuses one whose serial numbers are not the modules', and one whose
+sources have changed since. There is no switch to skip a check; the fix is to import again. A
+simulation with no files uses the package's generic instrument (`defaults/`), which a live session
+refuses. Every setting the driver reads is required in the pod's entry: a pod whose entry lacks one
+is refused (`required_settings`), never given a default.
+
+## The pods
+
+`left_x_arm` / `right_x_arm` (STAR's names) are `Pod`s, one ACE board each, on one shared X rail. A
+pod's axes, head or channels and gripper are driven by one board through one position record, so the
+pod keeps the shared mechanics (moves, homing, enabling, the reads, every `_unchecked_fw_*`) and its
+features send through it. `driver.arm(name)` also takes Biomek's names (`1`, `"Pod1"`, `"MC_1"`).
+
+**I5. Safety state.** The instrument rests with the interlock tripped; the driver arms it only to
+move and leaves it as it found it. `stop()` moves nothing (Biomek stops in place). `pause` /
+`resume` is Biomek's whole-system pause. A fault under power is cleared by enabling, with a warning;
+one that will not clear trips the interlock. The door only reports: it has no interlock of its own.
+
+**I6. Positions are kept as the MC keeps them.** Each axis has `(position, adjusted)`; moves are
+planned from where the driver last put the axis, not from a read. An axis whose position is unknown
+(after homing, a force-limited move or a failure) is read before its next move. That, and sending
+each move's requests in the MC's order, keeps the traffic request for request the MC's. Home All is
+the MC's recipe (`driver/recipes/homing.py`), its targets from the motor record.
+
+**I7. Pod against pod is the driver's job.** Nothing below the driver stops the pods colliding.
+Before a pod moves, its swept X range (bridge, pipettor and gripper as posed, with what it holds)
+must clear the other pod's range and any move it has in flight, or the move is refused before
+anything is sent (`driver/x_rail.py`, Biomek's own rule, on its 1/16 cm grid). Before that check, as
+Biomek clears the way, an idle other pod moves aside just far enough: its near edge to the next
+grid line past the zone the move needs, plus 1/64 cm, its gripper turned to a quarter turn. A busy
+one is not moved, and the move is refused. The guard uses the configuration only, so it holds
+without a deck.
+
+## The deck and the device
+
+**I8. The deck is optional; the device holds the models.** The driver homes, parks and moves with no
+deck. `BiomekI7Device` (built by `BiomekI7(...)`, or `simulation=True`) is the resource tree: the
+deck, and per pod a bridge and pod model built from the declared geometry, following the pod's axes.
+The features hold their heads as the STAR's do (`head96.resource`, `pipettes.resources`).
+
+**I9. Targeting is PyLabRobot-native, with one Biomek correction** (`targeting.py`): a target is the
+resource's location on the deck plus the offset, in Biomek's frame, plus the moving pod's
+calibration of the deck position it stands on. Positions centre their labware, as Biomek does.
+
+**I10. Labware is Biomek's own.** Biomek's labware and tip classes are PyLabRobot definitions
+(`pylabrobot.resources.beckman_coulter`); `resource_model/labware.py` names them by class, and
+`layouts.place_labware` places a method's Instrument Setup. A tip's end is its length less its
+seating depth; a tip-loading position's adaptor plate takes its labware 0.254 cm lower.
+
+**I11. Tips are shaft state.** A tip a head carries is a child of its `TipMountingShaft`, whose
+state is the tip (`serialize_state`). The device saves the tree's state (`state_json`) whenever a
+head's tips change, restores it when built, and carries it over to the models it rebuilds at setup:
+the 96-head cannot sense tips, so that is how they are known across sessions.
+
+**I12. Motion is planned and checked as Biomek's planner does** (`driver/planning/`):
+
+- *Parts.* Each tool is a few boxes, each widened by `AvoidanceMargin`: the 96-head (flange and
+  up, head, tips' block), a Span-8 probe (a lower box, an open-topped upper part), the gripper
+  (upper hand; lower hand, fingers and what it holds, which turn with GR). The pipettor's lower
+  parts reach `AdditionalSafeHeight` lower. The world is boxes too: the deck's positions, their own
+  obstacles, the instrument's structure.
+- *One check, before every move* (`check.py`): each part swept from start to end (a hull; a turn
+  from one quarter turn to another, the box over each corner's arc; any other turn, sampled),
+  against the deck (the operation's own position left out) and the pod's other tool, and the rail
+  (I7). Not clear: refused, nothing sent.
+- *One planner per planned call* (`features/pod.py`, `find_path.py`): out of any position the pod
+  stands in, straight up, part by part; the safe heights (the tallest thing under each tool's
+  footprint, plus margins); the direct way, or else Biomek's search (one axis of one part at a
+  time, to the next contact); merged as Biomek merges (`merge.py`). The whole call is planned
+  before anything moves: with no path, nothing moves.
+- *Two models.* The planner plans with more than the check checks (the gripper padded by
+  `AdditionalSafeHeightGripper`, the other pod as a wall at the end of its travel), so its plans
+  pass the check; the check stands alone for every other move.
+
+A call may give its traverse height (STAR's `minimum_traverse_height_*`); the travel at it is
+planned like any other: straight when clear, else searched around what it would meet at that
+height, else refused.
+
+## Operation features
+
+A feature exists once discovery says it is fitted (STAR's P2): `pipettes` on a Span-8 pod. Shortcuts
+(`driver.pipettes`, `lh.pipettes`) give it when exactly one pod carries it. Calls take STAR's shape:
+the arguments every PyLabRobot liquid handler shares are positional, in STAR's order; the rest are
+keyword-only, so a STAR positional argument this driver lacks is refused, not misread. Where the
+Span-8 applies one value to all probes, a per-channel list whose values differ is refused.
+
+**I13. Pipetting follows Biomek's templates** (`driver/liquid.py`): its height rule (from the
+bottom, top or liquid), following the liquid, mixes, conditioning, blowout, trailing air and the
+touch-off, for any PyLabRobot container from its height <-> volume function. A setting the driver
+does not build yet is refused, never run without it. The Span-8's tips are checked by its tip
+sensor; it cannot drop tips into a rack, only discard them.
+
+`head96` is the Multichannel pod's. Its tips are loaded force-limited by the MC's `LT`
+(`driver/recipes/tip_load.py`, its arguments from the configuration) and ejected by the plunger's
+shuck. It has no tip sensor, so `setup` ejects over its trash even with no tips recorded
+(`precautionary_discard`).
+
+**I14. A grip is Biomek's.** `<pod>.gripper` takes STAR's iSWAP / CoRe gripper calls with a
+`direction`: travel turned, open, down, a force-limited close that stops on the labware, lift clear,
+carry, place. The grip point is the resource's `preferred_pickup_location`; the widths default to
+Biomek's margins around the labware's width; a close that reaches its target met nothing and is
+refused. A pod's own gripper and pipettor are kept apart (`driver/planning/check.py`).
+
+**I15. Biomek's techniques are a translation, not a mode.** `techniques.py` turns a Biomek technique
+and liquid type into the features' keyword arguments, which a caller splats and overrides. There is
+no `technique=` argument and no selection by rank.
+
+## Where Biomek and the shared interface part
+
+- The Span-8's probes share X and are spread evenly in Y by one span value (`motion.span_targets`),
+  so one move reaches only collinear, evenly spaced targets; other `use_channels` / well sets are
+  split into several moves (as STAR splits by X). Results are the same; timing is not.
+- The 96-head has no liquid-level sensing and one plunger: `lld_mode` None or OFF only, and one
+  volume, as STAR's head.
+- Pipetting templates (a step's choreography: approach, touch-off, the small Z moves around a
+  dispense) have no PyLabRobot counterpart. The standard ones are what `aspirate` / `dispense` do
+  (`driver/liquid.py`); the reservoir variants are `offset` + `approach_height`.
+- Heights from the liquid need the well's contents: PyLabRobot's volume trackers (on), as Biomek
+  needs known amounts. The 96-head has one Z: the lowest any mandrel needs.
+- Geometry comes through PyLabRobot only. The features take any PyLabRobot container and tip: the
+  cavity bottom (`material_z_thickness`), depth, size and cross-section, `compute_height_from_volume`,
+  the tip's length, fitting depth and diameter. Biomek's labware is a converter into those
+  (`pylabrobot.resources.beckman_coulter`, with Biomek's height <-> volume as `height_volume_data`).
+- Biomek's heights are in mm, its positions in cm: the API takes PyLabRobot's mm throughout.
+
+Parameters are keyword arguments defaulted from `default_*` class attributes (STAR P6, P18); what
+the instrument fixes (the tip loading, the gripper's squeeze) comes from its instrument file.
+Positions come from the deck through the configuration's conversions; every move passes the rail
+guard (I7) and the move check (I12).
+
+## Not in this driver
+
+The deck's devices (shakers, Peltiers, the tilting ALP, the washer, the camera) are separate
+devices, or chassis features once their protocol is known. Liquid-level sensing, prewetting, clot
+detection and Biomek's volume calibration are not built: the Span-8 refuses liquid-level sensing,
+and a Biomek technique that turns any of them on is refused (`techniques.py`).
+
+## Rules the operations keep that are not PyLabRobot's own
+
+- **The 96-head loads tips only on a tip-loading position.** Its `LT` presses the whole box, which
+  Biomek allows only where the position's ALP can load tips (`BiomekPosition.head96_tip_loading`);
+  `plan_pick_up` refuses elsewhere.
+- **Setup takes off tips left on**, as the STAR's does: the Span-8's by its tip sensor; the
+  96-head, which has no tip sensor, by the session state, and by default it ejects over its trash
+  even when none are recorded (`BiomekI7.setup(discard_tips=, precautionary_discard=)`).
+- **Biomek labware saves and loads as plain PyLabRobot data**: a well built from a Biomek class
+  carries its height <-> volume as `height_volume_data`, and the deck, its ALPs and positions
+  deserialize, so a deck file stands in for the code that built it.
+
+## Where the API keeps Biomek's own shape
+
+- **`home`, not `initialize`, on the parts.** `pod.home()`, `head96.home_plunger()`,
+  `pipettes.home_pumps()` keep Biomek's words; the driver's `initialize` is STAR's bring-up (what
+  `setup` does after discovery).
+- **`stop()` moves nothing.** STAR's raises its channels and parks. Biomek stops without moving and
+  rests the arms by tripping the interlock; after a fault, a move at stop is what is not wanted.
+- **No `driver.configuration`.** The device answers per module (`chassis.configuration`, each
+  pod's `configuration`); what describes the instrument is the declared configuration
+  (`driver.declared`).
+- **The door only reports.** The door has no interlock (only the light curtain and the host trip
+  it), so `front_cover` has no `disable_control`.
+- **Axis states are names** (`"enabled"`, `"disabled"`, `"not_configured"`, `"fault"`).
