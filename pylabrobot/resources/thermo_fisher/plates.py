@@ -37,6 +37,60 @@ logger = logging.getLogger(__name__)
 # └── PPD (brand, services)
 
 
+def thermo_TS_kingfisher_96_wellplate_2000uL_Vb(name: str) -> Plate:
+  """Thermo Scientific KingFisher 96 deep-well polypropylene plate.
+
+  Part numbers: 95040450 (non-sterile), 95040460 (sterile).
+  Product: https://www.thermofisher.com/order/catalog/product/95040450
+  Total well volume (2000 uL):
+  https://www.thermofisher.com/order/catalog/product/95040450/faqs
+
+  Dimensions: Thermo Fisher drawing 180-252M-01, archived at
+  ``engineering_diagrams/thermo_TS_kingfisher_96_wellplate_2000uL_Vb.pdf``.
+  The 42.3 mm dimension runs from the rim to the inner V tip, placing the cavity
+  bottom 1.7 mm above the plate base. The drawing does not dimension the bottom
+  plastic thickness. Until it is measured, the well origin provisionally uses
+  the cavity bottom and ``material_z_thickness`` remains unknown; operations
+  requiring that thickness are unsupported.
+
+  The 8.3 mm opening is represented as a square bounding box. Rounded corners,
+  taper, and the lower round/V-shaped section are not modeled by a height-volume
+  function. Calibrate that relationship before using volume-based liquid heights.
+  Lid geometry and stacking pitch are unknown.
+
+  Args:
+    name: Name of the plate.
+  """
+  well_width = 8.3  # from spec: inner opening width
+  cavity_bottom_z = 44.0 - 42.3  # from spec: overall height minus cavity depth
+  return Plate(
+    name=name,
+    size_x=127.8,  # from spec (+/- 0.15)
+    size_y=85.5,  # from spec (+/- 0.15)
+    size_z=44.0,  # from spec (+/- 0.3)
+    model=thermo_TS_kingfisher_96_wellplate_2000uL_Vb.__name__,
+    plate_type="skirted",  # from spec: section view
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      dx=14.4 - well_width / 2,  # from spec: left edge to column 1 center
+      dy=85.5 - 11.3 - 7 * 9.0 - well_width / 2,  # from spec: row A is 11.3 from back
+      dz=cavity_bottom_z,  # provisional origin at inner bottom; outer bottom not dimensioned
+      item_dx=9.0,  # from spec
+      item_dy=9.0,  # from spec
+      size_x=well_width,
+      size_y=well_width,  # from spec: square opening, rounded corners approximated
+      size_z=42.3,  # from spec: cavity depth
+      bottom_type=WellBottomType.V,  # from spec: section view
+      cross_section_type=CrossSectionType.RECTANGLE,  # bounding box of the rounded square opening
+      material_z_thickness=None,  # not dimensioned in the drawing
+      max_volume=2000,  # from spec: manufacturer's total-volume FAQ, not working volume
+      name_prefix=name,
+    ),
+  )
+
+
 # # # # # # # # # # Thermo_TS_96_wellplate_1200ul_Rb # # # # # # # # # #
 
 
@@ -351,6 +405,57 @@ def thermo_AB_96_wellplate_300ul_Vb_MicroAmp(name: str, with_lid: bool = False) 
       compute_height_from_volume=(
         _compute_height_from_volume_thermo_AB_96_wellplate_300ul_Vb_MicroAmp
       ),
+      name_prefix=name,
+    ),
+  )
+
+
+def thermo_AB_96_wellplate_200ul_Vb_MicroAmp_Fast(name: str) -> Plate:
+  """Applied Biosystems MicroAmp Fast Optical 96-Well Reaction Plate, 0.1 mL.
+
+  Cat. nos. 4346906 and 4366932 have a barcode. Cat. no. 4346907 has no barcode.
+  The polypropylene plate is semi-skirted, with tapered wells and rounded tips. The product
+  specifications list 200 µL well capacity and 100 µL working volume.
+
+  Drawing 4344815, sheet 2, shows the 17.14 mm overall height to the top of the skirt.
+  The OEM guide (p. 18) gives 15.94 mm without specifying the datum. The well height uses
+  this value as the distance from the outer well tip to the recessed well rim. The 15.0 mm
+  cavity depth is the mean of operator-confirmed tip contacts below the rim at A1 (15.1 mm)
+  and H12 (14.9 mm) on a Hamilton 182531 insert. The modeled cavity-bottom offset combines
+  that depth with the assumed well height. The drawing specifies a nominal 0.74 mm bottom wall.
+  Liquid-height calculations require measured height-volume data for these wells.
+
+  https://documents.thermofisher.com/TFS-Assets/LSG/manuals/cms_042423.pdf
+  https://documents.thermofisher.com/TFS-Assets/LSG/brochures/molecular-biology-oem-pcr-plastics-guide.pdf#page=18
+  https://www.thermofisher.com/order/catalog/product/4346906
+  """
+  plate_width = 85.48  # from spec
+  well_diameter = 5.49  # from spec
+  well_height = 15.94  # OEM guide height, interpreted as outer tip to rim
+  cavity_depth = 15.0  # measured, mean of A1 and H12 tip-contact depths
+  return Plate(
+    name=name,
+    size_x=127.76,  # from spec
+    size_y=plate_width,
+    size_z=17.14,  # from spec
+    model=thermo_AB_96_wellplate_200ul_Vb_MicroAmp_Fast.__name__,
+    plate_type="semi-skirted",  # from spec
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,  # from spec
+      num_items_y=8,  # from spec
+      dx=14.38 - well_diameter / 2,  # from spec, left edge to A1 center minus radius
+      dy=plate_width - 11.24 - 63.0 - well_diameter / 2,  # from spec, back edge to A1 then H1
+      dz=0.0,  # from spec, outer well tips define the plate's lowest point
+      item_dx=9.0,  # from spec
+      item_dy=9.0,  # from spec
+      size_x=well_diameter,
+      size_y=well_diameter,
+      size_z=well_height,
+      material_z_thickness=round(well_height - cavity_depth, 2),
+      bottom_type=WellBottomType.V,  # tapered profile from the drawing
+      cross_section_type=CrossSectionType.CIRCLE,  # from spec
+      max_volume=200,  # from manufacturer product specifications
       name_prefix=name,
     ),
   )

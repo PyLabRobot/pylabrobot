@@ -4,6 +4,7 @@ import struct
 import unittest
 
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
+  MantisArmCoordinate,
   compute_absolute_device_position,
   compute_corrected_encoder_reading,
   compute_device_position,
@@ -58,20 +59,28 @@ class UnitTests(unittest.TestCase):
 class KinematicsTests(unittest.TestCase):
   def test_both_links_at_0_put_the_head_at_idle(self):
     # The idle position is (15.00, 31.177).
-    x, y = compute_head_position(theta_1=0.0, theta_2=0.0)
-    self.assertAlmostEqual(x, 15.0, places=9)
-    self.assertAlmostEqual(y, 31.177, places=3)
+    head = compute_head_position(theta_1=0.0, theta_2=0.0)
+    assert head.x is not None and head.y is not None
+    self.assertAlmostEqual(head.x, 15.0, places=9)
+    self.assertAlmostEqual(head.y, 31.177, places=3)
+    self.assertIsNone(head.z)
 
   def test_inverse_and_forward_kinematics_agree(self):
-    for x, y in ((15.0, 31.177), (-57.0, 0.0), (60.0, 80.0), (0.0, 100.0)):
+    # In front of the arm and in the back zones, where the other solution lies elsewhere.
+    points = [(15.0, 31.177), (-57.0, 0.0), (60.0, 80.0), (0.0, 100.0)]
+    points += [(-85.0, -45.0), (75.0, -50.0), (-65.0, -4.0), (90.0, -50.0)]
+    for x, y in points:
       with self.subTest(x=x, y=y):
-        theta_1, theta_2 = compute_joint_angles(x=x, y=y)
+        theta_1, theta_2 = compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
         head = compute_head_position(theta_1=theta_1, theta_2=theta_2)
-        self.assertAlmostEqual(head[0], x, places=6)
-        self.assertAlmostEqual(head[1], y, places=6)
+        assert head.x is not None and head.y is not None
+        self.assertAlmostEqual(head.x, x, places=6)
+        self.assertAlmostEqual(head.y, y, places=6)
 
   def test_idle_is_both_links_at_0(self):
-    theta_1, theta_2 = compute_joint_angles(x=15.0, y=31.17691453623979)
+    theta_1, theta_2 = compute_joint_angles(
+      location=MantisArmCoordinate(x=15.0, y=31.17691453623979, z=None)
+    )
     self.assertAlmostEqual(theta_1, 0.0, places=9)
     self.assertAlmostEqual(theta_2, 0.0, places=9)
 
@@ -79,7 +88,7 @@ class KinematicsTests(unittest.TestCase):
     for x, y in ((0.0, 200.0), (0.0, 0.0), (30.0, 0.0)):
       with self.subTest(x=x, y=y):
         with self.assertRaises(MantisKinematicsError):
-          compute_joint_angles(x=x, y=y)
+          compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
 
 
 class EncoderCorrectionTests(unittest.TestCase):

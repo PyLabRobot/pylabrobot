@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Measured on a bench PF400: the servo overshoots, so a target at an axis end lands past it.
-_GRIPPER_LIMIT_HEADROOM = 0.5
+_GRIPPER_OVERSHOOT_TOLERANCE = 0.5
 _GRIPPER_UNIT_EPS = 1e-6
 
 
@@ -164,8 +164,8 @@ class PreciseFlexGripper:
   def _hold_within_gripper_limits(self, units: float) -> float:
     """A gripper target held a little inside the axis's soft limits."""
     soft_min, soft_max = self._get_gripper_limits()
-    low = soft_min + _GRIPPER_LIMIT_HEADROOM
-    high = soft_max - _GRIPPER_LIMIT_HEADROOM
+    low = soft_min + _GRIPPER_OVERSHOOT_TOLERANCE
+    high = soft_max - _GRIPPER_OVERSHOOT_TOLERANCE
     held = min(max(units, low), high)
     if held != units:
       logger.warning(
@@ -306,6 +306,14 @@ class PreciseFlexGripper:
       force_sensing: False only to make a position move on purpose.
     """
     await self._move_jaws(position, force_sensing)
+
+  async def open(self) -> None:
+    """Open the jaws to half a unit inside the wide end of :attr:`jaw_width_range`."""
+    await self.move_to_jaw_position(width=self.jaw_width_range[1] - _GRIPPER_OVERSHOOT_TOLERANCE)
+
+  async def close(self) -> None:
+    """Close the jaws, force-limited, to half a unit inside the narrow end of the range."""
+    await self.move_to_jaw_position(width=self.jaw_width_range[0] + _GRIPPER_OVERSHOOT_TOLERANCE)
 
   # -- sensors -------------------------------------------------------------------------------------
 

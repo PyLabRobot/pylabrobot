@@ -18,17 +18,17 @@ Mantis
    driver.master.MantisDriver
    driver.simulator.MantisSimulationDriver
    driver.simulator.MantisSimulationArm
-   driver.simulator.MantisSimulationV3Arm
    driver.simulator.MantisSimulationPlateClamp
-   driver.simulator.MantisSimulationPneumaticPlateClamp
    driver.simulator.MantisSimulationPump
    driver.simulator.MantisSimulationRfid
    driver.simulator.MantisSimulationLedBar
    driver.features.arm.Arm
-   driver.features.arm_v3.V3Arm
+   driver.features.arm.MantisPose
+   driver.features.arm.MantisArmConfiguration
    driver.arm_kinematics
+   driver.stage_transform
+   driver.sequence_files
    driver.features.plate_clamp.PlateClamp
-   driver.features.pneumatic_plate_clamp.PneumaticPlateClamp
    driver.features.pump.Pump
    driver.features.rfid.Rfid
    driver.features.led_bar.LedBar
