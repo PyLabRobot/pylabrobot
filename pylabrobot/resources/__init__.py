@@ -3,6 +3,7 @@ from .agenbio import *
 from .agilent import *
 from .alpaqua import *
 from .azenta import *
+from .beckman_coulter import *
 from .biorad import *
 from .boekel import *
 from .btx import *
