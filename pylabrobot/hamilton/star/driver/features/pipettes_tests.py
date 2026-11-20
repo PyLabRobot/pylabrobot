@@ -256,6 +256,67 @@ class TestXYMove(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.sent[-1], jy("4200 3000 2000 1600 1420 1240 1060 0880"))
 
 
+class TestXMove(unittest.IsolatedAsyncioTestCase):
+  """`move_to_x_position`: checked first, the low channels and head up, then the arm."""
+
+  async def asyncSetUp(self):
+    self.pipettes, self.sent = await channels(width=9.0, positions=TestXYMove.SPREAD)
+    await self.pipettes.move_stop_disc_to_z_positions({0: 200.0, 1: 250.0})
+    self.sent.clear()
+
+  def _moves(self) -> List[str]:
+    return [command for command in self.sent if command[2:4] in ("ZA", "XP")]
+
+  async def test_only_the_low_channels_rise_and_before_x(self):
+    await self.pipettes.move_to_x_position(x=500.0)
+    self.assertEqual(self._moves(), ["P1ZAza22838zv11652zr075zw3", "X0XPla05000lr3lw7"])
+
+  async def test_a_refused_x_or_raise_moves_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_to_x_position(x=5000.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_to_x_position(x=500.0, minimum_traverse_height_start=400)
+    self.assertEqual(self._moves(), [])
+
+  async def test_moving_x_with_y_raises_only_once(self):
+    await self.pipettes.move_to_xy_positions(500.0, {0: 420.0})
+    raised = [command for command in self.sent if command[2:4] == "ZA"]
+    self.assertEqual(raised, ["P1ZAza22838zv11652zr075zw3"])
+
+  def _low_head(self) -> None:
+    """Put the 96-head below every traverse height; its safe-Z moves are recorded as sent."""
+    head = self.pipettes.arm.head96
+    assert head is not None
+
+    async def low() -> float:
+      return 150.0
+
+    async def to_safe_z(*args: Any, **kwargs: Any) -> float:
+      self.sent.append("head to safe Z")
+      return 300.0
+
+    head.request_z_position = low  # type: ignore[method-assign]
+    head.move_to_safe_z = to_safe_z  # type: ignore[method-assign]
+
+  async def test_a_low_head_rises_before_x(self):
+    self._low_head()
+    await self.pipettes.move_to_x_position(x=500.0)
+    x_move = next(i for i, command in enumerate(self.sent) if command.startswith("X0XP"))
+    self.assertLess(self.sent.index("head to safe Z"), x_move)
+
+  async def test_a_height_of_0_raises_neither_channels_nor_head(self):
+    self._low_head()
+    await self.pipettes.move_to_x_position(x=500.0, minimum_traverse_height_start=0)
+    self.assertEqual(self._moves(), ["X0XPla05000lr3lw7"])
+    await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, minimum_traverse_height_start=0)
+    self.assertNotIn("head to safe Z", self.sent)
+
+  async def test_without_safety_checks_only_the_arm_moves(self):
+    await self.pipettes.move_to_x_position(x=500.0, perform_safety_checks=False)
+    self.assertTrue(self.sent)
+    self.assertEqual([command for command in self.sent if not command.startswith("X0")], [])
+
+
 async def simulated_channels() -> Pipettes:
   """The channels of a simulated device, as setup leaves them.
 
@@ -710,7 +771,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._stand_at_x(300.0, 250.04)
     x = await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0)
     self.assertEqual(self.sent, ["C0XLpn01xs02000"])
-    self.moves.assert_awaited_once_with(252.0)
+    self.moves.assert_awaited_once_with(x=252.0, perform_safety_checks=False)
     self.assertEqual(x, 249.4)
 
   async def test_x_probe_with_no_post_detection_distance_sends_only_the_search(self):
@@ -729,7 +790,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._stand_at_x(300.0, 400.0)
     x = await self.pipettes.probe_x_using_clld(0, "right")
     self.assertEqual(self.sent, [f"C0XLpn01xs{round(high * 10):05}"])
-    self.moves.assert_awaited_once_with(398.0)
+    self.moves.assert_awaited_once_with(x=398.0, perform_safety_checks=False)
     self.assertEqual(x, 400.6)
 
   async def test_x_probe_refuses_an_end_behind_the_arm_or_out_of_reach(self):
@@ -814,7 +875,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._answer_the_search_with("XL", "C0XLid0001er12/00")
     self._stand_at_x(300.0, 200.0)
     self.assertIsNone(await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0))
-    self.moves.assert_awaited_once_with(202.0)
+    self.moves.assert_awaited_once_with(x=202.0, perform_safety_checks=False)
 
   async def test_y_probe_that_finds_nothing_makes_its_post_detection_move_and_answers_none(self):
     for trace in (70, 73):

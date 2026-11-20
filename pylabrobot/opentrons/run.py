@@ -226,6 +226,12 @@ class OpentronsRun:
       params["speed"] = speed
     await self.execute("moveToCoordinates", params)
 
+  async def configure_nozzle_layout(self, pipette_id: str, configuration: Dict[str, Any]) -> None:
+    """Set which nozzles a multi-channel pipette uses, and which of them it moves by."""
+    await self.execute(
+      "configureNozzleLayout", {"pipetteId": pipette_id, "configurationParams": configuration}
+    )
+
   async def get_position(self, pipette_id: str) -> Coordinate:
     """Read the nozzle or mounted tip's critical point through savePosition."""
     result = (await self.execute("savePosition", {"pipetteId": pipette_id})).result
