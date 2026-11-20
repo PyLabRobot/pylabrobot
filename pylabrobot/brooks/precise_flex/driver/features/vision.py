@@ -611,6 +611,33 @@ class PreciseFlexVision:
     """
     await self.start_led(camera, 0, use_server=use_server)
 
+  async def _light_greeting(self) -> None:
+    """Fade the front LED on, 0.1 s a step, then turn it off.
+
+    Does nothing on a vision server without the ``LightControl`` tool type.
+    """
+    config = self.configuration
+    if config.discovered and not config.has_vision_tool_type("LightControl"):
+      return
+    for brightness in (10, 30, 60, 100):
+      await self.start_led(camera="front", brightness=brightness)
+      await asyncio.sleep(0.1)
+    await self.stop_led(camera="front")
+
+  async def _light_farewell(self) -> None:
+    """Flash the front, then the bottom LED, twice each, 0.1 s on; both are left off.
+
+    Does nothing on a vision server without the ``LightControl`` tool type.
+    """
+    config = self.configuration
+    if config.discovered and not config.has_vision_tool_type("LightControl"):
+      return
+    for _ in range(2):
+      for camera in ("front", "bottom"):
+        await self.start_led(camera=camera, brightness=100)
+        await asyncio.sleep(0.1)
+        await self.stop_led(camera=camera)
+
   # -- camera image (Acquire) ----------------------------------------------
 
   @requires_vision_tool_type("Acquire")
