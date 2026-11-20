@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import struct
 import time
 from typing import (
@@ -77,6 +78,7 @@ from .framing import (
   split_frames,
 )
 from .oem_config import (
+  CHIP_SLOT_APPROACH_PATH,
   UNKNOWN_ZONE,
   WASH_APPROACH_PATH,
   WASH_POSITIONS,
@@ -937,9 +939,16 @@ class MantisDriver:
     ):
       raise MantisConfigurationError("zones block: a route to safe XY moves the arms only")
     known = {WASTE_APPROACH_PATH, *(WASH_APPROACH_PATH.format(position=p) for p in WASH_POSITIONS)}
-    if routes["approach_paths"] is not None and not set(routes["approach_paths"]) <= known:
+    chip_slot = re.compile(CHIP_SLOT_APPROACH_PATH.format(slot=r"[1-9][0-9]*"))
+    unknown = [
+      name
+      for name in routes["approach_paths"] or {}
+      if name not in known and chip_slot.fullmatch(name) is None
+    ]
+    if unknown:
       raise MantisConfigurationError(
-        f"approach_paths block: the paths are {sorted(known)}, got {sorted(routes['approach_paths'])}"
+        f"approach_paths block: the paths are {sorted(known)} and chip slots "
+        f"({CHIP_SLOT_APPROACH_PATH}), got {sorted(unknown)}"
       )
     return routes
 

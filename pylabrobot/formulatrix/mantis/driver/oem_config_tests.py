@@ -11,6 +11,8 @@ from pylabrobot.formulatrix.mantis.driver.configuration import RECORDING_MANTIS_
 from pylabrobot.formulatrix.mantis.driver.errors import MantisConfigurationError
 from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
 from pylabrobot.formulatrix.mantis.driver.oem_config import (
+  CHIP_CHANGER_SEQUENCE_DIRECTORY,
+  CHIP_RACK_TYPE,
   COMMON_SEQUENCE_DIRECTORY,
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
@@ -535,6 +537,38 @@ class RouteBlockTests(unittest.TestCase):
     del rectangles["LeftFront"]
     with self.assertRaisesRegex(MantisConfigurationError, "has no LeftFrontZoneMinimumX"):
       self.load(zones={**SYNTHETIC_ZONES_BLOCK, "rectangles": rectangles})
+
+  def test_each_fixed_chip_slot_gives_its_routes_joined_and_an_lc3_slot_none(self):
+    routes: Dict[str, List[List[Optional[float]]]] = {
+      "SafeStart": [[None, None, -1.57]],
+      "MoveAttach": [[10.0, 20.0, -1.57], [10.0, 20.0, 5.0]],
+      "Origin": [[11.0, 21.0, 5.0]],
+      "Shift": [[11.0, 25.0, 5.0]],
+      "SafeStop": [[11.0, 25.0, None]],
+    }
+    keys = []
+    for slot, chip_changer_type in ((1, CHIP_RACK_TYPE), (2, 1)):
+      keys.append(f'    <add key="ChipChanger.{slot}.Type" value="{chip_changer_type}" />\r\n')
+      for name in routes:
+        keys.append(
+          f'    <add key="ChipChanger.{slot}.{name}Sequence" value="{name}.seq.txt" />\r\n'
+        )
+    chip_changer_config = HEAD + '    <add key="ChipChanger.Count" value="2" />\r\n'
+    chip_changer_config += "".join(keys) + TAIL
+    with tempfile.TemporaryDirectory() as directory:
+      configs_directory = write_zone_install(
+        directory=directory, zones=SYNTHETIC_ZONES_BLOCK, approach_paths={}
+      )
+      write_files(directory=configs_directory, files={"ChipChanger.config": chip_changer_config})
+      sequence_directory = os.path.join(directory, "Data", CHIP_CHANGER_SEQUENCE_DIRECTORY)
+      os.makedirs(sequence_directory)
+      write_files(
+        directory=sequence_directory,
+        files={f"{name}.seq.txt": get_route_text(route=route) for name, route in routes.items()},
+      )
+      blocks = _load_unit_configuration(oem_config_directory=configs_directory)
+    joined = [route_line for route in routes.values() for route_line in route]
+    self.assertEqual(blocks["approach_paths"], {"chip_slot_1": joined})
 
 
 # A unit's StageTuning.config, in the layout of a v4 install.
