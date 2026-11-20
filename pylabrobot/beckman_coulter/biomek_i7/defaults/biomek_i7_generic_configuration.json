@@ -1,0 +1,2667 @@
+{
+  "generic": true,
+  "chassis_serial_number": null,
+  "instrument_serial_number": null,
+  "sources": {
+    "instrument_file": {
+      "fingerprint": "sha256:9cbfcd7168db1a0a0e9f6436c4d1479bc1664e1c39c7e4c125f5694b96dee046"
+    },
+    "master_controller": {
+      "fingerprint": "sha256:f4aceddd504ac0579c6fee9dad49a9ec4a637f2bd538ae4cd9a8191445a0af07"
+    }
+  },
+  "pods": {
+    "left": {
+      "component": "MC_1",
+      "module_type": "multichannel",
+      "module_serial_number": null,
+      "source": "bif:Devices/Pipettor1/Pod1",
+      "conversion": {
+        "D": {
+          "const": 229.932355946194,
+          "offset": 187.7766869,
+          "unit": "uL"
+        },
+        "GG": {
+          "const": 18334.65,
+          "offset": -5.981,
+          "unit": "cm"
+        },
+        "GR": {
+          "const": -376.2492651,
+          "offset": 376.295,
+          "unit": "deg"
+        },
+        "GY": {
+          "const": 1982.2617,
+          "offset": -15.833,
+          "unit": "cm"
+        },
+        "GZ": {
+          "const": 1591.549,
+          "offset": -37.949,
+          "unit": "cm"
+        },
+        "X": {
+          "const": 2560.0,
+          "offset": -10.518999999999998,
+          "unit": "cm"
+        },
+        "Y": {
+          "const": 2560.0,
+          "offset": -14.446000000000002,
+          "unit": "cm"
+        },
+        "Z": {
+          "const": 2560.0,
+          "offset": -39.863,
+          "unit": "cm"
+        }
+      },
+      "limits": {
+        "D": [
+          -185.9935538,
+          1200.0
+        ],
+        "GG": [
+          5.981,
+          15.681
+        ],
+        "GR": [
+          -370.0,
+          190.0
+        ],
+        "GY": [
+          15.834,
+          62.683
+        ],
+        "GZ": [
+          6.943,
+          37.949
+        ],
+        "X": [
+          10.52,
+          108.7457
+        ],
+        "Y": [
+          14.596,
+          59.5976
+        ],
+        "Z": [
+          11.153599999999999,
+          39.863
+        ]
+      },
+      "geometry": {
+        "bridge_x_span": 39.0154,
+        "bridge_to_head_x_offset": 11.020399999999999,
+        "mandrel1_x_offset": 4.353700000000001,
+        "mandrel1_y_offset": 2.5650000000000004,
+        "mandrel_x_spacing": 0.9,
+        "mandrel_y_spacing": 0.9,
+        "avoidance_margin": 0.2164,
+        "pod_x_span": 18.606,
+        "pod_y_span": 11.43,
+        "gripper_x_offset": 0.309,
+        "gripper_y_offset": 0.206,
+        "gripper_z_offset": -7.304,
+        "frame_safety_left": 0.5,
+        "frame_safety_right": 1.5,
+        "additional_safe_height": 0.5336,
+        "additional_safe_height_gripper": 0.5336,
+        "mandrels_x": 12,
+        "mandrels_y": 8,
+        "sub_mandrel_safe_height": 0.2705
+      },
+      "park": {
+        "GG": 7.889,
+        "GR": 90.0,
+        "GY": 48.0,
+        "GZMargin": -0.1,
+        "XMargin": 14.0,
+        "Y": 29.0,
+        "ZMargin": -0.1
+      },
+      "settings": {
+        "AlwaysMaxZ": false,
+        "AStarSearchLimit": 10000,
+        "DAxisULPerCM": 178.139348120214,
+        "DiscardStackHeightThreshold": 5.6,
+        "DiscardWiderUnsqueeze": 10.326,
+        "Fixed": true,
+        "GlobalMinSafeHeight": -100000.0,
+        "HeadBodyXSpan": 13.0175,
+        "HeadBodyYSpan": 7.9375,
+        "HeadFlangeHeight": 1.0795,
+        "HeadHeight": 9.8171,
+        "HeadSerialNumber": null,
+        "HeadType": "MC96_1200",
+        "HeadTypeLabel": "1200 \u00b5L MC-96 Head",
+        "HomingTimeout": 300000,
+        "HysteresisX": 1.0,
+        "HysteresisY": 1.0,
+        "LeftPod": true,
+        "ManualControlSafety": 0.5,
+        "MaxAllowedPositionDiffAfterRetry": 0.05,
+        "Name": "Pod1",
+        "NotHomedCode": "needs to be homed",
+        "PerActionOverhead": 0.001,
+        "PerMoveActionOverhead": 0.005,
+        "PodName": "MC_1",
+        "PodToHeadBodyXOffset": 2.795000000000001,
+        "PodToHeadBodyYOffset": 1.7462500000000007,
+        "PodType": "MC",
+        "PodTypeLabel": "Multichannel Pod",
+        "PruneMoves": true,
+        "RetrySpeed": 20,
+        "RotationPenalty": 10.0,
+        "SensorEnabled": false,
+        "SpeedLimit": 100.0,
+        "TimeoutSlop": 25.0,
+        "TipLoadForceLimitOffset": 250.0,
+        "TipLoadForceLimitSlope": 2150,
+        "TipLoadOverheadTime": 5.2,
+        "TipLoadPushOffDistance": 0.292,
+        "TipLoadPushOffSpeed": 5,
+        "TipLoadRelieveSpeed": 5,
+        "TipLoadRelieveZOffset": -0.7,
+        "TipLoadSettlingTime": 2.0,
+        "TipLoadSpeed": 10,
+        "TipLoadStartZOffset": 0.0,
+        "TipLoadXRangePadding": 70.5978,
+        "TipLoadZOffset": -1.25,
+        "TipSeatingDepth": 0.7074,
+        "TipUnloadShuckSpeed": 100,
+        "TipUnloadZOffset": -0.661,
+        "Type": "Pod96",
+        "UI_CLSID": "{b6711077-a389-4d59-8f40-95c4129106da}",
+        "WarningThresholdAngleChange": 0.25,
+        "WarningThresholdGripChange": 0.01,
+        "Head/PodToMandrel1": {
+          "X": 2.0477,
+          "Y": -6.325,
+          "Z": -10.5245
+        },
+        "GripperSqueezeForce": 5.0
+      },
+      "gripper_model": {
+        "Finger": {
+          "Base": [
+            {
+              "X": -1.45,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.27
+            },
+            {
+              "X": 11.668,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 13.316,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 13.316,
+              "Y": -7.279999999999999
+            },
+            {
+              "X": 9.544,
+              "Y": -7.279999999999999
+            },
+            {
+              "X": 9.544,
+              "Y": -5.566000000000001
+            },
+            {
+              "X": 3.574,
+              "Y": -0.619
+            },
+            {
+              "X": -1.45,
+              "Y": -0.619
+            }
+          ],
+          "BaseWithProbes": [
+            {
+              "X": -1.45,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.27
+            },
+            {
+              "X": 11.668,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 11.90625,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 11.90625,
+              "Y": -9.234
+            },
+            {
+              "X": 9.544,
+              "Y": -9.234
+            },
+            {
+              "X": 9.544,
+              "Y": -5.566000000000001
+            },
+            {
+              "X": 3.574,
+              "Y": -0.619
+            },
+            {
+              "X": -1.45,
+              "Y": -0.619
+            }
+          ],
+          "BottomPart": {
+            "FingerwiseSpan": 9.421,
+            "TopSurface": -0.508,
+            "ZOffset": 0.27,
+            "ZSpan": 7.55
+          },
+          "ClipperThickness": 0.106,
+          "ExtensionSpan": 9.065,
+          "FingerCenterOffset": -0.003,
+          "FingerMountOriginSpanAtHardstop": 6.321,
+          "FingerwiseOffset": 0.6330000000000002,
+          "LWFingerSpacing": 0.191,
+          "OverallAngledThickness": 1.022,
+          "PadsCenterToRotationCenter": 11.443,
+          "Thickness": 0.635,
+          "TopPart": {
+            "FingerwiseSpan": 5.345,
+            "ZSpan": 0.619
+          }
+        },
+        "Lowerhand": {
+          "FingerwiseSpan": 4.166,
+          "YSpanNoFingerMountExtension": 9.525,
+          "ZSpan": 3.175
+        },
+        "Upperhand": {
+          "CenterXOffset": 0.0,
+          "CenterYOffset": 0.0,
+          "XSpan": 4.851,
+          "YSpan": 8.165,
+          "ZSpan": 8.949
+        }
+      },
+      "obstacles": [
+        {
+          "name": "BackLeftTower",
+          "buffer": 0.2,
+          "x2": 3.117,
+          "y2": 12.177
+        },
+        {
+          "name": "LeftShield",
+          "buffer": 0.2,
+          "x2": -6.496,
+          "y2": 70.24600000000001
+        },
+        {
+          "name": "LightCurtain",
+          "buffer": 0.5,
+          "y1": 70.24600000000001
+        },
+        {
+          "name": "BackShield",
+          "buffer": 0.2,
+          "y2": -2.0920000000000005
+        },
+        {
+          "name": "IBeam",
+          "buffer": 0.2,
+          "y2": 11.091999999999999,
+          "z1": 37.069
+        },
+        {
+          "name": "RightShield",
+          "buffer": 0.2,
+          "x1": 158.41400000000002,
+          "y2": 70.24600000000001
+        },
+        {
+          "name": "Floor",
+          "buffer": 0.2,
+          "z1": -500.0,
+          "z2": 0.0
+        },
+        {
+          "name": "BackRightTower",
+          "buffer": 0.2,
+          "x1": 148.8,
+          "y2": 12.177
+        },
+        {
+          "name": "LeftCamera",
+          "buffer": 0.2,
+          "x2": -1.6689999999999998,
+          "y1": 65.561,
+          "z1": 32.078
+        },
+        {
+          "name": "RightCamera",
+          "buffer": 0.2,
+          "x1": 153.586,
+          "y1": 65.561,
+          "z1": 32.078
+        },
+        {
+          "name": "PumpBank",
+          "buffer": 0.2,
+          "x1": 121.044,
+          "y2": 13.447,
+          "z2": 37.069
+        }
+      ]
+    },
+    "right": {
+      "component": "SPAN8_2",
+      "module_type": "span8",
+      "module_serial_number": null,
+      "source": "bif:Devices/Pipettor1/Pod2",
+      "conversion": {
+        "D1": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D2": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D3": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D4": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D5": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D6": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D7": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D8": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "D": {
+          "const": 24.0,
+          "offset": 0.0,
+          "unit": "uL"
+        },
+        "GG": {
+          "const": 18334.65,
+          "offset": -5.987,
+          "unit": "cm"
+        },
+        "GR": {
+          "const": -376.2492651,
+          "offset": 377.175,
+          "unit": "deg"
+        },
+        "GY": {
+          "const": 1982.2617,
+          "offset": -15.901,
+          "unit": "cm"
+        },
+        "GZ": {
+          "const": 1591.549,
+          "offset": -37.931,
+          "unit": "cm"
+        },
+        "S": {
+          "const": 4713.0,
+          "offset": -6.3,
+          "unit": "cm"
+        },
+        "X": {
+          "const": 2560.0,
+          "offset": -146.40669375,
+          "unit": "cm"
+        },
+        "Y": {
+          "const": 4713.0,
+          "offset": -15.123735233662208,
+          "unit": "cm"
+        },
+        "Z1": {
+          "const": 4823.423,
+          "offset": -37.235921235034354,
+          "unit": "cm"
+        },
+        "Z2": {
+          "const": 4823.423,
+          "offset": -37.20402123503435,
+          "unit": "cm"
+        },
+        "Z3": {
+          "const": 4823.423,
+          "offset": -37.23722123503438,
+          "unit": "cm"
+        },
+        "Z4": {
+          "const": 4823.423,
+          "offset": -37.305421235034345,
+          "unit": "cm"
+        },
+        "Z5": {
+          "const": 4823.423,
+          "offset": -37.27122123503436,
+          "unit": "cm"
+        },
+        "Z6": {
+          "const": 4823.423,
+          "offset": -37.222921235034356,
+          "unit": "cm"
+        },
+        "Z7": {
+          "const": 4823.423,
+          "offset": -37.21462123503436,
+          "unit": "cm"
+        },
+        "Z8": {
+          "const": 4823.423,
+          "offset": -37.22662123503437,
+          "unit": "cm"
+        },
+        "Z": {
+          "const": 4823.423,
+          "offset": -42.81242123503436,
+          "unit": "cm"
+        }
+      },
+      "limits": {
+        "D": [
+          0.0,
+          1000.0
+        ],
+        "D1": [
+          0.0,
+          1000.0
+        ],
+        "D2": [
+          0.0,
+          1000.0
+        ],
+        "D3": [
+          0.0,
+          1000.0
+        ],
+        "D4": [
+          0.0,
+          1000.0
+        ],
+        "D5": [
+          0.0,
+          1000.0
+        ],
+        "D6": [
+          0.0,
+          1000.0
+        ],
+        "D7": [
+          0.0,
+          1000.0
+        ],
+        "D8": [
+          0.0,
+          1000.0
+        ],
+        "GG": [
+          5.987,
+          15.687
+        ],
+        "GR": [
+          -370.0,
+          190.0
+        ],
+        "GY": [
+          15.902,
+          62.966
+        ],
+        "GZ": [
+          6.925,
+          37.931
+        ],
+        "Span": [
+          6.3,
+          35.0
+        ],
+        "X": [
+          48.199,
+          146.406
+        ],
+        "Y": [
+          15.274,
+          66.455
+        ],
+        "Z": [
+          22.635421235034357,
+          39.52602123503435
+        ],
+        "Z1": [
+          17.05892123503436,
+          39.55792123503436
+        ],
+        "Z2": [
+          17.05892123503436,
+          39.52602123503435
+        ],
+        "Z3": [
+          17.05892123503436,
+          39.559221235034386
+        ],
+        "Z4": [
+          17.05892123503436,
+          39.62742123503435
+        ],
+        "Z5": [
+          17.05892123503436,
+          39.59322123503436
+        ],
+        "Z6": [
+          17.05892123503436,
+          39.54492123503436
+        ],
+        "Z7": [
+          17.05892123503436,
+          39.53662123503436
+        ],
+        "Z8": [
+          17.05892123503436,
+          39.548621235034375
+        ]
+      },
+      "geometry": {
+        "bridge_x_span": 25.7204,
+        "bridge_to_head_x_offset": 13.274799999999999,
+        "mandrel1_x_offset": 1.0,
+        "mandrel1_y_offset": 1.0,
+        "mandrel_x_spacing": 0.9,
+        "mandrel_y_spacing": 0.9,
+        "avoidance_margin": 0.2164,
+        "pod_x_span": 4.0,
+        "pod_y_span": 10.0,
+        "gripper_x_offset": 1.445,
+        "gripper_y_offset": 0.2,
+        "gripper_z_offset": -7.398,
+        "frame_safety_left": 1.0,
+        "frame_safety_right": 1.5,
+        "additional_safe_height": 1.0,
+        "additional_safe_height_gripper": 0.5336
+      },
+      "park": {
+        "GG": 7.889,
+        "GR": 90.0,
+        "GY": 48.0,
+        "GZMargin": -0.1,
+        "ZMargin": -0.1
+      },
+      "settings": {
+        "ADSlowMoveRange": 0.5,
+        "AlwaysMaxZ": false,
+        "AStarSearchLimit": 12500,
+        "CalibrateVolumeForProbes": false,
+        "D1SpeedLimit": 80.1724,
+        "D2SpeedLimit": 80.1724,
+        "D3SpeedLimit": 80.1724,
+        "D4SpeedLimit": 80.1724,
+        "D5SpeedLimit": 80.1724,
+        "D6SpeedLimit": 80.1724,
+        "D7SpeedLimit": 80.1724,
+        "D8SpeedLimit": 80.1724,
+        "DetectTips": true,
+        "DiscardHeight": 39.52602123503435,
+        "DiscardOffset": 0.35,
+        "DiscardOvershoot": 0.0,
+        "DiscardOvershootFixed": true,
+        "DiscardSpeed": 25,
+        "DiscardStackHeightThreshold": 5.6,
+        "DiscardWiderUnsqueeze": 10.326,
+        "DSpeedLimit": 100.0,
+        "Fixed": false,
+        "FixedHomingOffset": 0.2134,
+        "FixedProbeZOffset": 5.7899,
+        "GlobalMinSafeHeight": -100000.0,
+        "HeadSerialNumber": null,
+        "HeadType": "Unknown",
+        "HomingTimeout": 300000,
+        "HysteresisX": 1.0,
+        "HysteresisY": 1.0,
+        "LeftPod": false,
+        "LoadSpeed": 25,
+        "MandrelExtender": 5.7899,
+        "ManualControlSafety": 0.5,
+        "MaxAllowedPositionDiffAfterRetry": 0.05,
+        "MaxLoadingProbes": 2,
+        "MaxSafeDeltaY": 2.0,
+        "MaxSafeDeltaZ": 10.0,
+        "MaxUnloadingProbes": 4,
+        "MinLoadingInterval": 4,
+        "MinUnloadingInterval": 1,
+        "Name": "Pod2",
+        "NotHomedCode": "needs to be homed",
+        "OverrideRTSimulatedLLS": true,
+        "PerActionOverhead": 0.001,
+        "PerMoveActionOverhead": 0.005,
+        "PodName": "SPAN8_2",
+        "PodType": "SPAN8",
+        "PodTypeLabel": "Span Pod",
+        "PostClotDetectionPause": 0.1,
+        "PostRunWashVolume": 1.0,
+        "ProbeCount": 8,
+        "ProbeReservoirYMargin": 0.16256,
+        "ProbeSize": 0.9,
+        "ProbeSwitchPoint": 11.0,
+        "PruneMoves": true,
+        "realvsExpected1_7": -0.010500000000000398,
+        "RetrySpeed": 20,
+        "RH_Backoff": 50.0,
+        "RotationPenalty": 10.0,
+        "SensorEnabled": true,
+        "SpeedLimit": 100,
+        "STAGSpeed": 1,
+        "SystemTrailingAirgap": 20.0,
+        "TimeoutSlop": 25.0,
+        "TiploadExitZOffset": 2.0,
+        "TipLoadTime": 8.0,
+        "TipLoadZOffset": -0.77,
+        "TipShuckDiameter": 0.83,
+        "Type": "Pod8Span",
+        "UI_CLSID": "{fbe216b4-1c3a-4bac-91d0-53c036b3de70}",
+        "UISpanToRealSpan": 0.7,
+        "UnloadSpeed": 35,
+        "UseAccessPoints": false,
+        "ValveMoveTime": 0.35,
+        "ValveNoMoveTime": 0.045,
+        "WarningThresholdAngleChange": 0.25,
+        "WarningThresholdGripChange": 0.01,
+        "XShift1_7": -0.02970000000000539,
+        "BrokenTips": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "LoadingOffsets": [
+          -0.05,
+          -0.05,
+          -0.05,
+          -0.05,
+          -0.05,
+          -0.05,
+          -0.05,
+          -0.05
+        ],
+        "DefaultTipHubInfo": {
+          "Length": 0.9779,
+          "MaxRadius": 0.3429,
+          "MinRadius": 0.3302
+        },
+        "LLSWireModel": {
+          "AnchorCenterY": 40.721,
+          "AnchorHalfLength": 4.166,
+          "AnchorXOffset": 9.953,
+          "FixedTipZOriginToWireOffset": 3.371,
+          "WireBottomAtZMax": 29.78,
+          "WireStartXOffset": 2.6
+        },
+        "GripperSqueezeForce": 5.0
+      },
+      "gripper_model": {
+        "Finger": {
+          "Base": [
+            {
+              "X": -1.45,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.27
+            },
+            {
+              "X": 11.668,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 13.316,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 13.316,
+              "Y": -7.279999999999999
+            },
+            {
+              "X": 9.544,
+              "Y": -7.279999999999999
+            },
+            {
+              "X": 9.544,
+              "Y": -5.566000000000001
+            },
+            {
+              "X": 3.574,
+              "Y": -0.619
+            },
+            {
+              "X": -1.45,
+              "Y": -0.619
+            }
+          ],
+          "BaseWithProbes": [
+            {
+              "X": -1.45,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.778
+            },
+            {
+              "X": 3.894,
+              "Y": 0.27
+            },
+            {
+              "X": 11.668,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 11.90625,
+              "Y": -5.946999999999999
+            },
+            {
+              "X": 11.90625,
+              "Y": -9.234
+            },
+            {
+              "X": 9.544,
+              "Y": -9.234
+            },
+            {
+              "X": 9.544,
+              "Y": -5.566000000000001
+            },
+            {
+              "X": 3.574,
+              "Y": -0.619
+            },
+            {
+              "X": -1.45,
+              "Y": -0.619
+            }
+          ],
+          "BottomPart": {
+            "FingerwiseSpan": 9.421,
+            "TopSurface": -0.508,
+            "ZOffset": 0.27,
+            "ZSpan": 7.55
+          },
+          "ClipperThickness": 0.106,
+          "ExtensionSpan": 9.065,
+          "FingerCenterOffset": 0.014,
+          "FingerMountOriginSpanAtHardstop": 6.321,
+          "FingerwiseOffset": 0.6330000000000002,
+          "LWFingerSpacing": 0.191,
+          "OverallAngledThickness": 1.022,
+          "PadsCenterToRotationCenter": 11.42,
+          "Thickness": 0.635,
+          "TopPart": {
+            "FingerwiseSpan": 5.345,
+            "ZSpan": 0.619
+          }
+        },
+        "Lowerhand": {
+          "FingerwiseSpan": 4.166,
+          "YSpanNoFingerMountExtension": 9.525,
+          "ZSpan": 3.175
+        },
+        "Upperhand": {
+          "CenterXOffset": 0.0,
+          "CenterYOffset": 0.0,
+          "XSpan": 4.851,
+          "YSpan": 8.165,
+          "ZSpan": 8.949
+        }
+      },
+      "obstacles": [
+        {
+          "name": "BackLeftTower",
+          "buffer": 0.2,
+          "x2": 3.117,
+          "y2": 12.177
+        },
+        {
+          "name": "LightCurtain",
+          "buffer": 0.5,
+          "y1": 70.246
+        },
+        {
+          "name": "BackShield",
+          "buffer": 0.2,
+          "y2": -2.092
+        },
+        {
+          "name": "IBeam",
+          "buffer": 0.2,
+          "y2": 11.092,
+          "z1": 37.069
+        },
+        {
+          "name": "Floor",
+          "buffer": 0.2,
+          "z1": -500.0,
+          "z2": 0.0
+        },
+        {
+          "name": "LeftCamera",
+          "buffer": 0.2,
+          "x2": -1.669,
+          "y1": 65.561,
+          "z1": 32.078
+        },
+        {
+          "name": "BackRightTower",
+          "buffer": 0.2,
+          "x1": 148.8,
+          "y2": 12.177
+        },
+        {
+          "name": "RightCamera",
+          "buffer": 0.2,
+          "x1": 153.586,
+          "y1": 65.561,
+          "z1": 32.078
+        },
+        {
+          "name": "RightShield",
+          "buffer": 0.2,
+          "x1": 158.414,
+          "y2": 70.246
+        },
+        {
+          "name": "PumpBank",
+          "buffer": 0.2,
+          "x1": 121.044,
+          "y2": 13.447,
+          "z2": 37.069
+        },
+        {
+          "name": "LeftShield",
+          "buffer": 0.2,
+          "x2": -7.874,
+          "y2": 70.246
+        }
+      ]
+    }
+  },
+  "deck_positions": {
+    "BS1": {
+      "corners": {
+        "1": [
+          40.3464,
+          15.4873,
+          16.0968
+        ],
+        "2": [
+          40.423,
+          15.474,
+          16.1
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "CP1": {
+      "corners": {
+        "1": [
+          98.8117,
+          15.3923,
+          16.7973
+        ],
+        "2": [
+          98.742,
+          15.474,
+          16.3
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P1": {
+      "corners": {
+        "1": [
+          40.4144,
+          25.8845,
+          15.9601
+        ],
+        "2": [
+          40.418,
+          25.888,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P10": {
+      "corners": {
+        "1": [
+          69.579,
+          57.17080029449462,
+          15.966
+        ],
+        "2": [
+          69.58119999999998,
+          57.16830029449462,
+          15.9787
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    },
+    "P11": {
+      "corners": {
+        "1": [
+          84.1574,
+          36.3236,
+          15.9652
+        ],
+        "2": [
+          84.156,
+          36.302,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P12": {
+      "corners": {
+        "1": [
+          84.162,
+          46.736,
+          15.968
+        ],
+        "2": [
+          84.1707,
+          46.737,
+          15.9679
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P13": {
+      "corners": {
+        "1": [
+          84.155,
+          57.175900294494625,
+          15.972
+        ],
+        "2": [
+          84.15719999999999,
+          57.17340029449463,
+          15.9851
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    },
+    "P14": {
+      "corners": {
+        "1": [
+          98.691,
+          25.939,
+          15.974
+        ],
+        "2": [
+          98.7398,
+          25.9237,
+          15.9713
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P15": {
+      "corners": {
+        "1": [
+          98.715,
+          36.324,
+          15.975
+        ],
+        "2": [
+          98.7468,
+          36.3267,
+          15.9744
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P16": {
+      "corners": {
+        "1": [
+          98.709,
+          46.744,
+          15.972
+        ],
+        "2": [
+          98.7184,
+          46.7501,
+          15.9737
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P17": {
+      "corners": {
+        "1": [
+          98.723,
+          57.177,
+          15.964
+        ],
+        "2": [
+          98.7366,
+          57.1795,
+          15.9766
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P18": {
+      "corners": {
+        "1": [
+          113.314,
+          15.476,
+          15.964
+        ],
+        "2": [
+          113.3297,
+          15.4973,
+          15.9615
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P19": {
+      "corners": {
+        "1": [
+          113.314,
+          25.89,
+          15.964
+        ],
+        "2": [
+          113.3246,
+          25.9146,
+          15.9659
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P2": {
+      "corners": {
+        "1": [
+          40.4558,
+          36.313,
+          16.0101
+        ],
+        "2": [
+          40.418,
+          36.302,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P20": {
+      "corners": {
+        "1": [
+          113.314,
+          36.304,
+          15.964
+        ],
+        "2": [
+          113.3359,
+          36.3325,
+          15.9708
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P21": {
+      "corners": {
+        "1": [
+          113.314,
+          46.718,
+          15.964
+        ],
+        "2": [
+          113.3125,
+          46.7644,
+          15.9665
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P22": {
+      "corners": {
+        "1": [
+          113.314,
+          57.132,
+          15.964
+        ],
+        "2": [
+          113.3238,
+          57.181,
+          15.9735
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P23": {
+      "corners": {
+        "1": [
+          127.893,
+          46.718,
+          15.964
+        ],
+        "2": [
+          127.8847,
+          46.7469,
+          15.9565
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P24": {
+      "corners": {
+        "1": [
+          127.893,
+          57.132,
+          15.964
+        ],
+        "2": [
+          127.8928,
+          57.1835,
+          15.9636
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Position"
+      }
+    },
+    "P3": {
+      "corners": {
+        "1": [
+          40.4703,
+          46.7005,
+          16.0425
+        ],
+        "2": [
+          40.418,
+          46.716,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P4": {
+      "corners": {
+        "1": [
+          40.4777,
+          57.1474,
+          16.0187
+        ],
+        "2": [
+          40.418,
+          57.13,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P5": {
+      "corners": {
+        "1": [
+          55.0039,
+          36.3134,
+          15.9538
+        ],
+        "2": [
+          54.997,
+          36.302,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "P6": {
+      "corners": {
+        "1": [
+          54.996,
+          46.729,
+          15.969
+        ],
+        "2": [
+          55.0004,
+          46.7289,
+          15.9686
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P7": {
+      "corners": {
+        "1": [
+          54.994,
+          57.16830029449462,
+          15.971
+        ],
+        "2": [
+          54.99619999999999,
+          57.16580029449462,
+          15.9839
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    },
+    "P8": {
+      "corners": {
+        "1": [
+          69.572,
+          36.325,
+          15.963
+        ],
+        "2": [
+          69.6,
+          36.3197,
+          15.965
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "P9": {
+      "corners": {
+        "1": [
+          69.584,
+          46.737,
+          15.962
+        ],
+        "2": [
+          69.6464,
+          46.7379,
+          15.9609
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Position"
+      }
+    },
+    "TA1": {
+      "corners": {
+        "1": [
+          129.977,
+          36.098,
+          15.959
+        ],
+        "2": [
+          129.9485,
+          36.3464,
+          15.9532
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Not",
+        "2": "Position"
+      }
+    },
+    "TL1": {
+      "corners": {
+        "1": [
+          11.2464,
+          36.3048,
+          16.1996
+        ],
+        "2": [
+          11.259,
+          36.302,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL10": {
+      "corners": {
+        "1": [
+          25.8297,
+          15.4482,
+          16.2324
+        ],
+        "2": [
+          25.838,
+          15.474,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL11": {
+      "corners": {
+        "1": [
+          25.8394,
+          25.8775,
+          16.209
+        ],
+        "2": [
+          25.838,
+          25.888,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL2": {
+      "corners": {
+        "1": [
+          11.2418,
+          46.7271,
+          16.2016
+        ],
+        "2": [
+          11.259,
+          46.716,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL3": {
+      "corners": {
+        "1": [
+          11.2511,
+          57.1587,
+          16.2016
+        ],
+        "2": [
+          11.259,
+          57.13,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL4": {
+      "corners": {
+        "1": [
+          25.8414,
+          36.315,
+          16.2141
+        ],
+        "2": [
+          25.838,
+          36.302,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL5": {
+      "corners": {
+        "1": [
+          25.8609,
+          46.7377,
+          16.211
+        ],
+        "2": [
+          25.838,
+          46.716,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TL6": {
+      "corners": {
+        "1": [
+          25.8461,
+          57.1603,
+          16.2098
+        ],
+        "2": [
+          25.838,
+          57.13,
+          16.219
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Position",
+        "2": "Deck"
+      }
+    },
+    "TR1": {
+      "corners": {
+        "1": [
+          10.94730025939942,
+          17.57920008850098,
+          20.7014
+        ],
+        "2": [
+          10.949500259399407,
+          17.57670008850098,
+          20.7016
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    },
+    "TR2": {
+      "corners": {
+        "1": [
+          128.2010999909401,
+          17.57920008850098,
+          20.7014
+        ],
+        "2": [
+          128.20329999094008,
+          17.57670008850098,
+          20.7016
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    },
+    "W2": {
+      "corners": {
+        "1": [
+          142.26539992294312,
+          56.92709994659424,
+          22.2255
+        ],
+        "2": [
+          142.26759992294313,
+          56.92459994659424,
+          22.2257
+        ]
+      },
+      "x_span": 3.175,
+      "y_span": 8.9992,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    },
+    "W3": {
+      "corners": {
+        "1": [
+          78.62710000000004,
+          14.321300000000033,
+          10.689400000000001
+        ],
+        "2": [
+          78.62930000000003,
+          14.318800000000035,
+          10.839200000000002
+        ]
+      },
+      "x_span": 12.819,
+      "y_span": 8.59,
+      "framed": {
+        "1": "Deck",
+        "2": "Deck"
+      }
+    }
+  },
+  "deck_layout": [
+    {
+      "name": "TrashLeftBin_1",
+      "alp_type": "TrashLeftBin",
+      "column": 6,
+      "row": 12,
+      "positions": [
+        "TR1"
+      ],
+      "x1": -7.5796997406005815
+    },
+    {
+      "name": "TipLoad1x1_1",
+      "alp_type": "TipLoad1x1",
+      "column": 6,
+      "row": 20,
+      "positions": [
+        "TL1"
+      ],
+      "x1": 10.80570000190735
+    },
+    {
+      "name": "TipLoad1x1_2",
+      "alp_type": "TipLoad1x1",
+      "column": 6,
+      "row": 25,
+      "positions": [
+        "TL2"
+      ],
+      "x1": 10.80110000190735
+    },
+    {
+      "name": "TipLoad1x1_3",
+      "alp_type": "TipLoad1x1",
+      "column": 6,
+      "row": 30,
+      "positions": [
+        "TL3"
+      ],
+      "x1": 10.81040000190735
+    },
+    {
+      "name": "TipLoad1x1_10",
+      "alp_type": "TipLoad1x1",
+      "column": 13,
+      "row": 10,
+      "positions": [
+        "TL10"
+      ],
+      "x1": 25.388600000000004
+    },
+    {
+      "name": "TipLoad1x1_11",
+      "alp_type": "TipLoad1x1",
+      "column": 13,
+      "row": 15,
+      "positions": [
+        "TL11"
+      ],
+      "x1": 25.398300000000006
+    },
+    {
+      "name": "TipLoad1x1_6",
+      "alp_type": "TipLoad1x1",
+      "column": 13,
+      "row": 20,
+      "positions": [
+        "TL4"
+      ],
+      "x1": 25.400300001907354
+    },
+    {
+      "name": "TipLoad1x1_5",
+      "alp_type": "TipLoad1x1",
+      "column": 13,
+      "row": 25,
+      "positions": [
+        "TL5"
+      ],
+      "x1": 25.419800001907355
+    },
+    {
+      "name": "TipLoad1x1_4",
+      "alp_type": "TipLoad1x1",
+      "column": 13,
+      "row": 30,
+      "positions": [
+        "TL6"
+      ],
+      "x1": 25.405000001907354
+    },
+    {
+      "name": "Static1x1_3",
+      "alp_type": "Static1x1",
+      "column": 20,
+      "row": 15,
+      "positions": [
+        "P1"
+      ],
+      "x1": 39.97340000190736
+    },
+    {
+      "name": "Static1x1_25",
+      "alp_type": "Static1x1",
+      "column": 20,
+      "row": 20,
+      "positions": [
+        "P2"
+      ],
+      "x1": 40.01430000000002
+    },
+    {
+      "name": "Static1x1_26",
+      "alp_type": "Static1x1",
+      "column": 20,
+      "row": 25,
+      "positions": [
+        "P3"
+      ],
+      "x1": 40.02880000000002
+    },
+    {
+      "name": "Static1x1_27",
+      "alp_type": "Static1x1",
+      "column": 20,
+      "row": 30,
+      "positions": [
+        "P4"
+      ],
+      "x1": 40.036200000000015
+    },
+    {
+      "name": "BioShake_1",
+      "alp_type": "BioShake",
+      "column": 21,
+      "row": 10,
+      "positions": [
+        "BS1"
+      ],
+      "x1": 39.650700000000015
+    },
+    {
+      "name": "Static1x1_28",
+      "alp_type": "Static1x1",
+      "column": 27,
+      "row": 20,
+      "positions": [
+        "P5"
+      ],
+      "x1": 54.56300000000002
+    },
+    {
+      "name": "Static1x1_6",
+      "alp_type": "Static1x1",
+      "column": 27,
+      "row": 25,
+      "positions": [
+        "P6"
+      ],
+      "x1": 54.55550000190736
+    },
+    {
+      "name": "Static1x1_7",
+      "alp_type": "Static1x1",
+      "column": 27,
+      "row": 30,
+      "positions": [
+        "P7"
+      ],
+      "x1": 54.55320000190736
+    },
+    {
+      "name": "ELx405DW_1",
+      "alp_type": "ELx405DW",
+      "column": 32,
+      "row": 11,
+      "positions": [
+        "W3"
+      ],
+      "x1": 54.85710000000004
+    },
+    {
+      "name": "Static1x1_24",
+      "alp_type": "Static1x1",
+      "column": 34,
+      "row": 20,
+      "positions": [
+        "P8"
+      ],
+      "x1": 69.13050000190735
+    },
+    {
+      "name": "Static1x1_9",
+      "alp_type": "Static1x1",
+      "column": 34,
+      "row": 25,
+      "positions": [
+        "P9"
+      ],
+      "x1": 69.14280000190737
+    },
+    {
+      "name": "Static1x1_8",
+      "alp_type": "Static1x1",
+      "column": 34,
+      "row": 30,
+      "positions": [
+        "P10"
+      ],
+      "x1": 69.13760000190736
+    },
+    {
+      "name": "Static1x1_29",
+      "alp_type": "Static1x1",
+      "column": 41,
+      "row": 20,
+      "positions": [
+        "P11"
+      ],
+      "x1": 83.7167
+    },
+    {
+      "name": "Static1x1_10",
+      "alp_type": "Static1x1",
+      "column": 41,
+      "row": 25,
+      "positions": [
+        "P12"
+      ],
+      "x1": 83.72100000190736
+    },
+    {
+      "name": "Static1x1_11",
+      "alp_type": "Static1x1",
+      "column": 41,
+      "row": 30,
+      "positions": [
+        "P13"
+      ],
+      "x1": 83.71470000190736
+    },
+    {
+      "name": "Static1x1_14",
+      "alp_type": "Static1x1",
+      "column": 48,
+      "row": 15,
+      "positions": [
+        "P14"
+      ],
+      "x1": 98.25030000190736
+    },
+    {
+      "name": "Static1x1_23",
+      "alp_type": "Static1x1",
+      "column": 48,
+      "row": 20,
+      "positions": [
+        "P15"
+      ],
+      "x1": 98.27370000190736
+    },
+    {
+      "name": "Static1x1_13",
+      "alp_type": "Static1x1",
+      "column": 48,
+      "row": 25,
+      "positions": [
+        "P16"
+      ],
+      "x1": 98.26750000190737
+    },
+    {
+      "name": "Static1x1_12",
+      "alp_type": "Static1x1",
+      "column": 48,
+      "row": 30,
+      "positions": [
+        "P17"
+      ],
+      "x1": 98.28230000190736
+    },
+    {
+      "name": "ColdPlate_1",
+      "alp_type": "ColdPlate",
+      "column": 49,
+      "row": 10,
+      "positions": [
+        "CP1"
+      ],
+      "x1": 98.11540000000001
+    },
+    {
+      "name": "Static1x1_16",
+      "alp_type": "Static1x1",
+      "column": 55,
+      "row": 10,
+      "positions": [
+        "P18"
+      ],
+      "x1": 112.87250000190735
+    },
+    {
+      "name": "Static1x1_17",
+      "alp_type": "Static1x1",
+      "column": 55,
+      "row": 15,
+      "positions": [
+        "P19"
+      ],
+      "x1": 112.87250000190735
+    },
+    {
+      "name": "Static1x1_18",
+      "alp_type": "Static1x1",
+      "column": 55,
+      "row": 20,
+      "positions": [
+        "P20"
+      ],
+      "x1": 112.87250000190735
+    },
+    {
+      "name": "Static1x1_19",
+      "alp_type": "Static1x1",
+      "column": 55,
+      "row": 25,
+      "positions": [
+        "P21"
+      ],
+      "x1": 112.87250000190735
+    },
+    {
+      "name": "Static1x1_20",
+      "alp_type": "Static1x1",
+      "column": 55,
+      "row": 30,
+      "positions": [
+        "P22"
+      ],
+      "x1": 112.87250000190735
+    },
+    {
+      "name": "TrashRightBin_1",
+      "alp_type": "TrashRightBin",
+      "column": 62,
+      "row": 12,
+      "positions": [
+        "TR2"
+      ],
+      "x1": 127.1010999909401
+    },
+    {
+      "name": "Static1x1_22",
+      "alp_type": "Static1x1",
+      "column": 62,
+      "row": 25,
+      "positions": [
+        "P23"
+      ],
+      "x1": 127.45210000190735
+    },
+    {
+      "name": "Static1x1_21",
+      "alp_type": "Static1x1",
+      "column": 62,
+      "row": 30,
+      "positions": [
+        "P24"
+      ],
+      "x1": 127.45210000190735
+    },
+    {
+      "name": "Tilting-ALP_1",
+      "alp_type": "Tilting-ALP",
+      "column": 63,
+      "row": 20,
+      "positions": [
+        "TA1"
+      ],
+      "x1": 128.7869
+    },
+    {
+      "name": "WashStationSpan8_1",
+      "alp_type": "WashStationSpan8",
+      "column": 71,
+      "row": 30,
+      "positions": [
+        "W2"
+      ],
+      "x1": 141.77009992294313
+    }
+  ],
+  "modules": {
+    "multichannel": [
+      {
+        "name": "X",
+        "device": 17,
+        "index": 1,
+        "configure": "0001000000807d02000100000000fc0300010000000088130000000000005a050003000300320000605b0300c8000000002d3101b80b0000000200000180ff800c0000b80b307532000000803801000a0000b80b000050000000000000fb1027000010270000000000000000000060ea000000000000800100000000f401a00f00000000000000ffffffff0a0064000000000000002f440000803f000000000000905f0100c94eaa3acea074395d1feb330000000000000000141b000014000000b1010000ea100000401f000000000000f4010000102700000f0000000000000000000000000000000000020000002c01000032000000",
+        "limits": {
+          "max_velocity": 163200,
+          "max_acceleration": 261120,
+          "max_jerk": 1280000,
+          "min_position": 0,
+          "max_position": 350720
+        },
+        "home_position": 35840,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y",
+        "device": 17,
+        "index": 2,
+        "configure": "000100000000ee02000100000000b0040001000000001027000000000000e80300030003003200000071020064000000c0e1e400d007000000020000018000800c0000b80b307532000000803801000a0000b004000050000000000000fb1027000010270000000000000000000060ea000000000000800100000000f401a00f00000000000000ffffffff0a0064000000000000002f440000803f000000000000905f0100c94eaa3acea074395d1feb330000000000000000141b000014000000b1010000ea100000401f000000000000f4010000102700000f0000000000000000000000000000000000020000002c01000032000000",
+        "limits": {
+          "max_velocity": 192000,
+          "max_acceleration": 307200,
+          "max_jerk": 2560000,
+          "min_position": 0,
+          "max_position": 256000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z",
+        "device": 17,
+        "index": 3,
+        "configure": "0001000000005f00000100000000f401000100000000aa0a000018fcff0000000003000300140000a0860100e803000040420f00e80300008000000008800034080000800c0852d007000000000000010000f401000050000000000000fa1027000010270000c8000000000000003075000018fcffff800100000000e803881300000000000080ffffffff0a006400000000000000000000000000000000000000000000000000000000000000000000000000000050c3000000000000000000000000000000000000000000000000000000000000000000000fd007410000000000000002000000000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 24320,
+          "max_acceleration": 128000,
+          "max_jerk": 698880,
+          "min_position": -256000,
+          "max_position": 0
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D",
+        "device": 17,
+        "index": 4,
+        "configure": "0001000000000003000100000000c01200000000000000000000000000801a06000300000050000050c300006400000000000000c8000000b80b00000d00ff480d0000f00a3075b4000000000000000a0000c012000040010000000000fb10270000401f00000000000000000000a8610000a8a80000000000000000f401dc0500000000000080ffffffff0a00102700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000000000000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 196608,
+          "max_acceleration": 1228800,
+          "max_jerk": 0,
+          "min_position": 0,
+          "max_position": 400000
+        },
+        "home_position": 400,
+        "hysteresis": 0
+      },
+      {
+        "name": "GY",
+        "device": 17,
+        "index": 5,
+        "configure": "0001000000030f01000100000029830100010000009b1f0f000000000052060300030003f23d0000400d0300e80300000048e80194110000f30100000d0000b0040000dc05640018010000000000000a00298301006f4d000000000000fb10270000d6060a000000000000000000983a000000000000c60000000000f401a00f00000000000000ffffffff0a00640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000000000000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 69379,
+          "max_acceleration": 99113,
+          "max_jerk": 991131,
+          "min_position": 0,
+          "max_position": 198226
+        },
+        "home_position": 47574,
+        "hysteresis": 0
+      },
+      {
+        "name": "GG",
+        "device": 17,
+        "index": 6,
+        "configure": "00010000001966010001000000f9f91b0001000000bac317010000000002f00200030003b735000050c30000e803000080841e00d0070000e10300000d0000bc020000dc056400fa000000e02e00000a00f9f91b001966010000000000fb4c1d000020030a000000000000000000a861000000000000290700000000f401d00700000000000000ffffffff0a00640000000000000000000000000000000000000000000000000000000000000000000000d4feffff3705000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000dc0500000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 91673,
+          "max_acceleration": 1833465,
+          "max_jerk": 18334650,
+          "min_position": 0,
+          "max_position": 192514
+        },
+        "home_position": 35753,
+        "hysteresis": 0
+      },
+      {
+        "name": "GZ",
+        "device": 17,
+        "index": 7,
+        "configure": "000a000000415d0000bc02000030b301000000000000000000d03effff00000000010003380600000000000000000000000000000000000000000000090000b80b0000dc05e8030000000000000000000030b30100161f000000000000fc1027000088130a000000000000000000c8af0000000000003e0158020000640000000000e803fa0000ffffffff0a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000000000000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 23873,
+          "max_acceleration": 111408,
+          "max_jerk": 0,
+          "min_position": -49456,
+          "max_position": 0
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "GR",
+        "device": 17,
+        "index": 8,
+        "configure": "0001000000ebb8010001000000b9bd050001000000e5f61600c396c6ff000000000300039475000020a107006400000080841e00f40100004b0000000d0000bc020000dc05640004010000b03600000200b9bd050075dc000000000000fa4c1d000020030a000000000000000000983a000000000000f00200000000f401c40900000000000000ffffffff0a00640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000dc0500000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 112875,
+          "max_acceleration": 376249,
+          "max_jerk": 1504997,
+          "min_position": -3762493,
+          "max_position": 0
+        },
+        "home_position": -141093,
+        "hysteresis": 0
+      }
+    ],
+    "span8": [
+      {
+        "name": "X",
+        "device": 17,
+        "index": 1,
+        "configure": "000100000000ee02000100000000b00400010000000010270000a6faff0000000003000300320000007102006400000080c3c901b80b0000000200000180ff800c0000b80b307532000000803801000a0000b80b000050000000000000fa1027000010270000000000000000000060ea000000000000800100000000f401a00f00000000000000ffffffff0a0064000000000000002f440000803f000000000000905f0100c94eaa3acea074395d1feb330000000000000000141b000014000000b1010000ea100000401f000000000000f4010000102700000f0000000000000000000000000000001800020000002c01000032000000",
+        "limits": {
+          "max_velocity": 192000,
+          "max_acceleration": 307200,
+          "max_jerk": 2560000,
+          "min_position": -350720,
+          "max_position": 0
+        },
+        "home_position": -2560,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y1",
+        "device": 17,
+        "index": 2,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 23569,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y2",
+        "device": 17,
+        "index": 3,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 27811,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y3",
+        "device": 17,
+        "index": 4,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 32053,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y4",
+        "device": 17,
+        "index": 5,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 36296,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y5",
+        "device": 17,
+        "index": 6,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 40538,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y6",
+        "device": 17,
+        "index": 7,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 44781,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y7",
+        "device": 17,
+        "index": 8,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 49023,
+        "hysteresis": 0
+      },
+      {
+        "name": "Y8",
+        "device": 17,
+        "index": 9,
+        "configure": "ff170000004370010074000000f0f20200bb01000080e29e00000000004f3107000200034925000078000000640000005e01000066660000ee02000001c4098a020000d0070000",
+        "limits": {
+          "max_velocity": 94275,
+          "max_acceleration": 193264,
+          "max_jerk": 10412672,
+          "min_position": 0,
+          "max_position": 471375
+        },
+        "home_position": 53265,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z1",
+        "device": 17,
+        "index": 10,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee020000ffc4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z2",
+        "device": 17,
+        "index": 11,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee02000001c4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z3",
+        "device": 17,
+        "index": 12,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee020000ffc4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z4",
+        "device": 17,
+        "index": 13,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee02000001c4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z5",
+        "device": 17,
+        "index": 14,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee020000ffc4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z6",
+        "device": 17,
+        "index": 15,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee02000001c4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z7",
+        "device": 17,
+        "index": 16,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee020000ffc4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "Z8",
+        "device": 17,
+        "index": 17,
+        "configure": "ffe8010000a6ae0200890900006f71110061240000fcc4f531daa3f8ff6abc0000020043aa44000096000000780000005e010000ff7f0000ee02000001c4098a02000088130000",
+        "limits": {
+          "max_velocity": 175782,
+          "max_acceleration": 1143151,
+          "max_jerk": 838190332,
+          "min_position": -482342,
+          "max_position": 48234
+        },
+        "home_position": -4823,
+        "hysteresis": 0
+      },
+      {
+        "name": "D1",
+        "device": 18,
+        "index": 1,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D2",
+        "device": 18,
+        "index": 2,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D3",
+        "device": 18,
+        "index": 3,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D4",
+        "device": 18,
+        "index": 4,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D5",
+        "device": 18,
+        "index": 5,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D6",
+        "device": 18,
+        "index": 6,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D7",
+        "device": 18,
+        "index": 7,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "D8",
+        "device": 18,
+        "index": 8,
+        "configure": "c8000000a00f000014000000a05a0000c8000000302a00001027000050c3000000000000c05d00005800",
+        "limits": {
+          "max_velocity": 23200,
+          "max_acceleration": 50000,
+          "min_position": 0,
+          "max_position": 24000
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "GY",
+        "device": 17,
+        "index": 18,
+        "configure": "0001000000030f01000100000029830100010000009b1f0f000000000052060300030003f23d0000400d0300e80300000048e80194110000f30100000d0000b0040000dc05640018010000000000000a00298301006f4d000000000000fb10270000d6060a000000000000000000983a000000000000c60000000000f401a00f00000000000000ffffffff0a00640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000000000001800000000000000000000000000",
+        "limits": {
+          "max_velocity": 69379,
+          "max_acceleration": 99113,
+          "max_jerk": 991131,
+          "min_position": 0,
+          "max_position": 198226
+        },
+        "home_position": 47574,
+        "hysteresis": 0
+      },
+      {
+        "name": "GG",
+        "device": 17,
+        "index": 19,
+        "configure": "00010000001966010001000000f9f91b0001000000bac317010000000002f00200030003b735000050c30000e803000080841e00d0070000e10300000d0000bc020000dc056400fa000000e02e00000a00f9f91b001966010000000000fb4c1d000020030a000000000000000000a861000000000000290700000000f401d00700000000000000ffffffff0a00640000000000000000000000000000000000000000000000000000000000000000000000d4feffff3705000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000dc0500000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 91673,
+          "max_acceleration": 1833465,
+          "max_jerk": 18334650,
+          "min_position": 0,
+          "max_position": 192514
+        },
+        "home_position": 35753,
+        "hysteresis": 0
+      },
+      {
+        "name": "GZ",
+        "device": 17,
+        "index": 20,
+        "configure": "000a000000415d0000bc02000030b301000000000000000000d03effff00000000010003380600000000000000000000000000000000000000000000090000b80b0000dc05e8030000000000000000000030b30100161f000000000000fc1027000088130a000000000000000000c8af0000000000003e0158020000640000000000e803fa0000ffffffff0a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000000000000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 23873,
+          "max_acceleration": 111408,
+          "max_jerk": 0,
+          "min_position": -49456,
+          "max_position": 0
+        },
+        "home_position": 0,
+        "hysteresis": 0
+      },
+      {
+        "name": "GR",
+        "device": 17,
+        "index": 21,
+        "configure": "0001000000ebb8010001000000b9bd050001000000e5f61600c396c6ff000000000300039475000020a107006400000080841e00f40100004b0000000d0000bc020000dc05640004010000b03600000200b9bd050075dc000000000000fa4c1d000020030a000000000000000000983a000000000000f00200000000f401c40900000000000000ffffffff0a00640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f0000000000000000000000dc0500000000000000000000000000000000",
+        "limits": {
+          "max_velocity": 112875,
+          "max_acceleration": 376249,
+          "max_jerk": 1504997,
+          "min_position": -3762493,
+          "max_position": 0
+        },
+        "home_position": -141093,
+        "hysteresis": 0
+      }
+    ]
+  }
+}
