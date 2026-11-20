@@ -1646,9 +1646,15 @@ class PreciseFlexArm:
       targets = build_targets(current)
       start = current
       for target in targets:
-        if check_soft_limits:
-          self._assert_within_soft_limits(start, target)
-        self._check_path_reachable(start, target)
+        try:
+          if check_soft_limits:
+            self._assert_within_soft_limits(start, target)
+          self._check_path_reachable(start, target)
+        except ValueError as exc:
+          logger.error(
+            "[PreciseFlex %s] move refused, nothing sent: %s", self._driver.io._host, exc
+          )
+          raise
         start = target
       try:
         await unchecked_fw_move(targets)
@@ -1659,9 +1665,10 @@ class PreciseFlexArm:
     try:
       await attempt()
     except OutOfRangeOfMotionError as exc:
-      if not (retry_out_of_range and self._driver._recover_out_of_range):
-        raise
       host = self._driver.io._host
+      if not (retry_out_of_range and self._driver._recover_out_of_range):
+        logger.error("[PreciseFlex %s] move refused: %s", host, exc)
+        raise
       logger.warning(
         "[PreciseFlex %s] commanded move blocked - %s; auto-recovery on -> recovering and retrying",
         host,

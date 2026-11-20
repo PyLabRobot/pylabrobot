@@ -549,8 +549,10 @@ class TestParkingTakesAClearTurn(unittest.IsolatedAsyncioTestCase):
   async def test_a_turn_past_the_wrists_soft_limit_is_not_taken(self):
     # From -215.9 the clear turn is -180, which this wrist may not reach: nothing is sent.
     self.read.arm.soft_limits[PreciseFlexAxis.WRIST] = (-970.0, -200.0)
-    with self.assertRaisesRegex(ValueError, "WRIST target 180.0 is outside its soft limit"):
-      await self.park("301.1 92.0 179.4 -215.9 70.7")
+    with self.assertLogs("pylabrobot.brooks.precise_flex.driver.features.arm", "ERROR") as logs:
+      with self.assertRaisesRegex(ValueError, "WRIST target 180.0 is outside its soft limit"):
+        await self.park("301.1 92.0 179.4 -215.9 70.7")
+    self.assertIn("move refused, nothing sent: WRIST target 180.0", "\n".join(logs.output))
 
   async def test_a_pose_no_turn_reaches_clear_is_refused_as_written(self):
     self.driver.arm.parking_position = {
