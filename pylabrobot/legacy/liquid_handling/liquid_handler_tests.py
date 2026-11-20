@@ -320,6 +320,28 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       == lid.get_absolute_location().z
     )
 
+  async def test_move_lid_to_plate_in_resource_stack(self):
+    """`move_lid` onto, and off, a plate that sits in a ResourceStack on a plate carrier site."""
+    plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    stacked = cor_96_wellplate_360uL_Fb(name="stacked")
+    stack = ResourceStack(name="stack", direction="z", resources=[stacked])
+    plt_car[0] = stack
+    plt_car[1] = other = cor_96_wellplate_360uL_Fb(name="other", with_lid=True)
+    self.deck.assign_child_resource(plt_car, rails=1)
+    stack_location = stack.location
+    lid = other.lid
+    assert lid is not None
+
+    await self.lh.move_lid(lid, stacked)
+    self.assertIs(stacked.lid, lid)
+    self.assertFalse(other.has_lid())
+    self.assertEqual(stack.location, stack_location)
+
+    await self.lh.move_lid(lid, other)
+    self.assertIs(other.lid, lid)
+    self.assertFalse(stacked.has_lid())
+    self.assertEqual(stack.location, stack_location)
+
   async def test_move_lid_to_trash(self):
     # a lid moved to the trash is discarded, not seated on it
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})

@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `PlateHolder`: a lid can be assigned to a plate that sits in a `ResourceStack` on the holder; this raised `AssertionError` in `_update_resource_stack_location`, which is also called for assignments to the stack's descendants.
 - `pylabrobot.io.USB.ctrl_transfer` writes data in host-to-device control transfers (`data_or_wLength` takes the bytes); recording such a transfer raised `TypeError: 'int' object is not iterable`.
 - Azenta XPeel (`pylabrobot.azenta.XPeel` and the legacy `XPeelBackend`): `request_status()` / `get_status()` read the three error codes from a ready line that carries its error description (`*ready:00,00,00 [No error]`), and `peel()` sends `adhere_time` as the peeler's code 1-4 (`*xpeel:41` for 2.5 s), which it accepts.
 - Imported `unittest.mock` in `pylabrobot/centrifuge/centrifuge_tests.py` (pre-existing bug that prevented the test class from running).
