@@ -1,6 +1,9 @@
 """Tests for the VANTAstar driver: its commands against the bytes Voyager sent to the reader, and
 its command flows against the reader's captured replies, through a fake USB link."""
 
+import json
+import os
+import tempfile
 import unittest
 from collections import deque
 from dataclasses import replace
@@ -13,7 +16,11 @@ from pylabrobot.bmg_labtech.protocol.framing import (
   USB_SINGLE,
   usb_wrap_payload,
 )
-from pylabrobot.bmg_labtech.vantastar.driver.configuration_tests import HARDWARE_INFO
+from pylabrobot.bmg_labtech.vantastar.driver.configuration import read_configuration
+from pylabrobot.bmg_labtech.vantastar.driver.configuration_tests import (
+  HARDWARE_INFO,
+  RECORDING_VANTASTAR,
+)
 from pylabrobot.bmg_labtech.vantastar.driver.errors import CommandRefusedError, DeviceError
 from pylabrobot.bmg_labtech.vantastar.driver.features.measurement import (
   LUMINESCENCE_NO_FILTER,
@@ -842,6 +849,55 @@ class FlowTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(run[0], CommandId.RUN)
     self.assertEqual(run[67], 0x03)  # WellPlateModeKinetic and CalcTimeOnly
     self.assertEqual(run[1:67] + run[68:], fields[:66] + fields[67:])
+
+
+class DeclaredConfigurationTests(unittest.IsolatedAsyncioTestCase):
+  """Setup against a declared configuration, and saving the reader's configuration."""
+
+  @staticmethod
+  def make_reader(declared_configuration_json=None) -> VANTAstarDriver:
+    """A driver whose reader answers INIT with the tested reader's INIT reply, anything else with
+    an idle status."""
+    driver = VANTAstarDriver(
+      io=FakeUSB(lambda p: HARDWARE_INFO if p[0] == CommandId.INITIALIZE else STATUS_IDLE),
+      declared_configuration_json=declared_configuration_json,
+    )
+    driver.default_poll_interval = 0
+    return driver
+
+  async def test_setup_against_the_recording(self):
+    """The tested reader matches its recording."""
+    driver = self.make_reader(RECORDING_VANTASTAR)
+    await driver.setup()
+    self.assertEqual(driver.configuration.serial_number, "0421-000446")
+
+  async def test_setup_refuses_another_configuration(self):
+    """Setup refuses a reader that disagrees with the declaration on what is fitted, naming each
+    difference; firmware is not compared."""
+    declared = read_configuration(RECORDING_VANTASTAR)
+    declared["device"].update(stirrer=True, pumps=["XP3000", None], firmware_version=1110)
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "declared.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump(declared, f)
+      with self.assertRaises(RuntimeError) as cm:
+        await self.make_reader(path).setup()
+    message = str(cm.exception)
+    self.assertIn("stirrer: declared True, reader False", message)
+    self.assertIn("pumps: declared ['XP3000', None], reader [None, None]", message)
+    self.assertNotIn("firmware_version", message)
+
+  async def test_save_configuration(self):
+    """The saved configuration is the recording; saving before setup is refused."""
+    driver = self.make_reader()
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "saved.json")
+      with self.assertRaises(RuntimeError):
+        driver.save_configuration(path)
+      await driver.setup()
+      driver.save_configuration(path)
+      with open(path, encoding="utf-8") as saved, open(RECORDING_VANTASTAR, encoding="utf-8") as f:
+        self.assertEqual(saved.read(), f.read())
 
 
 if __name__ == "__main__":

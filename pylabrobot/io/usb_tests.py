@@ -189,3 +189,28 @@ class USBControlTransferTests(unittest.TestCase):
     ]
     validator = USBValidator(capture, "mock USB", 1, 2)
     self.assertEqual(validator.ctrl_transfer(0x40, 1, 0, 0, b"\x01"), bytearray())
+
+
+class USBDeviceSelectionTests(unittest.TestCase):
+  """Pick a device by serial number, reading the descriptor rather than PyUSB's empty cache."""
+
+  def _devices(self, *serials):
+    devices = []
+    for serial in serials:
+      dev = Mock(iSerialNumber=3 if serial else 0, _serial_number=None, serial_number=serial)
+      devices.append(dev)
+    return devices
+
+  def test_serial_number_is_read_through_the_descriptor(self) -> None:
+    devices = self._devices("A", "B")
+    with patch.object(usb_module, "libusb_package", create=True) as lib:
+      lib.find.return_value = devices
+      self.assertEqual(
+        USB(1, 2, "mock USB", serial_number="B").get_available_devices(), [devices[1]]
+      )
+
+  def test_device_without_serial_number_is_refused(self) -> None:
+    with patch.object(usb_module, "libusb_package", create=True) as lib:
+      lib.find.return_value = self._devices(None)
+      with self.assertRaisesRegex(RuntimeError, "does not have a serial number"):
+        USB(1, 2, "mock USB", serial_number="B").get_available_devices()

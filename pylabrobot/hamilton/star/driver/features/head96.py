@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import warnings
 from dataclasses import dataclass, field, replace
 from typing import (
   TYPE_CHECKING,
@@ -2593,7 +2594,6 @@ class Head96(Head):
     *,
     hamilton_liquid_class: Optional[HamiltonLiquidClass] = None,
     jet: bool = False,
-    blow_out: bool = False,
     empty: bool = False,
     piston_volume: Optional[float] = None,
     lld_sensor: Literal["A1 or B2", "G11 or H12", "any", "all"] = "any",
@@ -2618,14 +2618,16 @@ class Head96(Head):
     limit_curve_index: Optional[int] = None,
     minimum_traverse_height_start: Optional[float] = None,
     minimum_traverse_height_end: Optional[float] = None,
+    blow_out: Optional[bool] = None,
   ) -> None:
     """Dispense liquid with the whole head, in one `C0 ED`.
 
     Placed as `mix`. The firmware never searches: OFF dispenses at `liquid_height` above the
     cavity bottom, the cavity bottom when None; CAPACITIVE finds the surface by cLLD, sets the
     tracker to the volume found and dispenses at the surface, following it up. The floor is the
-    cavity bottom unless given. `jet`, `blow_out` and `empty` pick the firmware's mode. Booked as
-    `aspirate`; the head goes to safe Z on a failure.
+    cavity bottom unless given. `jet`, `blow_out_air_volume` and `empty` pick the firmware's mode:
+    a blow-out mode when the air, given or from a given class, is over 0. Booked as `aspirate`;
+    the head goes to safe Z on a failure.
 
     Args:
       resource: a plate of 96 wells or of one, its 96 wells, or a container.
@@ -2638,7 +2640,6 @@ class Head96(Head):
       flow_rate: in uL/s. The class's, else 120.0, when None.
       hamilton_liquid_class: looked up for the tip, water, `jet` and `blow_out` when None.
       jet: a jet from above the liquid, rather than at the surface.
-      blow_out: the blow-out air follows the liquid out.
       empty: the tips are emptied where they stand; the model books what they hold.
       piston_volume: what the piston pushes out per channel, in uL, as given.
       lld_sensor: which cLLD sensors trigger, under CAPACITIVE.
@@ -2657,8 +2658,8 @@ class Head96(Head):
         at `liquid_height` under OFF; never above the top. Refused beside a distance.
       second_section_height: height of the container's narrower lower section, in mm.
       second_section_ratio: that section's bottom to top ratio, in tenths.
-      blow_out_air_volume: air pushed out after the liquid in a blow-out mode, in uL. The
-        class's, else 0.0, when None.
+      blow_out_air_volume: air pushed out after the liquid, in uL; over 0, given or from a given
+        class, is a blow-out mode. The class's, else 0.0, when None.
       post_mix: mixed after the dispense; None for no mixing. Its auto surface following needs
         a surface, as the call's.
       mix_position_from_liquid_surface: mixing depth under the surface, in mm.
@@ -2670,17 +2671,30 @@ class Head96(Head):
         `configuration.traversal_z_position` when None; safe Z under CAPACITIVE.
       minimum_traverse_height_end: where the tips are left, in mm.
         `configuration.traversal_z_position` when None.
+      blow_out: deprecated, give `blow_out_air_volume`.
 
     Raises:
       ValueError: An argument out of range, both or neither of `volume` and `piston_volume`, a
         class beside `piston_volume`, no class for the tip, a liquid height under CAPACITIVE, a
-        resource the head cannot work, a piston without the travel, a container without room, or
-        auto surface following beside a distance or under OFF without a liquid height.
+        resource the head cannot work, a piston without the travel, a container without room,
+        auto surface following beside a distance or under OFF without a liquid height, or
+        `blow_out` contradicting `blow_out_air_volume`.
       RuntimeError: No deck, no tips, the iSWAP not parked, a container without height-volume
         functions under CAPACITIVE or auto surface following, no liquid found, or a container
         found without the room.
       TypeError: A tip that is not a Hamilton tip.
     """
+    if blow_out is not None:
+      warnings.warn(
+        "`blow_out` is deprecated, give `blow_out_air_volume`.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      if blow_out_air_volume is not None and blow_out != (blow_out_air_volume > 0):
+        raise ValueError(
+          f"blow_out={blow_out} contradicts blow_out_air_volume={blow_out_air_volume}; give only "
+          "blow_out_air_volume"
+        )
     lld_mode = self._get_lld_mode(
       lld_mode, auto_surface_following, surface_following_distance, liquid_height
     )
@@ -2705,7 +2719,7 @@ class Head96(Head):
     tips = self._get_mounted_tips()
     tip = next(t for t in tips if t is not None)
     asked, pushed, hlc = self._get_liquid_and_piston_volume(
-      tip, volume, piston_volume, hamilton_liquid_class, jet, blow_out, "pushed out"
+      tip, volume, piston_volume, hamilton_liquid_class, jet, bool(blow_out), "pushed out"
     )
 
     def by_class(name: str, given: Optional[float]) -> Optional[float]:
@@ -2725,6 +2739,11 @@ class Head96(Head):
     blow_out_air = by_class("blow_out_air_volumes", blow_out_air_volume) or 0.0
     settling_time = by_class("settling_times", settling_time)
     swap_speed = by_class("swap_speeds", swap_speed)
+    if blow_out is None:
+      # A looked-up class's air leaves the mode as it was.
+      blow_out = (
+        blow_out_air_volume is not None or hamilton_liquid_class is not None
+      ) and blow_out_air > 0
     mode = self._get_dispensing_mode(jet, blow_out, empty)
 
     channels = [channel for channel, t in enumerate(tips) if t is not None]

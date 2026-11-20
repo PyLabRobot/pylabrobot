@@ -26,9 +26,16 @@ from pylabrobot.opentrons.ot2 import (
   TemperatureModuleStatus,
 )
 from pylabrobot.opentrons.run import OpentronsRun
-from pylabrobot.opentrons.types import InstrumentInfo, ModuleInfo, MountedPipette, RobotInfo
+from pylabrobot.opentrons.types import (
+  DoorStatus,
+  InstrumentInfo,
+  ModuleInfo,
+  MountedPipette,
+  RobotInfo,
+)
 
 __all__ = [
+  "DoorStatus",
   "Flex",
   "FlexGripper",
   "FlexHead1",

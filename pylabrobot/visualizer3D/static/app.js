@@ -48,6 +48,7 @@ import {
   clearSelection,
   hoverBox,
   infoPanel,
+  placeHighlight,
   refreshPlacement,
   renderInfoPanel,
   select,
@@ -305,12 +306,15 @@ function atBoundary(surface) {
       targetX: +arm.targetX.toFixed(2),
       referenceOffset: arm.referenceOffset,
     })),
-  hover: () => ({
-    visible: hoverBox.visible,
-    empty: hoverBox.box.isEmpty(),
-    min: hoverBox.box.min.toArray().map((v) => +v.toFixed(1)),
-    max: hoverBox.box.max.toArray().map((v) => +v.toFixed(1)),
-  }),
+  hover: () => {
+    const box = new THREE.Box3().setFromObject(hoverBox);
+    return {
+      visible: hoverBox.visible,
+      empty: box.isEmpty(),
+      min: box.min.toArray().map((v) => +v.toFixed(1)),
+      max: box.max.toArray().map((v) => +v.toFixed(1)),
+    };
+  },
   // What the toolbar's origins button does, for a test that has no pointer.
   origins: (on = true) => switchOriginDots(on),
   // What the toolbar's halos button does, for the same reason.
@@ -548,7 +552,7 @@ afterDraw(() => gif.tick());
 onChange((change) => {
   if (change.kind === "glide") {
     if (change.index !== selected) return;
-    selectionBox.box.copy(worldBox(change.index));
+    placeHighlight(selectionBox, change.index);
     refreshPlacement(change.index);
   } else if (change.kind === "state") {
     // Only a panel showing something this message touched, or holding a tip it touched, is drawn

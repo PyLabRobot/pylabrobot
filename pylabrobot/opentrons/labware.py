@@ -1,6 +1,5 @@
 """PLR labware conversion and bindings scoped to one Opentrons run."""
 
-import math
 import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Optional, Tuple, cast
@@ -42,27 +41,6 @@ _TROUGH_BOTTOM_SHAPES = {
   TroughBottomType.UNKNOWN: "flat",
 }
 
-_OFFICIAL_TIP_RACKS = {
-  "Opentrons Flex 96 Tip Rack 50 µL": "opentrons_flex_96_tiprack_50ul",
-  "Opentrons Flex 96 Filter Tip Rack 50 µL": "opentrons_flex_96_filtertiprack_50ul",
-  "Opentrons Flex 96 Tip Rack 200 µL": "opentrons_flex_96_tiprack_200ul",
-  "Opentrons Flex 96 Tip Rack 1000 µL": "opentrons_flex_96_tiprack_1000ul",
-  "Opentrons OT-2 96 Filter Tip Rack 10 µL": "opentrons_96_filtertiprack_10ul",
-  "Opentrons OT-2 96 Filter Tip Rack 20 µL": "opentrons_96_filtertiprack_20ul",
-  "Opentrons OT-2 96 Filter Tip Rack 200 µL": "opentrons_96_filtertiprack_200ul",
-  "Opentrons OT-2 96 Filter Tip Rack 1000 µL": "opentrons_96_filtertiprack_1000ul",
-  "Opentrons OT-2 96 Tip Rack 10 µL": "opentrons_96_tiprack_10ul",
-  "Opentrons OT-2 96 Tip Rack 20 µL": "opentrons_96_tiprack_20ul",
-  "Opentrons OT-2 96 Tip Rack 300 µL": "opentrons_96_tiprack_300ul",
-  "Opentrons OT-2 96 Tip Rack 1000 µL": "opentrons_96_tiprack_1000ul",
-}
-
-
-def official_tip_rack_identity(tip_rack: TipRack) -> Optional[LabwareIdentity]:
-  """Look up a rack's official definition identity for its calibration data."""
-  load_name = _OFFICIAL_TIP_RACKS.get(tip_rack.model or "")
-  return LabwareIdentity("opentrons", load_name, 1) if load_name is not None else None
-
 
 def build_tip_rack_definition(
   tip_rack: TipRack,
@@ -74,8 +52,8 @@ def build_tip_rack_definition(
 ) -> Dict[str, Any]:
   """Build a tip-rack definition from PLR geometry.
 
-  Defaults to OT-2's diagonal tip-spot diameter and empty group metadata.
-  ``for_flex`` uses the spot width as the diameter and adds group metadata.
+  The tip spot supplies the well diameter and depth. A spot with no depth
+  uses the prototype tip's length. ``for_flex`` adds group metadata.
   Rotated racks or spots and tips seated below the rack's base are rejected.
   If omitted, the tip comes from A1 and the load name is a random UUID.
   ``grip_distance_from_top`` adds a gripper height to the definition.
@@ -132,17 +110,12 @@ def build_tip_rack_definition(
     },
     "wells": {
       well_names[child.name]: {
-        "depth": tip.get_size_z(),
+        "depth": child.get_size_z() or tip.get_size_z(),
         "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
         "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
         "z": cast(Coordinate, child.location).z,
         "shape": "circular",
-        "diameter": child.get_size_x()
-        if for_flex
-        else math.hypot(
-          child.get_absolute_size_x(),
-          child.get_absolute_size_y(),
-        ),
+        "diameter": child.get_size_x(),
         "totalLiquidVolume": tip.maximal_volume,
       }
       for child in tip_spots

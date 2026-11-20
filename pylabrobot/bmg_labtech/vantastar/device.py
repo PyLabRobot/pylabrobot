@@ -1,5 +1,6 @@
 """BMG Labtech VANTAstar plate reader as a PyLabRobot resource."""
 
+import os
 from typing import Any, Awaitable, Callable, Optional
 
 from pylabrobot.io.usb import USB
@@ -12,6 +13,15 @@ from .driver.features.luminescence import Luminescence
 from .driver.features.shaker import Shaker
 from .driver.features.temperature_controller import TemperatureController
 from .driver.master import VANTAstarDriver
+from .driver.simulator import VANTAstarSimulationDriver
+
+# The configuration the tested reader reported (firmware 1.12, with the temperature controller).
+RECORDING_VANTASTAR = os.path.join(
+  os.path.dirname(__file__),
+  "driver",
+  "recordings",
+  "vantastar_1_12_temperature_controller.json",
+)
 
 SIZE_X = 420.0
 SIZE_Y = 520.0
@@ -87,6 +97,8 @@ class VANTAstarDevice(Resource):
     size_x: float = SIZE_X,
     size_y: float = SIZE_Y,
     size_z: float = SIZE_Z,
+    declared_configuration_json: Optional[str] = None,
+    simulation: bool = False,
   ):
     """
     Args:
@@ -96,6 +108,14 @@ class VANTAstarDevice(Resource):
       size_x: width, in mm.
       size_y: depth, in mm.
       size_z: height, in mm.
+      declared_configuration_json: a file ``save_configuration`` wrote, passed to the driver:
+        setup refuses a reader that disagrees with it on what is fitted; a simulated reader's
+        configuration.
+      simulation: build a simulated reader, with no link, from ``declared_configuration_json``.
+
+    Raises:
+      ValueError: if ``simulation`` is given without ``declared_configuration_json``, or with
+        ``device_id`` or ``io``.
     """
     super().__init__(
       name=name,
@@ -105,7 +125,20 @@ class VANTAstarDevice(Resource):
       category="device",
       model="VANTAstar",
     )
-    self.driver = VANTAstarDriver(device_id=device_id, io=io, name=name)
+    self.driver: VANTAstarDriver
+    if simulation:
+      if declared_configuration_json is None:
+        raise ValueError("a simulated reader needs declared_configuration_json")
+      if device_id is not None or io is not None:
+        raise ValueError("a simulated reader has no link: no device_id or io")
+      self.driver = VANTAstarSimulationDriver(declared_configuration_json, name=name)
+    else:
+      self.driver = VANTAstarDriver(
+        device_id=device_id,
+        io=io,
+        name=name,
+        declared_configuration_json=declared_configuration_json,
+      )
     self.plate_holder = _VANTAstarPlateHolder(f"{name}_plate_holder", self.driver.drawer)
     self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
     self.driver.drawer.plate_holder = self.plate_holder
@@ -192,6 +225,8 @@ def VANTAstar(
   size_x: float = SIZE_X,
   size_y: float = SIZE_Y,
   size_z: float = SIZE_Z,
+  declared_configuration_json: Optional[str] = None,
+  simulation: bool = False,
 ) -> VANTAstarDevice:
   """Build a VANTAstar plate reader resource.
 
@@ -202,7 +237,13 @@ def VANTAstar(
     size_x: width, in mm.
     size_y: depth, in mm.
     size_z: height, in mm.
+    declared_configuration_json: a file ``save_configuration`` wrote: setup refuses a reader that
+      disagrees with it on what is fitted, e.g. ``RECORDING_VANTASTAR``; a simulated reader's
+      configuration.
+    simulation: build a simulated reader, with no link; it defaults to ``RECORDING_VANTASTAR``.
   """
+  if simulation and declared_configuration_json is None:
+    declared_configuration_json = RECORDING_VANTASTAR
   return VANTAstarDevice(
     name=name,
     device_id=device_id,
@@ -210,4 +251,6 @@ def VANTAstar(
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
+    declared_configuration_json=declared_configuration_json,
+    simulation=simulation,
   )

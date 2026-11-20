@@ -365,6 +365,40 @@ class Fluorescence(Measurement):
 
   # -- reads ---------------------------------------------------------------------------------------
 
+  def _build_measure(
+    self,
+    fluorescence_channels: Union[FluorescenceChannel, Sequence[FluorescenceChannel]],
+    gain: Union[int, Sequence[int], None],
+    monochromator: Union[MonochromatorSettings, Sequence[MonochromatorSettings], None],
+    focal_height: Optional[float],
+    enhanced_dynamic_range: bool,
+    plate: Optional[Plate],
+    wells: Optional[Sequence[Well]],
+    measurement_settings: Optional[MeasurementSettings],
+  ) -> Tuple[Plate, MeasurementSettings, List[Tuple[int, int]], List[_Optics], bytes]:
+    """Check an endpoint read and build its RUN fields: the plate, the settings, the measured
+    wells (row, column), each channel's optics and the fields.
+
+    Raises:
+      RuntimeError: if no plate is on the plate holder.
+      ValueError: if an argument is out of range.
+    """
+    optics, gains, monochromators = self._prepare_read(fluorescence_channels, gain, monochromator)
+    plate = self._get_plate(plate)
+    settings = self._get_fluorescence_settings(measurement_settings, plate)
+    measured = _get_measured_wells(plate, wells)
+    parameters = self._build_run(
+      optics,
+      gains=gains,
+      monochromators=monochromators,
+      focal_height=self._get_focal_height(focal_height, plate, wells),
+      enhanced_dynamic_range=enhanced_dynamic_range,
+      plate=plate,
+      wells=wells,
+      settings=settings,
+    )
+    return plate, settings, measured, optics, parameters
+
   @overload
   async def measure(
     self,
@@ -378,6 +412,7 @@ class Fluorescence(Measurement):
     plate: Optional[Plate] = ...,
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
     timeout: float = ...,
   ) -> FluorescenceResult: ...
 
@@ -394,6 +429,7 @@ class Fluorescence(Measurement):
     plate: Optional[Plate] = ...,
     measurement_settings: Optional[MeasurementSettings] = ...,
     shake_settings: Optional[ShakeSettings] = ...,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = ...,
     timeout: float = ...,
   ) -> List[FluorescenceResult]: ...
 
@@ -409,6 +445,7 @@ class Fluorescence(Measurement):
     plate: Optional[Plate] = None,
     measurement_settings: Optional[MeasurementSettings] = None,
     shake_settings: Optional[ShakeSettings] = None,
+    simulated_data: Optional[Sequence[FluorescenceResult]] = None,
     timeout: float = 300.0,
   ) -> Union[FluorescenceResult, List[FluorescenceResult]]:
     """Measure the fluorescence intensity of the plate from the top (endpoint), through one
@@ -440,6 +477,8 @@ class Fluorescence(Measurement):
       plate: the plate to measure; None uses the plate on the plate holder.
       measurement_settings: how to read; None reads with the defaults (20 flashes, 0.5 s).
       shake_settings: shake the plate before the read; None does not shake.
+      simulated_data: ignored by a reader; a simulated one (``VANTAstar(simulation=True)``)
+        reads its values from it.
       timeout: seconds the run may take.
 
     Returns:
@@ -450,19 +489,15 @@ class Fluorescence(Measurement):
       RuntimeError: if no plate is on the plate holder or the run ends without its data.
       ValueError: if an argument is out of range.
     """
-    optics, gains, monochromators = self._prepare_read(fluorescence_channels, gain, monochromator)
-    plate = self._get_plate(plate)
-    settings = self._get_fluorescence_settings(measurement_settings, plate)
-    measured = _get_measured_wells(plate, wells)
-    parameters = self._build_run(
-      optics,
-      gains=gains,
-      monochromators=monochromators,
-      focal_height=self._get_focal_height(focal_height, plate, wells),
-      enhanced_dynamic_range=enhanced_dynamic_range,
-      plate=plate,
-      wells=wells,
-      settings=settings,
+    _, settings, measured, optics, parameters = self._build_measure(
+      fluorescence_channels,
+      gain,
+      monochromator,
+      focal_height,
+      enhanced_dynamic_range,
+      plate,
+      wells,
+      measurement_settings,
     )
     await self._prepare(settings, shake_settings)
     start = datetime.now()

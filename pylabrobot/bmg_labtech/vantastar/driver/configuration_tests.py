@@ -1,12 +1,24 @@
-"""Tests for the VANTAstar configuration parser, on the INIT reply of a reader with firmware 1.12."""
+"""Tests for the VANTAstar configuration parser, on the INIT reply of a reader with firmware 1.12,
+and the recording saved from it."""
 
+import os
 import unittest
 
 from pylabrobot.bmg_labtech.vantastar.driver.configuration import (
+  SERIAL_NUMBER_PLACEHOLDER,
+  VANTAstarConfiguration,
+  compute_recording_name,
+  configuration_from_json,
+  configuration_to_json,
   get_modules,
   parse_hardware_info,
+  read_configuration,
 )
 from pylabrobot.bmg_labtech.vantastar.driver.responses import split_reply
+
+RECORDING_VANTASTAR = os.path.join(
+  os.path.dirname(__file__), "recordings", "vantastar_1_12_temperature_controller.json"
+)
 
 HARDWARE_INFO = bytes.fromhex(
   "13250004000002001f0460000101010100d8000010303432312d3030303434360001000b00274053090001090d000208"
@@ -54,6 +66,82 @@ class ConfigurationTests(unittest.TestCase):
     """A reply other than a HardwareInfoResponse is refused."""
     with self.assertRaises(ValueError):
       parse_hardware_info(bytes.fromhex("012500040000050100000000000901010102010400004f0000"))
+
+
+class FittedHardwareTests(unittest.TestCase):
+  """The fitted hardware, from the modules after the mainboard's."""
+
+  def test_tested_reader(self):
+    """The tested reader: a single standard photomultiplier, a temperature controller of 3
+    channels, no pumps, a spectrometer up to 1050 nm, 7 slides with linear variable filters, no
+    atmospheric control unit, no stirrer; no stacker or barcode reader module."""
+    c = parse_hardware_info(HARDWARE_INFO)
+    self.assertEqual(c.photomultipliers, "single")
+    self.assertEqual((c.temperature_controller, c.temperature_controller_channels), (True, 3))
+    self.assertEqual(c.pumps, (None, None))
+    self.assertEqual((c.spectrometer, c.spectrometer_maximum_wavelength), (True, 1050))
+    assert c.monochromator_slides is not None
+    self.assertEqual(len(c.monochromator_slides), 7)
+    self.assertEqual(c.monochromator_slides["EX_SP"], {1: "open", 2: "Filter 1", 3: "Filter 2"})
+    self.assertEqual(c.monochromator_slides["EM_SLIT"][6], "LUM lense")
+    self.assertTrue(c.linear_variable_filters)
+    self.assertFalse(c.atmospheric_control_unit_connected)
+    self.assertFalse(c.stirrer)
+    self.assertIsNone(c.stacker_connected)
+    self.assertIsNone(c.barcode_readers)
+
+  def test_other_values(self):
+    """Values the tested reader does not report, decoded from the layout: dual photomultipliers,
+    both pump types, a stacker, two barcode readers, an atmospheric control unit, a stirrer."""
+    c = VANTAstarConfiguration()
+    c.update_from_modules(
+      {
+        9: bytes([0b101]),
+        15: bytes([0b1001]),
+        17: bytes([0x01, 0x00, 0x00]),
+        18: bytes([0b0101, 0b00010011]),
+        49: bytes([0x01]) + bytes(6),
+        98: bytes([0x01, 0x00]),
+      }
+    )
+    self.assertEqual(c.photomultipliers, "dual")
+    self.assertEqual(c.pumps, ("XP3000", "XCalibur"))
+    self.assertTrue(c.stacker_connected)
+    self.assertEqual(c.barcode_readers, {1: "SE 965", 3: "CSE 600"})
+    self.assertTrue(c.atmospheric_control_unit_connected)
+    self.assertTrue(c.stirrer)
+
+  def test_short_module_leaves_its_fields_unknown(self):
+    """A module shorter than its fields leaves them None and warns; the others are filled."""
+    c = VANTAstarConfiguration()
+    with self.assertLogs("pylabrobot.bmg_labtech.vantastar.driver.configuration", "WARNING"):
+      c.update_from_modules({31: bytes([0x01]), 98: bytes([0x01, 0x00])})
+    self.assertIsNone(c.spectrometer)
+    self.assertTrue(c.stirrer)
+
+
+class RecordingTests(unittest.TestCase):
+  """The recording of the tested reader."""
+
+  def test_recording_is_the_decoded_reply(self):
+    """The recording holds what the INIT reply decodes to, the serial number a placeholder."""
+    saved = read_configuration(RECORDING_VANTASTAR)["device"]
+    self.assertEqual(saved, configuration_to_json(parse_hardware_info(HARDWARE_INFO)))
+    self.assertEqual(saved["serial_number"], SERIAL_NUMBER_PLACEHOLDER)
+    self.assertNotIn("modules", saved)
+
+  def test_recording_is_named_from_its_contents(self):
+    configuration = configuration_from_json(read_configuration(RECORDING_VANTASTAR)["device"])
+    self.assertEqual(compute_recording_name(configuration), os.path.basename(RECORDING_VANTASTAR))
+
+  def test_read_back_equals_decoded(self):
+    """Read back, the recording is the decoded configuration but for the serial number and the
+    raw modules."""
+    configuration = configuration_from_json(read_configuration(RECORDING_VANTASTAR)["device"])
+    expected = parse_hardware_info(HARDWARE_INFO)
+    expected.serial_number = SERIAL_NUMBER_PLACEHOLDER
+    expected.modules = None
+    self.assertEqual(configuration, expected)
 
 
 if __name__ == "__main__":

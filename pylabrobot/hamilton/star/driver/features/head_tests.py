@@ -1323,7 +1323,7 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
   async def test_off_into_a_trough_centres_the_array_and_books_96_times(self):
     await self.head.aspirate(self.plate, piston_volume=40.0, liquid_height=2.0)
     self.assertEqual(self.sent[0][1]["liquid_surface_no_lld"], 1886)
-    await self.head.dispense(self.trough, piston_volume=40.0, jet=True, blow_out=True)
+    await self.head.dispense(self.trough, piston_volume=40.0, jet=True)
     command, fields = self.sent[1]
     self.assertEqual(command, "ED")
     centre = self.trough.get_location_wrt(self.deck, "c", "c", "cavity_bottom")
@@ -1331,7 +1331,7 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(
       (fields["dispensing_mode"], fields["x_position"], fields["y_position"]),
       (
-        1,
+        0,
         round((centre.x - c.channel_array_size_x / 2) * 10),
         round((centre.y + c.channel_array_size_y / 2) * 10),
       ),
@@ -1459,10 +1459,54 @@ class TestHead96AspirateDispense(unittest.IsolatedAsyncioTestCase):
     jet = get_star_liquid_class(300.0, True, True, True, Liquid.WATER, True, True)
     assert jet is not None and jet.dispense_stop_flow_rate != 5.0
     await self.head.aspirate(self.plate, piston_volume=150.0)
-    await self.head.dispense(self.plate, 30.0, jet=True, blow_out=True)
+    await self.head.dispense(self.plate, 30.0, hamilton_liquid_class=jet, jet=True)
     self.assertEqual(self.sent[1][1]["cut_off_speed"], round(jet.dispense_stop_flow_rate * 10))
-    await self.head.dispense(self.plate, 30.0, jet=True, blow_out=True, cut_off_speed=4.5)
+    await self.head.dispense(
+      self.plate, 30.0, hamilton_liquid_class=jet, jet=True, cut_off_speed=4.5
+    )
     self.assertEqual(self.sent[2][1]["cut_off_speed"], 45)
+
+  async def test_the_mode_follows_the_blow_out_air_and_a_deprecated_blow_out_warns(self):
+    await self.head.aspirate(self.plate, piston_volume=100.0, blow_out_air_volume=20.0)
+    before = self.head.piston_position
+    await self.head.dispense(self.plate, piston_volume=10.0)
+    await self.head.dispense(self.plate, piston_volume=10.0, blow_out_air_volume=5.0)
+    # Only the blow-out mode pushes its air out after the liquid.
+    self.assertAlmostEqual(before - self.head.piston_position, 25.0, places=1)
+    await self.head.dispense(self.plate, piston_volume=10.0, jet=True, blow_out_air_volume=5.0)
+    await self.head.dispense(self.plate, piston_volume=10.0, empty=True, blow_out_air_volume=5.0)
+    modes = [fields["dispensing_mode"] for _, fields in self.sent[1:]]
+    self.assertEqual(modes, [2, 3, 1, 4])
+    # Without an air volume given, the deprecated flag decides, as it did.
+    await self.head.aspirate(self.plate, piston_volume=20.0)
+    with self.assertWarns(DeprecationWarning):
+      await self.head.dispense(self.plate, piston_volume=10.0, jet=True, blow_out=True)
+    self.assertEqual(self.sent[-1][1]["dispensing_mode"], 1)
+    sent = len(self.sent)
+    for flag, air in ((True, 0.0), (False, 5.0)):
+      with self.assertWarns(DeprecationWarning), self.assertRaisesRegex(ValueError, "contradicts"):
+        await self.head.dispense(
+          self.plate, piston_volume=10.0, blow_out=flag, blow_out_air_volume=air
+        )
+    self.assertEqual(len(self.sent), sent)
+
+  async def test_a_looked_up_class_s_air_leaves_a_jet_without_blow_out(self):
+    from pylabrobot.hamilton.star.liquid_classes.mapping import (
+      HighVolume_96COREHead1000ul_Water_DispenseJet_Aliquot as looked_up,
+    )
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_1000uL
+
+    assert looked_up.dispense_blow_out_volume > 0
+    tip_car = TIP_CAR_480_A00(name="tip carrier 2")
+    tip_car[1] = tip_rack = hamilton_96_tiprack_1000uL(name="tip_rack_02")
+    self.deck.assign_child_resource(tip_car, track=13)
+    await self.head.drop_tips(self.deck.get_trash_area96())
+    await self.head.pick_up_tips(tip_rack)
+    await self.head.aspirate(self.plate, piston_volume=100.0)
+    await self.head.dispense(self.plate, 50.0, jet=True)
+    self.assertEqual(self.sent[-1][1]["dispensing_mode"], 0)
+    await self.head.dispense(self.plate, 20.0, hamilton_liquid_class=looked_up, jet=True)
+    self.assertEqual(self.sent[-1][1]["dispensing_mode"], 1)
 
   async def test_no_liquid_under_capacitive_raises_and_the_head_goes_up(self):
     with self.assertRaises(RuntimeError):

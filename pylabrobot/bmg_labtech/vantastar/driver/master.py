@@ -11,6 +11,7 @@ The commands are sent with the fields and in the order BMG's Voyager software us
 
 import asyncio
 import contextvars
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -29,7 +30,14 @@ from pylabrobot.bmg_labtech.protocol.framing import (
 )
 from pylabrobot.io.usb import USB
 
-from .configuration import HARDWARE_INFO_ID, VANTAstarConfiguration, parse_hardware_info
+from .configuration import (
+  FITTED_FIELDS,
+  HARDWARE_INFO_ID,
+  VANTAstarConfiguration,
+  configuration_to_json,
+  parse_hardware_info,
+  read_configuration,
+)
 from .errors import (
   BUSY_CODES,
   WARNING_CODES,
@@ -268,37 +276,41 @@ class VANTAstarDriver:
       raise ValueError(f"default_read_timeout must be positive, got {value}")
     self._default_read_timeout = value
 
+  def _build_io(self, device_id: Optional[str]) -> USB:
+    """The USB link to the reader with serial number ``device_id`` (None: the first found)."""
+    return USB(
+      id_vendor=0x0483,
+      id_product=0xA29A,
+      human_readable_device_name="BMG VANTAstar",
+      serial_number=device_id,
+      read_endpoint_address=0x81,
+      write_endpoint_address=0x01,
+      configuration_callback=_configure_usb_device,
+      # The reader rejects a multi-packet command whose 64-byte packets are followed by zero-length
+      # packets; Voyager sends none.
+      zero_length_packets=False,
+    )
+
   def __init__(
     self,
     device_id: Optional[str] = None,
     io: Optional[USB] = None,
     name: str = "VANTAstar",
+    declared_configuration_json: Optional[str] = None,
   ):
     """
     Args:
       device_id: the USB serial number.  None uses the first reader found.
       io: an already-built ``USB``, used instead of building one.
       name: the device name, heading its log messages.
+      declared_configuration_json: a file ``save_configuration`` wrote.  Setup refuses a reader
+        that disagrees with it on what is fitted (``FITTED_FIELDS``).
     """
     if io is not None and not isinstance(io, USB):
       raise TypeError(f"io must be a USB, got {type(io).__name__}")
-    self.io: USB = (
-      io
-      if io is not None
-      else USB(
-        id_vendor=0x0483,
-        id_product=0xA29A,
-        human_readable_device_name="BMG VANTAstar",
-        serial_number=device_id,
-        read_endpoint_address=0x81,
-        write_endpoint_address=0x01,
-        configuration_callback=_configure_usb_device,
-        # The reader rejects a multi-packet command whose 64-byte packets are followed by
-        # zero-length packets; Voyager sends none.
-        zero_length_packets=False,
-      )
-    )
+    self.io: USB = io if io is not None else self._build_io(device_id)
     self.name = name
+    self.declared_configuration_json = declared_configuration_json
     self._lock = asyncio.Lock()
     self._measuring = False
     self._last_warning: Optional[Codes] = None
@@ -604,6 +616,44 @@ class VANTAstarDriver:
       c.serial_number,
     )
     return c
+
+  def _check_declared_configuration(self) -> None:
+    """Compare what is fitted with the declared configuration, if there is one.
+
+    Raises:
+      RuntimeError: if the reader and the declaration disagree on what is fitted.
+    """
+    if self.declared_configuration_json is None:
+      return
+    declared = read_configuration(self.declared_configuration_json)["device"]
+    answered = configuration_to_json(self.configuration)
+    differences = [
+      f"{name}: declared {declared.get(name)!r}, reader {answered[name]!r}"
+      for name in FITTED_FIELDS
+      if declared.get(name) != answered[name]
+    ]
+    if differences:
+      raise RuntimeError(
+        f"{self.name} does not match {self.declared_configuration_json}: " + "; ".join(differences)
+      )
+
+  def save_configuration(self, path: str, indent: Optional[int] = 2) -> None:
+    """Write what this reader reported to a file, to be declared later
+    (``declared_configuration_json``).  The serial number is written as
+    ``SERIAL_NUMBER_PLACEHOLDER``.
+
+    Args:
+      path: where to write it.
+      indent: how far to indent the JSON, or None to write it on one line.
+
+    Raises:
+      RuntimeError: if nothing has been read off the reader yet.
+    """
+    if self.configuration.firmware_version is None:
+      raise RuntimeError("nothing read off the reader yet; call `setup` first")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump({"device": configuration_to_json(self.configuration)}, f, indent=indent)
+      f.write("\n")
 
   # -- drawer ---------------------------------------------------------------
 
@@ -1303,7 +1353,11 @@ class VANTAstarDriver:
     return f"[{self.name}] Connected on USB 0x0483:0xA29A (serial {serial})"
 
   async def setup(self) -> None:
-    """Connect, initialize the reader (about 10 s), and read its configuration."""
+    """Connect, initialize the reader (about 10 s), and read its configuration.
+
+    Raises:
+      RuntimeError: if the reader does not match the declared configuration.
+    """
     logger.warning(
       "the VANTAstar driver has been tested on one reader (firmware 1.12) only; its luminescence "
       "read not yet (that reader has no luminescence module). If you verify it on your reader, "
@@ -1313,6 +1367,7 @@ class VANTAstarDriver:
     await self.io.drain()
     await self.initialize()
     self.discover()
+    self._check_declared_configuration()
     logger.info("%s", self.format_setup_summary())
 
   async def stop(self, accept_plate_left_in_device: bool = False) -> None:

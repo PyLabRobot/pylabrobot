@@ -1302,16 +1302,10 @@ class TestResourceMetadata(unittest.TestCase):
           self.assertEqual(r.serialize()["resource"]["metadata"], meta)
         else:
           self.assertEqual(r.serialize()["metadata"], meta)
-        if name == "ResourceStack":
-          with self.assertRaises(
-            TypeError
-          ):  # unrelated to metadata: ResourceStack.copy() is broken
-            r.copy()
-        else:
-          r_copy = r.copy()
-          self.assertEqual(r_copy.metadata, meta)
-          self.assertEqual(r_copy.name, r.name)
-          self.assertEqual(r_copy, r)
+        r_copy = r.copy()
+        self.assertEqual(r_copy.metadata, meta)
+        self.assertEqual(r_copy.name, r.name)
+        self.assertEqual(r_copy, r)
 
   def test_deserialize_same_named_class_via_module_alias(self):
     # Simulate a class imported under two module paths: find_subclass returns a
