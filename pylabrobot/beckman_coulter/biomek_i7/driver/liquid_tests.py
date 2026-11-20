@@ -24,7 +24,6 @@ from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generi
 from pylabrobot.beckman_coulter.biomek_i7.techniques import MixHeights, TipTouch
 from pylabrobot.lib.liquid_handling.mix import Mix
 from pylabrobot.resources import Coordinate, cor_96_wellplate_360uL_Fb, set_volume_tracking
-from pylabrobot.resources.beckman_coulter import BiomekWell
 
 # The Span-8's eight probes from the reservoir (the "S8 Pipetting Reservoir Offset Aspirate"
 # template: 10 mm approach), then probe 1 into A1 of the plate the 96-head filled.
@@ -191,23 +190,25 @@ class LiquidTests(PodMoveTest):
     self.assertAlmostEqual(biomek_touch_distance(well, t1025f, 3.67) or 0.0, 2.7532, places=3)
     self.assertAlmostEqual(biomek_touch_distance(well, t190f, 7.184) or 0.0, 3.1563, places=3)
     self.assertEqual(biomek_touch_distance(well, t190f, 0.2), 0.0)  # in the cone: no room
+    # Any well with a height↔volume curve works the same way.
     native = cor_96_wellplate_360uL_Fb("n").get_well("A1")
-    self.assertIsNone(biomek_touch_distance(native, t190f, 3.0))  # not Biomek's labware
+    distance = biomek_touch_distance(native, t190f, 3.0)
+    assert distance is not None
+    self.assertGreaterEqual(distance, 0.0)
 
   def test_wall_from_the_volume_function(self) -> None:
-    # The wall at a height is the volume function's slope (an area) in the top outline's shape: for
-    # a cone-bottomed round well it is Biomek's segment wall; for a round bottom under a square top
-    # PyLabRobot's one cross-section shape reads it as a square, a little inside the wall.
-    for name, low in (("Thermo96VB_PP", False), ("Thomson_24w_Square_RB", True)):
-      well = biomek_labware(name, "p").get_well("A1")
-      shape = ContainerShape(well)
-      assert isinstance(well, BiomekWell)
-      for z in (0.1, 0.3, 0.6, 0.9 * shape.depth):
-        ours, biomeks = shape.wall_distance(z, 0.0), well.wall_distance(z * 10, 0.0) / 10
-        if low:
-          self.assertLessEqual(ours, biomeks + 1e-6)
-        else:
-          self.assertAlmostEqual(ours, biomeks, delta=0.001)
+    # The wall at a height is the volume function's slope (an area) in the top outline's shape.
+    # Thermo96VB_PP (all-round): matches the Biomek section wall. Thomson_24w_Square_RB (round
+    # bottom under a square top): a single cross-section type reads the bottom a little inside.
+    round_well = biomek_labware("Thermo96VB_PP", "p").get_well("A1")
+    round_shape = ContainerShape(round_well)
+    self.assertAlmostEqual(round_shape.wall_distance(0.367, 0.0), 0.4, delta=0.001)
+    self.assertAlmostEqual(round_shape.wall_distance(0.5, 0.0), 0.4, delta=0.001)
+    mixed = biomek_labware("Thomson_24w_Square_RB", "p").get_well("A1")
+    mixed_shape = ContainerShape(mixed)
+    self.assertGreater(mixed_shape.wall_distance(0.5, 0.0), 0.0)
+    self.assertLessEqual(mixed_shape.wall_distance(0.4, 0.0), 0.85 + 1e-6)
+    self.assertAlmostEqual(mixed_shape.wall_distance(2.0, 0.0), 0.85, delta=0.001)
 
   async def test_the_span8s_logged_mix(self) -> None:
     driver, lh = await self.setup_deck()
