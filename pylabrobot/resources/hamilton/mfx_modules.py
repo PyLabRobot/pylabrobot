@@ -74,8 +74,8 @@ def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
     size_x=135.0,
     size_y=94.0,
     size_z=178.0 - 18.2 - 100,  # 59.8 mm
-    # probe height - carrier_height - deck_height
-    child_location=Coordinate(4.0, 3.5, 178.0 - 18.2 - 100),
+    # z: probe height - carrier height - deck height
+    child_location=Coordinate(4.0, 4.0, 178.0 - 18.2 - 100),
     model=hamilton_mfx_plateholder_DWP_flat.__name__,
     pedestal_size_z=0,
   )
