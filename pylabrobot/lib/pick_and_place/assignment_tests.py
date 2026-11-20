@@ -58,6 +58,20 @@ class AssignPlacedResourceTests(unittest.TestCase):
     self.assertEqual(self.plate.get_absolute_rotation().z % 360, 0)
     self.assert_where_aimed(self.plate, location)
 
+  def test_a_resource_holder_turned_about_two_axes_seats_it_where_aimed(self):
+    holder = ResourceHolder(
+      "holder",
+      size_x=130,
+      size_y=90,
+      size_z=5,
+      rotation=Rotation(x=10, z=90),
+      child_location=Coordinate(4, 4, 2),
+    )
+    self.deck.assign_child_resource(holder, location=Coordinate(400, 200, 10))
+    location = self.place(self.plate, holder)
+    self.assertIs(holder.resource, self.plate)
+    self.assert_where_aimed(self.plate, location)
+
   def test_a_turn_by_the_move_is_kept(self):
     holder = ResourceHolder("holder", size_x=130, size_y=90, size_z=5)
     self.deck.assign_child_resource(holder, location=Coordinate(100, 200, 10))
