@@ -2,6 +2,7 @@ import unittest
 
 from pylabrobot.resources.hamilton.mfx_carriers import hamilton_mfx_carrier_L5_base
 from pylabrobot.resources.hamilton.mfx_modules import (
+  hamilton_mfx_plateholder_DWP_flat,
   hamilton_mfx_tiprackholder_standard,
 )
 
@@ -417,3 +418,12 @@ class MFXCarrierTests(unittest.TestCase):
     assert len(mfx_carrier.sites) == 5
     for i in range(5):
       assert mfx_carrier.sites[i].name == f"MFX_TIP_module_{i + 1}"
+
+  def test_rack_based_dwp_module_centres_an_slas_footprint(self):
+    module = hamilton_mfx_plateholder_DWP_flat(name="module")
+    hamilton_mfx_carrier_L5_base(name="mfx_carrier", modules={0: module})
+    footprint = Resource(name="footprint", size_x=127.76, size_y=85.48, size_z=10)
+    module.assign_child_resource(footprint)
+    location = footprint.get_location_wrt(module)
+    self.assertAlmostEqual(location.x, (module.get_size_x() - footprint.get_size_x()) / 2)
+    self.assertAlmostEqual(location.y, (module.get_size_y() - footprint.get_size_y()) / 2)
