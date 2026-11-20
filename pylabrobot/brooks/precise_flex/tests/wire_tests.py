@@ -197,7 +197,12 @@ _Case = Tuple[
 
 # (name, call, commands sent, exception raised or None), each on an arm already set up.
 _CASES: List[_Case] = [
-  ("stop", lambda arm: arm.stop(), ["attach 0", "hp 0", "<io.write> exit"], None),
+  (
+    "stop",
+    lambda arm: arm.stop(with_light_farewell=False),
+    ["attach 0", "hp 0", "<io.write> exit"],
+    None,
+  ),
   ("request_mode", lambda arm: arm.request_mode(), ["mode"], None),
   ("set_response_mode_pc", lambda arm: arm.set_response_mode("pc"), ["mode 0"], None),
   ("set_response_mode_verbose", lambda arm: arm.set_response_mode("verbose"), ["mode 1"], None),
@@ -842,15 +847,15 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     return arm, fake
 
   async def test_setup(self):
-    _, fake = await self._run_setup(has_rail=False)
+    _, fake = await self._run_setup(has_rail=False, with_light_greeting=False)
     self.assert_wire(fake.sent, _SETUP)
 
   async def test_setup_skip_home(self):
-    _, fake = await self._run_setup(has_rail=False, skip_home=True)
+    _, fake = await self._run_setup(has_rail=False, skip_home=True, with_light_greeting=False)
     self.assert_wire(fake.sent, _SETUP_SKIP_HOME)
 
   async def test_setup_with_rail(self):
-    _, fake = await self._run_setup(has_rail=True)
+    _, fake = await self._run_setup(has_rail=True, with_light_greeting=False)
     self.assert_wire(fake.sent, _SETUP)
 
   async def test_a_failed_setup_hands_the_arm_back_and_closes_the_links(self):
@@ -860,7 +865,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     image_io, server_io = MagicMock(stop=AsyncMock()), MagicMock(stop=AsyncMock())
     arm._vision_image_io, arm._vision_server_io = image_io, server_io
     with self.assertRaises(PreciseFlexError):
-      await arm.setup(skip_home=True)
+      await arm.setup(skip_home=True, with_light_greeting=False)
     self.assertEqual(fake.sent[-3:], ["attach 0", "hp 0", "<io.write> exit"])
     image_io.stop.assert_awaited_once()
     server_io.stop.assert_awaited_once()
@@ -871,7 +876,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     arm = _make_arm(fake)
     with self.assertRaises(PreciseFlexError):
       try:
-        await arm.setup(skip_home=True)
+        await arm.setup(skip_home=True, with_light_greeting=False)
       finally:
         sent = len(fake.sent)
         await arm.stop()
@@ -881,7 +886,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     fake = _FakeController({"mode 0": "-1"})
     arm = _make_arm(fake)
     with self.assertRaises(PreciseFlexError):
-      await arm.setup(skip_home=True)
+      await arm.setup(skip_home=True, with_light_greeting=False)
     cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
   async def test_the_setup_error_is_raised_when_handing_back_fails(self):
@@ -889,7 +894,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     arm = _make_arm(fake)
     cast(AsyncMock, arm.io.stop).side_effect = OSError("closed")
     with self.assertRaises(PreciseFlexError) as raised, self.assertLogs(level="WARNING"):
-      await arm.setup(skip_home=True)
+      await arm.setup(skip_home=True, with_light_greeting=False)
     self.assertEqual(raised.exception.replycode, -3101)
     self.assertIn("hp 0", fake.sent)
 
@@ -947,7 +952,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     failing_read = AsyncMock(side_effect=TimeoutError("pd 116"))
     arm._request_configuration = failing_read  # type: ignore[method-assign]
     with self.assertRaises(TimeoutError):
-      await arm.setup()
+      await arm.setup(with_light_greeting=False)
     self.assertIsNone(arm.arm.configuration)
 
   async def test_at_speed_restores_the_profile_speed(self):
@@ -970,7 +975,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
   async def test_recovering_an_axis_out_of_range(self):
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
     self.assertEqual(await arm.arm.recover_axes_within_limits(), {PreciseFlexAxis.SHOULDER: 92.0})
@@ -1010,7 +1015,7 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
       }
     )
     arm = _make_arm(fake)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     return arm, fake
 
@@ -1157,7 +1162,7 @@ class TestPreciseFlexDefaults(unittest.IsolatedAsyncioTestCase):
   async def _arm(self) -> Tuple[PreciseFlexDriver, _FakeController]:
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     return arm, fake
 
@@ -1191,7 +1196,7 @@ async def _arm_after_homing() -> Tuple[PreciseFlexDriver, _FakeController]:
     {"Speed 1": "0 1 60", "wherej": "0 301.105 2.235 179.732 -180.776 125.844"}
   )
   arm = _make_arm(fake)
-  await arm.setup()
+  await arm.setup(with_light_greeting=False)
   fake.sent.clear()
   return arm, fake
 
@@ -1357,7 +1362,7 @@ class TestMotionSettlesBeforeTheNextCommand(unittest.IsolatedAsyncioTestCase):
       with self.subTest(name):
         fake = _FakeController(_RAIL_REPLIES)
         arm = _make_arm(fake, has_rail=True)
-        await arm.setup()
+        await arm.setup(with_light_greeting=False)
         fake.sent.clear()
         stopped = AsyncMock(side_effect=lambda: fake.sent.append("<stopped>"))
         arm.arm._wait_for_eom = stopped  # type: ignore[method-assign]
@@ -1594,7 +1599,7 @@ class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
   ):
     fake = _FakeController(_RAIL_REPLIES if has_rail else {"Speed 1": "0 1 60"})
     arm = _make_arm(fake, has_rail=has_rail)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     if out_of_range:  # so recovery sets its speed
       fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
