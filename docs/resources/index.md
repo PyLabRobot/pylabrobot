@@ -104,7 +104,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
 
   <tr><td>├── ResourceStack</td></tr>
-  <tr><td>│   └── <a href="resource-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
+  <tr><td>│   └── <a href="itemized-resource/tiprack/nested-tip-rack.html">Nested tip rack stack</a></td></tr>
 
   <tr><td>└── Workcell (to be made)</td></tr>
 </table>
