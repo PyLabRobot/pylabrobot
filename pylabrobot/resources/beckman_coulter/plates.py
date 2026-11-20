@@ -3,8 +3,7 @@
 - `xspan`, `yspan`, `height`: the footprint and height; `wellsx` / `wellsy`, `wellxspacing` /
   `wellyspacing`, `well1xoffset` / `well1yoffset` (A1's centre from the left and back edges): the
   grid; `welldepth`, the top segment's `topx` / `topy`: a well's size.
-- `segments`: a well's outline from the bottom up (`WellSegment`), which gives its height <->
-  volume table and where its wall is.
+- well sections from the bottom up become each well's `height_volume_data`.
 - a reservoir's `sections`: its wells, `x1..x2`, `y1..y2` from the left and back edges, `depth`.
 - `gripperinfo`: where Biomek's gripper pads go (`preferred_pickup_location`), the fingertips
   `gripperzoffset` above the bottom (below it for a plate).
@@ -19,24 +18,50 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
-from .biomek_resource import BiomekWell, WellSegment
+from .biomek_resource import _WellSegment, height_volume_data_from_segments
 
 _96_WELLPLATE_VB_SEGMENTS = (
-  WellSegment(2.0, 2.735, 2.735, 0.0, 0.0),
-  WellSegment(8.5, 4.0, 4.0, 4.0, 4.0),
+  _WellSegment(2.0, 2.735, 2.735, 0.0, 0.0),
+  _WellSegment(8.5, 4.0, 4.0, 4.0, 4.0),
+)
+_96_WELLPLATE_VB_DEPTH = 10.5
+_96_WELLPLATE_VB_HVD = height_volume_data_from_segments(
+  _96_WELLPLATE_VB_SEGMENTS, _96_WELLPLATE_VB_DEPTH
 )
 
-_96_WELLPLATE_FLAT_SEGMENTS = (WellSegment(10.668, 3.43, 3.43, 3.175, 3.175),)
+_96_WELLPLATE_FLAT_SEGMENTS = (_WellSegment(10.668, 3.43, 3.43, 3.175, 3.175),)
+_96_WELLPLATE_FLAT_DEPTH = 10.668
+_96_WELLPLATE_FLAT_HVD = height_volume_data_from_segments(
+  _96_WELLPLATE_FLAT_SEGMENTS, _96_WELLPLATE_FLAT_DEPTH
+)
 
 _96_DEEPWELL_SQUARE_SEGMENTS = (
-  WellSegment(8.61, 3.85, 3.85, 0.0, 0.0),
-  WellSegment(33.3, 4.14, 4.14, 4.14, 4.14, round=False),
+  _WellSegment(8.61, 3.85, 3.85, 0.0, 0.0),
+  _WellSegment(33.3, 4.14, 4.14, 4.14, 4.14, round=False),
+)
+_96_DEEPWELL_SQUARE_DEPTH = 41.91
+_96_DEEPWELL_SQUARE_HVD = height_volume_data_from_segments(
+  _96_DEEPWELL_SQUARE_SEGMENTS, _96_DEEPWELL_SQUARE_DEPTH
 )
 
 _24_WELLPLATE_SQUARE_RB_SEGMENTS = (
-  WellSegment(8.0, 8.0, 8.0, 0.0, 0.0, cap=True),
-  WellSegment(32.0, 8.5, 8.5, 8.5, 8.5, round=False),
+  _WellSegment(8.0, 8.0, 8.0, 0.0, 0.0, cap=True),
+  _WellSegment(32.0, 8.5, 8.5, 8.5, 8.5, round=False),
 )
+_24_WELLPLATE_SQUARE_RB_DEPTH = 40.0
+_24_WELLPLATE_SQUARE_RB_HVD = height_volume_data_from_segments(
+  _24_WELLPLATE_SQUARE_RB_SEGMENTS, _24_WELLPLATE_SQUARE_RB_DEPTH
+)
+
+_RESERVOIR_350CB_SEGMENTS = (_WellSegment(37.4, 61.9, 40.75, 61.9, 40.75, round=False),)
+_RESERVOIR_350CB_DEPTH = 37.4
+_RESERVOIR_350CB_HVD = height_volume_data_from_segments(
+  _RESERVOIR_350CB_SEGMENTS, _RESERVOIR_350CB_DEPTH
+)
+
+_RESERVOIR_SEGMENTS = (_WellSegment(14.53, 55.52, 36.325, 55.52, 36.325, round=False),)
+_RESERVOIR_DEPTH = 14.53
+_RESERVOIR_HVD = height_volume_data_from_segments(_RESERVOIR_SEGMENTS, _RESERVOIR_DEPTH)
 
 
 def beckman_coulter_biomek_96_wellplate_vb(name: str, with_lid: bool = False) -> Plate:
@@ -65,7 +90,7 @@ def beckman_coulter_biomek_96_wellplate_vb(name: str, with_lid: bool = False) ->
     model=beckman_coulter_biomek_96_wellplate_vb.__name__,
     lid=lid,
     ordered_items=create_ordered_items_2d(
-      BiomekWell,
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=11.31,  # well1xoffset 1.44 cm, less half the well
@@ -75,10 +100,10 @@ def beckman_coulter_biomek_96_wellplate_vb(name: str, with_lid: bool = False) ->
       item_dy=9.0,
       size_x=6.18,
       size_y=6.18,
-      size_z=10.5,  # welldepth 1.05 cm
+      size_z=_96_WELLPLATE_VB_DEPTH,  # welldepth 1.05 cm
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.CIRCLE,
-      segments=_96_WELLPLATE_VB_SEGMENTS,
+      height_volume_data=_96_WELLPLATE_VB_HVD,
       max_volume=440.0,  # wellvolume
       name_prefix=name,
     ),
@@ -113,7 +138,7 @@ def beckman_coulter_biomek_96_wellplate_flat(name: str, with_lid: bool = False) 
     model=beckman_coulter_biomek_96_wellplate_flat.__name__,
     lid=lid,
     ordered_items=create_ordered_items_2d(
-      BiomekWell,
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.95,  # well1xoffset 1.438 cm, less half the well
@@ -123,10 +148,10 @@ def beckman_coulter_biomek_96_wellplate_flat(name: str, with_lid: bool = False) 
       item_dy=9.0,
       size_x=6.86,
       size_y=6.86,
-      size_z=10.668,  # welldepth 1.0668 cm
+      size_z=_96_WELLPLATE_FLAT_DEPTH,  # welldepth 1.0668 cm
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
-      segments=_96_WELLPLATE_FLAT_SEGMENTS,
+      height_volume_data=_96_WELLPLATE_FLAT_HVD,
       max_volume=362.76,  # wellvolume
       name_prefix=name,
     ),
@@ -146,7 +171,7 @@ def beckman_coulter_biomek_96_deepwell_square(name: str) -> Plate:
     size_z=44.2,  # height 4.42 cm
     model=beckman_coulter_biomek_96_deepwell_square.__name__,
     ordered_items=create_ordered_items_2d(
-      BiomekWell,
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.2364,  # well1xoffset 1.43764 cm, less half the well
@@ -156,10 +181,10 @@ def beckman_coulter_biomek_96_deepwell_square(name: str) -> Plate:
       item_dy=9.0,
       size_x=8.28,
       size_y=8.28,
-      size_z=41.91,  # welldepth 4.191 cm
+      size_z=_96_DEEPWELL_SQUARE_DEPTH,  # welldepth 4.191 cm
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
-      segments=_96_DEEPWELL_SQUARE_SEGMENTS,
+      height_volume_data=_96_DEEPWELL_SQUARE_HVD,
       max_volume=2200.0,  # wellvolume
       name_prefix=name,
     ),
@@ -194,7 +219,7 @@ def beckman_coulter_biomek_24_wellplate_square_rb(name: str, with_lid: bool = Fa
     model=beckman_coulter_biomek_24_wellplate_square_rb.__name__,
     lid=lid,
     ordered_items=create_ordered_items_2d(
-      BiomekWell,
+      Well,
       num_items_x=6,
       num_items_y=4,
       dx=10.5,  # well1xoffset 1.9 cm, less half the well
@@ -204,10 +229,10 @@ def beckman_coulter_biomek_24_wellplate_square_rb(name: str, with_lid: bool = Fa
       item_dy=18.0,
       size_x=17.0,
       size_y=17.0,
-      size_z=40.0,  # welldepth 4.0 cm
+      size_z=_24_WELLPLATE_SQUARE_RB_DEPTH,  # welldepth 4.0 cm
       bottom_type=WellBottomType.U,
       cross_section_type=CrossSectionType.RECTANGLE,
-      segments=_24_WELLPLATE_SQUARE_RB_SEGMENTS,
+      height_volume_data=_24_WELLPLATE_SQUARE_RB_HVD,
       max_volume=10000.0,  # wellvolume
       name_prefix=name,
     ),
@@ -235,14 +260,14 @@ def beckman_coulter_biomek_reservoir_350cb(name: str, with_lid: bool = False) ->
     # Biomek's pads: the TiterplateLid's own centre on its seat, gripperzoffset above its bottom.
     lid.preferred_pickup_location = Coordinate(63.5, 44.575, 2.0)
   wells: Dict[str, Well] = {}
-  wells["A1"] = BiomekWell(
+  wells["A1"] = Well(
     name=f"{name}_A1",
     size_x=123.8,  # x1 0.2 to x2 12.58 cm
     size_y=81.5,  # y1 0.2 to y2 8.35 cm
-    size_z=37.4,  # depth 3.74 cm
-    segments=(WellSegment(37.4, 61.9, 40.75, 61.9, 40.75, round=False),),
+    size_z=_RESERVOIR_350CB_DEPTH,  # depth 3.74 cm
     bottom_type=WellBottomType.FLAT,
     cross_section_type=CrossSectionType.RECTANGLE,
+    height_volume_data=_RESERVOIR_350CB_HVD,
     max_volume=300000.0,  # maxvolume
   )
   wells["A1"].location = Coordinate(2.0, 2.35, 0.6)
@@ -264,14 +289,14 @@ def beckman_coulter_biomek_reservoir(name: str) -> Plate:
 
   Biomek labware class Reservoir: a well per section."""
   wells: Dict[str, Well] = {}
-  wells["A1"] = BiomekWell(
+  wells["A1"] = Well(
     name=f"{name}_A1",
     size_x=111.04,  # x1 0.826 to x2 11.93 cm
     size_y=72.65,  # y1 0.635 to y2 7.9 cm
-    size_z=14.53,  # depth 1.453 cm
-    segments=(WellSegment(14.53, 55.52, 36.325, 55.52, 36.325, round=False),),
+    size_z=_RESERVOIR_DEPTH,  # depth 1.453 cm
     bottom_type=WellBottomType.FLAT,
     cross_section_type=CrossSectionType.RECTANGLE,
+    height_volume_data=_RESERVOIR_HVD,
     max_volume=110000.0,  # maxvolume
   )
   wells["A1"].location = Coordinate(8.26, 3.55, 14.68)
@@ -292,7 +317,7 @@ def beckman_coulter_biomek_modular_reservoir(name: str) -> Plate:
 
   Biomek labware class ModularReservoir: a well per section."""
   wells: Dict[str, Well] = {}
-  wells["A1"] = BiomekWell(
+  wells["A1"] = Well(
     name=f"{name}_A1",
     size_x=23.65,  # x1 1.105 to x2 3.47 cm
     size_y=69.19,  # y1 0.772 to y2 7.691 cm
@@ -303,7 +328,7 @@ def beckman_coulter_biomek_modular_reservoir(name: str) -> Plate:
     max_volume=40700.0,  # maxvolume
   )
   wells["A1"].location = Coordinate(11.05, 8.69, 14.07)
-  wells["A2"] = BiomekWell(
+  wells["A2"] = Well(
     name=f"{name}_A2",
     size_x=23.65,  # x1 3.84825 to x2 6.21325 cm
     size_y=69.19,  # y1 0.772 to y2 7.691 cm
@@ -314,7 +339,7 @@ def beckman_coulter_biomek_modular_reservoir(name: str) -> Plate:
     max_volume=40700.0,  # maxvolume
   )
   wells["A2"].location = Coordinate(38.4825, 8.69, 14.07)
-  wells["A3"] = BiomekWell(
+  wells["A3"] = Well(
     name=f"{name}_A3",
     size_x=23.65,  # x1 6.5915 to x2 8.9565 cm
     size_y=69.19,  # y1 0.772 to y2 7.691 cm
@@ -325,7 +350,7 @@ def beckman_coulter_biomek_modular_reservoir(name: str) -> Plate:
     max_volume=40700.0,  # maxvolume
   )
   wells["A3"].location = Coordinate(65.915, 8.69, 14.07)
-  wells["A4"] = BiomekWell(
+  wells["A4"] = Well(
     name=f"{name}_A4",
     size_x=23.65,  # x1 9.33475 to x2 11.69975 cm
     size_y=69.19,  # y1 0.772 to y2 7.691 cm

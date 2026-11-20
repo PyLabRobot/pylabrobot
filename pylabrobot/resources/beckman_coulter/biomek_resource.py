@@ -1,20 +1,16 @@
-"""Biomek's own shapes on PyLabRobot's resources: a tip's cone and a well's outline by height.
+"""Biomek tip cones, and a private helper that turns Biomek well sections into height↔volume tables.
 
 Biomek describes a tip by its length, capacity and seating depth (which `Tip` holds) and also by its
-cone, and a well by its sections from the bottom up, each with an outline that changes with height.
-A Biomek touch-off places the tip against the wall at a height, so it needs both: these classes
-carry them, and everything else about the resource is PyLabRobot's.
+cone. Plate wells are ordinary PyLabRobot `Well`s: Biomek's section outline is only used when
+defining them, to build `height_volume_data`.
 """
 
 import math
-from dataclasses import asdict, dataclass
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
+from dataclasses import dataclass
+from typing import Dict, Optional, Sequence, Tuple
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.well import Well
-from pylabrobot.utils.interpolation import interpolate_1d
 
 
 class BiomekTip(Tip):
@@ -83,8 +79,8 @@ class BiomekTip(Tip):
 
 
 @dataclass(frozen=True)
-class WellSegment:
-  """One section of a Biomek well, from the bottom up, in mm.
+class _WellSegment:
+  """One Biomek well section, from the bottom up, in mm (authoring only).
 
   Attributes:
     height: how tall the section is.
@@ -130,90 +126,30 @@ class WellSegment:
 
 # mm between a height -> volume table's heights where a section's cross-section changes with height
 # (a cone, a cap): PyLabRobot interpolates between them.
-KNOT_STEP = 0.1
+_KNOT_STEP = 0.1
 
 
-class BiomekWell(Well):
-  """A well with Biomek's outline by height (`segments`, bottom up): its height <-> volume table
-  (`height_volume_data`) is made from them, and `wall_distance` says where its wall is at a height.
-  With no segments it is a plain `Well`."""
+def _volume_at(segments: Sequence[_WellSegment], z: float) -> float:
+  """uL held `z` mm above the bottom, by the sections."""
+  left, v = z, 0.0
+  for seg in segments:
+    v += seg.volume(left)
+    left -= seg.height
+    if left <= 0:
+      break
+  return v
 
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    segments: Sequence[Union[WellSegment, Mapping[str, Any]]] = (),
-    height_volume_data: Optional[Dict[float, float]] = None,
-    max_volume: Optional[float] = None,
-    **kwargs: Any,
-  ):
-    self.segments: Tuple[WellSegment, ...] = tuple(
-      s if isinstance(s, WellSegment) else WellSegment(**s) for s in segments
-    )
-    if height_volume_data is None and self.segments:
-      height_volume_data = self._height_volume_table(size_z)
-    if max_volume is None and height_volume_data is not None:
-      max_volume = interpolate_1d(size_z, height_volume_data, bounds_handling="error")
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      height_volume_data=height_volume_data,
-      max_volume=max_volume,
-      **kwargs,
-    )
 
-  def half_widths(self, z: float) -> Tuple[float, float]:
-    """Half-widths (x, y), mm, `z` mm above the bottom (the top's above the top)."""
-    left = max(0.0, z)
-    for seg in self.segments:
-      if left <= seg.height:
-        return seg.half_widths(left)
-      left -= seg.height
-    last = self.segments[-1]
-    return last.half_widths(last.height)
-
-  def wall_distance(self, z: float, angle: float) -> float:
-    """How far, mm, the wall is from the well's axis `z` mm above its bottom, in direction `angle`
-    (radians): the radius for a round well, to the nearest side for a rectangular one."""
-    hx, hy = self.half_widths(z)
-    if all(s.round for s in self.segments):
-      return hx
-    c, s = abs(math.cos(angle)), abs(math.sin(angle))
-    return min(hx / c if c > 1e-12 else math.inf, hy / s if s > 1e-12 else math.inf)
-
-  def volume_at(self, z: float) -> float:
-    """uL held `z` mm above the bottom, by the segments."""
-    left, v = z, 0.0
-    for seg in self.segments:
-      v += seg.volume(left)
-      left -= seg.height
-      if left <= 0:
-        break
-    return v
-
-  def _height_volume_table(self, depth: float) -> Dict[float, float]:
-    """A point at each section's ends, and every `KNOT_STEP` in a section whose cross-section
-    changes, up to the rim."""
-    zs = [0.0]
-    for seg in self.segments:
-      h = seg.height
-      constant = seg.half_widths(0.0) == seg.half_widths(h) == seg.half_widths(h / 2)
-      n = 1 if constant else max(1, math.ceil(h / KNOT_STEP))
-      zs += [zs[-1] + h * i / n for i in range(1, n + 1)]
-    if depth > zs[-1]:
-      zs.append(depth)
-    return {round(z, 6): self.volume_at(z) for z in zs}
-
-  def __eq__(self, other: object) -> bool:
-    return (
-      isinstance(other, BiomekWell) and super().__eq__(other) and self.segments == other.segments
-    )
-
-  __hash__ = Resource.__hash__
-
-  def serialize(self) -> dict:
-    return {**super().serialize(), "segments": [asdict(s) for s in self.segments]}
+def height_volume_data_from_segments(
+  segments: Sequence[_WellSegment], depth: float
+) -> Dict[float, float]:
+  """A height (mm) -> volume (uL) table from Biomek well sections, up to `depth`."""
+  zs = [0.0]
+  for seg in segments:
+    h = seg.height
+    constant = seg.half_widths(0.0) == seg.half_widths(h) == seg.half_widths(h / 2)
+    n = 1 if constant else max(1, math.ceil(h / _KNOT_STEP))
+    zs += [zs[-1] + h * i / n for i in range(1, n + 1)]
+  if depth > zs[-1]:
+    zs.append(depth)
+  return {round(z, 6): _volume_at(segments, z) for z in zs}

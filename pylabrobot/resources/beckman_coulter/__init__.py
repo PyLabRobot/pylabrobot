@@ -1,4 +1,4 @@
-from .biomek_resource import BiomekTip, BiomekWell, WellSegment
+from .biomek_resource import BiomekTip
 from .plates import (
   beckman_coulter_biomek_24_wellplate_square_rb,
   beckman_coulter_biomek_96_deepwell_square,

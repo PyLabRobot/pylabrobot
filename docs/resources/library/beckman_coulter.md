@@ -4,8 +4,9 @@ Company page: [Beckman Coulter Life Sciences](https://www.beckman.com)
 
 Transcribed from the tip and labware classes of Biomek 5, Beckman Coulter's software for its Biomek
 liquid handlers. The labware is defined as Biomek defines it, under Biomek's class names (in
-quotes), whoever makes it. Tips are `BiomekTip`s, which also carry the tip's cone; wells are
-`BiomekWell`s, which also carry Biomek's outline of the well by height.
+quotes), whoever makes it. Plates and reservoirs use ordinary PyLabRobot `Plate` and `Well`
+resources; Biomek's well sections become each well's `height_volume_data`. Tips are `BiomekTip`s,
+which also carry the tip's cone.
 
 ## Tips
 
