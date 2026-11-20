@@ -6,6 +6,7 @@ offsets declared are the ones the recorded idle targets imply, so the moves are 
 """
 
 import asyncio
+import functools
 import json
 import math
 import os
@@ -39,11 +40,13 @@ from pylabrobot.formulatrix.mantis.driver.features.arm import (
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   BLUE,
+  CYAN,
   GREEN,
   OFF,
   RED,
   START_IDLE_ANIMATION,
   STOP_ANIMATION,
+  VIOLET,
   bar_states,
   color_write,
   led_bar_frames,
@@ -2249,6 +2252,191 @@ class V3ArmTests(DriverTestCase):
     driver.save_configuration(path=saved)
     with open(saved, encoding="utf-8") as file:
       self.assertEqual(json.load(file)["arm"], SYNTHETIC_V3_ARM_BLOCK)
+
+
+# A unit's path through chip slot 1, in the arm frame, as its chip changer routes give it.
+CHIP_SLOT_1_PATH: List[List[Optional[float]]] = [
+  [70.394, 63.965, -1.57],
+  [80.052, 12.077, -1.57],
+  [94.052, -7.923, -1.57],
+  [124.052, 2.077, -1.57],
+  [124.052, 12.077, -1.57],
+  [124.052, 12.077, 10.938],
+  [124.052, 12.077, 10.938],
+  [122.385, 12.398, 10.561],
+  [122.385, 12.398, None],
+  [122.385, 12.398, -1.57],
+  [89.714, 10.769, -1.57],
+]
+# The moves a Mantis v4 was sent to pick up slot 1's chip and place it back: each motor's target in
+# device units, "-" held, at the recorded profiles; on the unit the recorded idle targets are from.
+CAPTURED_CHIP_SLOT_1_PICK_UP = """
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+43.109383064569144,-8.651398664407912,-61.811023622047244
+56.29303487592246,-44.245804640535354,-61.811023622047244
+68.97776972857237,-49.32540175358294,-61.811023622047244
+78.33455945880014,-32.777253468679135,-61.811023622047244
+76.05956795856261,-29.122652531670656,-61.811023622047244
+76.05956795856261,-29.122652531670656,430.62992125984255
+76.05956795856261,-29.122652531670656,430.62992125984255
+75.13806588014809,-29.569602303281187,415.78740157480314
+75.13806588014809,-29.569602303281187,-
+75.13806588014809,-29.569602303281187,-61.811023622047244
+60.931962501316455,-41.48356515074482,-61.811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+""".split()
+CAPTURED_CHIP_SLOT_1_PLACE = """
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+60.931962501316455,-41.48356515074482,-61.811023622047244
+75.13806588014809,-29.569602303281187,-61.811023622047244
+75.13806588014809,-29.569602303281187,-
+75.13806588014809,-29.569602303281187,415.78740157480314
+76.05956795856261,-29.122652531670656,430.62992125984255
+76.05956795856261,-29.122652531670656,430.62992125984255
+76.05956795856261,-29.122652531670656,-61.811023622047244
+78.33455945880014,-32.777253468679135,-61.811023622047244
+68.97776972857237,-49.32540175358294,-61.811023622047244
+56.29303487592246,-44.245804640535354,-61.811023622047244
+43.109383064569144,-8.651398664407912,-61.811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+""".split()
+CAPTURED_CHIP_SLOT_WAITS = {"pick_up": (12, 20, 22), "place": (10, 20, 22)}
+# Where the captures differ: Z at idle after a chip slot, -0.003 mm from no unit file; PLR sends
+# its flag, 0, as every other move to idle does.
+CAPTURED_CHIP_SLOT_IDLE_Z = -0.11811023622047244
+
+
+def parse_captured_moves(*, captured: List[str]) -> List[Dict[int, float]]:
+  """Each captured queued move's targets, by motor; a held motor left out."""
+  return [
+    {motor: float(value) for motor, value in enumerate(move.split(",")) if value != "-"}
+    for move in captured
+  ]
+
+
+class ChipSlotTests(ArmTestCase):
+  async def set_up_chip_slots(self, *, link: RouteLink):
+    driver = await self.set_up_arm(link=link, approach_paths={"chip_slot_1": CHIP_SLOT_1_PATH})
+    driver.arm._initialized = True
+    driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._next_item = 1
+    return driver
+
+  def assert_captured(
+    self, *, link: RouteLink, driver, captured: List[str], waits: Tuple[int, ...]
+  ):
+    sent = [payload for _, command, payload in self.sent(link) if command == 68]
+    expected = parse_captured_moves(captured=captured)
+    self.assertEqual(len(sent), len(expected))
+    for index, (payload, targets) in enumerate(zip(sent, expected)):
+      with self.subTest(move=index):
+        if index in (1, len(expected) - 1):  # the move to idle: Z at its flag, see above
+          self.assertEqual(targets[2], CAPTURED_CHIP_SLOT_IDLE_Z)
+          targets = {**targets, 2: 0.0}
+        expected_payload = get_queued_move(item=index + 1, targets=targets)
+        self.assertEqual(payload[:6], expected_payload[:6])
+        for offset in range(6, len(payload), 8):
+          (sent_value,) = struct.unpack_from("<d", payload, offset)
+          (expected_value,) = struct.unpack_from("<d", expected_payload, offset)
+          self.assertAlmostEqual(sent_value, expected_value, places=9)
+    self.assertEqual(
+      [(0, 61, b""), (0, 62, b"")], [frame for frame in self.sent(link) if frame[1] in (61, 62)]
+    )
+    waited = [call.kwargs["item"] - 1 for call in driver._wait_for_queue_item.await_args_list]
+    self.assertEqual(tuple(waited), waits)
+
+  async def test_a_pick_up_and_a_placement_queue_the_recorded_moves(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    self.assert_captured(
+      link=link,
+      driver=driver,
+      captured=CAPTURED_CHIP_SLOT_1_PICK_UP,
+      waits=CAPTURED_CHIP_SLOT_WAITS["pick_up"],
+    )
+    self.assertEqual(driver.arm.attached_chip, 1)
+    self.sent_before = len(link.written)
+    driver._next_item = 1
+    driver._wait_for_queue_item.reset_mock()
+    await driver.arm.place_chip(slot=1)
+    self.assert_captured(
+      link=link,
+      driver=driver,
+      captured=CAPTURED_CHIP_SLOT_1_PLACE,
+      waits=CAPTURED_CHIP_SLOT_WAITS["place"],
+    )
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_the_led_bar_shows_cyan_for_a_pick_up_and_violet_for_a_placement(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.return_chip()
+    written = link.written[self.sent_before :]
+    self.assertEqual(bar_states(written=written), [CYAN, "idle", VIOLET, "idle"])
+
+  async def test_return_chip_places_into_the_slot_it_came_from(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    with self.assertRaisesRegex(MantisMotionError, "no chip is on the head"):
+      await driver.arm.return_chip()
+    await driver.arm.pick_up_chip(slot=1)
+    with self.assertRaisesRegex(MantisMotionError, "the chip from slot 1 is on the head"):
+      await driver.arm.pick_up_chip(slot=1)
+    frames = []
+    for place in (functools.partial(driver.arm.place_chip, slot=1), driver.arm.return_chip):
+      self.sent_before = len(link.written)
+      driver._next_item = 1
+      await place()
+      frames.append(self.sent(link))
+      driver.arm._attached_chip = 1
+    self.assertEqual(frames[1], frames[0])
+
+  async def test_without_a_slot_path_nothing_moves(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    with self.assertRaisesRegex(MantisConfigurationError, "no path into chip slot 2"):
+      await driver.arm.pick_up_chip(slot=2)
+    self.assertEqual(self.sent(link), [])
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_head_stopped_inside_a_slot_is_on_its_path(self):
+    # Below the safe height, inside the slot; at it, before and after, in the open.
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    offsets = driver.arm.configuration.offsets
+    z = 0.0
+    for index, (x, y, line_z) in enumerate(CHIP_SLOT_1_PATH):
+      z = z if line_z is None else line_z
+      angles = compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
+      joint_state = {0: angles[0] - offsets[0], 1: angles[1] - offsets[1], 2: z}
+      with self.subTest(line=index):
+        place = driver.arm._get_place(joint_state=joint_state)
+        self.assertEqual(place is not None, z > 0)
+        if place is not None:
+          self.assertEqual(place[0], "chip_slot_1")
 
 
 if __name__ == "__main__":
