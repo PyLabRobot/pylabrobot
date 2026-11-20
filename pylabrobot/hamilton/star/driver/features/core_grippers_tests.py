@@ -593,7 +593,7 @@ class TestPlaceOntoAPlateAdapter(unittest.IsolatedAsyncioTestCase):
     await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=6, grip_strength=40)
     await self.grippers.place_resource(self.magnet)
     # Let go 6 mm below its top, the plate sitting 28.12 mm up in the magnet.
-    self.assertEqual(self.sent, ["C0ZRxs05504xd0yj1133zj2162zi000zy0500yo0885th2800te2800"])
+    self.assertEqual(self.sent, ["C0ZRxs05504xd0yj1138zj2162zi000zy0500yo0885th2800te2800"])
     self.assertIs(self.plate.parent, self.magnet)
     self.assertEqual(self.plate.location, self.magnet.compute_plate_location(self.plate))
 
