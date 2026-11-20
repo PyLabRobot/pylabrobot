@@ -320,10 +320,10 @@ motors and logs where they stopped. A v3 stop sends no park move.
 `request_state` and `_release`: board 12 without one, a pressure-board output with one. On an
 output, `lock` takes no level, switches the valve on and starts the air pump if needed; readbacks
 confirm both control states, never plate contact or pressure, and `request_state` raises
-`MantisConfigurationError`. Unlock and shutdown release the valve and restore a pump started by the
-clamp; a pump already running stays on. The clamp serializes these operations, owns a pump change
-before sending it, and attempts valve release and pump restoration independently on failure or
-cancellation.
+`MantisConfigurationError`. Unlock releases the valve and leaves the pump on; shutdown also turns
+off a pump started by the clamp, and a pump already running stays on. The clamp serializes these
+operations, owns a pump change before sending it, and attempts valve release and pump restoration
+independently on failure or cancellation.
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
