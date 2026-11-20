@@ -1,0 +1,53 @@
+﻿:orphan:
+
+pylabrobot.resources.formulatrix.mantis\_chips
+==============================================
+
+.. currentmodule:: pylabrobot.resources.formulatrix
+
+.. automodule:: pylabrobot.resources.formulatrix.mantis_chips
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      mantis_chip_high_volume
+      mantis_chip_high_volume_hi_fi
+      mantis_chip_low_volume
+      mantis_chip_low_volume_hi_fi
+      mantis_chip_nozzle_0_8mm
+      mantis_chip_nozzle_pfe_0_15mm
+      mantis_chip_nozzle_pfe_0_3mm
+      mantis_chip_nozzle_silicone_0_1mm
+      mantis_chip_nozzle_silicone_0_2mm
+      mantis_chip_nozzle_silicone_0_3mm
+      mantis_chip_nozzle_silicone_0_4mm
+      mantis_chip_nozzle_silicone_0_5mm
+      mantis_chip_nozzle_silicone_0_6mm
+      mantis_chip_nozzle_silicone_1_0mm
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: class.rst
+   
+      MantisChip
+      MantisChipNozzle
+   
+   
+
+   
+   
+   

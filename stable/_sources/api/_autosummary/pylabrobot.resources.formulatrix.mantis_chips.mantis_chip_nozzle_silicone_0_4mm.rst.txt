@@ -1,0 +1,6 @@
+pylabrobot.resources.formulatrix.mantis\_chips.mantis\_chip\_nozzle\_silicone\_0\_4mm
+=====================================================================================
+
+.. currentmodule:: pylabrobot.resources.formulatrix.mantis_chips
+
+.. autofunction:: mantis_chip_nozzle_silicone_0_4mm
