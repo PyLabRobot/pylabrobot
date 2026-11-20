@@ -21,6 +21,7 @@ The PLR Resource Management System consists of two key components, each serving 
 :hidden:
 
 introduction
+assigning-resources
 custom-resources
 ```
 
@@ -183,6 +184,7 @@ library/cellvis
 library/corning
 library/eppendorf
 library/falcon
+library/formulatrix
 library/greiner
 library/hamilton
 library/imcs

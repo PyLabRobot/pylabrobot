@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Assigning child resources &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8" />
+
+    <script src="../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/plr_devices.js?v=ba1a2da2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'resources/assigning-resources';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.24.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/resources/assigning-resources.html" />
+    <link rel="icon" href="../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Defining custom resources" href="custom-resources.html" />
+    <link rel="prev" title="Resources Introduction" href="introduction.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="1.0.0b1" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button type="button" class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation" aria-expanded="false" aria-controls="pst-primary-sidebar-modal">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button type="button" class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button type="button" class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg me-1"></i>System Settings</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg me-1"></i>Light</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button type="button" class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button type="button" class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page" aria-expanded="false" aria-controls="pst-secondary-sidebar-modal">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal" tabindex="-1"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../user_guide/index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button type="button" class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg me-1"></i>System Settings</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg me-1"></i>Light</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button type="button" id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Resources Introduction</a></li>
+<li class="toctree-l1 current active"><a aria-current="page" class="current reference internal" href="#">Assigning child resources</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom-resources.html">Defining custom resources</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Ontology</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="carrier/carrier.html">Carrier</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/tip-carrier/tip-carrier.html">TipCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></li>
+<li class="toctree-l2"><a class="reference internal" href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="container/container.html">Container</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="container/petri-dish/petri-dish.html">PetriDish</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/trough/trough.html">Trough</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/tube/tube.html">Tube</a></li>
+<li class="toctree-l2"><a class="reference internal" href="container/well/well.html">Well</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="deck/deck.html">Deck</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="itemized-resource/itemized-resource.html">ItemizedResource</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="itemized-resource/plate/plate.html">Plates</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/plate/definition-plate.html">Tutorial: Plate Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/plate/plate-quadrants.html">Tutorial: Plate Quadrants</a></li>
+</ul>
+</details></li>
+
+<li class="toctree-l2 has-children"><a class="reference internal" href="itemized-resource/tiprack/tiprack.html">TipRack</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="itemized-resource/tiprack/tip-spot.html">TipSpot</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="itemized-resource/container-rack/container-rack.html">ContainerRack</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="itemized-resource/tube-rack/tube-rack.html">TubeRack</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="resource-holder/resource-holder.html">ResourceHolder</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="resource-holder/plate-holder.html">PlateHolder</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="plate-adapter/plate-adapter.html">PlateAdapter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="petri-dish-holder/petri-dish-holder.html">PetriDishHolder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource-stack/resource-stack.html">ResourceStack</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Resource Library</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="library/agenbio.html">Agenbio</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/agilent.html">Agilent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/alpaqua.html">Alpaqua Engineering, LLC</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/azenta.html">Azenta</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/bioer.html">BioER</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/biorad.html">Biorad</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/boekel.html">Boekel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/celltreat.html">CellTreat</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/cellvis.html">Cellvis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/corning.html">Corning Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/eppendorf.html">Eppendorf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/falcon.html">Falcon</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="library/formulatrix.html">Formulatrix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/greiner.html">Greiner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/hamilton.html">Hamilton STAR “ML_STAR”</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/imcs.html">IMCS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/mckesson.html">McKesson</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/nest.html">Wuxi Nest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/opentrons.html">Opentrons</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/perkin_elmer.html">Perkin Elmer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/pioreactor.html">Pioreactor</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/porvair.html">Porvair</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/revvity.html">Revvity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/sarstedt.html">Sarstedt</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/sergi.html">Sergi Lab Supplies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/thermo_fisher.html">Thermo Fisher Scientific Inc.</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/vwr.html">VWR</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="library/diy/index.html">DIY Resources</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="library/diy/grindbio.html">GrindBio</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/diy/davidnedrud.html">Designs by David Nedrud</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-house"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Resource Management System</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Assigning child resources</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="assigning-child-resources">
+<h1>Assigning child resources<a class="headerlink" href="#assigning-child-resources" title="Link to this heading">#</a></h1>
+<p>Resources form a tree (see the <a class="reference internal" href="introduction.html"><span class="doc">Resources Introduction</span></a>). You build the tree by assigning a child
+resource to a parent resource. This page shows the <code class="docutils literal notranslate"><span class="pre">assign_child_*</span></code> methods:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.assign_child_resource.html#pylabrobot.resources.Resource.assign_child_resource" title="pylabrobot.resources.Resource.assign_child_resource"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assign_child_resource()</span></code></a> puts a child at a location that you
+give.</p></li>
+<li><p><a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.assign_child_by_anchor.html#pylabrobot.resources.Resource.assign_child_by_anchor" title="pylabrobot.resources.Resource.assign_child_by_anchor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assign_child_by_anchor()</span></code></a> computes the location from two
+anchor points, one on the parent and one on the child.</p></li>
+<li><p>Some resources, such as resource holders, carriers and decks, compute the location for you.</p></li>
+</ul>
+<section id="at-a-location-assign-child-resource">
+<span id="at-a-location-assign_child_resource"></span><h2>At a location: <code class="docutils literal notranslate"><span class="pre">assign_child_resource</span></code><a class="headerlink" href="#at-a-location-assign-child-resource" title="Link to this heading">#</a></h2>
+<p>The location of a child is relative to the left front bottom corner of its parent. The x-axis goes
+from left to right, the y-axis from front to back, and the z-axis from bottom to top.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span><span class="p">,</span> <span class="n">Resource</span>
+
+<span class="n">parent</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"parent"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">child</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"child"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="n">parent</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="n">parent</span>
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">location</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.get_absolute_location.html#pylabrobot.resources.Resource.get_absolute_location" title="pylabrobot.resources.Resource.get_absolute_location"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_absolute_location()</span></code></a> gives the location relative to the root
+of the tree. When you put the parent in a larger tree, the child goes with it:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">root</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"root"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">root</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">get_absolute_location</span><span class="p">()</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">110</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">70</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>A name identifies a resource in its tree, so two resources in one tree cannot have the same name:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">duplicate</span> <span class="o">=</span> <span class="n">Resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"child"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="k">try</span><span class="p">:</span>
+  <span class="n">parent</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">duplicate</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+<span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+  <span class="nb">print</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>  <span class="c1"># Resource with name 'child' already exists in the tree.</span>
+<span class="k">else</span><span class="p">:</span>
+  <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">"expected a ValueError"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.unassign_child_resource.html#pylabrobot.resources.Resource.unassign_child_resource" title="pylabrobot.resources.Resource.unassign_child_resource"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unassign_child_resource()</span></code></a> removes a child from its parent. The
+child then has no parent and no location:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">parent</span><span class="o">.</span><span class="n">unassign_child_resource</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span>
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">location</span> <span class="ow">is</span> <span class="kc">None</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="by-anchor-points-assign-child-by-anchor">
+<span id="by-anchor-points-assign_child_by_anchor"></span><h2>By anchor points: <code class="docutils literal notranslate"><span class="pre">assign_child_by_anchor</span></code><a class="headerlink" href="#by-anchor-points-assign-child-by-anchor" title="Link to this heading">#</a></h2>
+<p>An anchor is a point on a resource, given by one letter per axis:</p>
+<ul class="simple">
+<li><p>x: <code class="docutils literal notranslate"><span class="pre">&quot;l&quot;</span></code> (left), <code class="docutils literal notranslate"><span class="pre">&quot;c&quot;</span></code> (center) or <code class="docutils literal notranslate"><span class="pre">&quot;r&quot;</span></code> (right);</p></li>
+<li><p>y: <code class="docutils literal notranslate"><span class="pre">&quot;f&quot;</span></code> (front), <code class="docutils literal notranslate"><span class="pre">&quot;c&quot;</span></code> (center) or <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> (back);</p></li>
+<li><p>z: <code class="docutils literal notranslate"><span class="pre">&quot;b&quot;</span></code> (bottom), <code class="docutils literal notranslate"><span class="pre">&quot;c&quot;</span></code> (center) or <code class="docutils literal notranslate"><span class="pre">&quot;t&quot;</span></code> (top).</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">get_anchor</span></code> and the tuple form also take the full words, such as <code class="docutils literal notranslate"><span class="pre">&quot;left&quot;</span></code>.
+<a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.get_anchor.html#pylabrobot.resources.Resource.get_anchor" title="pylabrobot.resources.Resource.get_anchor"><code class="xref py py-meth docutils literal notranslate"><span class="pre">get_anchor()</span></code></a> gives the location of an anchor, relative to the
+left front bottom corner of the resource:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">assert</span> <span class="n">parent</span><span class="o">.</span><span class="n">get_anchor</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s2">"c"</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s2">"c"</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="s2">"t"</span><span class="p">)</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">assign_child_by_anchor</span></code> puts the child so that its <code class="docutils literal notranslate"><span class="pre">child_anchor</span></code> is at the <code class="docutils literal notranslate"><span class="pre">parent_anchor</span></code> of the
+parent. Then it calls <code class="docutils literal notranslate"><span class="pre">assign_child_resource</span></code> with that location. Both anchors are left front
+bottom (<code class="docutils literal notranslate"><span class="pre">&quot;lfb&quot;</span></code>) by default, which gives the location <code class="docutils literal notranslate"><span class="pre">(0,</span> <span class="pre">0,</span> <span class="pre">0)</span></code>.</p>
+<p>Each of the next cells unassigns the child at its end, so that the next cell can assign it again.</p>
+<p>To center the child on the parent, align the center of the bottom of both:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">parent</span><span class="o">.</span><span class="n">assign_child_by_anchor</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">parent_anchor</span><span class="o">=</span><span class="s2">"ccb"</span><span class="p">,</span> <span class="n">child_anchor</span><span class="o">=</span><span class="s2">"ccb"</span><span class="p">)</span>
+
+<span class="c1"># (100 - 20) / 2 = 40 and (80 - 10) / 2 = 35</span>
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">location</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">35</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">parent</span><span class="o">.</span><span class="n">unassign_child_resource</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>To put the child on top of the parent, align the top of the parent with the bottom of the child.
+The anchors can also be tuples:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">parent</span><span class="o">.</span><span class="n">assign_child_by_anchor</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">parent_anchor</span><span class="o">=</span><span class="p">(</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">,</span> <span class="s2">"t"</span><span class="p">),</span> <span class="n">child_anchor</span><span class="o">=</span><span class="p">(</span><span class="s2">"c"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">))</span>
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">location</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">35</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">parent</span><span class="o">.</span><span class="n">unassign_child_resource</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+
+<span class="c1"># In the right back corner, on top</span>
+<span class="n">parent</span><span class="o">.</span><span class="n">assign_child_by_anchor</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">parent_anchor</span><span class="o">=</span><span class="s2">"rbt"</span><span class="p">,</span> <span class="n">child_anchor</span><span class="o">=</span><span class="s2">"rbb"</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">child</span><span class="o">.</span><span class="n">location</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">70</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">parent</span><span class="o">.</span><span class="n">unassign_child_resource</span><span class="p">(</span><span class="n">child</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="resources-that-compute-the-location">
+<h2>Resources that compute the location<a class="headerlink" href="#resources-that-compute-the-location" title="Link to this heading">#</a></h2>
+<p>Some resources know where their children go. For these, you do not give a location.</p>
+<p>A <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.ResourceHolder.html#pylabrobot.resources.ResourceHolder" title="pylabrobot.resources.ResourceHolder"><code class="xref py py-class docutils literal notranslate"><span class="pre">ResourceHolder</span></code></a> puts its child at its <code class="docutils literal notranslate"><span class="pre">child_location</span></code>:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResourceHolder</span><span class="p">,</span> <span class="n">cor_96_wellplate_360uL_Fb</span>
+
+<span class="n">holder</span> <span class="o">=</span> <span class="n">ResourceHolder</span><span class="p">(</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">"holder"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mf">127.76</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mf">85.48</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">child_location</span><span class="o">=</span><span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">cor_96_wellplate_360uL_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate"</span><span class="p">)</span>
+<span class="n">holder</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">holder</span><span class="o">.</span><span class="n">resource</span> <span class="ow">is</span> <span class="n">plate</span>
+<span class="k">assert</span> <span class="n">plate</span><span class="o">.</span><span class="n">location</span> <span class="o">==</span> <span class="n">Coordinate</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>A <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Carrier.html#pylabrobot.resources.Carrier" title="pylabrobot.resources.Carrier"><code class="xref py py-class docutils literal notranslate"><span class="pre">Carrier</span></code></a> has sites, and each site is a resource holder. Index the
+carrier to assign a resource to a site:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">hamilton_plate_carrier_L5_ac</span>
+
+<span class="n">plate_carrier</span> <span class="o">=</span> <span class="n">hamilton_plate_carrier_L5_ac</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate_carrier"</span><span class="p">)</span>
+<span class="n">plate_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">cor_96_wellplate_360uL_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate_on_carrier"</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">plate_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">resource</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"plate_on_carrier"</span>
+<span class="k">assert</span> <span class="n">plate_carrier</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">resource</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="n">plate_carrier</span><span class="o">.</span><span class="n">sites</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>Decks have their own ways to place resources. A Hamilton deck takes a <code class="docutils literal notranslate"><span class="pre">track</span></code> and computes the
+location of the carrier from it:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">STARLetDeck</span>
+
+<span class="n">star_deck</span> <span class="o">=</span> <span class="n">STARLetDeck</span><span class="p">()</span>
+<span class="n">star_deck</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate_carrier</span><span class="p">,</span> <span class="n">track</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">plate_carrier</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="n">star_deck</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>An Opentrons deck has a resource holder for each slot. Use
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">assign_child_at_slot()</span></code> to put labware in a slot:</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">OTDeck</span>
+
+<span class="n">ot_deck</span> <span class="o">=</span> <span class="n">OTDeck</span><span class="p">()</span>
+<span class="n">ot_deck</span><span class="o">.</span><span class="n">assign_child_at_slot</span><span class="p">(</span><span class="n">cor_96_wellplate_360uL_Fb</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"plate_in_slot_1"</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">ot_deck</span><span class="o">.</span><span class="n">get_resource</span><span class="p">(</span><span class="s2">"plate_in_slot_1"</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"ot2_deck_slot_1"</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p>See <a class="reference internal" href="../api/_autosummary/pylabrobot.resources.Resource.html#pylabrobot.resources.Resource" title="pylabrobot.resources.Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">Resource</span></code></a> for the API reference.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="introduction.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Resources Introduction</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="custom-resources.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Defining custom resources</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#at-a-location-assign-child-resource">At a location: <code class="docutils literal notranslate"><span class="pre">assign_child_resource</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#by-anchor-points-assign-child-by-anchor">By anchor points: <code class="docutils literal notranslate"><span class="pre">assign_child_by_anchor</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resources-that-compute-the-location">Resources that compute the location</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/resources/assigning-resources.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../_sources/resources/assigning-resources.ipynb.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.24.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

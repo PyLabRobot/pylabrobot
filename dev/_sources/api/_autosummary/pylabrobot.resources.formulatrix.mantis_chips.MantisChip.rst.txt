@@ -1,0 +1,6 @@
+pylabrobot.resources.formulatrix.mantis\_chips.MantisChip
+=========================================================
+
+.. currentmodule:: pylabrobot.resources.formulatrix.mantis_chips
+
+.. autoclass:: MantisChip

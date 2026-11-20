@@ -1,0 +1,6 @@
+pylabrobot.resources.formulatrix.mantis\_chips.mantis\_chip\_nozzle\_pfe\_0\_3mm
+================================================================================
+
+.. currentmodule:: pylabrobot.resources.formulatrix.mantis_chips
+
+.. autofunction:: mantis_chip_nozzle_pfe_0_3mm

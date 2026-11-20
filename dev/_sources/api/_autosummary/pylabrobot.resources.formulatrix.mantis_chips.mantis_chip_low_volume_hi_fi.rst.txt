@@ -1,0 +1,6 @@
+pylabrobot.resources.formulatrix.mantis\_chips.mantis\_chip\_low\_volume\_hi\_fi
+================================================================================
+
+.. currentmodule:: pylabrobot.resources.formulatrix.mantis_chips
+
+.. autofunction:: mantis_chip_low_volume_hi_fi
