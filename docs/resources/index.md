@@ -21,6 +21,7 @@ The PLR Resource Management System consists of two key components, each serving 
 :hidden:
 
 introduction
+assigning-resources
 custom-resources
 ```
 
