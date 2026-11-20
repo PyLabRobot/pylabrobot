@@ -259,9 +259,17 @@ class MantisDevice(Resource):
       if arm.is_initialized:
         await arm._report_pose()
 
-  async def stop(self) -> None:
-    """Stop the motors, park an arm brought up, release the clamp and disconnect."""
-    await self.driver.stop()
+  async def stop(self, accept_chip_left_on_head: bool = False) -> None:
+    """Stop the motors, park an arm brought up, release the clamp and disconnect.
+
+    Args:
+      accept_chip_left_on_head: stop with a chip on the head instead of refusing.
+
+    Raises:
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; the arm is
+        halted and parked, and the device stays connected for ``arm.return_chip``.
+    """
+    await self.driver.stop(accept_chip_left_on_head=accept_chip_left_on_head)
 
 
 def Mantis(

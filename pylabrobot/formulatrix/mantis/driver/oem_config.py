@@ -37,6 +37,19 @@ WASH_POSITIONS = (1, 2)
 # The approach paths' names: the waste, and each wash position.
 WASTE_APPROACH_PATH = "waste"
 WASH_APPROACH_PATH = "wash_{position}"
+# Where an install keeps each chip slot's routes, from its ``Data`` folder.
+CHIP_CHANGER_SEQUENCE_DIRECTORY = os.path.join("System", "Sequences", "ChipChanger")
+# The ``ChipChanger.config`` keys of a chip slot's routes, in the order a pick-up plays them.
+CHIP_CHANGER_ROUTE_KEYS = (
+  "SafeStartSequence",
+  "MoveAttachSequence",
+  "OriginSequence",
+  "ShiftSequence",
+  "SafeStopSequence",
+)
+# The chip changer type of a slot in the fixed chip racks; type 1 is an LC3's, not supported.
+CHIP_RACK_TYPE = 0
+CHIP_SLOT_APPROACH_PATH = "chip_slot_{slot}"
 # Where an install keeps the plate holder's origin, from its ``Data/Device`` folder.
 SBS_ADAPTER_FILE = os.path.join("Adapters", "SBS Adapter.ad.txt")
 # The stage tuning file in the unit's configuration folder: its ReferenceHeight.
@@ -292,6 +305,34 @@ def _load_approach_paths(*, sequence_directory: str, waste_file: str) -> Dict[st
   return paths
 
 
+def _load_chip_slot_approach_paths(*, path: str, sequence_directory: str) -> Dict[str, Any]:
+  """Each fixed chip slot's path from idle into the slot (``CHIP_SLOT_APPROACH_PATH``): the slot's
+  routes joined in ``CHIP_CHANGER_ROUTE_KEYS`` order. An LC3's positions are left out.
+
+  Args:
+    path: the unit's ``ChipChanger.config``.
+    sequence_directory: the install's ``System/Sequences/ChipChanger``.
+
+  Raises:
+    MantisConfigurationError: if a key is missing or not a number, or a route is missing or
+      malformed.
+  """
+  values = _parse_config_entries(path=path)
+  count_text = _get_setting(path=path, settings=values, key="ChipChanger.Count")
+  paths: Dict[str, Any] = {}
+  for slot in range(1, int(_get_number(path=path, key="ChipChanger.Count", text=count_text)) + 1):
+    type_key = f"ChipChanger.{slot}.Type"
+    type_text = _get_setting(path=path, settings=values, key=type_key)
+    if _get_number(path=path, key=type_key, text=type_text) != CHIP_RACK_TYPE:
+      continue
+    route: List[List[Optional[float]]] = []
+    for key in CHIP_CHANGER_ROUTE_KEYS:
+      file_name = _get_setting(path=path, settings=values, key=f"ChipChanger.{slot}.{key}")
+      route.extend(_parse_route(path=os.path.join(sequence_directory, file_name)))
+    paths[CHIP_SLOT_APPROACH_PATH.format(slot=slot)] = route
+  return paths
+
+
 def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
   """Read the v3 home frame and search settings, converting vendor units at the boundary."""
   try:
@@ -508,6 +549,15 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
     sequence_directory=sequence_directory,
     waste_file=WASTE_APPROACH_PATH_FILE if is_v4 else WASTE_APPROACH_PATH_ADAPTER_FILE,
   )
+  chip_changer_config = os.path.join(oem_config_directory, "ChipChanger.config")
+  if os.path.isfile(chip_changer_config):
+    data_directory = os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory)))
+    approach_paths.update(
+      _load_chip_slot_approach_paths(
+        path=chip_changer_config,
+        sequence_directory=os.path.join(data_directory, CHIP_CHANGER_SEQUENCE_DIRECTORY),
+      )
+    )
   if approach_paths:
     blocks["approach_paths"] = approach_paths
   return blocks

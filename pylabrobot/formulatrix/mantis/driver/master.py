@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import struct
 import time
 from typing import (
@@ -77,6 +78,7 @@ from .framing import (
   split_frames,
 )
 from .oem_config import (
+  CHIP_SLOT_APPROACH_PATH,
   UNKNOWN_ZONE,
   WASH_APPROACH_PATH,
   WASH_POSITIONS,
@@ -937,9 +939,16 @@ class MantisDriver:
     ):
       raise MantisConfigurationError("zones block: a route to safe XY moves the arms only")
     known = {WASTE_APPROACH_PATH, *(WASH_APPROACH_PATH.format(position=p) for p in WASH_POSITIONS)}
-    if routes["approach_paths"] is not None and not set(routes["approach_paths"]) <= known:
+    chip_slot = re.compile(CHIP_SLOT_APPROACH_PATH.format(slot=r"[1-9][0-9]*"))
+    unknown = [
+      name
+      for name in routes["approach_paths"] or {}
+      if name not in known and chip_slot.fullmatch(name) is None
+    ]
+    if unknown:
       raise MantisConfigurationError(
-        f"approach_paths block: the paths are {sorted(known)}, got {sorted(routes['approach_paths'])}"
+        f"approach_paths block: the paths are {sorted(known)} and chip slots "
+        f"({CHIP_SLOT_APPROACH_PATH}), got {sorted(unknown)}"
       )
     return routes
 
@@ -1325,13 +1334,20 @@ class MantisDriver:
       logger.warning("[%s] could not abort the sequencer", self.name, exc_info=True)
     await self.arm._halt()
 
-  async def stop(self) -> None:
+  async def stop(self, accept_chip_left_on_head: bool = False) -> None:
     """Fail the command in flight and every event waiter; abort the sequencer, stop the
     motors and park a v4 arm brought up; release the plate clamp, turn the LED bar off, stop reading
     the link and close it.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
     nothing is sent: the link is closed.
+
+    Args:
+      accept_chip_left_on_head: stop with a chip on the head instead of refusing.
+
+    Raises:
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; the arm is
+        halted and parked, and the link stays open for ``Arm.return_chip``.
     """
     if self._reader is not None and self._reader.done() and self._connected:
       failure = None if self._reader.cancelled() else self._reader.exception()
@@ -1348,6 +1364,12 @@ class MantisDriver:
         waiter.set_exception(MantisNotConnectedError(stopped))
     if self._connected:
       await self._halt()
+      chip_on_head = self.arm is not None and self.arm.attached_chip is not None
+      if chip_on_head and not accept_chip_left_on_head:
+        raise MantisMotionError(
+          f"{self.name}: a chip is still on the head; return it with return_chip(), or pass "
+          "accept_chip_left_on_head=True"
+        )
     if self.plate_clamp is not None and self._connected:
       try:
         await self.plate_clamp._release()
@@ -1392,7 +1414,7 @@ class MantisDriver:
           await self.led_bar._show_setup_done()
     except BaseException:
       try:
-        await self.stop()
+        await self.stop(accept_chip_left_on_head=True)  # the setup's own failure is raised
       except Exception:
         logger.warning("[%s] stop after a failed setup failed", self.name, exc_info=True)
       raise
