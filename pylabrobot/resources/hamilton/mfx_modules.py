@@ -66,14 +66,16 @@ def hamilton_mfx_plateholder_DWP_flat(name: str) -> PlateHolder:
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
   """
 
+  # resource_size_x=127.76,
+  # resource_size_y=85.48,
+
   return PlateHolder(
     name=name,
     size_x=135.0,
     size_y=94.0,
     size_z=178.0 - 18.2 - 100,  # 59.8 mm
-    # x, y: the pocket leaves what it holds some play; an ANSI/SLAS footprint sits centred on
-    # average. z: probe height - carrier height - deck height
-    child_location=Coordinate(x=(135.0 - 127.76) / 2, y=(94.0 - 85.48) / 2, z=178.0 - 18.2 - 100),
+    # z: probe height - carrier height - deck height
+    child_location=Coordinate(4.0, 4.0, 178.0 - 18.2 - 100),
     model=hamilton_mfx_plateholder_DWP_flat.__name__,
     pedestal_size_z=0,
   )
