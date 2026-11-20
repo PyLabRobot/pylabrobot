@@ -1,0 +1,6 @@
+pylabrobot.brooks.precise\_flex.PreciseFlexGripper.close
+========================================================
+
+.. currentmodule:: pylabrobot.brooks.precise_flex
+
+.. automethod:: PreciseFlexGripper.close
