@@ -287,12 +287,24 @@ go back at the depth the path took them across before Z rises. Every other move 
 `park`, from a pose on a path first goes back along it to its start, every argument checked
 before; a move of Z alone there is refused.
 
-`park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (True by default): each queued
+`park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (False by default). True: each queued
 item is played on its own (61, 62, 68) and each route step moved, then the pose read (84) and
 passed on, so the 3D model and the simulator follow every segment. Each item ends with every
 motor's move done before the next starts (seen in a capture), so the path is the same; without an
-observer nothing more is read. False plays a path in one go and reads the pose once at the end;
+observer nothing more is read. False plays a path in one go and reads the pose once at the end, as
 the stop's park always does.
+
+True is the one to use in simulation, or with the 3D viewer open: the model follows every point of
+an approach path or zone route instead of jumping to its end. It is False by default because, on a
+device, each segment then waits for its own play and its reads. Measured on a v4, the same targets
+in both modes:
+
+| call | True | False | extra |
+|---|---|---|---|
+| `move_to_waste()` from idle | 4.64 s | 3.42 s | +1.22 s (+36%) |
+| `move_to_wash(position=1)` from the waste | 9.03 s | 6.78 s | +2.25 s (+33%) |
+| `move_to_wash(position=2)` from wash 1 | 1.19 s | 1.08 s | +0.11 s (+10%) |
+| `park()` from wash 2 | 6.72 s | 5.44 s | +1.28 s (+24%) |
 
 On a v3, `Arm.initialize` (`_initialize_v3`) follows the captured cold start: it seats the arms
 against their stops (`_seat_arm_motors`, at most `SEAT_PASSES` passes) and backs them off from

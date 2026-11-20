@@ -18,9 +18,21 @@ import functools
 import logging
 import math
 import struct
-from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Sequence, Tuple, cast
+from typing import (
+  TYPE_CHECKING,
+  Any,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+  cast,
+)
 
 from pylabrobot.resources import Coordinate
+from pylabrobot.resources.manipulator import LinkBody
 
 from ...resource_model import (
   ARM_BASE_X,
@@ -252,6 +264,8 @@ class Arm:
     self.configuration = configuration
     self._initialized = False
     self._pose_observer: Optional[Callable[..., None]] = None
+    # The two link angles last passed on, degrees, the geometry's own; None before any.
+    self._link_angles: Optional[Tuple[float, float]] = None
     self._deck_to_arm_transform: Optional[Tuple[float, float, float]] = None
     if configuration.v3_arm_configuration is not None and self._get_generation() == "v4":
       raise MantisConfigurationError(f"{driver.name}: a v4 takes no v3 arm block")
@@ -967,9 +981,48 @@ class Arm:
       return
     try:
       theta_1, theta_2 = self._get_link_angles(joint_state=joint_state)
+      self._link_angles = (theta_1, theta_2)
       self._pose_observer(theta_1=theta_1, theta_2=theta_2, z=0.0 - joint_state[Z_MOTOR])
     except Exception:
       logger.warning("[%s] the arm's pose was not passed on", self._driver.name, exc_info=True)
+
+  def _get_five_bar(self, *, links: Dict[str, LinkBody]) -> Optional[Dict[str, Any]]:
+    """The arm as a five-bar linkage, for a viewer to place the four links from the two driven
+    angles; None before a pose was passed on.
+
+    Each short link's angle is its motor's, unwrapped, so a viewer turns it the way the motor does.
+
+    Args:
+      links: the 3D model's links, by ``right_short_arm``, ``right_long_arm``, ``left_short_arm``
+        and ``left_long_arm``, posed at the last angles passed on.
+    """
+    if self._link_angles is None:
+      return None
+    theta_1, theta_2 = self._link_angles
+    bases: Dict[str, List[float]] = {}
+    for side in ("right", "left"):
+      short = links[f"{side}_short_arm"]
+      turned = math.radians(short.rotation.z)
+      joint, location = short.proximal_joint, cast(Coordinate, short.location)
+      bases[side] = [
+        location.x + joint.x * math.cos(turned) - joint.y * math.sin(turned),
+        location.y + joint.x * math.sin(turned) + joint.y * math.cos(turned),
+      ]
+    return {
+      "links": {key: link.name for key, link in links.items()},
+      "joints": {
+        key: {
+          "proximal": [link.proximal_joint.x, link.proximal_joint.y],
+          "distal": [cast(Coordinate, link.distal_joint).x, cast(Coordinate, link.distal_joint).y],
+        }
+        for key, link in links.items()
+      },
+      "bases": bases,
+      "lengths": {key: link.length for key, link in links.items()},
+      "angles": {"right": theta_1 - 180.0, "left": -theta_2},
+      # The head sits left of the elbows' line in the arm frame; the drawn frame mirrors y.
+      "side_of_head": -1.0,
+    }
 
   async def _report_pose(self) -> None:
     """Read each motor's encoder (command 84) and pass the pose on, only if ``_pose_observer`` is
@@ -2147,7 +2200,7 @@ class Arm:
     self,
     *,
     minimum_traverse_height_start: Optional[float] = None,
-    with_model_updates: bool = True,
+    with_model_updates: bool = False,
   ) -> None:
     """Move the head to idle along its zone's route, from any zone; from an approach path, first out
     along it.
@@ -2158,8 +2211,8 @@ class Arm:
     Args:
       minimum_traverse_height_start: the nozzle's height above the deck to rise to first, mm;
         ``default_minimum_traverse_height`` when None.
-      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
-        plays the path in one go.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
       MantisConfigurationError: for a height in the deck frame without the unit's ``stage`` block;
@@ -2249,12 +2302,12 @@ class Arm:
     if not (with_model_updates and moves):  # else passed on after the last move
       await self._report_pose()
 
-  async def move_to_waste(self, *, with_model_updates: bool = True) -> None:
+  async def move_to_waste(self, *, with_model_updates: bool = False) -> None:
     """Move the head into the waste along the unit's approach path, from wherever it stands.
 
     Args:
-      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
-        plays the path in one go.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
       MantisConfigurationError: without the unit's approach path; nothing moves.
@@ -2264,14 +2317,14 @@ class Arm:
       name=WASTE_APPROACH_PATH, with_model_updates=with_model_updates
     )
 
-  async def move_to_wash(self, *, position: int, with_model_updates: bool = True) -> None:
+  async def move_to_wash(self, *, position: int, with_model_updates: bool = False) -> None:
     """Move the head into a wash position along the unit's approach path, from wherever it stands;
     from the other wash position without leaving the wash.
 
     Args:
       position: 1 or 2.
-      with_model_updates: read and pass on the pose after every segment, for the 3D model; False
-        plays the path in one go.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
       MantisConfigurationError: without the unit's approach path; nothing moves.

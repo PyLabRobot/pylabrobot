@@ -222,6 +222,102 @@ function glideAt(glide, share) {
   };
 }
 
+// A five-bar arm (two driven links, two that hang from them and meet at a pin) is published as its
+// two driven angles, unwrapped; every link is placed from them, so no glide can open the pin.
+const fiveBars = new Map(); // owner index -> { spec, angles, glide }
+const drivenLinks = new Set(); // the indices fiveBars place
+
+function placeFiveBar(spec, angles) {
+  const unit = (a) => [Math.cos(a * DEG), Math.sin(a * DEG)];
+  const turn = (a, p) => {
+    const c = Math.cos(a * DEG);
+    const s = Math.sin(a * DEG);
+    return [c * p[0] - s * p[1], s * p[0] + c * p[1]];
+  };
+  const ends = {};
+  for (const side of ["right", "left"]) {
+    const [u, v] = unit(angles[side]);
+    const length = spec.lengths[`${side}_short_arm`];
+    ends[side] = [spec.bases[side][0] + length * u, spec.bases[side][1] + length * v];
+  }
+  const dx = ends.left[0] - ends.right[0];
+  const dy = ends.left[1] - ends.right[1];
+  const d = Math.hypot(dx, dy);
+  const r1 = spec.lengths.right_long_arm;
+  const r2 = spec.lengths.left_long_arm;
+  if (d === 0 || d > r1 + r2 || d < Math.abs(r1 - r2)) return;
+  const along = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
+  const across = Math.sqrt(Math.max(0, r1 * r1 - along * along));
+  const side = spec.side_of_head;
+  const head = [
+    ends.right[0] + (along * dx) / d - (side * across * dy) / d,
+    ends.right[1] + (along * dy) / d + (side * across * dx) / d,
+  ];
+  for (const s of ["right", "left"]) {
+    const shortIndex = world.indexOfName.get(spec.links[`${s}_short_arm`]);
+    const longIndex = world.indexOfName.get(spec.links[`${s}_long_arm`]);
+    if (shortIndex === undefined || longIndex === undefined) continue;
+    const a = angles[s];
+    const b = Math.atan2(head[1] - ends[s][1], head[0] - ends[s][0]) / DEG;
+    const shortJoints = spec.joints[`${s}_short_arm`];
+    const pivot = turn(a, shortJoints.proximal);
+    const shortNow = getLocal(shortIndex);
+    setLocalRotation(shortIndex, { ...shortNow.rotation, z: a });
+    setLocal(shortIndex, {
+      x: spec.bases[s][0] - pivot[0],
+      y: spec.bases[s][1] - pivot[1],
+      z: shortNow.location.z,
+    });
+    const hang = turn(b - a, spec.joints[`${s}_long_arm`].proximal);
+    const longNow = getLocal(longIndex);
+    setLocalRotation(longIndex, { ...longNow.rotation, z: b - a });
+    setLocal(longIndex, {
+      x: shortJoints.distal[0] - hang[0],
+      y: shortJoints.distal[1] - hang[1],
+      z: longNow.location.z,
+    });
+    refreshSubtree(shortIndex);
+  }
+}
+
+function applyFiveBar(index, spec) {
+  for (const name of Object.values(spec.links)) {
+    const link = world.indexOfName.get(name);
+    if (link !== undefined) drivenLinks.add(link);
+  }
+  const before = fiveBars.get(index);
+  const target = { ...spec.angles };
+  if (!before || !glideSeconds || reducedMotion?.matches) {
+    fiveBars.set(index, { spec, angles: target, glide: null });
+    placeFiveBar(spec, target);
+    return;
+  }
+  const from = { ...before.angles };
+  fiveBars.set(index, {
+    spec,
+    angles: from,
+    glide: { from, to: target, left: glideSeconds, seconds: glideSeconds },
+  });
+}
+
+function updateFiveBars(delta) {
+  let moving = false;
+  for (const bar of fiveBars.values()) {
+    const glide = bar.glide;
+    if (!glide) continue;
+    glide.left -= delta;
+    const share = glide.left <= 0 ? 1 : 1 - glide.left / glide.seconds;
+    for (const side of ["right", "left"]) {
+      // As the motor turns: never the short way round, which can swing a link the wrong way.
+      bar.angles[side] = glide.from[side] + (glide.to[side] - glide.from[side]) * share;
+    }
+    placeFiveBar(bar.spec, bar.angles);
+    if (glide.left <= 0) bar.glide = null;
+    else moving = true;
+  }
+  return moving;
+}
+
 function applyLocation(index, location) {
   // A travelling part is drawn by its own group and glides there, so it is told the target rather
   // than being moved under it. What stands on it is not part of that group, though - the 96-head
@@ -253,7 +349,8 @@ export function onChange(listener) {
 }
 
 export function updateGlides(delta) {
-  if (!glides.size) return false;
+  const barsMoving = updateFiveBars(delta);
+  if (!glides.size) return barsMoving;
   for (const [index, glide] of glides) {
     glide.left -= delta;
     const done = glide.left <= 0;
@@ -334,13 +431,21 @@ export function applyState(payload) {
     // A state carries the whole of what a resource publishes, so a rotation that is not in it is
     // one that has come back to zero - the sender drops the identity to keep the message small.
     // Taking absence as "unchanged" leaves a joint drawn at the last angle it was turned to.
-    applyRotation(index, states[slot]?.rotation ?? { x: 0, y: 0, z: 0 });
+    if (!drivenLinks.has(index)) {
+      applyRotation(index, states[slot]?.rotation ?? { x: 0, y: 0, z: 0 });
+    }
     refreshOverlays(index, touched);
     applyJoints(index);
   }
   for (const [name, location] of Object.entries(payload.locations ?? {})) {
     const index = world.indexOfName.get(name);
-    if (index !== undefined) applyLocation(index, location);
+    if (index !== undefined && !drivenLinks.has(index)) applyLocation(index, location);
+  }
+  // Placed last: a link's own rotation and location in the same message are not drawn.
+  for (const [name, slot] of Object.entries(of)) {
+    const fiveBar = states[slot]?.five_bar;
+    const index = world.indexOfName.get(name);
+    if (fiveBar && index !== undefined) applyFiveBar(index, fiveBar);
   }
   for (const mesh of touched) {
     mesh.instanceMatrix.needsUpdate = true;
