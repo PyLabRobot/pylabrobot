@@ -1877,7 +1877,8 @@ CAPTURED_STATUS_RUNS = {
   2: [("0000", 8), ("0400", 13), ("0500", 1), ("0400", 12)],
 }
 # board, command, request payload, reply payload; "-" is an empty payload. Each following-error
-# configuration read (command 82) answers as captured: enabled, at most 4.0.
+# configuration read (command 82) answers as captured: enabled, at most 4.0. Last, the captured
+# tare of the bottle and chip sensors; the stop's pump read and their calibration written back.
 CAPTURED_EXCHANGES = """
 0:1:-:34002e00320030002e0036000000
 10:1:-:31002e0030002e0035000000
@@ -1964,6 +1965,25 @@ CAPTURED_EXCHANGES = """
 0:24:0000814e1be8b40a8a40:0000
 0:24:0100814e1be8b40a8a40:0000
 0:24:0200bb34be4f05c2be40:0000
+10:12:0000:0000
+10:13:00000000:-
+10:32:00000000:-
+10:34:00001027:-
+10:30:0000:00000000ade6f33f
+10:30:0000:00000000ade6f33f
+10:21:000000000040ed05873f0000004080232dc0:-
+10:34:00000000:-
+10:12:0100:0000
+10:13:01000000:-
+10:32:01000000:-
+10:34:01001027:-
+10:30:0100:00000000d170f43f
+10:30:0100:000000000029f53f
+10:21:010000000040ed05873f000000a0ca4b2dc0:-
+10:34:01000000:-
+10:14:-:0000
+10:21:000000000040ed05873f000000a0aaa62ac0:-
+10:21:010000000040ed05873f000000a0aaa62ac0:-
 """.split()
 
 

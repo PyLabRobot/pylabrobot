@@ -1218,7 +1218,7 @@ class MantisDriver:
       motor_limits = {motor: await self.request_motor_limits(motor=motor) for motor in MOTORS}
     self._discover_features(motor_limits=motor_limits)
     if self.pump is not None:
-      # Nothing uses the calibration yet: a board 10 that does not answer it does not fail setup.
+      # Kept as read; the tare reads it again, and fails setup where board 10 does not answer.
       try:
         self.configuration.feedback_sensor_parameters = await self.pump._request_calibration()
       except (TimeoutError, CommandRefusedError, FrameError, struct.error) as error:
@@ -1336,8 +1336,8 @@ class MantisDriver:
 
   async def stop(self) -> None:
     """Fail the command in flight and every event waiter; abort the sequencer, stop the
-    motors and park a v4 arm brought up; release the plate clamp, turn the LED bar off, stop reading
-    the link and close it.
+    motors and park a v4 arm brought up; release the plate clamp and the pressure, turn the LED bar
+    off, stop reading the link and close it.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
     nothing is sent: the link is closed.
@@ -1362,6 +1362,11 @@ class MantisDriver:
         await self.plate_clamp._release()
       except Exception:
         logger.warning("[%s] could not release the plate clamp", self.name, exc_info=True)
+    if self.pump is not None and self._connected:
+      try:
+        await self.pump._stop()
+      except Exception:
+        logger.warning("[%s] could not release the pressure", self.name, exc_info=True)
     if self.led_bar is not None and self._connected:
       try:
         await self.led_bar.turn_off()
@@ -1371,8 +1376,8 @@ class MantisDriver:
     await self._close()
 
   async def setup(self, *, skip_arm: bool = False) -> None:
-    """Open the link if it is not open, read the device's configuration and check it, then bring
-    the arm and Z up (``Arm.initialize``). This moves the device.
+    """Open the link if it is not open, read the device's configuration and check it, bring the
+    arm and Z up (``Arm.initialize``), then tare the pressure sensors. This moves the device.
 
     On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
     ``SETUP_DONE_HOLD``, then idle.
@@ -1397,6 +1402,8 @@ class MantisDriver:
       async with self._show_action(action="setup", show_inner_actions=False):
         if self.arm is not None and not skip_arm:
           await self.arm.initialize()
+        if self.pump is not None:
+          await self.pump._tare_pressure_sensors()
         if self.led_bar is not None and self.led_bar.show_actions:
           await self.led_bar._show_setup_done()
     except BaseException:

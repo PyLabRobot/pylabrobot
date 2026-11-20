@@ -19,7 +19,13 @@ from pylabrobot.formulatrix.mantis.driver.features import plate_clamp
 from pylabrobot.formulatrix.mantis.driver.features.arm import Arm
 from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
 from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
-from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
+from pylabrobot.formulatrix.mantis.driver.master_tests import (
+  CALIBRATION_WRITTEN_BACK,
+  PUMP_READ,
+  DriverTestCase,
+  FakeLink,
+  make_answers,
+)
 
 RELEASE = (12, 31, bytes.fromhex("000000000000e83f000000000000000088130000"))
 LOCK_AT_LEVEL_2 = (12, 30, bytes.fromhex("0000000000000000e17a14ae47e1ca3fe8030000"))
@@ -139,14 +145,16 @@ class PlateClampTests(DriverTestCase):
       [RELEASE, STATE_READ, LOCK_AT_LEVEL_2]
       + [STATE_READ] * 8
       + HALT
-      + [STATE_READ, RELEASE, STATE_READ, STATE_READ],
+      + [STATE_READ, RELEASE, STATE_READ, STATE_READ, PUMP_READ, *CALIBRATION_WRITTEN_BACK],
     )
 
   async def test_stop_releases_a_clamp_not_actuated_since_power_on(self):
     self.link.answers[STATE_READ] = [bytes.fromhex(state) for state in STATES_AT_POWER_ON]
     answer_states_in_turn(link=self.link, turns=[(31, STATES_AFTER_RELEASE_AT_POWER_ON)])
     await self.driver.stop()
-    self.assertEqual(self.sent(), HALT + [STATE_READ, RELEASE, STATE_READ])
+    self.assertEqual(
+      self.sent(), HALT + [STATE_READ, RELEASE, STATE_READ, PUMP_READ, *CALIBRATION_WRITTEN_BACK]
+    )
 
 
 class PlateClampDiscoveryTests(DriverTestCase):
@@ -187,7 +195,6 @@ PNEUMATIC_CLAMP_BLOCK = {"controller": "pressure_regulator", "auxiliary_output":
 VALVE_READ = (10, 41, bytes.fromhex("0200"))
 VALVE_ON = (10, 42, bytes.fromhex("02000100"))
 VALVE_OFF = (10, 42, bytes.fromhex("02000000"))
-PUMP_READ = (10, 14, b"")
 PUMP_ON = (10, 15, bytes.fromhex("0100"))
 PUMP_OFF = (10, 15, bytes.fromhex("0000"))
 REPLY_OFF, REPLY_ON, REPLY_SET = bytes.fromhex("0000"), bytes.fromhex("0100"), b""
@@ -284,25 +291,30 @@ class PneumaticPlateClampTests(DriverTestCase):
     )
 
   async def test_an_existing_air_supply_is_preserved(self):
-    """A clamp must not shut down an air pump it did not start."""
+    """A clamp must not shut down an air pump it did not start; stop releases the pressure."""
     driver, link, clamp = await self.make_clamp(pump_on=True)
     await clamp.lock()
     await clamp.unlock()
-    await driver.stop()
     commands = pressure_commands(link)
     self.assertNotIn(PUMP_ON, commands)
     self.assertNotIn(PUMP_OFF, commands)
     self.assertEqual(link.answers[PUMP_READ], [REPLY_ON])
     self.assertEqual(link.answers[VALVE_READ], [REPLY_OFF])
+    await driver.stop()
+    self.assertEqual(
+      pressure_commands(link)[len(commands) :][-3:], [PUMP_READ, PUMP_OFF, PUMP_READ]
+    )
+    self.assertEqual(link.answers[PUMP_READ], [REPLY_OFF])
 
   async def test_stop_releases_a_held_plate_and_restores_the_pump(self):
     """Shutdown releases the valve before switching off an air supply owned by the clamp."""
     driver, link, clamp = await self.make_clamp()
     await clamp.lock()
     await driver.stop()
+    # The pump the clamp started is off again before the pressure release reads it.
     self.assertEqual(
-      pressure_commands(link)[-6:],
-      [VALVE_READ, VALVE_OFF, VALVE_READ, PUMP_READ, PUMP_OFF, PUMP_READ],
+      pressure_commands(link)[-7:],
+      [VALVE_READ, VALVE_OFF, VALVE_READ, PUMP_READ, PUMP_OFF, PUMP_READ, PUMP_READ],
     )
     self.assertEqual(link.answers[VALVE_READ], [REPLY_OFF])
     self.assertEqual(link.answers[PUMP_READ], [REPLY_OFF])
@@ -367,7 +379,8 @@ class PneumaticPlateClampTests(DriverTestCase):
         driver = self.make_driver(link=link, declared_configuration_json=self.path)
         with self.assertRaises(MantisConfigurationError):
           await driver.setup(skip_arm=True)
-        self.assertEqual(pressure_commands(link), [])
+        actuated = [command for command in pressure_commands(link) if command[1] in (15, 42)]
+        self.assertEqual(actuated, [])
 
   async def test_request_state_refuses_with_nothing_sent(self):
     """A valve on a pressure-board output has no clamp state; its readback is the valve."""
