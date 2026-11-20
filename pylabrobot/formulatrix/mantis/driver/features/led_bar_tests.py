@@ -263,9 +263,10 @@ class SetupAndStopTests(LedBarTestCase):
   async def test_a_turn_off_that_fails_still_lets_the_next_setup_show(self):
     driver = await self.set_up_bar()
     del self.link.answers[color_write(colors=[OFF] * 20)]
-    driver.default_read_timeout = 0.25
+    driver.default_read_timeout = 0.25  # only the turn-off write is never answered
     with self.assertLogs("pylabrobot.formulatrix.mantis.driver.master", level="WARNING"):
       await driver.stop()
+    driver.default_read_timeout = self.default_read_timeout  # every write below is answered
     self.sent_before = len(self.link.written)
     await driver.setup(skip_arm=True)
     self.assertEqual(self.states(), [BLUE, GREEN, "idle"])
