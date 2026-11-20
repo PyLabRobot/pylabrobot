@@ -83,9 +83,14 @@ _ZTOUCH_MINIMUM_SEARCH_SPEED_PERCENT = 5
 # How near the column the gripper may be sent, in mm, seen from above; and how near the base plate,
 # seen from above or from its top face, whichever is further.
 _COLUMN_CLEARANCE = 5.0
-# Position tolerance of a joint stopped at its target: a pose read within it of a soft limit counts
-# as within the limit, as the controller does. Targets are held to the exact limit.
-_JOINT_OVERSHOOT_TOLERANCE = 0.001
+# Position tolerance of each joint stopped at its target, the largest error read on the device: a
+# pose read within it of a soft limit counts as within the limit. Targets are held to the limit.
+_JOINT_OVERSHOOT_TOLERANCES: Dict[PreciseFlexAxis, float] = {
+  PreciseFlexAxis.BASE: 0.052,
+  PreciseFlexAxis.SHOULDER: 0.013,
+  PreciseFlexAxis.ELBOW: 0.004,
+  PreciseFlexAxis.WRIST: 0.004,
+}
 
 
 def _snap_to_current(
@@ -1133,7 +1138,7 @@ class PreciseFlexArm:
   )
 
   def _axes_outside_soft_limits(
-    self, joints: JointState, tolerance: float = 0.0
+    self, joints: JointState, tolerances: Optional[Dict[PreciseFlexAxis, float]] = None
   ) -> Dict[PreciseFlexAxis, tuple]:
     """Axes whose value lies outside their soft limit, as ``axis -> (value, (lo, hi))``.
 
@@ -1143,11 +1148,12 @@ class PreciseFlexArm:
 
     Args:
       joints: the joint state to check.
-      tolerance: how far past a limit a value still counts as within it.
+      tolerances: per axis, how far past a limit a value still counts as within it; 0 if left out.
     """
     outside: Dict[PreciseFlexAxis, tuple] = {}
     for axis, (lo, hi) in self._get_soft_limits().items():
       value = joints.get(axis)
+      tolerance = (tolerances or {}).get(axis, 0.0)
       if value is not None and not (lo - tolerance <= value <= hi + tolerance):
         outside[axis] = (value, (lo, hi))
     return outside
@@ -1184,7 +1190,7 @@ class PreciseFlexArm:
       ValueError: If the target is out of range, as a pose taught in freedrive can be; re-teach it.
     """
     out_of_range = self._axes_outside_soft_limits(
-      joints=current, tolerance=_JOINT_OVERSHOOT_TOLERANCE
+      joints=current, tolerances=_JOINT_OVERSHOOT_TOLERANCES
     )
     if out_of_range:
       raise OutOfRangeOfMotionError(
@@ -1527,7 +1533,7 @@ class PreciseFlexArm:
     if speed_percent is None:
       speed_percent = self.default_recovery_speed_percent
     joints = await self.request_joint_state()
-    outside = self._axes_outside_soft_limits(joints=joints, tolerance=_JOINT_OVERSHOOT_TOLERANCE)
+    outside = self._axes_outside_soft_limits(joints=joints, tolerances=_JOINT_OVERSHOOT_TOLERANCES)
     if not outside:
       return {}
     prior_speed = await self._request_speed()
@@ -1588,7 +1594,7 @@ class PreciseFlexArm:
       return
 
     outside = self._axes_outside_soft_limits(
-      joints=await self.request_joint_state(), tolerance=_JOINT_OVERSHOOT_TOLERANCE
+      joints=await self.request_joint_state(), tolerances=_JOINT_OVERSHOOT_TOLERANCES
     )
     if not outside:
       return
@@ -1600,7 +1606,7 @@ class PreciseFlexArm:
     if self._driver._recover_out_of_range:
       await self.recover_axes_within_limits()
       outside = self._axes_outside_soft_limits(
-        joints=await self.request_joint_state(), tolerance=_JOINT_OVERSHOOT_TOLERANCE
+        joints=await self.request_joint_state(), tolerances=_JOINT_OVERSHOOT_TOLERANCES
       )
     if outside:
       raise OutOfRangeOfMotionError(

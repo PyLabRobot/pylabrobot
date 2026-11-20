@@ -359,11 +359,11 @@ class TestPreciseFlex400AutoRecoverOnMove(unittest.IsolatedAsyncioTestCase):
   async def test_a_joint_past_its_limit_within_tolerance_still_moves(self):
     """A joint sent to its limit can stop just past it, within tolerance: the next move is sent."""
     self.arm._recover_out_of_range = False
-    self._stub("0 0.0 11.999 0.0 0")  # elbow 0.001 past its limit of 12
+    self._stub("0 0.0 11.996 0.0 0")  # elbow 0.004 past its limit of 12, its tolerance
     await self.arm.arm.move_to_joint_state({PreciseFlexAxis.ELBOW: 90.0})
     self.assertEqual(self._cmds("MoveOneAxis"), [])
     self.assertEqual(len(self._cmds("moveJ")), 1)
-    self._stub("0 0.0 11.998 0.0 0")  # beyond the tolerance: out of range
+    self._stub("0 0.0 11.995 0.0 0")  # beyond the tolerance: out of range
     with self.assertRaises(OutOfRangeOfMotionError):
       await self.arm.arm.move_to_joint_state({PreciseFlexAxis.ELBOW: 90.0})
 
