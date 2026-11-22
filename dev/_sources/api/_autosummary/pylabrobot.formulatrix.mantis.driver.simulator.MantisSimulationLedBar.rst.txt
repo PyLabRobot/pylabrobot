@@ -17,6 +17,8 @@ pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationLedBar
    
       ~MantisSimulationLedBar.dispense_progress_color
       ~MantisSimulationLedBar.error_color
+      ~MantisSimulationLedBar.pick_up_chip_color
+      ~MantisSimulationLedBar.place_chip_color
       ~MantisSimulationLedBar.setup_color
       ~MantisSimulationLedBar.setup_done_color
    

@@ -871,7 +871,7 @@
 <td><p>the chip in each input slot: serial, chip type, date of manufacture</p></td>
 </tr>
 <tr class="row-odd"><td><p>LED bar (v4)</p></td>
-<td><p>one colour, one per LED, or an animation; shows setup, with the arm’s bring-up; off at stop</p></td>
+<td><p>shows one colour, a colour per LED or an animation; lit during setup, including the arm’s bring-up, and during each chip pick-up and placement; off at stop</p></td>
 </tr>
 <tr class="row-even"><td><p>Unit configuration</p></td>
 <td><p>the clamp’s lock levels, each slot’s RFID antenna, the arm’s calibration, its routes and the stage transform, from the unit’s configuration folder or a saved file; the first two else from a recording of its generation</p></td>
@@ -1166,6 +1166,26 @@ On a v3, setup seats the arms against their stops, backs off relative to their l
 </div>
 </div>
 </section>
+<section id="picking-up-a-chip-v4">
+<h3>Picking up a chip (v4)<a class="headerlink" href="#picking-up-a-chip-v4" title="Link to this heading">#</a></h3>
+<p>Place a chip in an input slot. <code class="docutils literal notranslate"><span class="pre">pick_up_chip(slot=...)</span></code> picks it up along the unit’s path into that slot, from wherever the head stands, and returns to idle; <code class="docutils literal notranslate"><span class="pre">attached_chip</span></code> names the slot the chip came from.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">pick_up_chip</span><span class="p">(</span><span class="n">slot</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">attached_chip</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">place_chip(slot=...)</span></code> places the chip on the head back into the slot it came from, along that slot’s path played backwards, and refuses any other slot; <code class="docutils literal notranslate"><span class="pre">return_chip()</span></code> does the same without naming the slot. <code class="docutils literal notranslate"><span class="pre">stop()</span></code> refuses while a chip is on the head: it halts and parks, then stays connected so the chip can be returned. <code class="docutils literal notranslate"><span class="pre">stop(accept_chip_left_on_head=True)</span></code> stops with it there.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">arm</span><span class="o">.</span><span class="n">return_chip</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
 </section>
 <section id="pressure">
 <h2>Pressure<a class="headerlink" href="#pressure" title="Link to this heading">#</a></h2>
@@ -1359,7 +1379,7 @@ On a v3, setup seats the arms against their stops, backs off relative to their l
 </section>
 <section id="led-bar">
 <h2>LED bar<a class="headerlink" href="#led-bar" title="Link to this heading">#</a></h2>
-<p>The v4’s LED bar shows what the device does: blue while setup runs, green for a second when it is done, then the idle animation; off at stop. An action that fails leaves it red. It exists only on a v4 whose LC3 board (board 12) answered at setup; a v3 has none. Its LED count is the unit’s (<code class="docutils literal notranslate"><span class="pre">NumberOfLed</span></code> in <code class="docutils literal notranslate"><span class="pre">Device.config</span></code>), as declared:</p>
+<p>The v4’s LED bar shows what the device does: blue while setup runs, green for a second when it is done, cyan while a chip is picked up, violet while one is placed, then the idle animation; off at stop. An action that fails leaves it red. It exists only on a v4 whose LC3 board (board 12) answered at setup; a v3 has none. Its LED count is the unit’s (<code class="docutils literal notranslate"><span class="pre">NumberOfLed</span></code> in <code class="docutils literal notranslate"><span class="pre">Device.config</span></code>), as declared:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">number_of_leds</span>
@@ -1383,7 +1403,7 @@ On a v3, setup seats the arms against their stops, backs off relative to their l
 </div>
 </div>
 </div>
-<p>Each action’s colour is an attribute of the bar (<code class="docutils literal notranslate"><span class="pre">setup_color</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_done_color</span></code>, <code class="docutils literal notranslate"><span class="pre">error_color</span></code>, <code class="docutils literal notranslate"><span class="pre">dispense_progress_color</span></code>, …), checked when it is set; each bar has its own:</p>
+<p>Each action’s colour is an attribute of the bar (<code class="docutils literal notranslate"><span class="pre">setup_color</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_done_color</span></code>, <code class="docutils literal notranslate"><span class="pre">error_color</span></code>, <code class="docutils literal notranslate"><span class="pre">dispense_progress_color</span></code>, <code class="docutils literal notranslate"><span class="pre">pick_up_chip_color</span></code>, <code class="docutils literal notranslate"><span class="pre">place_chip_color</span></code>), checked when it is set; each bar has its own:</p>
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mantis</span><span class="o">.</span><span class="n">led_bar</span><span class="o">.</span><span class="n">setup_color</span> <span class="o">=</span> <span class="s2">"#FF0080"</span>
@@ -1526,6 +1546,7 @@ On a v3, setup seats the arms against their stops, backs off relative to their l
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arm">Arm</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#moving-the-arm-v4">Moving the arm (v4)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#picking-up-a-chip-v4">Picking up a chip (v4)</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pressure">Pressure</a></li>

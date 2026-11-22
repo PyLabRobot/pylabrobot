@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.led\_bar.LedBar.pick\_up\_chip\_color
+===================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.led_bar
+
+.. autoproperty:: LedBar.pick_up_chip_color
