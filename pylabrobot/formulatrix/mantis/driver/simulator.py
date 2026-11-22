@@ -3,9 +3,11 @@
 import asyncio
 import dataclasses
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Literal, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources.formulatrix.mantis_chips import MantisChip
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .arm_kinematics import compute_device_position, compute_device_rate
 from .configuration import (
@@ -16,7 +18,7 @@ from .configuration import (
   configuration_from_json,
   read_configuration,
 )
-from .errors import MantisConfigurationError, MantisTimeoutError
+from .errors import MantisConfigurationError, MantisMotionError, MantisTimeoutError
 from .features.arm import (
   ARM_MOTORS,
   MOTOR_HOMED,
@@ -223,9 +225,40 @@ class MantisSimulationArm(Arm):
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
     self._statuses: Dict[int, int] = {0: 0, 1: 0, Z_MOTOR: 0}
     self._homed: Set[int] = set()
+    # The device's chip spots by slot, set by its setup; a pick-up or placement checks them.
+    self._chip_spots: Optional[Dict[int, ResourceHolder]] = None
 
   def _check_calibrated(self) -> None:
     """Pass: a simulated arm needs only its offsets, which it always has."""
+
+  async def _check_chip_slot_tag(
+    self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
+  ) -> None:
+    """Check a chip slot against the device's chip spots instead of its tag: a pick-up needs a
+    ``MantisChip`` there, a placement none. The chip on the head counts as out of its spot.
+
+    Without chip spots (a driver used without its device), nothing is checked.
+    """
+    if self._chip_spots is None:
+      logger.info(
+        "[%s] simulated: no chip spots, so chip slot %d is not checked for %s",
+        self._driver.name,
+        slot,
+        action,
+      )
+      return
+    chip_spot = self._chip_spots.get(slot)
+    chip = chip_spot.resource if chip_spot is not None else None
+    held = isinstance(chip, MantisChip) and self._attached_chip != slot
+    if action == "pick_up_chip" and not held:
+      raise MantisMotionError(
+        f"{self._driver.name}: chip slot {slot} holds no chip in the model; nothing moves"
+      )
+    if action == "place_chip" and held:
+      raise MantisMotionError(
+        f"{self._driver.name}: chip slot {slot} already holds chip "
+        f"{chip.name if chip is not None else ''} in the model; nothing moves"
+      )
 
   def _set_position(self, *, motor: int, position: float) -> None:
     """Move a motor: the controller holds it there, and an arm motor's encoder reads it."""
