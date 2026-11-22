@@ -444,13 +444,19 @@ class PreciseFlexDriver:
 
   @evented_operation(
     "precise_flex.setup",
-    lambda self, skip_home=False, skip_vision_setup=False: {
+    lambda self, skip_home=False, skip_vision_setup=False, with_light_greeting=True: {
       "device": self._controller_reference(),
       "skip_home": skip_home,
       "skip_vision_setup": skip_vision_setup,
+      "with_light_greeting": with_light_greeting,
     },
   )
-  async def setup(self, skip_home: bool = False, skip_vision_setup: bool = False):
+  async def setup(
+    self,
+    skip_home: bool = False,
+    skip_vision_setup: bool = False,
+    with_light_greeting: bool = True,
+  ):
     """Bring the arm fully up: ``connect``, ``initialize``, then ``home`` unless skipped.
 
     ``initialize`` reads the configuration, and setup raises if that fails. The arm is then
@@ -466,6 +472,7 @@ class PreciseFlexDriver:
       skip_home: If True, skip the homing step during setup.
       skip_vision_setup: If True, leave ``self.vision`` unset even when a vision module is detected.
         Mirrors STAR's ``skip_*`` setup flags.
+      with_light_greeting: fade the front LED on and off last, where vision can.
     """
     try:
       await self.connect()
@@ -476,6 +483,8 @@ class PreciseFlexDriver:
       await self.arm._handle_out_of_range_axes()
       if not skip_vision_setup and configuration.has_vision_server:
         await self._setup_vision(self._vision_host)
+        if with_light_greeting and self.vision is not None:
+          await self.vision._light_greeting()
     except BaseException:
       try:
         for release in (self.detach, self.power_off_robot, self._exit, self._close_vision_server):
@@ -688,11 +697,22 @@ class PreciseFlexDriver:
 
   @evented_operation(
     "precise_flex.stop",
-    lambda self: {"device": self._controller_reference()},
+    lambda self, with_light_farewell=True: {
+      "device": self._controller_reference(),
+      "with_light_farewell": with_light_farewell,
+    },
   )
-  async def stop(self):
-    """Hand the arm back and close every connection (``disconnect``)."""
-    await self.disconnect()
+  async def stop(self, with_light_farewell: bool = True):
+    """Hand the arm back and close every connection (``disconnect``).
+
+    Args:
+      with_light_farewell: flash the front and the bottom LEDs twice first, where vision can.
+    """
+    try:
+      if with_light_farewell and self._connected and self.vision is not None:
+        await self.vision._light_farewell()
+    finally:
+      await self.disconnect()
 
   # -- device-level commands -------------------------------------------------
 
