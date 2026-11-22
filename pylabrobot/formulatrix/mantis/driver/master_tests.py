@@ -271,7 +271,7 @@ class DriverTestCase(unittest.IsolatedAsyncioTestCase):
   async def set_up_driver(self, *, link: FakeLink, skip_arm: bool = True, **kwargs) -> MantisDriver:
     driver = self.make_driver(link=link, **kwargs)
     await driver.setup(skip_arm=skip_arm)
-    self.addAsyncCleanup(driver.stop)
+    self.addAsyncCleanup(driver.stop, accept_chip_left_on_head=True)
     return driver
 
 
