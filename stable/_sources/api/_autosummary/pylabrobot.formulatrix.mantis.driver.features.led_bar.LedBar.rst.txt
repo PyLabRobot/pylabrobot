@@ -17,6 +17,8 @@ pylabrobot.formulatrix.mantis.driver.features.led\_bar.LedBar
    
       ~LedBar.dispense_progress_color
       ~LedBar.error_color
+      ~LedBar.pick_up_chip_color
+      ~LedBar.place_chip_color
       ~LedBar.setup_color
       ~LedBar.setup_done_color
    

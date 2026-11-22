@@ -589,9 +589,16 @@
 <h1>pylabrobot.formulatrix.mantis.MantisDevice.stop<a class="headerlink" href="#pylabrobot-formulatrix-mantis-mantisdevice-stop" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.MantisDevice.stop">
-<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisDevice.</span></span><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.MantisDevice.stop" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">MantisDevice.</span></span><span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">accept_chip_left_on_head</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.MantisDevice.stop" title="Link to this definition">#</a></dt>
 <dd><p>Stop the motors, park an arm brought up, release the clamp and disconnect.</p>
 <dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>accept_chip_left_on_head</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – stop with a chip on the head instead of refusing.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError"><strong>MantisMotionError</strong></a> – if a chip is on the head, unless <code class="docutils literal notranslate"><span class="pre">accept_chip_left_on_head</span></code>; the arm is
+    halted and parked, and the device stays connected for <code class="docutils literal notranslate"><span class="pre">arm.return_chip</span></code>.</p>
+</dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>None</p>
 </dd>
