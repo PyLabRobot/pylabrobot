@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_absolute\_location
+=================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_absolute_location

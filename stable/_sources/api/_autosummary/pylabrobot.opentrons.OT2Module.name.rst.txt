@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.name
+===================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Module.name

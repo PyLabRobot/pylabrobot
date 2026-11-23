@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.check\_can\_drop\_resource\_here
+==========================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.check_can_drop_resource_here

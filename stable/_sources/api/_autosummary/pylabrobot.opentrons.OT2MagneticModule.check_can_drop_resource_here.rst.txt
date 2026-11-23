@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.check\_can\_drop\_resource\_here
+=======================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.check_can_drop_resource_here

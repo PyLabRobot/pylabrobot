@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.deregister\_will\_assign\_resource\_callback
+======================================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.deregister_will_assign_resource_callback

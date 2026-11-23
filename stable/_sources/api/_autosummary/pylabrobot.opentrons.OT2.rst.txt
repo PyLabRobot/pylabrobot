@@ -38,6 +38,7 @@ pylabrobot.opentrons.OT2
       ~OT2.get_unfinished_run
       ~OT2.home
       ~OT2.list_connected_modules
+      ~OT2.load_module
       ~OT2.set_rail_lights
       ~OT2.setup
       ~OT2.stop

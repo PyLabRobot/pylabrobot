@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.engage
+=============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.engage

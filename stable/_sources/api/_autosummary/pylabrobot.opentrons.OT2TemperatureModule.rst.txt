@@ -1,0 +1,94 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2TemperatureModule
+=========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2TemperatureModule
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2TemperatureModule.is_loaded
+      ~OT2TemperatureModule.labware_offset
+      ~OT2TemperatureModule.location
+      ~OT2TemperatureModule.maximum_temperature
+      ~OT2TemperatureModule.minimum_temperature
+      ~OT2TemperatureModule.module_id
+      ~OT2TemperatureModule.name
+      ~OT2TemperatureModule.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2TemperatureModule.__init__
+      ~OT2TemperatureModule.assign_child_by_anchor
+      ~OT2TemperatureModule.assign_child_resource
+      ~OT2TemperatureModule.at
+      ~OT2TemperatureModule.center
+      ~OT2TemperatureModule.centers
+      ~OT2TemperatureModule.check_can_drop_resource_here
+      ~OT2TemperatureModule.copy
+      ~OT2TemperatureModule.deactivate
+      ~OT2TemperatureModule.deregister_did_assign_resource_callback
+      ~OT2TemperatureModule.deregister_did_unassign_resource_callback
+      ~OT2TemperatureModule.deregister_state_update_callback
+      ~OT2TemperatureModule.deregister_will_assign_resource_callback
+      ~OT2TemperatureModule.deregister_will_unassign_resource_callback
+      ~OT2TemperatureModule.deserialize
+      ~OT2TemperatureModule.find_resource
+      ~OT2TemperatureModule.find_resources
+      ~OT2TemperatureModule.get_absolute_location
+      ~OT2TemperatureModule.get_absolute_rotation
+      ~OT2TemperatureModule.get_absolute_size_x
+      ~OT2TemperatureModule.get_absolute_size_y
+      ~OT2TemperatureModule.get_absolute_size_z
+      ~OT2TemperatureModule.get_all_children
+      ~OT2TemperatureModule.get_anchor
+      ~OT2TemperatureModule.get_default_child_location
+      ~OT2TemperatureModule.get_highest_known_point
+      ~OT2TemperatureModule.get_location_wrt
+      ~OT2TemperatureModule.get_resource
+      ~OT2TemperatureModule.get_root
+      ~OT2TemperatureModule.get_size_x
+      ~OT2TemperatureModule.get_size_y
+      ~OT2TemperatureModule.get_size_z
+      ~OT2TemperatureModule.has_resource
+      ~OT2TemperatureModule.is_in_subtree_of
+      ~OT2TemperatureModule.load_all_state
+      ~OT2TemperatureModule.load_from_json_file
+      ~OT2TemperatureModule.load_state
+      ~OT2TemperatureModule.load_state_from_file
+      ~OT2TemperatureModule.named
+      ~OT2TemperatureModule.register_did_assign_resource_callback
+      ~OT2TemperatureModule.register_did_unassign_resource_callback
+      ~OT2TemperatureModule.register_state_update_callback
+      ~OT2TemperatureModule.register_will_assign_resource_callback
+      ~OT2TemperatureModule.register_will_unassign_resource_callback
+      ~OT2TemperatureModule.request_status
+      ~OT2TemperatureModule.rotate
+      ~OT2TemperatureModule.rotate_to
+      ~OT2TemperatureModule.rotated
+      ~OT2TemperatureModule.save
+      ~OT2TemperatureModule.save_state_to_file
+      ~OT2TemperatureModule.serialize
+      ~OT2TemperatureModule.serialize_all_state
+      ~OT2TemperatureModule.serialize_state
+      ~OT2TemperatureModule.set_temperature
+      ~OT2TemperatureModule.unassign
+      ~OT2TemperatureModule.unassign_child_resource
+      ~OT2TemperatureModule.wait_for_temperature
+   
+   

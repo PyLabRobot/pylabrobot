@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.is\_in\_subtree\_of
+==================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.is_in_subtree_of

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.request\_status
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.request_status

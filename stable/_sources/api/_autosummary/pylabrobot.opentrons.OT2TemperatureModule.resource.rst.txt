@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.resource
+==================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2TemperatureModule.resource

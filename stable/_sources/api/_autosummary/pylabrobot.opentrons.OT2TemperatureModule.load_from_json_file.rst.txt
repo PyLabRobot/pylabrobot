@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.load\_from\_json\_file
+================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.load_from_json_file

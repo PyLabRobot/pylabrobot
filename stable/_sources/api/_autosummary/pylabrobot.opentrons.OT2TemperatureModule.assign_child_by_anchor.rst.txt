@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.assign\_child\_by\_anchor
+===================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.assign_child_by_anchor

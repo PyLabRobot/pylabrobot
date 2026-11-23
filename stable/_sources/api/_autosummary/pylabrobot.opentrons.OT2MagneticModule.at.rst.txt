@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.at
+=========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.at

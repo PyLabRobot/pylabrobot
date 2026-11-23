@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.at
+=================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.at

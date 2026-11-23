@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.get\_anchor
+==================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.get_anchor

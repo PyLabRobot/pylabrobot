@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.check\_can\_drop\_resource\_here
+===============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.check_can_drop_resource_here

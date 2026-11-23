@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_size\_y
+======================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_size_y

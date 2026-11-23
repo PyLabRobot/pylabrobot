@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.get\_location\_wrt
+=================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.get_location_wrt

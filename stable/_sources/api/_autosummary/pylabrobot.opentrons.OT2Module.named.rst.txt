@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.named
+====================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.named

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.is\_loaded
+=========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Module.is_loaded

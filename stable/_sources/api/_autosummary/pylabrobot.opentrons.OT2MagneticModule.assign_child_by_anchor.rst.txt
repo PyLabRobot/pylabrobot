@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.assign\_child\_by\_anchor
+================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.assign_child_by_anchor

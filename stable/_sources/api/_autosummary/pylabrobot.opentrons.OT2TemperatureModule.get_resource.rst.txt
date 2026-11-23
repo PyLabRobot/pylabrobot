@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_resource
+=======================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_resource

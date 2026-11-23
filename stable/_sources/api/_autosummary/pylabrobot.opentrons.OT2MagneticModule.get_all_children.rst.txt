@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.get\_all\_children
+=========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.get_all_children

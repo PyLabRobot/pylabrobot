@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.save\_state\_to\_file
+====================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.save_state_to_file

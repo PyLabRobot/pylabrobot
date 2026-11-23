@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.find\_resources
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.find_resources

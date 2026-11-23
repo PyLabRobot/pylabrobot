@@ -1,0 +1,88 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2Module
+==============================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2Module
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2Module.is_loaded
+      ~OT2Module.labware_offset
+      ~OT2Module.location
+      ~OT2Module.module_id
+      ~OT2Module.name
+      ~OT2Module.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2Module.__init__
+      ~OT2Module.assign_child_by_anchor
+      ~OT2Module.assign_child_resource
+      ~OT2Module.at
+      ~OT2Module.center
+      ~OT2Module.centers
+      ~OT2Module.check_can_drop_resource_here
+      ~OT2Module.copy
+      ~OT2Module.deregister_did_assign_resource_callback
+      ~OT2Module.deregister_did_unassign_resource_callback
+      ~OT2Module.deregister_state_update_callback
+      ~OT2Module.deregister_will_assign_resource_callback
+      ~OT2Module.deregister_will_unassign_resource_callback
+      ~OT2Module.deserialize
+      ~OT2Module.find_resource
+      ~OT2Module.find_resources
+      ~OT2Module.get_absolute_location
+      ~OT2Module.get_absolute_rotation
+      ~OT2Module.get_absolute_size_x
+      ~OT2Module.get_absolute_size_y
+      ~OT2Module.get_absolute_size_z
+      ~OT2Module.get_all_children
+      ~OT2Module.get_anchor
+      ~OT2Module.get_default_child_location
+      ~OT2Module.get_highest_known_point
+      ~OT2Module.get_location_wrt
+      ~OT2Module.get_resource
+      ~OT2Module.get_root
+      ~OT2Module.get_size_x
+      ~OT2Module.get_size_y
+      ~OT2Module.get_size_z
+      ~OT2Module.has_resource
+      ~OT2Module.is_in_subtree_of
+      ~OT2Module.load_all_state
+      ~OT2Module.load_from_json_file
+      ~OT2Module.load_state
+      ~OT2Module.load_state_from_file
+      ~OT2Module.named
+      ~OT2Module.register_did_assign_resource_callback
+      ~OT2Module.register_did_unassign_resource_callback
+      ~OT2Module.register_state_update_callback
+      ~OT2Module.register_will_assign_resource_callback
+      ~OT2Module.register_will_unassign_resource_callback
+      ~OT2Module.rotate
+      ~OT2Module.rotate_to
+      ~OT2Module.rotated
+      ~OT2Module.save
+      ~OT2Module.save_state_to_file
+      ~OT2Module.serialize
+      ~OT2Module.serialize_all_state
+      ~OT2Module.serialize_state
+      ~OT2Module.unassign
+      ~OT2Module.unassign_child_resource
+   
+   

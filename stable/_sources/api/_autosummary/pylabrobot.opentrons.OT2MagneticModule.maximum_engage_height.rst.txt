@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.maximum\_engage\_height
+==============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2MagneticModule.maximum_engage_height

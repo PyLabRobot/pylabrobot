@@ -19,6 +19,7 @@ pylabrobot.opentrons.ModuleInfo
       ~ModuleInfo.module_type
       ~ModuleInfo.serial_number
       ~ModuleInfo.id
+      ~ModuleInfo.data
    
    
 

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.save\_state\_to\_file
+============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.save_state_to_file

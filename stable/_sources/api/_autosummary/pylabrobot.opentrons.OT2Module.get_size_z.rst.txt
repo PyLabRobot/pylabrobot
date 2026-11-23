@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.get\_size\_z
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.get_size_z

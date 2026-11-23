@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.register\_state\_update\_callback
+===========================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.register_state_update_callback

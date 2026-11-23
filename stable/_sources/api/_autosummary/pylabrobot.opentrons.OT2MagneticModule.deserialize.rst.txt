@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.deserialize
+==================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.deserialize

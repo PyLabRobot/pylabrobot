@@ -1,0 +1,6 @@
+pylabrobot.opentrons.MagneticModuleStatus.height
+================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: MagneticModuleStatus.height

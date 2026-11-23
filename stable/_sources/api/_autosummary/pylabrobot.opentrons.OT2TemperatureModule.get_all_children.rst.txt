@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_all\_children
+============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_all_children

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.find\_resource
+=====================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.find_resource
