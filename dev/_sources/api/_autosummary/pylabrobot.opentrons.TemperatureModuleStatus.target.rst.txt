@@ -1,0 +1,6 @@
+pylabrobot.opentrons.TemperatureModuleStatus.target
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: TemperatureModuleStatus.target

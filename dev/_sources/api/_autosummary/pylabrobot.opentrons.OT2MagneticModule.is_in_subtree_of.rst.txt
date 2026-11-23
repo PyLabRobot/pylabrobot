@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.is\_in\_subtree\_of
+==========================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.is_in_subtree_of

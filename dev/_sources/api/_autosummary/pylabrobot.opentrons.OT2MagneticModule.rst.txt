@@ -1,0 +1,92 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.OT2MagneticModule
+======================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: OT2MagneticModule
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2MagneticModule.is_loaded
+      ~OT2MagneticModule.labware_offset
+      ~OT2MagneticModule.location
+      ~OT2MagneticModule.maximum_engage_height
+      ~OT2MagneticModule.module_id
+      ~OT2MagneticModule.name
+      ~OT2MagneticModule.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~OT2MagneticModule.__init__
+      ~OT2MagneticModule.assign_child_by_anchor
+      ~OT2MagneticModule.assign_child_resource
+      ~OT2MagneticModule.at
+      ~OT2MagneticModule.center
+      ~OT2MagneticModule.centers
+      ~OT2MagneticModule.check_can_drop_resource_here
+      ~OT2MagneticModule.copy
+      ~OT2MagneticModule.deregister_did_assign_resource_callback
+      ~OT2MagneticModule.deregister_did_unassign_resource_callback
+      ~OT2MagneticModule.deregister_state_update_callback
+      ~OT2MagneticModule.deregister_will_assign_resource_callback
+      ~OT2MagneticModule.deregister_will_unassign_resource_callback
+      ~OT2MagneticModule.deserialize
+      ~OT2MagneticModule.disengage
+      ~OT2MagneticModule.engage
+      ~OT2MagneticModule.find_resource
+      ~OT2MagneticModule.find_resources
+      ~OT2MagneticModule.get_absolute_location
+      ~OT2MagneticModule.get_absolute_rotation
+      ~OT2MagneticModule.get_absolute_size_x
+      ~OT2MagneticModule.get_absolute_size_y
+      ~OT2MagneticModule.get_absolute_size_z
+      ~OT2MagneticModule.get_all_children
+      ~OT2MagneticModule.get_anchor
+      ~OT2MagneticModule.get_default_child_location
+      ~OT2MagneticModule.get_highest_known_point
+      ~OT2MagneticModule.get_location_wrt
+      ~OT2MagneticModule.get_resource
+      ~OT2MagneticModule.get_root
+      ~OT2MagneticModule.get_size_x
+      ~OT2MagneticModule.get_size_y
+      ~OT2MagneticModule.get_size_z
+      ~OT2MagneticModule.has_resource
+      ~OT2MagneticModule.is_in_subtree_of
+      ~OT2MagneticModule.load_all_state
+      ~OT2MagneticModule.load_from_json_file
+      ~OT2MagneticModule.load_state
+      ~OT2MagneticModule.load_state_from_file
+      ~OT2MagneticModule.named
+      ~OT2MagneticModule.register_did_assign_resource_callback
+      ~OT2MagneticModule.register_did_unassign_resource_callback
+      ~OT2MagneticModule.register_state_update_callback
+      ~OT2MagneticModule.register_will_assign_resource_callback
+      ~OT2MagneticModule.register_will_unassign_resource_callback
+      ~OT2MagneticModule.request_status
+      ~OT2MagneticModule.rotate
+      ~OT2MagneticModule.rotate_to
+      ~OT2MagneticModule.rotated
+      ~OT2MagneticModule.save
+      ~OT2MagneticModule.save_state_to_file
+      ~OT2MagneticModule.serialize
+      ~OT2MagneticModule.serialize_all_state
+      ~OT2MagneticModule.serialize_state
+      ~OT2MagneticModule.unassign
+      ~OT2MagneticModule.unassign_child_resource
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.minimum\_temperature
+==============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: OT2TemperatureModule.minimum_temperature

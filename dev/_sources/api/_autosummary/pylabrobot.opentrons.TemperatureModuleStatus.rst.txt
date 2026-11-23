@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.TemperatureModuleStatus
+============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: TemperatureModuleStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureModuleStatus.temperature
+      ~TemperatureModuleStatus.target
+      ~TemperatureModuleStatus.status
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~TemperatureModuleStatus.__init__
+   
+   

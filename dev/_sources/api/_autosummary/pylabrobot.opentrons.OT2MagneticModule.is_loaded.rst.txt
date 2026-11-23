@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.is\_loaded
+=================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2MagneticModule.is_loaded

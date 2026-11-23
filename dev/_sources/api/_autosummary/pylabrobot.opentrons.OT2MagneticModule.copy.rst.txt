@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.copy
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.copy

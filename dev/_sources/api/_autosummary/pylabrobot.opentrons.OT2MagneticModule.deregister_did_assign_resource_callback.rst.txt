@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.deregister\_did\_assign\_resource\_callback
+==================================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.deregister_did_assign_resource_callback

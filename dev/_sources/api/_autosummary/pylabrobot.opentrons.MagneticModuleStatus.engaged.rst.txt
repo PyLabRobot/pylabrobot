@@ -1,0 +1,6 @@
+pylabrobot.opentrons.MagneticModuleStatus.engaged
+=================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: MagneticModuleStatus.engaged

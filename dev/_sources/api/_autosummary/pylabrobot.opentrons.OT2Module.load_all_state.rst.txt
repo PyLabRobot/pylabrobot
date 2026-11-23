@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.load\_all\_state
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.load_all_state

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.wait\_for\_temperature
+================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.wait_for_temperature

@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.opentrons.MagneticModuleStatus
+=========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoclass:: MagneticModuleStatus
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MagneticModuleStatus.engaged
+      ~MagneticModuleStatus.height
+      ~MagneticModuleStatus.status
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MagneticModuleStatus.__init__
+   
+   

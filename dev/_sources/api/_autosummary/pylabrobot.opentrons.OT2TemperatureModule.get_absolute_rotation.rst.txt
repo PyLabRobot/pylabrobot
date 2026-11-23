@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_absolute\_rotation
+=================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_absolute_rotation

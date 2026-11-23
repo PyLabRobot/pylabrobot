@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.rotated
+======================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.rotated

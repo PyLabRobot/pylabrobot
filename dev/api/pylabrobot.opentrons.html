@@ -592,6 +592,24 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2_8ChannelPipette.html#pylabrobot.opentrons.OT2_8ChannelPipette" title="pylabrobot.opentrons.OT2_8ChannelPipette"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2_8ChannelPipette</span></code></a></p></td>
 <td><p>An eight-channel OT-2 pipette with a rigid nozzle layout.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2TemperatureModule.html#pylabrobot.opentrons.OT2TemperatureModule" title="pylabrobot.opentrons.OT2TemperatureModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2TemperatureModule</span></code></a></p></td>
+<td><p>The Temperature Module, GEN1 or GEN2: a block that heats or cools what stands on it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2MagneticModule.html#pylabrobot.opentrons.OT2MagneticModule" title="pylabrobot.opentrons.OT2MagneticModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2MagneticModule</span></code></a></p></td>
+<td><p>The Magnetic Module, GEN1 or GEN2: magnets that rise under the labware standing on it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2Module.html#pylabrobot.opentrons.OT2Module" title="pylabrobot.opentrons.OT2Module"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2Module</span></code></a></p></td>
+<td><p>A module standing in an OT-2 deck slot, holding one labware.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OT2ModuleMismatchError.html#pylabrobot.opentrons.OT2ModuleMismatchError" title="pylabrobot.opentrons.OT2ModuleMismatchError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OT2ModuleMismatchError</span></code></a></p></td>
+<td><p>The robot loaded another module of the model than the one a module was given.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.TemperatureModuleStatus.html#pylabrobot.opentrons.TemperatureModuleStatus" title="pylabrobot.opentrons.TemperatureModuleStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemperatureModuleStatus</span></code></a></p></td>
+<td><p>A Temperature Module's state as the robot reports it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.MagneticModuleStatus.html#pylabrobot.opentrons.MagneticModuleStatus" title="pylabrobot.opentrons.MagneticModuleStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MagneticModuleStatus</span></code></a></p></td>
+<td><p>A Magnetic Module's state as the robot reports it.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.OpentronsAPI.html#pylabrobot.opentrons.OpentronsAPI" title="pylabrobot.opentrons.OpentronsAPI"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OpentronsAPI</span></code></a></p></td>
 <td><p>HTTP endpoint encoding and decoding, without device or selected-run state.</p></td>
 </tr>
@@ -605,7 +623,7 @@
 <td><p>A physical pipette, independent of any run's loaded pipette ID.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.ModuleInfo.html#pylabrobot.opentrons.ModuleInfo" title="pylabrobot.opentrons.ModuleInfo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModuleInfo</span></code></a></p></td>
-<td><p>The identity of a connected module.</p></td>
+<td><p>The identity of a connected module, and its live state as the robot reports it.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.opentrons.DoorStatus.html#pylabrobot.opentrons.DoorStatus" title="pylabrobot.opentrons.DoorStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DoorStatus</span></code></a></p></td>
 <td><p>The front door as the OT-2's door switch reports it.</p></td>

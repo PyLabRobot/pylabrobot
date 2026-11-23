@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.centers
+======================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.centers

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.\_\_init\_\_
+===================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.__init__

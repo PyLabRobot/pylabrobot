@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.unassign\_child\_resource
+================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.unassign_child_resource

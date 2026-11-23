@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2MagneticModule.disengage
+================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2MagneticModule.disengage

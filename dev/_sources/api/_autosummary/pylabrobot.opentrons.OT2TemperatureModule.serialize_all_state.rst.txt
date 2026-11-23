@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.serialize\_all\_state
+===============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.serialize_all_state

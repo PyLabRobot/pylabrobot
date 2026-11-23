@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.named
+===============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.named

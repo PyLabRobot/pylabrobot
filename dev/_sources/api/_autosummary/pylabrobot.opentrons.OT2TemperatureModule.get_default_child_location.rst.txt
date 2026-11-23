@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_default\_child\_location
+=======================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_default_child_location

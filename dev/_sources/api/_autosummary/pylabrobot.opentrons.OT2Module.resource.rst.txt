@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.resource
+=======================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Module.resource

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.deregister\_state\_update\_callback
+==================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2Module.deregister_state_update_callback

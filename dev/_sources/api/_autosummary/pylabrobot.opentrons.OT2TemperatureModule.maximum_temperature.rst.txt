@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.maximum\_temperature
+==============================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoattribute:: OT2TemperatureModule.maximum_temperature

@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.unassign\_child\_resource
+===================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.unassign_child_resource

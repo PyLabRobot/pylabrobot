@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2TemperatureModule.get\_highest\_known\_point
+====================================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: OT2TemperatureModule.get_highest_known_point

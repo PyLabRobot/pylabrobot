@@ -1,0 +1,6 @@
+﻿pylabrobot.opentrons.OT2ModuleMismatchError
+===========================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoexception:: OT2ModuleMismatchError

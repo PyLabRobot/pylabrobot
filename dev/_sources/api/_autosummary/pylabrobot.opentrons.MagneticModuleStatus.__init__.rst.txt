@@ -1,0 +1,6 @@
+pylabrobot.opentrons.MagneticModuleStatus.\_\_init\_\_
+======================================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. automethod:: MagneticModuleStatus.__init__

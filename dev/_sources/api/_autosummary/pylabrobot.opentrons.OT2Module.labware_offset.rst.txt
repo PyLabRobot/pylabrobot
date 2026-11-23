@@ -1,0 +1,6 @@
+pylabrobot.opentrons.OT2Module.labware\_offset
+==============================================
+
+.. currentmodule:: pylabrobot.opentrons
+
+.. autoproperty:: OT2Module.labware_offset
