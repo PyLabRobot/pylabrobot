@@ -43,7 +43,7 @@ class IncoTests(unittest.IsolatedAsyncioTestCase):
   """Check packets, stream failures and serialization without a real socket."""
 
   async def asyncSetUp(self) -> None:
-    self.inco = Inco("example.invalid", "CERTUS", timeout=0.1)
+    self.inco = Inco("example.invalid", "CERTUS", timeout=5)
     self.io = MagicMock(spec=Socket)
     self.inco.io = self.io
     await self.inco.setup()
@@ -154,9 +154,11 @@ class IncoTests(unittest.IsolatedAsyncioTestCase):
       return b""
 
     self.io.read_exact.side_effect = slow_read
+    self.inco.timeout = 0.1
     with self.assertRaises(asyncio.TimeoutError):
       await self.inco.get_number("State")
     self.io.stop.assert_awaited_once()
+    self.inco.timeout = 5
     await self.inco.setup()
     waiting.clear()
     task = asyncio.create_task(self.inco.call("Valve.Cmd.Dispens", 1000.0))
