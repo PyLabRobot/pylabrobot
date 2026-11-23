@@ -369,14 +369,20 @@ class ActionTests(LedBarTestCase):
           self.bar.error_color = color
         with self.assertRaises(ValueError):
           self.bar.dispense_progress_color = color
+        with self.assertRaises(ValueError):
+          self.bar.pick_up_chip_color = color
+        with self.assertRaises(ValueError):
+          self.bar.place_chip_color = color
     self.assertEqual(
       [
         self.bar.setup_color,
         self.bar.setup_done_color,
         self.bar.error_color,
         self.bar.dispense_progress_color,
+        self.bar.pick_up_chip_color,
+        self.bar.place_chip_color,
       ],
-      ["blue", "green", "red", "green"],
+      ["blue", "green", "red", "green", "#00FFFF", "#8000FF"],
     )
     self.assertEqual(self.sent(), [])
 
