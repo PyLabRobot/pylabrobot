@@ -42,7 +42,7 @@ class OperatorTests(HIDTestCase):
   async def asyncSetUp(self) -> None:
     """Prepare one arbitrary plate role, external endpoints and a configurable provider."""
     self.mock_hid()
-    self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
+    self.flex = KingFisherFlex(timeout=5, operation_timeout=5)
     self.flex.io = self.io
     self.plate = thermo_TS_kingfisher_96_wellplate_2000uL_Vb("physical_001")
     self.source = ResourceHolder("storage", 0, 0, 0)

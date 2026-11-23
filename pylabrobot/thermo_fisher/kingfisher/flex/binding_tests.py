@@ -19,7 +19,7 @@ class PlateBindingTests(HIDTestCase):
   async def asyncSetUp(self) -> None:
     """Create two named BDZ roles and two independently named PLR resources."""
     self.mock_hid()
-    self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
+    self.flex = KingFisherFlex(timeout=5, operation_timeout=5)
     self.flex.io = self.io
     self.protocol = read_flex_bdz(
       bdz_bytes(

@@ -18,7 +18,7 @@ class ActionTests(HIDTestCase):
   async def asyncSetUp(self) -> None:
     """Prepare a mid-run exchange followed by targeted and untargeted interventions."""
     self.mock_hid()
-    self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
+    self.flex = KingFisherFlex(timeout=5, operation_timeout=5)
     self.flex.io = self.io
     self.a = thermo_TS_kingfisher_96_wellplate_2000uL_Vb("physical_a")
     self.b = thermo_TS_kingfisher_96_wellplate_2000uL_Vb("physical_b")

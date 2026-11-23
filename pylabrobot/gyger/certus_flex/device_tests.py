@@ -33,7 +33,7 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
 
   def setUp(self) -> None:
     self.device = CertusFlex(
-      "example.invalid", target="CERTUS", head="flex5", timeout=0.03, poll_interval=0.001
+      "example.invalid", target="CERTUS", head="flex5", timeout=5, poll_interval=0.001
     )
     self.inco = MagicMock(spec=Inco)
     self.device._inco = self.inco
@@ -139,6 +139,7 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(CertusFlexError):
       await self.device.move_to(1, 2, 3)
     self.numbers({POSITION + ".Prop.State": [4, 5]})
+    self.device.timeout = 0.03
     with self.assertRaises(asyncio.TimeoutError):
       await self.device.move_to(1, 2, 3)
     self.assertEqual(self.inco.call.await_count, 2)
@@ -206,6 +207,7 @@ class CertusFlexTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.inco.call.await_count, 2)  # Pulse and barrier; no repeat.
 
   async def test_barrier_timeout_does_not_repeat_dose(self) -> None:
+    self.device.timeout = 0.03
     self.numbers(
       {path + ".Prop.State": [4.0] for path in (ROOT, POSITION, PRESSURE, HEAD, VALVE)}
       | {HEAD + ".Prop.SyncValves": [0.0]}

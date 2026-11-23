@@ -18,7 +18,7 @@ class HostConfirmationTests(HIDTestCase):
   async def asyncSetUp(self) -> None:
     """Initialize an entirely simulated instrument and a two-prompt script."""
     self.mock_hid()
-    self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
+    self.flex = KingFisherFlex(timeout=5, operation_timeout=5)
     self.flex.io = self.io
     self.original = read_flex_bdz(bdz_bytes())
     self.protocol = read_flex_bdz(

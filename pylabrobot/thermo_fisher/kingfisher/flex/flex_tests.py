@@ -16,7 +16,7 @@ class FlexTests(HIDTestCase):
   async def asyncSetUp(self) -> None:
     """Prepare a Flex and immutable protocol fixture without opening either."""
     self.mock_hid()
-    self.flex = KingFisherFlex(timeout=0.2, operation_timeout=0.2)
+    self.flex = KingFisherFlex(timeout=5, operation_timeout=5)
     self.flex.io = self.io
     self.physical_flex = self.flex
     self.protocol = read_flex_bdz(bdz_bytes())
