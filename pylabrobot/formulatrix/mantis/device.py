@@ -27,6 +27,7 @@ from .resource_model import (
   ARM_BASE_X,
   ARM_BASE_Y,
   ARM_Z,
+  CHIP_SLOT_RACKS,
   MANIFEST,
   PLATE_HOLDER_LOCATION,
   PLATE_HOLDER_SIZE_X,
@@ -43,8 +44,9 @@ from .resource_model import (
 class MantisDevice(Resource):
   """A Formulatrix Mantis, v3 or v4: its main box, the parts on it and the driver that runs it.
 
-  The main box carries the deck with its plate holder, the two chip racks and the Z column with the
-  arm. The generation is read at setup (``driver.configuration.generation``).
+  The main box carries the deck with its plate holder, the two chip racks with a chip spot per
+  input slot (``chip_spots``), and the Z column with the arm. The generation is read at setup
+  (``driver.configuration.generation``).
   """
 
   def _update_arm_model(self, *, theta_1: float, theta_2: float, z: float) -> None:
@@ -184,6 +186,13 @@ class MantisDevice(Resource):
     self.assign_child_resource(self.left_chip_rack, location=measured_at["left_chip_rack"])
     self.right_chip_rack = chip_rack(name=f"{name}_right_chip_rack", side="right")
     self.assign_child_resource(self.right_chip_rack, location=measured_at["right_chip_rack"])
+    # Each input slot's chip spot, by slot, as the RFID reader and the chip changer number them.
+    self.chip_spots: Dict[int, ResourceHolder] = {}
+    for slot, side in CHIP_SLOT_RACKS.items():
+      rack = self.left_chip_rack if side == "left" else self.right_chip_rack
+      spot = rack.get_resource(f"{rack.name}_spot_{slot}")
+      assert isinstance(spot, ResourceHolder)
+      self.chip_spots[slot] = spot
 
     # The Z column and the arm it carries, drawn at idle until setup reads where the arm is. The
     # column is drawn where it stands with Z at 0 and moves with Z, the arm on it.
@@ -250,9 +259,17 @@ class MantisDevice(Resource):
       if arm.is_initialized:
         await arm._report_pose()
 
-  async def stop(self) -> None:
-    """Stop the motors, park an arm brought up, release the clamp and disconnect."""
-    await self.driver.stop()
+  async def stop(self, accept_chip_left_on_head: bool = False) -> None:
+    """Stop the motors, park an arm brought up, release the clamp and disconnect.
+
+    Args:
+      accept_chip_left_on_head: stop with a chip on the head instead of refusing.
+
+    Raises:
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; the arm is
+        halted and parked, and the device stays connected for ``arm.return_chip``.
+    """
+    await self.driver.stop(accept_chip_left_on_head=accept_chip_left_on_head)
 
 
 def Mantis(
