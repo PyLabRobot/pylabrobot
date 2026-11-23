@@ -2005,17 +2005,26 @@ CAPTURED_EXCHANGES = """
 """.split()
 
 
+# The status reads the bring-up's first Z home adds before the captured sequence (which seats the
+# arms first): each motor's following-error check reads it idle, then Z reads homed.
+Z_FIRST_STATUSES = {0: ["0000"], 1: ["0000"], 2: ["0000", "0400"]}
+# The motion commands it adds: the arms' faults cleared, Z's cleared, Z homed.
+Z_HOME_REQUEST = "0200000001000000d343867e1e874d4064ea130f737482407d2ae7ab04c2ce40"
+Z_FIRST_COMMANDS = [(17, "0000"), (17, "0100"), (17, "0200"), (21, Z_HOME_REQUEST)]
+
+
 def make_v3_answers():
-  """Play each captured reply list in order, repeating its final reply."""
+  """Play each captured reply list in order, repeating its final reply; each motor's status reads
+  with the first Z home's (`Z_FIRST_STATUSES`) after the opening idle check."""
   answers: Dict[Tuple[int, int, bytes], List[bytes]] = {}
   for exchange in CAPTURED_EXCHANGES:
     board, command, request, reply = exchange.split(":")
     key = int(board), int(command), bytes.fromhex(request.replace("-", ""))
     answers.setdefault(key, []).append(bytes.fromhex(reply.replace("-", "")))
   for motor, runs in CAPTURED_STATUS_RUNS.items():
-    answers[0, 20, struct.pack("<h", motor)] = [
-      bytes.fromhex(word) for word, count in runs for _ in range(count)
-    ]
+    words = [word for word, count in runs for _ in range(count)]
+    words[1:1] = Z_FIRST_STATUSES[motor]
+    answers[0, 20, struct.pack("<h", motor)] = [bytes.fromhex(word) for word in words]
   return answers
 
 
@@ -2106,7 +2115,8 @@ class V3ArmTests(DriverTestCase):
     return driver, link
 
   async def test_setup_and_stop_follow_the_captured_v3_sequence(self):
-    """Seat twice, back off from live positions, home Z twice, then arms 1/0, and walk to idle."""
+    """Home Z, then seat twice, back off from live positions, home Z twice, then arms 1/0, and walk
+    to idle."""
     driver, link = await self.set_up_arm()
     self.assertTrue(driver.arm.is_initialized)
     joint_state = await driver.arm.request_joint_state()
@@ -2117,7 +2127,7 @@ class V3ArmTests(DriverTestCase):
     with self.assertRaisesRegex(MantisConfigurationError, "no absolute"):
       await driver.arm.request_absolute_joint_state()
     await driver.stop()
-    expected = []
+    expected = list(Z_FIRST_COMMANDS)
     for exchange in CAPTURED_EXCHANGES:
       board, command, request, _ = exchange.split(":")
       if int(board) == 0 and int(command) in (17, 21, 22, 24, 28):
@@ -2132,7 +2142,13 @@ class V3ArmTests(DriverTestCase):
     ]
     precheck = [(82, "0000"), (82, "0100"), (82, "0200")]
     self.assertEqual(
-      homes, precheck + [(21, "0200")] + precheck + [(21, "0200"), (21, "0100"), (21, "0000")]
+      homes,
+      precheck
+      + [(21, "0200")]  # Z first, before the arms move
+      + precheck
+      + [(21, "0200")]
+      + precheck
+      + [(21, "0200"), (21, "0100"), (21, "0000")],
     )
 
   async def test_stop_sends_three_stops_and_no_park(self):
@@ -2167,16 +2183,21 @@ class V3ArmTests(DriverTestCase):
     self.assertEqual(get_motion_commands(link=link), [])
 
   async def test_failure_to_seat_stops_every_motor(self):
-    """A retract that never meets a stop must not go on to home Z."""
+    """A retract that never meets a stop must not go on: Z is homed once, before the arms move,
+    and not again."""
     answers = make_v3_answers()
-    for motor in range(3):
+    for motor in range(2):
       answers[0, 20, struct.pack("<h", motor)] = [bytes.fromhex("0000")]
+    # Idle, idle at the first Z home's check, homed after it, then idle.
+    answers[0, 20, struct.pack("<h", 2)] = [
+      bytes.fromhex(word) for word in ("0000", "0000", "0400", "0000")
+    ]
     driver, link = await self.make_arm(answers=answers)
     with mock.patch.object(arm_module, "SEAT_PASSES", 2):
       with self.assertRaisesRegex(MantisMotionError, "did not seat"):
         await driver.arm.initialize()
     commands = get_motion_commands(link=link)
-    self.assertNotIn(21, [command for command, _ in commands])
+    self.assertEqual([payload for command, payload in commands if command == 21], [Z_HOME_REQUEST])
     self.assertEqual(
       [payload[:4] for command, payload in commands if command == 24], ["0000", "0100", "0200"]
     )

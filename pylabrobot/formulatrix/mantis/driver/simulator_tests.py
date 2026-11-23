@@ -169,7 +169,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     with mock.patch.object(arm, "_unchecked_fw_home", wraps=arm._unchecked_fw_home) as home:
       await arm.initialize()
     z_homes = [call.kwargs for call in home.call_args_list if call.kwargs["motor"] == 2]
-    self.assertEqual(len(z_homes), 2)
+    self.assertEqual(len(z_homes), 3)  # once before the arms move, then twice as captured
     for z_home in z_homes:
       self.assertEqual(z_home["fast_speed"], compute_device_rate(motor=2, rate=10.0))
       self.assertEqual(z_home["acceleration"], compute_device_rate(motor=2, rate=300.0))
