@@ -323,7 +323,7 @@ def wait_briefly_for_unpower(*, driver):
   send_command = driver._send_command
 
   async def send(**kwargs):
-    if (kwargs["board"], kwargs["command"], kwargs.get("payload", b"")) in UNPOWER:
+    if kwargs["command"] == 19:
       kwargs["timeout"] = 0.25
     return await send_command(**kwargs)
 
