@@ -370,6 +370,7 @@ class FTDI(IOBase):
     device_id: Device identifier (serial number)
     vid: USB Vendor ID
     pid: USB Product ID
+    usb_product: USB product string, for devices that share a VID/PID.
     ftdi_library: "libftdi" or "d2xx"; None picks D2XX on Windows when FTDI's D2XX library loads,
       else libftdi.
   """
@@ -383,6 +384,7 @@ class FTDI(IOBase):
     interface_select: Optional[int] = None,
     usb_address: Optional[str] = None,
     ftdi_library: Optional[str] = "libftdi",
+    usb_product: Optional[str] = None,
   ):
     if ftdi_library not in (None, "libftdi", "d2xx"):
       raise ValueError(f"ftdi_library must be 'libftdi', 'd2xx' or None, got {ftdi_library!r}")
@@ -418,6 +420,7 @@ class FTDI(IOBase):
     self._pid = pid
     self._interface_select = interface_select
     self._usb_address = usb_address
+    self._usb_product = usb_product
 
     # Will be resolved in setup()
     self._dev: Optional[Device] = None
@@ -487,6 +490,13 @@ class FTDI(IOBase):
         continue
       else:
         base = serial_number
+      description = node.Description.decode("ascii", "replace")
+      if self._usb_product is not None:
+        descriptions = {self._usb_product}
+        if base != serial_number:
+          descriptions.add(f"{self._usb_product} {serial_number[-1]}")
+        if description not in descriptions:
+          continue
       if self._device_id is not None and base != self._device_id:
         continue
       candidates.append((serial_number, base))
@@ -494,7 +504,8 @@ class FTDI(IOBase):
       held = sum(1 for node in nodes if node.Flags & _FT_FLAGS_OPENED and not node.SerialNumber)
       raise RuntimeError(
         f"No FTDI channel found through D2XX for '{self.human_readable_device_name}' "
-        f"(device_id {self._device_id}, interface {letter or 'any'}). FTDI channels found: "
+        f"(device_id {self._device_id}, product {self._usb_product}, interface {letter or 'any'}). "
+        "FTDI channels found: "
         f"{listed or 'none'}. "
         + (
           f"{held} held by another program list no serial number: close the vendor software or "
@@ -554,6 +565,9 @@ class FTDI(IOBase):
       device_serial_number = usb.util.get_string(device, device.iSerialNumber)
       if self._device_id is not None and device_serial_number != self._device_id:
         continue
+      if self._usb_product is not None:
+        if usb.util.get_string(device, device.iProduct) != self._usb_product:
+          continue
 
       # device matches all specified criteria
       candidates.append(device)
@@ -580,7 +594,7 @@ class FTDI(IOBase):
       raise RuntimeError(
         f"No FTDI devices found with specified criteria: "
         f"VID:PID {vid_string}:{pid_string}, "
-        f"device_id {self._device_id}. "
+        f"device_id {self._device_id}, product {self._usb_product}. "
         "Connected devices: " + connected_devices_string
       )
 
@@ -609,6 +623,13 @@ class FTDI(IOBase):
       except (ValueError, NotImplementedError):
         continue
       if device.bus == bus and device_ports == ports:
+        if self._usb_product is not None:
+          product = usb.util.get_string(device, device.iProduct)
+          if product != self._usb_product:
+            raise RuntimeError(
+              f"USB device at {self._usb_address!r} has product {product!r}, "
+              f"expected {self._usb_product!r}"
+            )
         if device.address is None:
           raise RuntimeError(f"USB device at {self._usb_address!r} has no device address")
         return int(device.bus), int(device.address)
@@ -1067,6 +1088,7 @@ class FTDI(IOBase):
       "pid": self._pid,
       "usb_address": self._usb_address,
       "ftdi_library": self.ftdi_library,
+      "usb_product": self._usb_product,
     }
 
 

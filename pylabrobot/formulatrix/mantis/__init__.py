@@ -1,17 +1,22 @@
 """Formulatrix Mantis liquid dispenser."""
 
+from .carousel import MantisCarousel
 from .device import RECORDING_MANTIS_V4, Mantis, MantisDevice
 from .driver import (
   CLAMP_STATE_DESCRIPTIONS,
   CONFIRMED_FIRMWARE_VERSIONS,
   MOTOR_ERROR_CODE_DESCRIPTIONS,
   MOTOR_STATUS_ERROR_BITS,
+  PRESSURE_CONTROLLER_STATUS_DESCRIPTIONS,
+  PRESSURE_CONTROLLERS,
   SENSOR_ALARM_CODE_DESCRIPTIONS,
+  Arm,
   ChecksumError,
   CommandRefusedError,
   DeviceConfiguration,
   FrameError,
   InvalidQueueItemError,
+  LedBar,
   MantisConfigurationError,
   MantisConnectionLostError,
   MantisCoordinateError,
@@ -22,13 +27,19 @@ from .driver import (
   MantisNotConnectedError,
   MantisPressureError,
   MantisPrimeError,
+  MantisSimulationArm,
   MantisSimulationDriver,
+  MantisSimulationLedBar,
   MantisSimulationPlateClamp,
+  MantisSimulationPump,
   MantisSimulationRfid,
   MantisTimeoutError,
   PlateClamp,
   PlateClampError,
+  PressureController,
+  Pump,
   Rfid,
 )
+from .driver.carousel_configuration import CarouselConfiguration
 from .driver.configuration import RECORDING_MANTIS_V3
 from .liquid_classes import MantisLiquidClass, mantis_mapping

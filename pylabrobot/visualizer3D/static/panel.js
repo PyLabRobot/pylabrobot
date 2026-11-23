@@ -4,7 +4,7 @@
 import * as THREE from "three";
 
 import { HOVER, SELECT, SELECTION_SHOWN_MS } from "./constants.js";
-import { OVERLAY_ORDER, stateOf, worldBox } from "./drawn.js";
+import { boxMatrix, OVERLAY_ORDER, stateOf } from "./drawn.js";
 import { escapeHtml, fmt, liquid, NBSP, section, tuple, withUnit } from "./format.js";
 import { invalidate } from "./frame.js";
 import { view } from "./renderer.js";
@@ -12,17 +12,31 @@ import { modelOf, sizeOf, world } from "./world.js";
 
 export let selected = -1;
 
-export const selectionBox = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(SELECT));
+// A highlight is the resource's own box, carried by its world matrix as its outline is, so a
+// turned resource is hugged at its angle rather than by an upright box around it.
+const UNIT_EDGES = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
 
-selectionBox.visible = false;
+function highlightBox(color) {
+  const helper = new THREE.LineSegments(
+    UNIT_EDGES,
+    new THREE.LineBasicMaterial({ color, toneMapped: false }),
+  );
+  helper.matrixAutoUpdate = false;
+  helper.visible = false;
+  view.add(helper);
+  return helper;
+}
 
-view.add(selectionBox);
+export const selectionBox = highlightBox(SELECT);
 
-export const hoverBox = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(HOVER));
+export const hoverBox = highlightBox(HOVER);
 
-hoverBox.visible = false;
-
-view.add(hoverBox);
+/** Put a highlight on resource `index`'s box, where and as the resource now stands. */
+export function placeHighlight(helper, index) {
+  const [sx, sy, sz] = sizeOf(modelOf(index));
+  helper.matrix.copy(boxMatrix(world.matrices[index], sx, sy, sz));
+  helper.matrixWorldNeedsUpdate = true;
+}
 
 // Both highlights draw over everything. A hairline box behind translucent walls, landing on the
 // resource's own outline, is a highlight nobody can see.
@@ -241,7 +255,7 @@ function hideSelectionLater() {
 
 export function select(index, openPanel = true) {
   selected = index;
-  selectionBox.box.copy(worldBox(index));
+  placeHighlight(selectionBox, index);
   selectionBox.visible = true;
   hideSelectionLater();
   announceSelection(index);
@@ -249,6 +263,6 @@ export function select(index, openPanel = true) {
 }
 
 export function showHoverBox(index) {
-  hoverBox.box.copy(worldBox(index));
+  placeHighlight(hoverBox, index);
   hoverBox.visible = true;
 }

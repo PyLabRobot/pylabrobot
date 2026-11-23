@@ -30,6 +30,7 @@ Manufacturers
     pylabrobot.cole_parmer
     pylabrobot.curiox
     pylabrobot.formulatrix
+    pylabrobot.gyger
     pylabrobot.hamilton
     pylabrobot.high_res
     pylabrobot.inheco
@@ -40,6 +41,7 @@ Manufacturers
     pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.opentrons
+    pylabrobot.paa
     pylabrobot.qinstruments
     pylabrobot.revvity
     pylabrobot.sartorius

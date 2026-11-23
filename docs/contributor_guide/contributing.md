@@ -121,9 +121,10 @@ Make sure you write a test that fails before your fix and passes after your fix.
 
 ### Adding resources
 
-If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tip_racks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/resources/hamilton/tip_racks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
-
-Make sure to add your file to the imports in `__init__.py` of your resources package.
+Follow the [resource contribution guide](contributing-new-resources.md) to add a definition,
+document its measurements, export it, and update the resource library. A definition that only
+configures existing resource classes needs no tests. Test the underlying implementations
+independently of individual definitions.
 
 ### Writing a new backend
 

@@ -53,13 +53,13 @@ class MantisConfigurationError(MantisError, ValueError):
 
 
 class PlateClampError(MantisError, RuntimeError):
-  """The plate clamp read a failure state (``CLAMP_STATE_DESCRIPTIONS``)."""
+  """The plate clamp reported a failure or did not reach the commanded control state."""
 
   def __init__(self, message: str, *, state: int):
     """
     Args:
       message: what went wrong.
-      state: the clamp state read, 4, 7 or 8.
+      state: the motor clamp's state code, or the pneumatic valve's 0/1 control state.
     """
     super().__init__(message)
     self.state = state
