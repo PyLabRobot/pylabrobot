@@ -232,6 +232,7 @@ class TestSimulator(AnyioTestBase):
 class TestSimulatorWithoutLocations(AnyioTestBase):
   async def test_drawer_falls_back_to_the_last_move(self):
     reader = CLARIOstarPlus(simulation=True)
+    reader.drawer.location_in = None
     async with reader:
       await reader.drawer.open()
       assert (await reader.driver.request_status()).drawer_open

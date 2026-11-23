@@ -50,6 +50,8 @@ class Tube(Container):
       material_z_thickness: Tube base to cavity base.
       max_volume: Maximum volume of the tube.
       category: Category of the tube.
+      model: Optional model identifier of the tube.
+      bottom_type: Shape of the tube bottom (``TubeBottomType`` or its string value).
       height_volume_data: Optional dict mapping height (mm) to volume (uL). See
         :class:`Container` for details.
     """
@@ -70,9 +72,14 @@ class Tube(Container):
       height_volume_data=height_volume_data,
       no_go_zones=no_go_zones,
     )
+    self.bottom_type = bottom_type
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "max_volume": self.max_volume}
+    return {
+      **super().serialize(),
+      "max_volume": self.max_volume,
+      "bottom_type": self.bottom_type.value,
+    }
 
   def set_volume(self, volume: float):
     """Set the volume in the tube.

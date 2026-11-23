@@ -1620,3 +1620,26 @@ class TestUSBControlTransfer(AnyioTestBase):
     validator = USBValidator(capture, "mock USB", 1, 2)
     async with validator:
       assert await validator.ctrl_transfer(0x40, 1, 0, 0, b"\x01") == bytearray()
+
+
+class TestUSBDeviceSelection(AnyioTestBase):
+  """Pick a device by serial number, reading the descriptor rather than PyUSB's empty cache."""
+
+  def _devices(self, *serials: Optional[str]) -> list[mock.Mock]:
+    devices = []
+    for serial in serials:
+      dev = mock.Mock(iSerialNumber=3 if serial else 0, _serial_number=None, serial_number=serial)
+      devices.append(dev)
+    return devices
+
+  def test_serial_number_is_read_through_the_descriptor(self) -> None:
+    devices = self._devices("A", "B")
+    with mock.patch.object(usb_module, "libusb_package", create=True) as lib:
+      lib.find.return_value = devices
+      assert USB(1, 2, "mock USB", serial_number="B").get_available_devices() == [devices[1]]
+
+  def test_device_without_serial_number_is_refused(self) -> None:
+    with mock.patch.object(usb_module, "libusb_package", create=True) as lib:
+      lib.find.return_value = self._devices(None)
+      with pytest.raises(RuntimeError, match="does not have a serial number"):
+        USB(1, 2, "mock USB", serial_number="B").get_available_devices()

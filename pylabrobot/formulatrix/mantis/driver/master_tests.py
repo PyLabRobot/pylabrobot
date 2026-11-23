@@ -82,6 +82,8 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (0, 82, "0200"): "01000000000000005940",
   (0, 84, "0000"): "00000000b42350bf",
   (0, 84, "0100"): "0000000090b8d73f",
+  # Z's encoder at its flag (-0.25 device units), as the v4 answered: a stop reads where it stopped.
+  (0, 84, "0200"): "000000000000d0bf",
   # The absolute encoders, valid.
   (11, 30, "0000"): "010000000000f43f6740",
   (11, 30, "0100"): "010000000000a0d73940",
@@ -358,10 +360,17 @@ class DriverTestBase(AnyioTestBase):
     return driver
 
   async def set_up_driver(
-    self, *, link: FakeLink, skip_arm: bool = True, **kwargs: Any
+    self,
+    *,
+    link: FakeLink,
+    skip_arm: bool = True,
+    accept_chip_left_on_head: bool = True,
+    **kwargs: Any,
   ) -> MantisDriver:
     driver = self.make_driver(link=link, **kwargs)
-    await self._stack.enter_async_context(driver.lifespan(skip_arm=skip_arm))
+    await self._stack.enter_async_context(
+      driver.lifespan(skip_arm=skip_arm, accept_chip_left_on_head=accept_chip_left_on_head)
+    )
     return driver
 
 
@@ -391,11 +400,17 @@ class TestSetup(DriverTestBase):
     assert driver.configuration == DeviceConfiguration(
       generation="v4",
       firmware_versions={0: "4.20.6.2", 10: "1.0.8", 11: "0.1.7 DBG", 12: "0.1.8 DBG"},
-      motor_limits={0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
       feedback_sensor_parameters=RECORDED_CALIBRATION,
     )
+    # The motor limits are the arm's, read for it.
+    assert driver.arm is not None
+    assert driver.arm.configuration.motor_limits == {
+      0: (-4000.0, 4000.0),
+      1: (-4000.0, 4000.0),
+      2: (-160.0, 2300.0),
+    }
 
-  async def test_only_board_0_must_answer_and_each_other_board_is_asked_once(self) -> None:
+  async def test_only_board_0_must_answer_and_board_11_is_asked_twice(self) -> None:
     self.default_read_timeout = 0.25  # boards 10 to 12 never answer
     link = FakeLink(answers=make_answers(absent_boards=(10, 11, 12)))
     driver = await self.set_up_driver(link=link)
@@ -407,8 +422,41 @@ class TestSetup(DriverTestBase):
       12: None,
     }
     sent = [parse_frame(frame=frame)[1:] for frame in link.written]
-    for board in (10, 11, 12):
-      assert sent.count((board, 1, b"")) == 1
+    for board, count in ((10, 1), (11, 2), (12, 1)):
+      assert sent.count((board, 1, b"")) == count
+
+  async def test_board_11_answering_its_second_attempt_makes_a_v4(self) -> None:
+    self.default_read_timeout = 0.25  # board 11's first version request goes unanswered
+    link = FakeLink(answers=make_answers())
+    write = link.write
+    dropped: List[bytes] = []
+
+    async def drop_first_board_11_request(data: bytes) -> int:
+      if parse_frame(frame=data)[1:3] == (11, 1) and not dropped:
+        dropped.append(data)
+        link.written.append(data)
+        return len(data)
+      return await write(data)
+
+    link.io.write.side_effect = drop_first_board_11_request
+    driver = await self.set_up_driver(link=link)
+    assert driver.configuration.generation == "v4"
+    assert driver.configuration.firmware_versions[11] == "0.1.7 DBG"
+
+  async def test_a_v4_arm_block_on_a_silent_board_11_refuses_setup(self) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "declared.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump({"arm": {"homing_position_a": {"0": 0.0, "1": 0.0}}}, f)
+      link = FakeLink(answers=make_answers(absent_boards=(11,)))
+      driver = self.make_driver(link=link, declared_configuration_json=path)
+      driver.default_read_timeout = 0.25  # board 11 never answers
+      with pytest.raises(MantisConfigurationError, match="absolute-encoder references"):
+        async with driver:
+          pass
+    sent = [parse_frame(frame=frame)[1:3] for frame in link.written]
+    assert (0, 22) not in sent
+    assert driver.arm is None
 
   async def test_declared_configuration_that_disagrees_refuses_setup(self) -> None:
     with tempfile.TemporaryDirectory() as directory:
@@ -448,6 +496,15 @@ class TestSetup(DriverTestBase):
     assert link.io.entered_count == 1
     assert link.io.baudrates == [115_200]
 
+  async def test_non_boolean_lifespan_options_are_rejected_before_opening_link(self) -> None:
+    link = FakeLink(answers=make_answers())
+    driver = self.make_driver(link=link)
+    for kwargs in ({"skip_arm": 1}, {"accept_chip_left_on_head": "yes"}):
+      with pytest.raises(TypeError, match="must be a bool"):
+        async with driver.lifespan(**kwargs):  # type: ignore[arg-type]
+          pass
+    assert link.io.entered_count == 0
+
   async def test_reentry_after_a_lost_link_closes_it_quietly_and_reopens_it(
     self, caplog: pytest.LogCaptureFixture
   ) -> None:
@@ -485,15 +542,15 @@ class TestSetup(DriverTestBase):
         sent_before = len(link_lost.written)
       async with lost_driver.lifespan(skip_arm=True):
         assert lost_driver._reader_running
+        warnings = [
+          record
+          for record in caplog.records
+          if record.name.startswith("pylabrobot.formulatrix.mantis") and record.levelname != "INFO"
+        ]
+        assert len(warnings) == 1
+        assert "the link was lost" in warnings[0].getMessage()
+        assert all(record.exc_info is None for record in caplog.records)
     del driver2
-    warnings = [
-      record
-      for record in caplog.records
-      if record.name.startswith("pylabrobot.formulatrix.mantis") and record.levelname != "INFO"
-    ]
-    assert len(warnings) == 1
-    assert "the link was lost" in warnings[0].getMessage()
-    assert all(record.exc_info is None for record in caplog.records)
     assert link_lost.io.exited_count == 2
     assert link_lost.io.entered_count == 2
     # The first frame after the failure is re-entry's own firmware read: nothing went to the dead link.

@@ -285,7 +285,7 @@ class MantisCarousel(HasLifespan):
       except BaseException:
         await self._stop_after_failure()
         raise
-      logger.info("[%s] carousel at %.3f degrees", self.configuration.device_id, position % 360.0)
+      logger.info("[%s] carousel at %.2f degrees", self.configuration.device_id, position % 360.0)
 
   async def move_to_slot(
     self, slot: int, *, speed: Optional[float] = None, acceleration: Optional[float] = None

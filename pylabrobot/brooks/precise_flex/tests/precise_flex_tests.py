@@ -1103,6 +1103,17 @@ class TestPreciseFlex400AutoRecoverOnMove(AnyioTestBase):
     assert self._cmds("MoveOneAxis") == []
     assert self._cmds("moveJ") == []
 
+  async def test_a_joint_past_its_limit_within_tolerance_still_moves(self) -> None:
+    """A joint sent to its limit can stop just past it, within tolerance: the next move is sent."""
+    self.arm._recover_out_of_range = False
+    self._stub("0 0.0 11.996 0.0 0")  # elbow 0.004 past its limit of 12, its tolerance
+    await self.arm.arm.move_to_joint_state({PreciseFlexAxis.ELBOW: 90.0})
+    assert self._cmds("MoveOneAxis") == []
+    assert len(self._cmds("moveJ")) == 1
+    self._stub("0 0.0 11.995 0.0 0")  # beyond the tolerance: out of range
+    with pytest.raises(OutOfRangeOfMotionError):
+      await self.arm.arm.move_to_joint_state({PreciseFlexAxis.ELBOW: 90.0})
+
   async def test_on_recovers_offender_then_retries_move(
     self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
   ) -> None:

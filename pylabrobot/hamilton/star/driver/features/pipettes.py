@@ -1362,46 +1362,6 @@ class Pipettes:
       await self._set_z_speed(channel, self.default_z_speed)
       await self._set_z_acceleration(channel, self.default_z_acceleration)
 
-  # -- x position --------------------------------------------------------------------------------
-
-  async def request_x_position(self) -> float:
-    """Request where along X the channels are, in deck mm.
-
-    The channels have no X drive. They ride the arm and sit at its reference point, and this asks
-    the arm. Nothing is recorded: each channel's resource is a child of the arm's and follows it
-    in X.
-
-    Returns:
-      The position in mm.
-    """
-    return await self.arm.request_position()
-
-  async def move_to_x_position(
-    self,
-    x: float,
-    acceleration_level: Optional[int] = None,
-    current_limit: Optional[int] = None,
-    settle_reads: int = 20,
-  ):
-    """Move the channels along X. The whole arm travels, with everything else it carries.
-
-    Args:
-      x: where to go, in mm.
-      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the pipettes.
-      current_limit: the motor current limit. Defaults to the X-arm that holds the pipettes.
-      settle_reads: how many reads to take before calling the arm stopped.
-
-    Raises:
-      ValueError: If the channels cannot reach it.
-    """
-    self._check_reachable("x", x)
-    return await self.arm.move_to_x_position(
-      x,
-      acceleration_level=acceleration_level,
-      current_limit=current_limit,
-      settle_reads=settle_reads,
-    )
-
   # -- y position --------------------------------------------------------------------------------
 
   async def _plan_y_positions(
@@ -1882,6 +1842,49 @@ class Pipettes:
     async with self._temporary_z_drive_profile(speed=speed, acceleration=acceleration):
       await self.probe_z_max()
 
+  async def _traverse_raise_targets(self, height: float) -> Dict[int, float]:
+    """The stop disc target of every channel whose lowest point is below `height`, checked.
+
+    A channel's lowest point is its tip bottom when it carries one, else its stop disc.
+
+    Args:
+      height: the height every lowest point has to reach, in mm.
+
+    Returns:
+      Each low channel's stop disc target in mm, keyed by channel; empty if none is low.
+
+    Raises:
+      ValueError: If a channel cannot raise its lowest point that high.
+    """
+    lowest = await self._unchecked_fw_request_lowest_z_positions()
+    targets = {}
+    for channel, z in enumerate(lowest):
+      if z < height:
+        stop_disc = await self.request_stop_disc_z_position(channel)
+        targets[channel] = round(stop_disc + height - z, 2)
+        self._check_reachable("z", targets[channel])
+    return targets
+
+  async def _raise_head_on_the_arm(self, height: float) -> None:
+    """Raise the 96- or 384-head on these channels' arm to its safe Z if it is below `height`.
+
+    The head rides the arm, so an X move drags it along. Its lowest point is its tip bottom when it
+    carries tips, else its stop disc. A head already at its top stays there.
+
+    Args:
+      height: the height the head's lowest point has to be at, in mm.
+    """
+    # TODO: include the iSWAP once its safety design is decided.
+    head = self.arm.head96 or self.arm.head384
+    if head is None:
+      return
+    stop_disc = height
+    if await head.request_tip_presence():
+      stop_disc += await head.request_tip_overhang()
+    z = await head.request_z_position()
+    if z < stop_disc and z < head.configuration.z_range[1]:
+      await head.move_to_safe_z()
+
   # -- dispensing drive position -------------------------------------------------------------------
 
   async def dispensing_drive_request_uL_position(self, channel: int) -> float:
@@ -2008,30 +2011,67 @@ class Pipettes:
     self.piston_positions[channel] = round(self.piston_positions[channel] + drawn, 1)
     return drawn
 
-  # -- x and y together ----------------------------------------------------------------------------
+  # -- x position --------------------------------------------------------------------------------
 
-  async def _traverse_raise_targets(self, height: float) -> Dict[int, float]:
-    """The stop disc target of every channel whose lowest point is below `height`, checked.
+  async def request_x_position(self) -> float:
+    """Request where along X the channels are, in deck mm.
 
-    A channel's lowest point is its tip bottom when it carries one, else its stop disc.
-
-    Args:
-      height: the height every lowest point has to reach, in mm.
+    The channels have no X drive. They ride the arm and sit at its reference point, and this asks
+    the arm. Nothing is recorded: each channel's resource is a child of the arm's and follows it
+    in X.
 
     Returns:
-      Each low channel's stop disc target in mm, keyed by channel; empty if none is low.
+      The position in mm.
+    """
+    return await self.arm.request_position()
+
+  async def move_to_x_position(
+    self,
+    x: float,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
+    settle_reads: int = 20,
+    minimum_traverse_height_start: Optional[float] = None,
+    perform_safety_checks: bool = True,
+  ):
+    """Move the channels along X: everything low on the arm raised first, then the arm.
+
+    Everything is checked before anything moves. If the 96- or 384-head on this arm is below
+    `minimum_traverse_height_start` it goes to its safe Z, and every channel below it is raised to
+    it, all at once; then the arm travels, with everything it carries.
+
+    Args:
+      x: where to go, in mm.
+      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the pipettes.
+      current_limit: the motor current limit. Defaults to the X-arm that holds the pipettes.
+      settle_reads: how many reads to take before calling the arm stopped.
+      minimum_traverse_height_start: the height every channel's and the head's lowest point has to
+        be at first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
+      perform_safety_checks: whether to run the reads and raises above. False sends the X move
+        alone.
 
     Raises:
-      ValueError: If a channel cannot raise its lowest point that high.
+      ValueError: If the channels cannot reach `x`, or a channel cannot be raised that high.
     """
-    lowest = await self._unchecked_fw_request_lowest_z_positions()
-    targets = {}
-    for channel, z in enumerate(lowest):
-      if z < height:
-        stop_disc = await self.request_stop_disc_z_position(channel)
-        targets[channel] = round(stop_disc + height - z, 2)
-        self._check_reachable("z", targets[channel])
-    return targets
+    height = (
+      self.default_minimum_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
+    )
+    self._check_reachable("x", x)
+    if perform_safety_checks and height > 0:
+      raises = await self._traverse_raise_targets(height)
+      await self._raise_head_on_the_arm(height)
+      if raises:
+        await self.move_stop_disc_to_z_positions(raises)
+    return await self.arm.move_to_x_position(
+      x,
+      acceleration_level=acceleration_level,
+      current_limit=current_limit,
+      settle_reads=settle_reads,
+    )
+
+  # -- x and y together ----------------------------------------------------------------------------
 
   async def move_to_xy_positions(
     self,
@@ -2043,6 +2083,7 @@ class Pipettes:
     x_acceleration_level: Optional[int] = None,
     y_speed: Optional[float] = None,
     y_acceleration_level: Optional[int] = None,
+    perform_safety_checks: bool = True,
   ) -> None:
     """Move the channels across the deck: the low ones up first, then X and Y together.
 
@@ -2054,11 +2095,13 @@ class Pipettes:
       x: where to send the arm, in mm. The channels share it.
       ys: where to put each named channel, in mm, keyed by channel, 0-indexed from the back.
       make_space: whether the channels not named may be moved in Y. See `move_to_y_positions`.
-      minimum_traverse_height_start: the height to raise every low channel's lowest point to
-        first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
+      minimum_traverse_height_start: the height every channel's and the head's lowest point has to
+        be at first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
       x_acceleration_level: the arm's level for this move. See `move_to_x_position`.
       y_speed: every channel's Y speed for this move only, in mm/s. See `move_to_y_positions`.
       y_acceleration_level: every channel's Y level for this move only. See `move_to_y_positions`.
+      perform_safety_checks: whether to run the reads and raises first. See
+        `move_to_x_position`.
 
     Raises:
       ValueError: If X, a Y or a raise is out of reach, or two channels would stand too close.
@@ -2082,14 +2125,20 @@ class Pipettes:
       if value is not None and not low <= value <= high:
         raise ValueError(f"{name} must be between {low} and {high}, is {value}")
     planned_ys = await self._plan_y_positions(ys, make_space)
-    raises = await self._traverse_raise_targets(height) if height > 0 else {}
+    raises = (
+      await self._traverse_raise_targets(height) if perform_safety_checks and height > 0 else {}
+    )
 
+    if perform_safety_checks and height > 0:
+      await self._raise_head_on_the_arm(height)
     if raises:
       await self.move_stop_disc_to_z_positions(raises)
     try:
       async with non_cancelling_task_group() as group:
         group.start_soon(
-          lambda: self.move_to_x_position(x=x, acceleration_level=x_acceleration_level)
+          lambda: self.move_to_x_position(
+            x=x, acceleration_level=x_acceleration_level, perform_safety_checks=False
+          )
         )
         group.start_soon(
           lambda: self._move_to_planned_y_positions(
@@ -2574,7 +2623,8 @@ class Pipettes:
     # Back away, so a carrier moved later does not drag against the tip; 0 sends no move.
     if round(post_detection_distance, 1) > 0:
       away = post_detection_distance if direction == "left" else -post_detection_distance
-      await self.move_to_x_position(detected + away)
+      # the tip backs away at the probing height
+      await self.move_to_x_position(x=detected + away, perform_safety_checks=False)
     surface = detected - diameter / 2 if direction == "left" else detected + diameter / 2
     return round(surface, 1) if found else None
 

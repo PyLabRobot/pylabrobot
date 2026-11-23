@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 from typing import Any, List, Tuple
+from unittest import mock
 
 import pytest
 
@@ -114,10 +115,19 @@ class TestPumpDiscovery(DriverTestBase):
     answers = make_answers()
     for board, command, request in CALIBRATION_READS:
       del answers[(board, command, request)]
-    self.default_read_timeout = 0.25
-    driver = await self.set_up_driver(link=FakeLink(answers=answers))
-    assert driver.pump is not None
-    assert driver.configuration.feedback_sensor_parameters == {}
+    driver = self.make_driver(link=FakeLink(answers=answers))
+    send_command = driver._send_command
+
+    async def send(**kwargs: Any) -> bytes:
+      # Only the calibration reads, never answered, wait briefly: an answered read cannot time out.
+      if (kwargs["board"], kwargs["command"]) == (10, 20):
+        kwargs["timeout"] = 0.25
+      return await send_command(**kwargs)
+
+    with mock.patch.object(driver, "_send_command", side_effect=send):
+      async with driver.lifespan(skip_arm=True):
+        assert driver.pump is not None
+        assert driver.configuration.feedback_sensor_parameters == {}
 
   async def test_declared_calibration_is_ignored_and_not_saved(
     self, caplog: pytest.LogCaptureFixture

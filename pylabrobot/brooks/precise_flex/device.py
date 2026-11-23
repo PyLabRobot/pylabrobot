@@ -102,6 +102,8 @@ class PreciseFlexDevice(Resource, HasLifespan):
     *,
     skip_home: bool = False,
     skip_vision_setup: bool = False,
+    with_light_greeting: bool = True,
+    with_light_farewell: bool = True,
   ) -> None:
     """Open the underlying driver lifespan.
 
@@ -109,10 +111,17 @@ class PreciseFlexDevice(Resource, HasLifespan):
       stack: exit stack managing lifespan resources.
       skip_home: as ``PreciseFlexDriver.lifespan`` takes it.
       skip_vision_setup: as ``PreciseFlexDriver.lifespan`` takes it.
+      with_light_greeting: as ``PreciseFlexDriver.lifespan`` takes it.
+      with_light_farewell: as ``PreciseFlexDriver.lifespan`` takes it.
     """
     await super()._enter_lifespan(stack)
     await stack.enter_async_context(
-      self.driver.lifespan(skip_home=skip_home, skip_vision_setup=skip_vision_setup)
+      self.driver.lifespan(
+        skip_home=skip_home,
+        skip_vision_setup=skip_vision_setup,
+        with_light_greeting=with_light_greeting,
+        with_light_farewell=with_light_farewell,
+      )
     )
 
 

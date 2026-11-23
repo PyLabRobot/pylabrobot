@@ -4,7 +4,8 @@ import json
 import logging
 import os
 import tempfile
-from typing import Any
+from typing import Any, List, Optional, Tuple, cast
+from unittest import mock
 
 import pytest
 
@@ -12,24 +13,49 @@ from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.formulatrix.mantis import Mantis
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
+  MantisArmCoordinate,
   compute_device_position,
+  compute_device_rate,
   compute_joint_angles,
 )
 from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisMotionError,
   MantisTimeoutError,
 )
-from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z
-from pylabrobot.formulatrix.mantis.driver.features.arm_v3_tests import SYNTHETIC_V3_ARM_BLOCK
+from pylabrobot.formulatrix.mantis.driver.features.arm import SHUTDOWN_Z, Arm
 from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
-from pylabrobot.formulatrix.mantis.driver.features.pneumatic_plate_clamp import PneumaticPlateClamp
 from pylabrobot.formulatrix.mantis.driver.master import SEQUENCER_QUEUE_SIZE
+from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
+  SYNTHETIC_APPROACH_PATHS_BLOCK,
+  SYNTHETIC_STAGE_BLOCK,
+  SYNTHETIC_V3_ARM_BLOCK,
+  SYNTHETIC_WASH_2_ROUTE,
+  SYNTHETIC_WASH_ROUTE,
+  SYNTHETIC_WASTE_ROUTE,
+  SYNTHETIC_ZONES_BLOCK,
+)
 from pylabrobot.formulatrix.mantis.driver.simulator import (
   MantisSimulationArm,
   MantisSimulationDriver,
   MantisSimulationLedBar,
 )
+from pylabrobot.formulatrix.mantis.driver.stage_transform import (
+  compute_arm_frame_position,
+)
+from pylabrobot.resources import Coordinate
+from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
 from pylabrobot.testing.concurrency import AnyioTestBase
+
+
+async def request_head_position(*, arm: Arm) -> Tuple[float, float, float]:
+  """Where the head is: x and y in the arm frame, mm, and Z's height above its flag, mm."""
+  joint_state = await arm.request_joint_state()
+  head = arm._get_head_position(joint_state=joint_state)
+  return cast(float, head.x), cast(float, head.y), 0.0 - joint_state[2]
+
+
+# The synthetic stage's reference height, mm.
+REFERENCE_HEIGHT = SYNTHETIC_STAGE_BLOCK["reference_height"]
 
 
 class TestMantisSimulation(AnyioTestBase):
@@ -58,6 +84,14 @@ class TestMantisSimulation(AnyioTestBase):
   async def test_setup_reports_the_recorded_generation(self) -> None:
     assert self.mantis.driver.configuration.generation == "v4"
 
+  async def test_non_boolean_lifespan_options_are_rejected(self) -> None:
+    mantis = Mantis(simulation=True)
+    for kwargs in ({"skip_arm": 1}, {"accept_chip_left_on_head": "yes"}):
+      with pytest.raises(TypeError, match="must be a bool"):
+        async with mantis.lifespan(**kwargs):  # type: ignore[arg-type]
+          pass
+    assert not mantis.is_active
+
   async def test_clamp_starts_idle_then_locks_and_unlocks(self) -> None:
     clamp = self.mantis.plate_clamp
     assert isinstance(clamp, PlateClamp)
@@ -80,9 +114,10 @@ class TestMantisSimulation(AnyioTestBase):
         json.dump(recording, file)
       mantis = Mantis(simulation=True, declared_configuration_json=path)
       async with mantis.lifespan(skip_arm=True):
-        assert isinstance(mantis.plate_clamp, PneumaticPlateClamp) and mantis.pump is not None
+        assert isinstance(mantis.plate_clamp, PlateClamp) and mantis.pump is not None
         clamp = mantis.plate_clamp
         pump = mantis.pump
+        assert clamp.auxiliary_output == 2
         await clamp.lock()
         assert await clamp.request_locked()
         assert await pump.request_pump_on()
@@ -131,14 +166,49 @@ class TestMantisSimulation(AnyioTestBase):
         async with mantis:
           assert mantis.arm is not None
           assert mantis.arm.is_initialized
-          position = await mantis.arm.request_head_position()
-          assert position.x == pytest.approx(15.0)
-          assert position.y == pytest.approx(31.177)
+          head_x, head_y, _ = await request_head_position(arm=mantis.arm)
+          assert head_x == pytest.approx(15.0)
+          assert head_y == pytest.approx(31.177)
           for motor in (0, 1, 2):
             assert await mantis.driver.request_motor_status(motor=motor) == 4
         assert mantis.arm is not None
         assert not mantis.arm.is_initialized
         assert await mantis.driver.request_motor_position(motor=2) == 0.0
+
+  async def test_v3_initialization_runs_below_the_firmware_calls(self) -> None:
+    """The unit's Z homing values reach the home command; a retract seats the arm against its
+    stop, read as a following error, with the homed bit once homed."""
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      recording = json.load(file)
+    recording["device"]["firmware_versions"]["11"] = None
+    recording["device"]["generation"] = "v3"
+    block = json.loads(json.dumps(SYNTHETIC_V3_ARM_BLOCK))
+    block["motors"]["2"].update({"speed": 10.0, "acceleration": 300.0})
+    recording["arm"] = block
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "v3.json")
+      with open(path, "w", encoding="utf-8") as file:
+        json.dump(recording, file)
+      mantis = Mantis(simulation=True, declared_configuration_json=path)
+      async with mantis.lifespan(skip_arm=True):
+        arm = mantis.arm
+        assert arm is not None
+        retract = compute_device_position(motor=0, position=block["retract"])
+        await arm._unchecked_fw_move_absolute(
+          motor=0, position=retract, speed=1.0, acceleration=1.0
+        )
+        assert await mantis.driver.request_motor_status(motor=0) == 0x100
+        with mock.patch.object(arm, "_unchecked_fw_home", wraps=arm._unchecked_fw_home) as home:
+          await arm.initialize()
+        z_homes = [call.kwargs for call in home.call_args_list if call.kwargs["motor"] == 2]
+        assert len(z_homes) == 2
+        for z_home in z_homes:
+          assert z_home["fast_speed"] == compute_device_rate(motor=2, rate=10.0)
+          assert z_home["acceleration"] == compute_device_rate(motor=2, rate=300.0)
+        await arm._unchecked_fw_move_absolute(
+          motor=0, position=retract, speed=1.0, acceleration=1.0
+        )
+        assert await mantis.driver.request_motor_status(motor=0) == 0x104
 
   async def test_rfid_reads_every_declared_slot_empty(self) -> None:
     rfid = self.mantis.rfid
@@ -156,7 +226,9 @@ class TestMantisSimulation(AnyioTestBase):
     # Without offsets, the arm motors' idle targets are the links' angles for the head at idle.
     idle = [
       compute_device_position(motor=motor, position=angle)
-      for motor, angle in enumerate(compute_joint_angles(x=15.0, y=31.177))
+      for motor, angle in enumerate(
+        compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=31.177, z=None))
+      )
     ]
     for motor, status, position in ((0, 0, idle[0]), (1, 0, idle[1]), (2, 4, 0.0)):
       assert await driver.request_motor_status(motor=motor) == status
@@ -170,14 +242,11 @@ class TestMantisSimulation(AnyioTestBase):
   async def test_the_head_stands_at_idle_without_offsets(self) -> None:
     arm = self.mantis.arm
     assert arm is not None
-    head = await arm.request_head_position()
-    assert head.x == pytest.approx(15.0, abs=1e-9)
-    assert head.y == pytest.approx(31.177, abs=1e-9)
-    joint_position = await arm.request_joint_position()
-    assert await arm.request_absolute_joint_position() == {
-      0: joint_position[0],
-      1: joint_position[1],
-    }
+    head_x, head_y, _ = await request_head_position(arm=arm)
+    assert head_x == pytest.approx(15.0, abs=1e-9)
+    assert head_y == pytest.approx(31.177, abs=1e-9)
+    joint_state = await arm.request_joint_state()
+    assert await arm.request_absolute_joint_state() == {0: joint_state[0], 1: joint_state[1]}
 
   async def test_exit_parks_and_lowers_z(self) -> None:
     mantis = Mantis(simulation=True)
@@ -193,7 +262,7 @@ class TestMantisSimulation(AnyioTestBase):
     async with mantis.lifespan(skip_arm=True):
       arm = mantis.driver.arm
       assert isinstance(arm, MantisSimulationArm)
-      theta_1, theta_2 = compute_joint_angles(x=-57.0, y=0.0)
+      theta_1, theta_2 = compute_joint_angles(location=MantisArmCoordinate(x=-57.0, y=0.0, z=None))
       arm._absolute_positions = {
         0: compute_device_position(motor=0, position=theta_1),
         1: compute_device_position(motor=1, position=theta_2),
@@ -203,7 +272,7 @@ class TestMantisSimulation(AnyioTestBase):
 
   async def test_the_long_links_meet_at_the_head(self) -> None:
     assert self.mantis.arm is not None
-    head = await self.mantis.arm.request_head_position()
+    head_x, head_y, _ = await request_head_position(arm=self.mantis.arm)
     for name in ("right_long_arm", "left_long_arm"):
       link = self.mantis.arm_links[name]
       assert link.distal_joint is not None
@@ -213,8 +282,8 @@ class TestMantisSimulation(AnyioTestBase):
       end_x = corner.x + sum(matrix[0][k] * joint[k] for k in range(3))
       end_y = corner.y + sum(matrix[1][k] * joint[k] for k in range(3))
       # The arm frame is the device frame moved to the right motor's axis and mirrored in y.
-      assert end_x == pytest.approx(72.549 + head.x, abs=1e-2)
-      assert end_y == pytest.approx(142.594 - head.y, abs=1e-2)
+      assert end_x == pytest.approx(72.549 + head_x, abs=1e-2)
+      assert end_y == pytest.approx(142.594 - head_y, abs=1e-2)
 
   async def test_pump_reads_off_with_the_recorded_calibration(self) -> None:
     pump = self.mantis.pump
@@ -313,3 +382,219 @@ class TestMantisSimulation(AnyioTestBase):
   async def test_simulated_mantis_sends_nothing(self) -> None:
     with pytest.raises(NotImplementedError, match="sends nothing"):
       await self.mantis.driver._send_command(board=0, command=3)
+
+
+class TestSimulatedRoute(AnyioTestBase):
+  """A simulated Mantis declaring the unit's zones and approach paths, synthetic."""
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recording = json.load(f)
+    directory = stack.enter_context(tempfile.TemporaryDirectory())
+    self.declared_path = os.path.join(directory, "declared.json")
+    with open(self.declared_path, "w", encoding="utf-8") as f:
+      json.dump(
+        {
+          **recording,
+          "zones": SYNTHETIC_ZONES_BLOCK,
+          "approach_paths": SYNTHETIC_APPROACH_PATHS_BLOCK,
+          "stage": SYNTHETIC_STAGE_BLOCK,
+        },
+        f,
+      )
+    self.mantis = Mantis(simulation=True, declared_configuration_json=self.declared_path)
+    await stack.enter_async_context(self.mantis.lifespan())
+    arm = self.mantis.arm
+    assert isinstance(arm, MantisSimulationArm)
+    self.arm = arm
+
+  async def assert_head_at(self, *, x: float, y: float, z: float) -> None:
+    head = await request_head_position(arm=self.arm)
+    for value, expected in zip(head, (x, y, z)):
+      assert value == pytest.approx(expected, abs=1e-6)
+
+  async def move_head_to(self, *, x: float, y: float) -> None:
+    """Move the head to (x, y) in the arm frame, off the plate holder, through the deck frame."""
+    deck_x, deck_y = self.arm._get_deck_frame_xy(x=x, y=y)
+    await self.arm.move_to_xy_position(x=deck_x, y=deck_y)
+
+  async def test_a_move_off_the_plate_holder_and_back_to_idle(self) -> None:
+    await self.move_head_to(x=-57.0, y=0.0)
+    await self.arm.move_to_joint_state(joint_state={2: 10.0})
+    await self.assert_head_at(x=-57.0, y=0.0, z=-10.0)
+    assert not await self.arm.request_is_parked()
+    await self.arm.park()
+    await self.assert_head_at(x=15.0, y=31.177, z=0.0)
+    assert await self.arm.request_is_parked()
+
+  async def test_z_and_joint_moves(self) -> None:
+    await self.arm.move_to_z_position(z=50.0)
+    assert (await self.arm.request_pose()).nozzle_location.z == pytest.approx(50.0, abs=1e-6)
+    await self.arm.move_to_joint_state(joint_state={2: 5.0})
+    assert (await self.arm.request_joint_state())[2] == 5.0
+
+  async def assert_at_end_of(self, *, path: List[List[Optional[float]]]) -> None:
+    x, y, z = path[-1]
+    assert x is not None and y is not None and z is not None
+    await self.assert_head_at(x=x, y=y, z=-z)
+
+  async def test_the_waste_and_each_wash_are_reached_from_wherever_the_head_stands(self) -> None:
+    await self.arm.move_to_waste()
+    await self.assert_at_end_of(path=SYNTHETIC_WASTE_ROUTE)
+    # From the waste: out along its path to its start, then in along the wash's.
+    await self.arm.move_to_wash(position=1)
+    await self.assert_at_end_of(path=SYNTHETIC_WASH_ROUTE)
+    # From one wash to the other: up to wash 1's safe Z (its last line but one), across to wash 2's
+    # safe-Z line, then down; the head stays in the wash.
+    with mock.patch.object(
+      self.arm, "_leave_approach_path", wraps=self.arm._leave_approach_path
+    ) as leave:
+      await self.arm.move_to_wash(position=2)
+    last = len(SYNTHETIC_WASH_ROUTE) - 1
+    leave.assert_awaited_once_with(
+      name="wash_1", index=last, until=last - 1, with_model_updates=False
+    )
+    await self.assert_at_end_of(path=SYNTHETIC_WASH_2_ROUTE)
+    await self.arm.park()
+    assert await self.arm.request_is_parked()
+    with pytest.raises(ValueError, match="position must be one of"):
+      await self.arm.move_to_wash(position=3)
+
+  async def test_with_model_updates_the_pose_is_passed_on_after_every_segment(self) -> None:
+    for with_model_updates, calls in ((True, len(SYNTHETIC_WASH_ROUTE)), (False, 1)):
+      await self.arm.park()
+      with mock.patch.object(self.arm, "_pose_observer") as observer:
+        await self.arm.move_to_wash(position=1, with_model_updates=with_model_updates)
+      assert observer.call_count == calls
+      await self.assert_at_end_of(path=SYNTHETIC_WASH_ROUTE)
+
+  async def test_a_move_from_the_waste_leaves_along_its_path_first(self) -> None:
+    # Where the head stands is read from the motors: nothing is remembered between moves.
+    await self.arm.move_to_waste()
+    with mock.patch.object(
+      self.arm, "_leave_approach_path", wraps=self.arm._leave_approach_path
+    ) as leave:
+      await self.move_head_to(x=-57.0, y=0.0)
+    leave.assert_awaited_once_with(
+      name="waste", index=len(SYNTHETIC_WASTE_ROUTE) - 1, until=0, with_model_updates=False
+    )
+    await self.assert_head_at(x=-57.0, y=0.0, z=1.57)
+
+  async def test_leaving_a_path_never_moves_the_arms_while_z_rises(self) -> None:
+    # Z down positive in device units: a target below where Z stands raises it.
+    driver = self.arm._driver
+    for name in ("waste", "wash_1"):
+      if name == "waste":
+        await self.arm.move_to_waste()
+      else:
+        await self.arm.move_to_wash(position=1)
+      positions = dict(self.arm._positions)
+      with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
+        await self.arm.park()
+      assert queue.called
+      for call in queue.call_args_list:
+        targets = call.kwargs["targets"]
+        named = {motor: target[0] for motor, target in enumerate(targets) if target[1] != 0}
+        arms_move = any(positions[motor] != named[motor] for motor in (0, 1) if motor in named)
+        z_rises = 2 in named and named[2] < positions[2]
+        assert not (arms_move and z_rises), f"one item moves the arms and raises Z: {targets}"
+        positions.update(named)
+
+  async def test_on_a_path_z_alone_and_bad_arguments_move_nothing(self) -> None:
+    await self.arm.move_to_waste()
+    positions = dict(self.arm._positions)
+    with pytest.raises(MantisMotionError, match="on the waste approach path; Z alone"):
+      await self.arm.move_to_z_position(z=50.0)
+    with pytest.raises(MantisMotionError, match="on the waste approach path; Z alone"):
+      await self.arm.move_to_joint_state(joint_state={2: 5.0})
+    # A traverse height that is no height is refused before the head leaves the path.
+    nan = float("nan")
+    deck_x, deck_y = self.arm._get_deck_frame_xy(x=-57.0, y=0.0)
+    with pytest.raises(ValueError, match="outside its limits"):
+      await self.arm.move_to_xy_position(x=deck_x, y=deck_y, minimum_traverse_height_start=nan)
+    with pytest.raises(ValueError, match="outside its limits"):
+      await self.arm.move_to_location(
+        location=Coordinate(x=deck_x, y=deck_y, z=60.0), minimum_traverse_height_start=nan
+      )
+    with pytest.raises(ValueError, match="outside its limits"):
+      await self.arm.park(minimum_traverse_height_start=nan)
+    assert self.arm._positions == positions
+
+  async def test_move_to_xy_position_and_move_to_location_send_the_same_arm_targets(self) -> None:
+    # (-60, 14) mm in the arm frame: move_to_location moves across through move_to_xy_position.
+    location = Coordinate(*self.arm._get_deck_frame_xy(x=-60.0, y=14.0), z=60.0)
+    driver = self.arm._driver
+    sent = []
+    for move in (
+      lambda: self.arm.move_to_xy_position(x=location.x, y=location.y),
+      lambda: self.arm.move_to_location(location=location),
+    ):
+      await self.arm.park()
+      with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
+        await move()
+      sent.append(queue.call_args_list[0].kwargs["targets"][:2])
+    assert sent[0] == sent[1]
+
+  async def test_exit_from_a_back_zone_parks_along_its_route_and_lowers_z(self) -> None:
+    mantis = Mantis(simulation=True, declared_configuration_json=self.declared_path)
+    async with mantis:
+      arm = mantis.arm
+      assert isinstance(arm, MantisSimulationArm)
+      await arm.move_to_waste()
+    assert arm._positions[2] == pytest.approx(compute_device_position(motor=2, position=SHUTDOWN_Z))
+    idle = compute_joint_angles(location=MantisArmCoordinate(x=15.0, y=31.177, z=None))
+    for motor in (0, 1):
+      assert arm._positions[motor] == pytest.approx(
+        compute_device_position(motor=motor, position=idle[motor])
+      )
+
+  async def test_recover_from_fault_brings_the_head_back_to_idle(self) -> None:
+    await self.move_head_to(x=80.0, y=-40.0)
+    await self.arm.move_to_joint_state(joint_state={2: 5.0})
+    await self.arm.recover_from_fault()
+    assert self.arm.is_initialized
+    await self.assert_head_at(x=15.0, y=31.177, z=0.0)
+
+
+class TestSimulatedWellplate(AnyioTestBase):
+  """A simulated Mantis declaring synthetic zones and stage, a wellplate in its plate holder."""
+
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
+      recording = json.load(f)
+    directory = stack.enter_context(tempfile.TemporaryDirectory())
+    path = os.path.join(directory, "declared.json")
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump({**recording, "zones": SYNTHETIC_ZONES_BLOCK, "stage": SYNTHETIC_STAGE_BLOCK}, f)
+    self.mantis = Mantis(simulation=True, declared_configuration_json=path)
+    await stack.enter_async_context(self.mantis.lifespan())
+    self.wellplate = cor_96_wellplate_360uL_Fb(name="wellplate")
+    self.mantis.plate_holder.assign_child_resource(self.wellplate)
+
+  async def test_the_nozzle_goes_over_each_corner_well(self) -> None:
+    arm = self.mantis.arm
+    assert arm is not None
+    # Each well's centre from the wellplate's back-left corner, mm; 12.5 mm above its 14.2 mm frame.
+    for name, x, y in (("A1", 14.3, 11.28), ("A12", 113.3, 11.28), ("H1", 14.3, 74.28)):
+      center = self.wellplate.get_item(name).get_location_wrt(self.mantis.deck, x="c", y="c")
+      await arm.move_to_xy_position(x=center.x, y=center.y)
+      await arm.move_to_z_position(z=26.7)
+      arm_frame_location = compute_arm_frame_position(
+        position=(x, y, REFERENCE_HEIGHT - 26.7),
+        origin=(-50.0, 40.0, 51.0),
+        transformation_matrix=SYNTHETIC_STAGE_BLOCK["transformation_matrix"],
+        offset_x=(0.0, 0.0, -0.0015),
+        offset_y=(0.0, 0.0, 0.0025),
+        arm_type_rotation_degree=0.0,
+        arm_type_translation=(0.0, 0.0, 0.0),
+      )
+      head_x, head_y, head_z = await request_head_position(arm=arm)
+      assert arm_frame_location.x is not None and arm_frame_location.y is not None
+      assert arm_frame_location.z is not None
+      assert head_x == pytest.approx(arm_frame_location.x, abs=1e-3)
+      assert head_y == pytest.approx(arm_frame_location.y, abs=1e-3)
+      assert head_z == pytest.approx(-arm_frame_location.z, abs=1e-3)
+    await arm.park()
+    assert await arm.request_is_parked()

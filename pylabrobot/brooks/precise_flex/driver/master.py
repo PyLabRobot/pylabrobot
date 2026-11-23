@@ -623,14 +623,19 @@ class PreciseFlexDriver(HasLifespan):
     start_data: Dict[str, Any] = {
       "device": self._controller_reference(),
       "skip_home": kwargs.get("skip_home", False),
+      "with_light_greeting": kwargs.get("with_light_greeting", True),
     }
     if "skip_vision_setup" in kwargs:
       start_data["skip_vision_setup"] = kwargs["skip_vision_setup"]
+    stop_data: Dict[str, Any] = {
+      "device": self._controller_reference(),
+      "with_light_farewell": kwargs.get("with_light_farewell", True),
+    }
     return LifespanEventInfo(
       "precise_flex.setup",
       "precise_flex.stop",
       start_data,
-      {"device": self._controller_reference()},
+      stop_data,
     )
 
   def _log_disconnected(self) -> None:
@@ -777,6 +782,8 @@ class PreciseFlexDriver(HasLifespan):
     *,
     skip_home: bool = False,
     skip_vision_setup: bool = False,
+    with_light_greeting: bool = True,
+    with_light_farewell: bool = True,
   ) -> None:
     """Open and initialize the controller, registering rollback after each acquisition."""
     await super()._enter_lifespan(stack)
@@ -784,13 +791,25 @@ class PreciseFlexDriver(HasLifespan):
       raise TypeError("skip_home must be a bool")
     if not isinstance(skip_vision_setup, bool):
       raise TypeError("skip_vision_setup must be a bool")
+    if not isinstance(with_light_greeting, bool):
+      raise TypeError("with_light_greeting must be a bool")
+    if not isinstance(with_light_farewell, bool):
+      raise TypeError("with_light_farewell must be a bool")
 
     self._setup_completed = False
+    self.vision = None
     await self._enter_link(stack)
     await self.power_on_robot()
     self._push_lifespan_cleanup(stack, self.power_off_robot)
+
+    async def _farewell_if_completed() -> None:
+      """Play the LED farewell only after setup finished with vision enabled."""
+      if self._setup_completed and with_light_farewell and self.vision is not None:
+        await self.vision._light_farewell()
+
     await self.attach(1)
     self._push_lifespan_cleanup(stack, self.detach)
+    stack.push_shielded_async_callback(_farewell_if_completed, shield_timeout=5.0)
     self._push_lifespan_cleanup(stack, self.arm._force_stop_freedrive)
     await self.arm.stop_freedrive_mode()
     configuration = await self.discover()
@@ -800,6 +819,8 @@ class PreciseFlexDriver(HasLifespan):
     await self.arm._handle_out_of_range_axes()
     if not skip_vision_setup and configuration.has_vision_server:
       await self._setup_vision(self._vision_host)
+      if with_light_greeting and self.vision is not None:
+        await self.vision._light_greeting()
     self._setup_completed = True
 
   def _check_declared_against(self, discovered: "PreciseFlexConfiguration") -> None:

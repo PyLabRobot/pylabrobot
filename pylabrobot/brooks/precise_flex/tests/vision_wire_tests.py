@@ -13,6 +13,7 @@ import pytest
 from pylabrobot.brooks.precise_flex import PreciseFlexDriver
 from pylabrobot.brooks.precise_flex.driver.errors import PreciseFlexVisionError
 from pylabrobot.brooks.precise_flex.driver.features.vision import (
+  CameraInfo,
   PreciseFlexVision,
   StereoParameters,
   VisionConfiguration,
@@ -132,6 +133,7 @@ class _FakeNetwork:
     # Pushed onto the image stream when a camera acquire is triggered, as the vision server does.
     self.frames_on_acquire: List[bytes] = []
     self.controller_replies = dict(_CONTROLLER_REPLIES)
+    self.vision_replies = dict(_VISION_SERVER_REPLIES)
     self.unreachable: List[int] = []
     self._pending: Dict[int, List[str]] = {}
 
@@ -157,7 +159,7 @@ class _FakeNetwork:
     async def readline(sock: Socket, timeout: Optional[float] = None) -> bytes:
       line = network._pending[sock._port].pop(0)
       vision = sock._port == _VISION_SERVER_PORT
-      replies = _VISION_SERVER_REPLIES if vision else network.controller_replies
+      replies = network.vision_replies if vision else network.controller_replies
       return (replies.get(line, "0") + "\r\n").encode()
 
     async def read(sock: Socket, num_bytes: int = 128, timeout: Optional[float] = None) -> bytes:
@@ -487,7 +489,7 @@ class TestPreciseFlexVisionWire(_FastEomTestBase):
     return arm
 
   async def test_setup_with_vision(self) -> None:
-    arm = await self._arm()
+    arm = await self._arm(with_light_greeting=False)
     assert self.network.sent == _SETUP
     config = _vision(arm).configuration
     assert {name: tool.type for name, tool in config.vision_tools.items()} == {
@@ -538,11 +540,135 @@ class TestPreciseFlexVisionWire(_FastEomTestBase):
         await call()
     assert self.network.sent == []
 
+  async def test_setup_fades_the_front_led_on_last(self) -> None:
+    greeting = [
+      f"controller: {command}"
+      for brightness in (10, 30, 60, 100, 0)
+      for command in (
+        "VToolProperty led Bank 1",
+        f"VToolProperty led Brightness {brightness}",
+        "Vprocess LightControl",
+      )
+    ]
+    sleeps: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+      sleeps.append(delay)
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.driver.features.vision.anyio.sleep", new=record_sleep
+    ):
+      await self._arm()
+    assert self.network.sent == _SETUP + greeting
+    assert sleeps[-4:] == [0.1] * 4
+
   async def test_stop_closes_the_vision_server(self) -> None:
-    await self._arm()
+    await self._arm(with_light_farewell=False)
     self.network.sent.clear()
     await self._arm_stack.aclose()
     assert self.network.sent == _STOP
+
+  async def test_stop_flashes_the_leds_twice_first(self) -> None:
+    flash = [
+      f"controller: {command}"
+      for bank in (1, 2)
+      for brightness in (100, 0)
+      for command in (
+        f"VToolProperty led Bank {bank}",
+        f"VToolProperty led Brightness {brightness}",
+        "Vprocess LightControl",
+      )
+    ]
+    await self._arm()
+    self.network.sent.clear()
+    sleeps: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+      sleeps.append(delay)
+
+    with patch(
+      "pylabrobot.brooks.precise_flex.driver.features.vision.anyio.sleep", new=record_sleep
+    ):
+      await self._arm_stack.aclose()
+    assert self.network.sent == flash * 2 + _STOP
+    assert sleeps == [0.1] * 4
+
+  async def test_stop_without_light_control_does_not_flash(self) -> None:
+    arm = await self._arm(with_light_greeting=False)
+    _vision(arm).configuration = VisionConfiguration(discovered=True)
+    self.network.sent.clear()
+    await self._arm_stack.aclose()
+    assert self.network.sent == _STOP
+
+  async def test_greeting_and_farewell_skip_cameras_absent_from_discovered_configuration(
+    self,
+  ) -> None:
+    async def no_sleep(delay: float) -> None:
+      """Skip LED step delays while testing camera filtering."""
+      del delay
+
+    with patch("pylabrobot.brooks.precise_flex.driver.features.vision.anyio.sleep", new=no_sleep):
+      # Discovered LightControl with zero cameras skips both greeting and farewell.
+      self.network.vision_replies = {
+        **_VISION_SERVER_REPLIES,
+        "property get system.cameracount": "0 0",
+      }
+      arm = await self._arm()
+      assert _vision(arm).configuration.cameras == {}
+      assert "controller: Vprocess LightControl" not in self.network.sent
+      self.network.sent.clear()
+      await self._arm_stack.aclose()
+      assert self.network.sent == _STOP
+
+      # Discovered single-camera server (camera 1 only) runs greeting and flashes only bank 1.
+      self.network.vision_replies = {
+        **_VISION_SERVER_REPLIES,
+        "property get system.cameracount": "0 1",
+      }
+      self.network.sent.clear()
+      arm = await self._arm()
+      assert list(_vision(arm).configuration.cameras) == [1]
+      greeting = [
+        f"controller: {command}"
+        for brightness in (10, 30, 60, 100, 0)
+        for command in (
+          "VToolProperty led Bank 1",
+          f"VToolProperty led Brightness {brightness}",
+          "Vprocess LightControl",
+        )
+      ]
+      assert self.network.sent[-len(greeting) :] == greeting
+      self.network.sent.clear()
+      await self._arm_stack.aclose()
+      bank_1_flash = [
+        f"controller: {command}"
+        for brightness in (100, 0)
+        for command in (
+          "VToolProperty led Bank 1",
+          f"VToolProperty led Brightness {brightness}",
+          "Vprocess LightControl",
+        )
+      ]
+      assert self.network.sent == bank_1_flash * 2 + _STOP
+
+      # Discovered configuration with only camera 2 skips greeting and flashes only bank 2.
+      self.network.vision_replies = dict(_VISION_SERVER_REPLIES)
+      arm = await self._arm(with_light_greeting=False)
+      _vision(arm).configuration.cameras = {2: CameraInfo(name="Cam2")}
+      self.network.sent.clear()
+      await _vision(arm)._light_greeting()
+      assert self.network.sent == []
+      await self._arm_stack.aclose()
+      bank_2_flash = [
+        f"controller: {command}"
+        for brightness in (100, 0)
+        for command in (
+          "VToolProperty led Bank 2",
+          f"VToolProperty led Brightness {brightness}",
+          "Vprocess LightControl",
+        )
+      ]
+      assert self.network.sent == bank_2_flash * 2 + _STOP
 
   async def test_a_method_needs_its_tool_type(self) -> None:
     for _, configuration, sends in (

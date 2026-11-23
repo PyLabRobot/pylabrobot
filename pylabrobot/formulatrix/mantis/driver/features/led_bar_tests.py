@@ -276,6 +276,7 @@ class TestSetupAndStop(LedBarTestBase):
         del link.answers[color_write(colors=[OFF] * 20)]
         driver.default_read_timeout = 0.25
     assert any("could not turn the LED bar off" in rec.getMessage() for rec in caplog.records)
+    driver.default_read_timeout = self.default_read_timeout
     since = len(link.written)
     async with driver.lifespan(skip_arm=True):
       assert bar_states(written=link.written[since:]) == [BLUE, GREEN, "idle"]
@@ -385,12 +386,18 @@ class TestAction(LedBarTestBase):
         self.bar.error_color = color
       with pytest.raises(ValueError):
         self.bar.dispense_progress_color = color
+      with pytest.raises(ValueError):
+        self.bar.pick_up_chip_color = color
+      with pytest.raises(ValueError):
+        self.bar.place_chip_color = color
     assert [
       self.bar.setup_color,
       self.bar.setup_done_color,
       self.bar.error_color,
       self.bar.dispense_progress_color,
-    ] == ["blue", "green", "red", "green"]
+      self.bar.pick_up_chip_color,
+      self.bar.place_chip_color,
+    ] == ["blue", "green", "red", "green", "#00FFFF", "#8000FF"]
     assert self.sent() == []
 
   async def test_each_bar_has_its_own_colours(self) -> None:

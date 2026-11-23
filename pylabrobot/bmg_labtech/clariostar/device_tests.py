@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pylabrobot.bmg_labtech.clariostar.device import (
+  LOCATION_IN,
+  LOCATION_OUT,
   CLARIOstar,
   CLARIOstarDevice,
   CLARIOstarPlus,
@@ -136,6 +138,15 @@ class TestDevice(AnyioTestBase):
 
   async def test_generic_device_is_not_checked(self):
     await self.setup_reader(CLARIOstarDevice(io=FakeFTDI()))
+
+  async def test_the_drawer_moves_the_plate_holder_by_default(self):
+    reader = CLARIOstarPlus(simulation=True)
+    assert reader.plate_holder.location == LOCATION_IN
+    async with reader:
+      await reader.drawer.open()
+      assert reader.plate_holder.location == LOCATION_OUT
+      await reader.drawer.close()
+      assert reader.plate_holder.location == LOCATION_IN
 
 
 class TestStop(AnyioTestBase):

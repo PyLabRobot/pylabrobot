@@ -163,6 +163,32 @@ class TestBuiltAtSetupFromADeclaredConfiguration(AnyioTestBase):
     async with device:
       assert [r.name for r in device.get_all_children()] == before
 
+  async def test_lifespan_forwards_light_greeting_and_farewell_options(self) -> None:
+    device = simulated()
+    captured: list[dict[str, Any]] = []
+    original_lifespan = device.driver.lifespan
+
+    def record_lifespan(**kwargs: Any):
+      captured.append(kwargs)
+      return original_lifespan(**kwargs)
+
+    with patch.object(device.driver, "lifespan", side_effect=record_lifespan):
+      async with device.lifespan(
+        skip_home=True,
+        with_light_greeting=False,
+        with_light_farewell=False,
+      ):
+        pass
+
+    assert captured == [
+      {
+        "skip_home": True,
+        "skip_vision_setup": False,
+        "with_light_greeting": False,
+        "with_light_farewell": False,
+      }
+    ]
+
   def test_without_a_driver_or_simulation_there_is_nothing_to_drive(self) -> None:
     with pytest.raises(ValueError):
       PreciseFlex400()
@@ -583,11 +609,16 @@ class TestParkingTakesAClearTurn(AnyioTestBase):
     assert moves == ["moveJ 1 301.125 0.0 180.0 -180.0 70.7"]
     assert "parking with the wrist at -180.0, not 180.0" in caplog.text
 
-  async def test_a_turn_past_the_wrists_soft_limit_is_not_taken(self) -> None:
+  async def test_a_turn_past_the_wrists_soft_limit_is_not_taken(
+    self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+  ) -> None:
     # From -215.9 the clear turn is -180, which this wrist may not reach: nothing is sent.
+    monkeypatch.setattr(logging.getLogger("pylabrobot"), "propagate", True)
     self.read.arm.soft_limits[PreciseFlexAxis.WRIST] = (-970.0, -200.0)
-    with pytest.raises(ValueError, match="WRIST target 180.0 is outside its soft limit"):
-      await self.park("301.1 92.0 179.4 -215.9 70.7")
+    with caplog.at_level("ERROR", logger="pylabrobot.brooks.precise_flex.driver.features.arm"):
+      with pytest.raises(ValueError, match="WRIST target 180.0 is outside its soft limit"):
+        await self.park("301.1 92.0 179.4 -215.9 70.7")
+    assert "move refused, nothing sent: WRIST target 180.0" in caplog.text
 
   async def test_a_pose_no_turn_reaches_clear_is_refused_as_written(self) -> None:
     self.driver.arm.parking_position = {

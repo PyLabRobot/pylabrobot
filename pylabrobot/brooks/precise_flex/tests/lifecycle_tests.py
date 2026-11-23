@@ -1,4 +1,5 @@
 from typing import Any, Awaitable, Callable, Optional, cast
+from unittest.mock import patch
 
 import anyio
 import pytest
@@ -9,6 +10,7 @@ from pylabrobot.brooks.precise_flex import (
   PreciseFlexDriver,
   PreciseFlexRail,
 )
+from pylabrobot.brooks.precise_flex.driver.features.vision import PreciseFlexVision
 from pylabrobot.brooks.precise_flex.tests.wire_tests import _REPLIES, _SETUP, _SETUP_SKIP_HOME
 from pylabrobot.concurrency import AsyncExitStackWithShielding, HasLifespan
 from pylabrobot.events import EventBus, PLREvent, event_context, use_event_bus
@@ -100,9 +102,31 @@ def make_arm(
   return arm, recording_socket
 
 
-ENTRY = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP]]
-ENTRY_SKIP_HOME = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP_SKIP_HOME]]
-EXIT = ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]
+GREETING = [
+  f"write:{cmd}"
+  for brightness in (10, 30, 60, 100, 0)
+  for cmd in (
+    "VToolProperty led Bank 1",
+    f"VToolProperty led Brightness {brightness}",
+    "Vprocess LightControl",
+  )
+]
+FAREWELL = [
+  f"write:{cmd}"
+  for _ in range(2)
+  for bank in (1, 2)
+  for brightness in (100, 0)
+  for cmd in (
+    f"VToolProperty led Bank {bank}",
+    f"VToolProperty led Brightness {brightness}",
+    "Vprocess LightControl",
+  )
+]
+ENTRY_WITHOUT_GREETING = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP]]
+ENTRY = [*ENTRY_WITHOUT_GREETING, *GREETING]
+ENTRY_SKIP_HOME = ["socket.enter", *[f"write:{cmd}" for cmd in _SETUP_SKIP_HOME], *GREETING]
+EXIT_WITHOUT_FAREWELL = ["write:attach 0", "write:hp 0", "write:exit", "socket.exit"]
+EXIT = [*FAREWELL, *EXIT_WITHOUT_FAREWELL]
 
 
 def test_managed_methods_are_inherited() -> None:
@@ -117,6 +141,10 @@ def test_managed_methods_are_inherited() -> None:
 
 
 class TestPreciseFlexLifecycle(AnyioTestBase):
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    stack.enter_context(patch.object(PreciseFlexVision, "_LIGHT_STEP_DELAY", 0.0))
+
   async def test_entry_and_exit_order(self) -> None:
     events: list[str] = []
     arm, _ = make_arm(events)
@@ -156,7 +184,162 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     with pytest.raises(TypeError, match="skip_home must be a bool"):
       async with arm.lifespan(skip_home=1):
         pytest.fail("invalid options must not reach the body")
+    for kw in ({"with_light_greeting": "no"}, {"with_light_farewell": 0}):
+      with pytest.raises(TypeError, match="must be a bool"):
+        async with arm.lifespan(**kw):
+          pytest.fail("invalid options must not reach the body")
     assert events == []
+
+  async def test_light_greeting_and_farewell_can_be_disabled_via_lifespan(self) -> None:
+    events: list[str] = []
+    arm, _ = make_arm(events)
+    async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
+      events.append("body")
+    assert events == ENTRY_WITHOUT_GREETING + ["body"] + EXIT_WITHOUT_FAREWELL
+
+  async def test_cancellation_during_light_greeting_turns_off_front_led_and_cleans_up(self) -> None:
+    events: list[str] = []
+    arm, _ = make_arm(events)
+    lit_started = anyio.Event()
+
+    async def cancel_on_light_step() -> None:
+      lit_started.set()
+      await anyio.sleep_forever()
+
+    with patch.object(
+      PreciseFlexVision,
+      "_sleep_light_step",
+      side_effect=cancel_on_light_step,
+    ):
+      async with anyio.create_task_group() as tg:
+
+        async def enter() -> None:
+          async with arm:
+            pytest.fail("cancelled greeting must not reach body")
+
+        tg.start_soon(enter)
+        await lit_started.wait()
+        tg.cancel_scope.cancel()
+
+    assert "write:VToolProperty led Brightness 0" in events
+    assert events[-4:] == EXIT_WITHOUT_FAREWELL
+    assert not arm.is_active
+
+  async def test_cancellation_at_start_led_return_checkpoint_turns_off_front_led(self) -> None:
+    events: list[str] = []
+    arm, _ = make_arm(events)
+    original_send = arm.send_command
+    cancelled_once = False
+
+    async def cancel_after_first_light_control(command: str, **kwargs: Any) -> str:
+      nonlocal cancelled_once
+      reply = await original_send(command, **kwargs)
+      if command == "Vprocess LightControl" and not cancelled_once:
+        cancelled_once = True
+        scope.cancel()
+        await anyio.lowlevel.checkpoint()
+      return reply
+
+    with anyio.CancelScope() as scope:
+      with patch.object(arm, "send_command", side_effect=cancel_after_first_light_control):
+        async with arm.lifespan(skip_home=True):
+          pytest.fail("cancelled greeting must not reach body")
+
+    assert scope.cancelled_caught
+    assert "write:VToolProperty led Brightness 0" in events
+    assert events[-4:] == EXIT_WITHOUT_FAREWELL
+    assert not arm.is_active
+
+  async def test_cancellation_during_light_farewell_turns_off_active_led(self) -> None:
+    events: list[str] = []
+    arm, _ = make_arm(events)
+    step_count = 0
+
+    async def cancel_on_second_step() -> None:
+      """Let the front flash finish, then cancel while the bottom LED is lit."""
+      nonlocal step_count
+      step_count += 1
+      if step_count == 2:
+        scope.cancel()
+        await anyio.sleep_forever()
+
+    async with arm.lifespan(skip_home=True, with_light_greeting=False, with_light_farewell=False):
+      assert arm.vision is not None
+      events.clear()
+      with anyio.fail_after(5.0):
+        with anyio.CancelScope() as scope:
+          with patch.object(
+            PreciseFlexVision,
+            "_sleep_light_step",
+            side_effect=cancel_on_second_step,
+          ):
+            await arm.vision._light_farewell()
+        await anyio.lowlevel.checkpoint()
+
+      assert scope.cancelled_caught
+      assert events[-3:] == [
+        "write:VToolProperty led Bank 2",
+        "write:VToolProperty led Brightness 0",
+        "write:Vprocess LightControl",
+      ]
+
+    assert not arm.is_active
+
+  async def test_cancellation_at_farewell_start_led_checkpoint_turns_off_led(self) -> None:
+    events: list[str] = []
+    arm, recording_socket = make_arm(events)
+    original_readline = recording_socket.readline
+    cancelled_once = False
+
+    async def cancel_before_start_led_returns(timeout: Optional[float] = None) -> bytes:
+      """Cancel while start_led's LightControl reply is shielded so its exit checkpoint fires."""
+      nonlocal cancelled_once
+      reply = await original_readline(timeout=timeout)
+      if recording_socket._last_command == "Vprocess LightControl" and not cancelled_once:
+        cancelled_once = True
+        scope.cancel()
+      return reply
+
+    async with arm.lifespan(skip_home=True, with_light_greeting=False, with_light_farewell=False):
+      assert arm.vision is not None
+      events.clear()
+      with anyio.fail_after(5.0):
+        with anyio.CancelScope() as scope:
+          with patch.object(
+            recording_socket,
+            "readline",
+            side_effect=cancel_before_start_led_returns,
+          ):
+            await arm.vision._light_farewell()
+        await anyio.lowlevel.checkpoint()
+
+      assert scope.cancelled_caught
+      assert events == [
+        "write:VToolProperty led Bank 1",
+        "write:VToolProperty led Brightness 100",
+        "write:Vprocess LightControl",
+        "write:VToolProperty led Bank 1",
+        "write:VToolProperty led Brightness 0",
+        "write:Vprocess LightControl",
+      ]
+
+    assert not arm.is_active
+
+  async def test_skip_vision_setup_after_vision_session_clears_vision_and_omits_farewell(
+    self,
+  ) -> None:
+    events: list[str] = []
+    arm, _ = make_arm(events)
+
+    async with arm.lifespan(skip_home=True):
+      assert arm.vision is not None
+
+    events.clear()
+    async with arm.lifespan(skip_home=True, skip_vision_setup=True):
+      assert arm.vision is None
+
+    assert "write:Vprocess LightControl" not in events
+    assert events[-4:] == EXIT_WITHOUT_FAREWELL
 
   async def test_socket_entry_failure_issues_no_commands(self) -> None:
     events: list[str] = []
@@ -223,7 +406,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       task_group.cancel_scope.cancel()
       release_home.set()
 
-    assert events[-5:] == EXIT + ["cancelled"]
+    assert events[-5:] == EXIT_WITHOUT_FAREWELL + ["cancelled"]
     assert not arm.is_active
 
   async def test_body_cancellation_completes_all_cleanup(self) -> None:
@@ -245,7 +428,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       await body_started.wait()
       task_group.cancel_scope.cancel()
 
-    assert events[-5:] == EXIT + ["cancelled"]
+    assert events[-(len(EXIT) + 1) :] == EXIT + ["cancelled"]
     assert not arm.is_active
 
   async def test_detach_failure_does_not_skip_later_cleanup(self) -> None:
@@ -256,7 +439,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       async with arm.lifespan(skip_home=True):
         pass
 
-    assert events[-4:] == EXIT
+    assert events[-4:] == EXIT_WITHOUT_FAREWELL
     assert not arm.is_active
 
   async def test_cleanup_failures_remain_in_exception_chain(self) -> None:
@@ -278,7 +461,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       error = error.__context__
     assert "failed at attach 0" in messages
     assert "socket close failed" in messages
-    assert events[-4:] == EXIT
+    assert events[-len(EXIT) :] == EXIT
 
   async def test_sequential_reuse_runs_complete_cycles(self) -> None:
     events: list[str] = []
@@ -358,7 +541,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
           pytest.fail("partial entry reached the body")
       socket.fail_command = None
 
-    assert events[-7:] == [
+    assert events[-(len(EXIT) + 3) :] == [
       "write:freemode 1",
       "write:freemode 2",
       "write:freemode -1",
@@ -428,6 +611,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
       ),
       lambda arm: arm.gripper.move_to_jaw_position(80),
       lambda arm: arm.gripper.move_to_jaw_position_firmware_units(520),
+      lambda arm: arm.gripper.open(),
+      lambda arm: arm.gripper.close(),
       lambda arm: arm.rail.move_rail(10) if arm.rail is not None else arm.home(),
       lambda arm: arm.arm.pick_up_at_joint_state({}, 80),
       lambda arm: arm.arm.drop_at_joint_state({}, 80),
@@ -674,7 +859,7 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     commands_after_parent_exit = list(events)
     await scope.__aexit__(None, None, None)
 
-    assert commands_after_parent_exit[-5:] == ["write:freemode -1", *EXIT]
+    assert commands_after_parent_exit[-(len(EXIT) + 1) :] == ["write:freemode -1", *EXIT]
     assert events == commands_after_parent_exit
 
   async def test_sequential_freedrive_scope_reuse_runs_complete_cycles(self) -> None:
@@ -733,6 +918,8 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
     ]
     assert all(event.context["resources"] == resources for event in completed_lifecycle)
     assert completed_lifecycle[0].data["skip_home"] is True
+    assert completed_lifecycle[0].data["with_light_greeting"] is True
+    assert completed_lifecycle[2].data["with_light_farewell"] is True
     assert (
       completed_lifecycle[0].context["operation_id"]
       == completed_lifecycle[1].context["operation_id"]
@@ -765,6 +952,10 @@ class TestPreciseFlexLifecycle(AnyioTestBase):
 class TestPreciseFlexSetupCompatibility(AnyioTestBase):
   _anyio_backends = ["asyncio"]
 
+  async def _enter_lifespan(self, stack: AsyncExitStackWithShielding, **kwargs: Any) -> None:
+    await super()._enter_lifespan(stack, **kwargs)
+    stack.enter_context(patch.object(PreciseFlexVision, "_LIGHT_STEP_DELAY", 0.0))
+
   async def test_setup_compatibility_forwards_skip_home(self) -> None:
     events: list[str] = []
     arm, _ = make_arm(events)
@@ -776,4 +967,4 @@ class TestPreciseFlexSetupCompatibility(AnyioTestBase):
 
     await arm.stop()
     assert not arm.is_active
-    assert events[-4:] == EXIT
+    assert events[-len(EXIT) :] == EXIT

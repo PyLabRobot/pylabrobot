@@ -31,18 +31,14 @@ from .driver import (
   MantisSimulationDriver,
   MantisSimulationLedBar,
   MantisSimulationPlateClamp,
-  MantisSimulationPneumaticPlateClamp,
   MantisSimulationPump,
   MantisSimulationRfid,
-  MantisSimulationV3Arm,
   MantisTimeoutError,
   PlateClamp,
   PlateClampError,
-  PneumaticPlateClamp,
   PressureController,
   Pump,
   Rfid,
-  V3Arm,
   V3ArmConfiguration,
 )
 from .driver.carousel_configuration import CarouselConfiguration

@@ -24,10 +24,8 @@ from .errors import (
   PlateClampError,
 )
 from .features.arm import Arm
-from .features.arm_v3 import V3Arm
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
-from .features.pneumatic_plate_clamp import PneumaticPlateClamp
 from .features.pump import (
   PRESSURE_CONTROLLER_STATUS_DESCRIPTIONS,
   PRESSURE_CONTROLLERS,
@@ -41,9 +39,7 @@ from .simulator import (
   MantisSimulationDriver,
   MantisSimulationLedBar,
   MantisSimulationPlateClamp,
-  MantisSimulationPneumaticPlateClamp,
   MantisSimulationPump,
   MantisSimulationRfid,
-  MantisSimulationV3Arm,
 )
 from .v3_arm_configuration import V3ArmConfiguration

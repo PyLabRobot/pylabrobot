@@ -204,7 +204,12 @@ _Case = Tuple[
 
 # (name, call, commands sent, exception raised or None), each on an arm already set up.
 _CASES: List[_Case] = [
-  ("stop", lambda arm: arm.stop(), ["attach 0", "hp 0", "<io.write> exit"], None),
+  (
+    "stop",
+    lambda arm: arm.stop(),
+    ["attach 0", "hp 0", "<io.write> exit"],
+    None,
+  ),
   ("request_mode", lambda arm: arm.request_mode(), ["mode"], None),
   ("set_response_mode_pc", lambda arm: arm.set_response_mode("pc"), ["mode 0"], None),
   ("set_response_mode_verbose", lambda arm: arm.set_response_mode("verbose"), ["mode 1"], None),
@@ -590,6 +595,27 @@ _CASES: List[_Case] = [
     ["state", "state", "wherej", "MoveOneAxis 5 70.0 1", "state", "state", "wherej"],
     None,
   ),
+  (
+    "open",
+    lambda arm: arm.gripper.open(),
+    ["state", "state", "wherej", "ReleasePlate 133.5 50.0", "state", "state", "wherej"],
+    None,
+  ),
+  (
+    "close",
+    lambda arm: arm.gripper.close(),
+    [
+      "state",
+      "state",
+      "wherej",
+      "GraspPlate 69.5 50.0 10.0",
+      "ReleasePlate 69.5 50.0",
+      "state",
+      "state",
+      "wherej",
+    ],
+    None,
+  ),
   ("sense_fully_closed", lambda arm: arm.gripper.sense_fully_closed(), ["IsFullyClosed"], None),
   ("sense_each_fully_closed", lambda arm: arm.gripper.sense_each_fully_closed(), [], ValueError),
   (
@@ -803,6 +829,9 @@ class _FastEomTestBase(AnyioTestBase):
     stack.enter_context(
       patch("pylabrobot.brooks.precise_flex.driver.features.arm.anyio.sleep", new=AsyncMock())
     )
+    stack.enter_context(
+      patch("pylabrobot.brooks.precise_flex.driver.features.vision.anyio.sleep", new=AsyncMock())
+    )
 
 
 class TestPreciseFlexWire(_FastEomTestBase):
@@ -822,11 +851,20 @@ class TestPreciseFlexWire(_FastEomTestBase):
 
   @contextlib.asynccontextmanager
   async def _open_setup(
-    self, has_rail: bool, **kwargs: Any
+    self,
+    has_rail: bool,
+    *,
+    with_light_greeting: bool = False,
+    with_light_farewell: bool = False,
+    **kwargs: Any,
   ) -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeController]]:
     fake = _FakeController(_RAIL_REPLIES if has_rail else None)
     arm = _make_arm(fake, has_rail=has_rail)
-    async with arm.lifespan(**kwargs):
+    async with arm.lifespan(
+      with_light_greeting=with_light_greeting,
+      with_light_farewell=with_light_farewell,
+      **kwargs,
+    ):
       yield arm, fake
 
   async def test_setup(self) -> None:
@@ -848,7 +886,7 @@ class TestPreciseFlexWire(_FastEomTestBase):
     image_io, server_io = MagicMock(stop=AsyncMock()), MagicMock(stop=AsyncMock())
     arm._vision_image_io, arm._vision_server_io = image_io, server_io
     with pytest.raises(PreciseFlexError):
-      async with arm.lifespan(skip_home=True):
+      async with arm.lifespan(skip_home=True, with_light_greeting=False, with_light_farewell=False):
         pass
     assert fake.sent[-3:] == ["attach 0", "hp 0", "<io.write> exit"]
     image_io.stop.assert_awaited_once()
@@ -860,7 +898,9 @@ class TestPreciseFlexWire(_FastEomTestBase):
     arm = _make_arm(fake)
     with pytest.raises(PreciseFlexError):
       try:
-        async with arm.lifespan(skip_home=True):
+        async with arm.lifespan(
+          skip_home=True, with_light_greeting=False, with_light_farewell=False
+        ):
           pass
       finally:
         sent = len(fake.sent)
@@ -872,7 +912,7 @@ class TestPreciseFlexWire(_FastEomTestBase):
     fake = _FakeController({"mode 0": "-1"})
     arm = _make_arm(fake)
     with pytest.raises(PreciseFlexError):
-      async with arm.lifespan(skip_home=True):
+      async with arm.lifespan(skip_home=True, with_light_greeting=False, with_light_farewell=False):
         pass
     cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
@@ -887,7 +927,7 @@ class TestPreciseFlexWire(_FastEomTestBase):
       pytest.raises(PreciseFlexError) as raised,
       caplog.at_level("WARNING", logger="pylabrobot.brooks.precise_flex.driver.master"),
     ):
-      async with arm.lifespan(skip_home=True):
+      async with arm.lifespan(skip_home=True, with_light_greeting=False, with_light_farewell=False):
         pass
     assert raised.value.replycode == -3101
     assert "hp 0" in fake.sent
@@ -969,7 +1009,7 @@ class TestPreciseFlexWire(_FastEomTestBase):
     failing_read = AsyncMock(side_effect=TimeoutError("pd 116"))
     arm._request_configuration = failing_read  # type: ignore[method-assign]
     with pytest.raises(TimeoutError):
-      async with arm:
+      async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
         pass
     assert arm.arm.configuration is None
 
@@ -998,7 +1038,7 @@ class TestPreciseFlexWire(_FastEomTestBase):
   async def test_recovering_an_axis_out_of_range(self) -> None:
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    async with arm:
+    async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
       fake.sent.clear()
       fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
       assert await arm.arm.recover_axes_within_limits() == {PreciseFlexAxis.SHOULDER: 92.0}
@@ -1041,7 +1081,7 @@ class TestProbeZUsingZtouch(_FastEomTestBase):
       }
     )
     arm = _make_arm(fake)
-    async with arm:
+    async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
       fake.sent.clear()
       yield arm, fake
 
@@ -1228,7 +1268,7 @@ class TestPreciseFlexDefaults(_FastEomTestBase):
   async def _arm(self) -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeController]]:
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    async with arm:
+    async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
       fake.sent.clear()
       yield arm, fake
 
@@ -1260,7 +1300,7 @@ async def _arm_after_homing() -> AsyncIterator[Tuple[PreciseFlexDriver, _FakeCon
     {"Speed 1": "0 1 60", "wherej": "0 301.105 2.235 179.732 -180.776 125.844"}
   )
   arm = _make_arm(fake)
-  async with arm:
+  async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
     fake.sent.clear()
     yield arm, fake
 
@@ -1429,7 +1469,7 @@ class TestMotionSettlesBeforeTheNextCommand(_FastEomTestBase):
     ):
       fake = _FakeController(_RAIL_REPLIES)
       arm = _make_arm(fake, has_rail=True)
-      async with arm:
+      async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
         fake.sent.clear()
         stopped = AsyncMock(side_effect=lambda: fake.sent.append("<stopped>"))
         arm.arm._wait_for_eom = stopped  # type: ignore[method-assign]
@@ -1659,7 +1699,7 @@ class TestDeprecatedDriverMembers(_FastEomTestBase):
   ) -> Tuple[List[str], str]:
     fake = _FakeController(_RAIL_REPLIES if has_rail else {"Speed 1": "0 1 60"})
     arm = _make_arm(fake, has_rail=has_rail)
-    async with arm:
+    async with arm.lifespan(with_light_greeting=False, with_light_farewell=False):
       fake.sent.clear()
       if out_of_range:  # so recovery sets its speed
         fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"

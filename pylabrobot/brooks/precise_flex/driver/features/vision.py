@@ -12,6 +12,7 @@ the separate vision server protocol rather than the TCS controller, and are adde
 this module.
 """
 
+import contextlib
 import functools
 import io
 import logging
@@ -548,6 +549,11 @@ class PreciseFlexVision:
   # names, but fixed for the shipped vision project, so they are internal - not per-call arguments.
   _LIGHT_TOOL = "led"
   _LIGHT_PROCESS = "LightControl"
+  _LIGHT_STEP_DELAY = 0.1
+
+  async def _sleep_light_step(self) -> None:
+    """Pause one step between greeting or farewell brightness writes."""
+    await anyio.sleep(self._LIGHT_STEP_DELAY)
 
   @requires_vision_tool_type("LightControl")
   async def start_led(
@@ -611,6 +617,65 @@ class PreciseFlexVision:
     no arm motion.
     """
     await self.start_led(camera, 0, use_server=use_server)
+
+  async def _light_greeting(self) -> None:
+    """Fade the front LED on, 0.1 s a step, then turn it off.
+
+    Does nothing on a vision server without the ``LightControl`` tool type.
+    """
+    config = self.configuration
+    if config.discovered and (
+      not config.has_vision_tool_type("LightControl") or 1 not in config.cameras
+    ):
+      return
+    lit = False
+    try:
+      for brightness in (10, 30, 60, 100):
+        lit = True
+        await self.start_led(camera="front", brightness=brightness)
+        await self._sleep_light_step()
+      await self.stop_led(camera="front")
+      lit = False
+    except BaseException:
+      if lit:
+        with anyio.CancelScope(shield=True):
+          with anyio.move_on_after(5.0):
+            with contextlib.suppress(Exception):
+              await self.stop_led(camera="front")
+      raise
+
+  async def _light_farewell(self) -> None:
+    """Flash the front, then the bottom LED, twice each, 0.1 s on; both are left off.
+
+    Does nothing on a vision server without the ``LightControl`` tool type, and skips any camera
+    absent from a discovered configuration.
+    """
+    config = self.configuration
+    if config.discovered and not config.has_vision_tool_type("LightControl"):
+      return
+    targets: tuple[tuple[Literal["front", "bottom"], int], ...] = (
+      ("front", 1),
+      ("bottom", 2),
+    )
+    cameras: list[Literal["front", "bottom"]] = [
+      camera for camera, led in targets if not config.discovered or led in config.cameras
+    ]
+    for _ in range(2):
+      for camera in cameras:
+        lit = False
+        try:
+          lit = True
+          await self.start_led(camera=camera, brightness=100)
+          await self._sleep_light_step()
+          await self.stop_led(camera=camera)
+          lit = False
+        except BaseException:
+          if lit:
+            with anyio.CancelScope(shield=True):
+              with anyio.move_on_after(5.0):
+                with contextlib.suppress(Exception):
+                  await self.stop_led(camera=camera)
+          raise
 
   # -- camera image (Acquire) ----------------------------------------------
 
