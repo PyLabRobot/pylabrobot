@@ -2571,12 +2571,15 @@ class Arm:
     if not with_model_updates:  # else passed on after the last move
       await self._report_pose()
 
-  async def _halt(self) -> None:
+  async def _halt(self, *, park: bool = True) -> None:
     """Stop every motor at its default deceleration, then park a v4 arm if it was brought up and
     every motor stopped; a v3 arm is not parked until a v3 has run its moves.
 
     Each stop runs whether or not the one before it succeeded, its failure logged; the arm is no
     longer brought up after it. Without a park, where the motors stopped is read and logged.
+
+    Args:
+      park: False leaves the arm where it stopped and, if every motor stopped, still brought up.
     """
     initialized, self._initialized = self._initialized, False
     if self._get_generation() == "v3":
@@ -2588,7 +2591,8 @@ class Arm:
         logger.warning("[%s] a motor did not stop; the arm is not parked", self._driver.name)
       await self._log_where_it_stopped()
       return
-    if not initialized:
+    if not initialized or not park:
+      self._initialized = initialized
       await self._log_where_it_stopped()
       return
     try:

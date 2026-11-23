@@ -266,8 +266,9 @@ class MantisDevice(Resource):
       accept_chip_left_on_head: stop with a chip on the head instead of refusing.
 
     Raises:
-      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; the arm is
-        halted and parked, and the device stays connected for ``arm.return_chip``.
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; every motor
+        is stopped, the arm stays where it stopped, brought up, and the device stays connected for
+        ``arm.return_chip``.
     """
     await self.driver.stop(accept_chip_left_on_head=accept_chip_left_on_head)
 
