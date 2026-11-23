@@ -188,6 +188,7 @@ class ProtocolTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       parse_progress_samples(xml.replace("190&lt;", "invalid&lt;", 1))
     outer = ET.fromstring(xml)
+    assert outer[0].text is not None
     data = ET.fromstring(outer[0].text)
     values = data.find(".//seriesValueSet")
     assert values is not None
