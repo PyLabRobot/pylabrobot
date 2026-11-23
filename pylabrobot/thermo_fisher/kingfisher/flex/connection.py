@@ -5,14 +5,44 @@ import logging
 import math
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Literal, Optional, TypeVar
 
 from pylabrobot.io.hid import HID
 from pylabrobot.thermo_fisher.kingfisher.hid import decode_report, encode_reports
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+
+async def wait_for_completion(awaitable: Awaitable[_T], timeout: Optional[float]) -> _T:
+  """Apply a deadline without losing caller cancellation when the operation completes.
+
+  Unlike asyncio.wait_for on Python 3.10/3.11, completion in the same event-loop turn
+  as cancellation cannot consume the caller's cancellation. Always join the operation
+  before returning so it cannot continue writing after the session is invalidated.
+  """
+  task = asyncio.ensure_future(awaitable)
+  try:
+    done, _ = await asyncio.wait({task}, timeout=timeout)
+    if not done:
+      raise asyncio.TimeoutError()
+    return task.result()
+  finally:
+    task.cancel()
+    cancelled = False
+    while not task.done():
+      try:
+        await asyncio.wait({task})
+      except asyncio.CancelledError:
+        cancelled = True
+        task.cancel()
+    if not task.cancelled():
+      task.exception()
+    if cancelled:
+      raise asyncio.CancelledError()
 
 
 class FlexError(Exception):
@@ -248,10 +278,10 @@ class FlexConnection:
       self._pending = pending
       try:
         self._record("out", line)
-        await asyncio.wait_for(self._write(line.encode("ascii") + b"\r\n"), self.timeout)
-        await asyncio.wait_for(pending.ack.wait(), self.timeout)
+        await wait_for_completion(self._write(line.encode("ascii") + b"\r\n"), self.timeout)
+        await wait_for_completion(pending.ack.wait(), self.timeout)
         self.check_open()
-        await asyncio.wait_for(pending.done.wait(), completion_timeout)
+        await wait_for_completion(pending.done.wait(), completion_timeout)
         self.check_open()
         return tuple(pending.data)
       except BaseException as error:
@@ -277,12 +307,12 @@ class FlexConnection:
       try:
         async with self._writes:
           self._record("feature", "0100")
-          await asyncio.wait_for(
+          await wait_for_completion(
             self.io.send_feature_report(b"\x01\x00", report_id=b"\x00"), self.timeout
           )
         self._record("out", "<ESC>")
-        await asyncio.wait_for(self._write(b"\x1b", check_session=False), self.timeout)
-        code = await asyncio.wait_for(asyncio.shield(terminal), self.timeout)
+        await wait_for_completion(self._write(b"\x1b", check_session=False), self.timeout)
+        code = await wait_for_completion(asyncio.shield(terminal), self.timeout)
         if code != 0:
           raise FlexError(f"Abort failed with code {code}", "ABO", code)
       finally:

@@ -171,6 +171,11 @@ class FlexTests(HIDTestCase):
     )
     await self.wait_sent('PAU 1 "plate"')
     task.cancel()
+    done, _ = await asyncio.wait({task}, timeout=1)
+    if task not in done:
+      self.emit("PAU END 0\r\n")
+      await asyncio.gather(task, return_exceptions=True)
+      self.fail("Cancellation was consumed; the protocol kept waiting for physical Start")
     with self.assertRaises(asyncio.CancelledError):
       await task
     self.emit("PAU END 0\r\n")

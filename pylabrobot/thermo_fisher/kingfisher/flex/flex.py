@@ -19,6 +19,7 @@ from pylabrobot.thermo_fisher.kingfisher.flex.connection import (
   FlexMessage,
   FlexTranscriptEntry,
   validate_timeout,
+  wait_for_completion,
 )
 from pylabrobot.thermo_fisher.kingfisher.flex.protocol import (
   FlexBoundProtocol,
@@ -511,7 +512,7 @@ class KingFisherFlex:
             if handler is not None:
               await self._await_action_handler(action, handler, operator_timeout)
             else:
-              await asyncio.wait_for(self.wait_for_physical_start(action), operator_timeout)
+              await wait_for_completion(self.wait_for_physical_start(action), operator_timeout)
             if mode == "instrument":
               completed += 1
             else:

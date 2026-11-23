@@ -1,10 +1,47 @@
 """HID framing and response parsing without hardware access."""
 
+import asyncio
 import unittest
 
 from pylabrobot.thermo_fisher.kingfisher.hid import encode_reports
 
-from .connection import FlexError, FlexLines, parse_message
+from .connection import FlexError, FlexLines, parse_message, wait_for_completion
+
+
+class FlexCompletionTests(unittest.IsolatedAsyncioTestCase):
+  """Keep cancellation distinct from a concurrently completed operation."""
+
+  async def test_completion_cannot_consume_caller_cancellation(self) -> None:
+    """Cancel the caller in the same event-loop turn that its child completes."""
+
+    async def complete() -> int:
+      caller.cancel()
+      return 42
+
+    caller = asyncio.create_task(wait_for_completion(complete(), 1))
+    with self.assertRaises(asyncio.CancelledError):
+      await caller
+
+  async def test_timeout_and_cancellation_join_pending_operation(self) -> None:
+    """The child is stopped before either kind of interruption reaches the caller."""
+    for cancel in (False, True):
+      with self.subTest(cancel=cancel):
+        entered, stopped = asyncio.Event(), asyncio.Event()
+
+        async def pending() -> None:
+          entered.set()
+          try:
+            await asyncio.Event().wait()
+          finally:
+            stopped.set()
+
+        caller = asyncio.create_task(wait_for_completion(pending(), None if cancel else 0.01))
+        await entered.wait()
+        if cancel:
+          caller.cancel()
+        with self.assertRaises(asyncio.CancelledError if cancel else asyncio.TimeoutError):
+          await caller
+        self.assertTrue(stopped.is_set())
 
 
 class FlexFramingTests(unittest.TestCase):
