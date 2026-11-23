@@ -232,7 +232,7 @@ class ODTCEventTests(unittest.IsolatedAsyncioTestCase):
   async def test_timeout_failure_does_not_stop_temperature_control(self) -> None:
     """Timeout is a failed wait, not an implicit device stop."""
     self.fake.hold_name = "plr_currentProtocol"
-    with use_event_bus(self.bus), self.assertRaises(TimeoutError):
+    with use_event_bus(self.bus), self.assertRaises(asyncio.TimeoutError):
       await self.odtc.run_protocol(profile(), volume=60, lid_temperature=110, timeout=0.001)
     _, failed = self.lifecycle("execute_protocol", "failed")
     self.assertEqual(failed.data["error_type"], "TimeoutError")
