@@ -765,7 +765,7 @@ class DiscoveryTests(ArmTestCase):
   async def test_board_11_selects_the_arm_implementation(self):
     for absent_boards, generation in (((), "v4"), ((11,), "v3")):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
