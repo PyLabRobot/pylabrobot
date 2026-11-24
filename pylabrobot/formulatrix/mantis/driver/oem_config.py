@@ -1,0 +1,563 @@
+"""A Mantis unit's own values, read from the unit's ``.config`` and sequence files.
+
+Only the values set per unit are read: a block is loaded only where its source applies to the unit.
+"""
+
+import json
+import os
+import re
+import xml.etree.ElementTree as ElementTree
+from typing import Any, Dict, List, Optional
+
+from .arm_kinematics import (
+  MICROSTEPS,
+  PITCH,
+  STEPS_PER_REVOLUTION,
+  MantisArmCoordinate,
+  compute_position,
+)
+from .errors import MantisConfigurationError
+from .sequence_files import parse_move_sequence
+from .v3_arm_configuration import V3ArmConfiguration
+
+# Where a v4 install keeps each arm motor's absolute encoder correction, from its ``Data`` folder.
+ENCODER_CORRECTION_DIRECTORY = os.path.join("System", "Encoder Correction", "Sampling File")
+ENCODER_CORRECTION_FILE = "OneRevolutionSamplingData_Motor{motor}.csv"
+# Where the unit's sequences that move the arm sit, below its ``Data`` folder.
+COMMON_SEQUENCE_DIRECTORY = os.path.join("System", "Sequences", "Common")
+# The unit's zones, in the order it lists them; a head in none of them is in the Unknown zone.
+ZONES = ("Front", "RightBack", "RightMiddle", "RightFront", "LeftBack", "LeftMiddle", "LeftFront")
+UNKNOWN_ZONE = "Unknown"
+# The unit's approach path to the waste on a v4, and on a v3: every unit seen has both files.
+WASTE_APPROACH_PATH_FILE = "MoveToWasteStation.seq.txt"
+WASTE_APPROACH_PATH_ADAPTER_FILE = "MoveToWasteStation_Adapter.seq.txt"
+# The unit's approach path to each wash position, by number.
+WASH_APPROACH_PATH_FILE = "MoveToWashStation{position}.seq.txt"
+WASH_POSITIONS = (1, 2)
+# The approach paths' names: the waste, and each wash position.
+WASTE_APPROACH_PATH = "waste"
+WASH_APPROACH_PATH = "wash_{position}"
+# Where an install keeps each chip slot's routes, from its ``Data`` folder.
+CHIP_CHANGER_SEQUENCE_DIRECTORY = os.path.join("System", "Sequences", "ChipChanger")
+# The ``ChipChanger.config`` keys of a chip slot's routes, in the order a pick-up plays them.
+CHIP_CHANGER_ROUTE_KEYS = (
+  "SafeStartSequence",
+  "MoveAttachSequence",
+  "OriginSequence",
+  "ShiftSequence",
+  "SafeStopSequence",
+)
+# The chip changer type of a slot in the fixed chip racks; type 1 is an LC3's, not supported.
+CHIP_RACK_TYPE = 0
+CHIP_SLOT_APPROACH_PATH = "chip_slot_{slot}"
+# Where an install keeps the plate holder's origin, from its ``Data/Device`` folder.
+SBS_ADAPTER_FILE = os.path.join("Adapters", "SBS Adapter.ad.txt")
+# The stage tuning file in the unit's configuration folder: its ReferenceHeight.
+STAGE_TUNING_FILE = "StageTuning.config"
+# The only arm type on every unit seen; how the stage is framed for another is unknown.
+STANDARD_ARM_TYPE = "Standard"
+
+
+def _parse_config_entries(*, path: str) -> Dict[str, str]:
+  """The ``<add key="..." value="..." />`` settings of one ``.config`` file, by key.
+
+  Raises:
+    MantisConfigurationError: if the file is not well-formed XML.
+  """
+  try:
+    root = ElementTree.parse(path).getroot()
+  except ElementTree.ParseError as error:
+    raise MantisConfigurationError(f"{path} is not a readable .config file: {error}") from error
+  settings = root.find("appSettings")
+  if settings is None:
+    return {}
+  return {
+    entry.attrib["key"]: entry.attrib.get("value", "")
+    for entry in settings.iter("add")
+    if "key" in entry.attrib
+  }
+
+
+def _get_number(*, path: str, key: str, text: str) -> float:
+  """A setting's value as a number.
+
+  Raises:
+    MantisConfigurationError: if it is not one.
+  """
+  try:
+    return float(text)
+  except ValueError as error:
+    raise MantisConfigurationError(f"{path}: {key} is not a number: {text!r}") from error
+
+
+def _get_setting(*, path: str, settings: Dict[str, str], key: str) -> str:
+  """A setting's text.
+
+  Raises:
+    MantisConfigurationError: if the file has no such key.
+  """
+  if key not in settings:
+    raise MantisConfigurationError(f"{path} has no {key}")
+  return settings[key]
+
+
+def _parse_vector(*, path: str, key: str, text: str) -> List[float]:
+  """A vector written ``X <x> Y <y> Z <z>``, as the unit's files write one.
+
+  Raises:
+    MantisConfigurationError: if the text is not one, or a value is not a number.
+  """
+  match = re.fullmatch(r"\s*X\s+(\S+)\s+Y\s+(\S+)\s+Z\s+(\S+)\s*", text)
+  if match is None:
+    raise MantisConfigurationError(f"{path}: {key} is not 'X <x> Y <y> Z <z>': {text!r}")
+  return [_get_number(path=path, key=key, text=value) for value in match.groups()]
+
+
+def _parse_adapter_origin(*, path: str) -> List[float]:
+  """The plate holder's origin, (x, y, z) in mm, from an adapter file read whole.
+
+  Raises:
+    MantisConfigurationError: if the file is missing, of a version other than 1, a line is not
+      understood, or it does not hold one origin.
+  """
+  if not os.path.isfile(path):
+    raise MantisConfigurationError(f"the plate holder's origin is missing: {path}")
+  origins = []
+  with open(path, encoding="utf-8-sig") as f:
+    for number, line in enumerate(f, start=1):
+      text = line.strip()
+      if not text:
+        continue
+      version = re.fullmatch(r"\[\s*Version:\s*(\S+)\s*\]", text)
+      if version is not None:
+        if version.group(1) != "1":
+          raise MantisConfigurationError(
+            f"{path}: adapter file version {version.group(1)}; only version 1 is known"
+          )
+        continue
+      origins.append(_parse_vector(path=path, key=f"line {number}", text=text))
+  if len(origins) != 1:
+    raise MantisConfigurationError(f"{path}: one origin expected, found {len(origins)}")
+  return origins[0]
+
+
+def _parse_transformation_matrix(*, path: str, text: str) -> List[List[float]]:
+  """``MicroplateTransformationMatrix``: three rows of three numbers, written as JSON.
+
+  Raises:
+    MantisConfigurationError: if the text is not one.
+  """
+  try:
+    matrix = json.loads(text)
+  except ValueError as error:
+    raise MantisConfigurationError(f"{path}: MicroplateTransformationMatrix is not JSON") from error
+  if (
+    not isinstance(matrix, list)
+    or len(matrix) != 3
+    or any(not isinstance(row, list) or len(row) != 3 for row in matrix)
+    or any(
+      isinstance(value, bool) or not isinstance(value, (int, float))
+      for row in matrix
+      for value in row
+    )
+  ):
+    raise MantisConfigurationError(f"{path}: MicroplateTransformationMatrix is not 3 by 3: {text}")
+  return [[float(value) for value in row] for row in matrix]
+
+
+def _load_stage(
+  *, path: str, values: Dict[str, str], adapter_path: str, stage_tuning_path: str
+) -> Dict[str, Any]:
+  """The ``stage`` block: the plate holder's origin, ``Device.config``'s stage transform and
+  ``StageTuning.config``'s reference height.
+
+  Raises:
+    MantisConfigurationError: if a key, the adapter file or the stage tuning file is missing or
+      malformed, or the arm type is not ``STANDARD_ARM_TYPE``.
+  """
+  if not os.path.isfile(stage_tuning_path):
+    raise MantisConfigurationError(f"{stage_tuning_path} is missing: the stage's reference height")
+  stage_tuning = _parse_config_entries(path=stage_tuning_path)
+  arm_type = _get_setting(path=path, settings=values, key="ArmType")
+  if arm_type != STANDARD_ARM_TYPE:
+    raise MantisConfigurationError(
+      f"{path}: ArmType {arm_type!r}; only {STANDARD_ARM_TYPE!r} is supported"
+    )
+
+  def get_vector(key: str) -> List[float]:
+    return _parse_vector(path=path, key=key, text=_get_setting(path=path, settings=values, key=key))
+
+  return {
+    "origin": _parse_adapter_origin(path=adapter_path),
+    "transformation_matrix": _parse_transformation_matrix(
+      path=path,
+      text=_get_setting(path=path, settings=values, key="MicroplateTransformationMatrix"),
+    ),
+    "offset_x": get_vector(key="MicroplateOffsetX"),
+    "offset_y": get_vector(key="MicroplateOffsetY"),
+    "arm_type_rotation_degree": _get_number(
+      path=path,
+      key="ArmTypeRotationDegree",
+      text=_get_setting(path=path, settings=values, key="ArmTypeRotationDegree"),
+    ),
+    "arm_type_translation": get_vector(key="ArmTypeTranslation"),
+    "reference_height": _get_number(
+      path=stage_tuning_path,
+      key="ReferenceHeight",
+      text=_get_setting(path=stage_tuning_path, settings=stage_tuning, key="ReferenceHeight"),
+    ),
+  }
+
+
+def _parse_correction_table(*, path: str) -> List[List[float]]:
+  """The (ideal, measured) rows of one encoder correction file, its third column dropped.
+
+  Raises:
+    MantisConfigurationError: if a row is not numbers, or the measured column does not ascend.
+  """
+  rows: List[List[float]] = []
+  with open(path, encoding="utf-8-sig") as f:
+    for line in f:
+      fields = [field for field in line.strip().split(",") if field]
+      if not fields:
+        continue
+      try:
+        rows.append([float(fields[0]), float(fields[1])])
+      except (IndexError, ValueError) as error:
+        raise MantisConfigurationError(f"{path}: not an (ideal, measured) row: {line!r}") from error
+  if len(rows) < 2 or any(later[1] <= earlier[1] for earlier, later in zip(rows, rows[1:])):
+    raise MantisConfigurationError(f"{path}: two rows or more, the measured column ascending")
+  return rows
+
+
+def _parse_route(*, path: str) -> List[List[Optional[float]]]:
+  """A route's lines, as a declared configuration holds them.
+
+  Raises:
+    MantisConfigurationError: if the file is missing, malformed or moves nothing.
+  """
+  if not os.path.isfile(path):
+    raise MantisConfigurationError(f"a route is missing: {path}")
+  route: List[MantisArmCoordinate] = parse_move_sequence(path=path)
+  if all(route_line == MantisArmCoordinate(x=None, y=None, z=None) for route_line in route):
+    raise MantisConfigurationError(f"{path} moves nothing")
+  return [[route_line.x, route_line.y, route_line.z] for route_line in route]
+
+
+def _load_zones(*, path: str, sequence_directory: str) -> Dict[str, Any]:
+  """The ``zones`` block: each zone's rectangle in the arm frame, and its routes to safe XY and
+  to idle; the Unknown zone has routes and no rectangle.
+
+  Raises:
+    MantisConfigurationError: if a rectangle or a route is missing or malformed, or a route to
+      safe XY moves anything but the arms.
+  """
+  values = _parse_config_entries(path=path)
+  rectangles: Dict[str, List[float]] = {}
+  for zone in ZONES:
+    rectangle = [
+      _get_number(
+        path=path,
+        key=f"{zone}Zone{bound}",
+        text=_get_setting(path=path, settings=values, key=f"{zone}Zone{bound}"),
+      )
+      for bound in ("MinimumX", "MaximumX", "MinimumY", "MaximumY")
+    ]
+    if not (rectangle[0] < rectangle[1] and rectangle[2] < rectangle[3]):
+      raise MantisConfigurationError(
+        f"{path}: the {zone} zone's minimums are not below its maximums"
+      )
+    rectangles[zone] = rectangle
+  routes: Dict[str, Dict[str, List[List[Optional[float]]]]] = {}
+  for field, key in (
+    ("safe_xy_routes", "SafeMoveToSafeXYPositionFrom{zone}ZoneSequenceFile"),
+    ("idle_routes", "SafeMoveToIdleFrom{zone}ZoneSequenceFile"),
+  ):
+    routes[field] = {}
+    for zone in (*ZONES, UNKNOWN_ZONE):
+      file_name = _get_setting(path=path, settings=values, key=key.format(zone=zone))
+      route = _parse_route(path=os.path.join(sequence_directory, file_name))
+      if field == "safe_xy_routes" and any(x is None or z is not None for x, _, z in route):
+        raise MantisConfigurationError(f"{file_name}: a route to safe XY moves the arms only")
+      routes[field][zone] = route
+  return {"rectangles": rectangles, **routes}
+
+
+def _load_approach_paths(*, sequence_directory: str, waste_file: str) -> Dict[str, Any]:
+  """The ``approach_paths`` block: the unit's path from idle to the waste and to each wash
+  position, by name (``WASTE_APPROACH_PATH``, ``WASH_APPROACH_PATH``); only those whose file exists.
+
+  Args:
+    sequence_directory: the unit's ``System/Sequences/Common``.
+    waste_file: ``WASTE_APPROACH_PATH_FILE`` on a v4, ``WASTE_APPROACH_PATH_ADAPTER_FILE`` on a v3.
+
+  Raises:
+    MantisConfigurationError: if a path is malformed or moves nothing.
+  """
+  paths: Dict[str, Any] = {}
+  path = os.path.join(sequence_directory, waste_file)
+  if os.path.isfile(path):
+    paths[WASTE_APPROACH_PATH] = _parse_route(path=path)
+  for position in WASH_POSITIONS:
+    path = os.path.join(sequence_directory, WASH_APPROACH_PATH_FILE.format(position=position))
+    if os.path.isfile(path):
+      paths[WASH_APPROACH_PATH.format(position=position)] = _parse_route(path=path)
+  return paths
+
+
+def _load_chip_slot_approach_paths(*, path: str, sequence_directory: str) -> Dict[str, Any]:
+  """Each fixed chip slot's path from idle into the slot (``CHIP_SLOT_APPROACH_PATH``): the slot's
+  routes joined in ``CHIP_CHANGER_ROUTE_KEYS`` order. An LC3's positions are left out.
+
+  Args:
+    path: the unit's ``ChipChanger.config``.
+    sequence_directory: the install's ``System/Sequences/ChipChanger``.
+
+  Raises:
+    MantisConfigurationError: if a key is missing or not a number, or a route is missing or
+      malformed.
+  """
+  values = _parse_config_entries(path=path)
+  count_text = _get_setting(path=path, settings=values, key="ChipChanger.Count")
+  paths: Dict[str, Any] = {}
+  for slot in range(1, int(_get_number(path=path, key="ChipChanger.Count", text=count_text)) + 1):
+    type_key = f"ChipChanger.{slot}.Type"
+    type_text = _get_setting(path=path, settings=values, key=type_key)
+    if _get_number(path=path, key=type_key, text=type_text) != CHIP_RACK_TYPE:
+      continue
+    route: List[List[Optional[float]]] = []
+    for key in CHIP_CHANGER_ROUTE_KEYS:
+      file_name = _get_setting(path=path, settings=values, key=f"ChipChanger.{slot}.{key}")
+      route.extend(_parse_route(path=os.path.join(sequence_directory, file_name)))
+    paths[CHIP_SLOT_APPROACH_PATH.format(slot=slot)] = route
+  return paths
+
+
+def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
+  """Read the v3 home frame and search settings, converting vendor units at the boundary."""
+  try:
+
+    def number(key: str) -> float:
+      """Read one required vendor setting."""
+      return float(values[key])
+
+    def flag(key: str) -> bool:
+      """Read a boolean flag without accepting an unknown encoding."""
+      if values[key] not in ("0", "1"):
+        raise ValueError(f"{key} must be 0 or 1")
+      return values[key] == "1"
+
+    for motor in (0, 1, 2):
+      prefix = f"Motor.{motor + 1}."
+      if (
+        number(prefix + "StepsPerRevolution") != STEPS_PER_REVOLUTION
+        or number(prefix + "MicroSteps") != MICROSTEPS
+        or number(prefix + "PositionMapper.Pitch") != PITCH[motor]
+      ):
+        raise ValueError(f"motor {motor}'s unit conversion is unsupported")
+    count = number("Arm.PostHomingPosition.Count")
+    if count != int(count) or count < 1:
+      raise ValueError("Arm.PostHomingPosition.Count must be a positive integer")
+    route = []
+    for index in range(1, int(count) + 1):
+      x, y, z = map(float, values[f"Arm.PostHomingPosition.{index}"].split(","))
+      if z != 0:
+        raise ValueError("the v3 post-home route requires Z at its home flag")
+      route.append([x, y])
+    block = {
+      "offsets": {str(motor): number(f"Motor.{motor + 1}.Offset") for motor in (0, 1)},
+      "homing_position_n": {
+        str(motor): compute_position(
+          motor=motor, device_position=number(f"Motor.{motor + 1}.HomingPositionN")
+        )
+        for motor in (0, 1)
+      },
+      "motors": {
+        str(motor): {
+          "method": number(f"Motor.{motor + 1}.HomingPin"),
+          "positive_edge": flag(f"Motor.{motor + 1}.HomingPinActiveState"),
+          "positive_direction": flag(f"Motor.{motor + 1}.HomingDirection"),
+          "speed": number(f"Motor.{motor + 1}.HomingVelocity"),
+          "acceleration": number(f"Motor.{motor + 1}.HomingAcceleration"),
+        }
+        for motor in (0, 1, 2)
+      },
+      "retract": number("Arm.PreHomingMovement.RetractStep"),
+      "backoff": number("Arm.PreHomingMovement.EnforceStep"),
+      "jog_speed": number("Motor.1.DefaultVelocity"),
+      "jog_acceleration": number("Motor.1.DefaultAcceleration"),
+      "motor_xy_homing_delay": number("MotorXYHomingDelay") / 1000.0,
+      "post_homing_positions": route,
+    }
+    V3ArmConfiguration.from_block(block=block)
+    return block
+  except (KeyError, TypeError, ValueError) as error:
+    raise MantisConfigurationError(f"invalid v3 RobotArm.config: {error}") from error
+
+
+def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
+  """The unit's blocks, as declared configurations hold them, from its vendor ``.config`` files.
+
+  ``plate_clamp``: the lock levels, from ``Device.config`` (``PlateClampInisiatePWM``,
+  ``PlateClampTimer``), only for a clamp driven as a DC motor (``PlateClampController``).
+  A pneumatic clamp controlled by the pressure board instead uses ``PlateClampAuxId``.
+  ``rfid``: each input slot's antenna, from every ``RFIDAntennaId.ACC<n>`` of ``RFID.config``, only
+  when it exists; with ``Device.config``'s ``RfidMultiplexerDelay`` as written.
+  ``led_bar``: the LED count, from ``Device.config``'s ``NumberOfLed``, only where it is set.
+  ``arm``: each arm motor's ``Offset`` and ``HomingPositionA`` from ``RobotArm.config`` and its
+  encoder correction file from the ``Data`` folder two levels up, only where ``HomingPositionA``
+  is set (a v4); otherwise the v3's offsets, home positions, flag searches, retract and backoff
+  settings and post-home route. Motor 0 is ``Motor.1`` there.
+  ``zones``: ``DeviceZone.config``'s rectangles and each zone's routes to safe XY and to idle,
+  from the unit's ``System/Sequences/Common``, only where that file exists (a v4).
+  ``approach_paths``: the unit's paths from idle to the waste and to wash positions 1 and 2, from
+  the same folder, those that exist; the waste's ``WASTE_APPROACH_PATH_FILE`` where
+  ``DeviceZone.config`` exists (a v4), else ``WASTE_APPROACH_PATH_ADAPTER_FILE`` (a v3).
+  ``stage``: ``Device.config``'s ``MicroplateTransformationMatrix``, ``MicroplateOffsetX/Y`` and
+  ``ArmType*``, and the plate holder's origin from ``Data/Device/Adapters/SBS Adapter.ad.txt``,
+  only where ``Device.config`` sets the matrix.
+
+  Args:
+    oem_config_directory: the unit's ``Data/Device/Configs`` folder.
+
+  Raises:
+    MantisConfigurationError: if ``Device.config`` is missing, a block's key is missing or not a
+      number, or an arm motor's encoder correction file, a route or the adapter file is missing
+      or malformed.
+  """
+  device_config = os.path.join(oem_config_directory, "Device.config")
+  if not os.path.isfile(device_config):
+    raise MantisConfigurationError(f"{oem_config_directory} has no Device.config")
+  values = _parse_config_entries(path=device_config)
+
+  blocks: Dict[str, Any] = {}
+  if values.get("PlateClampController") == "PressureRegulator":
+    key = "PlateClampAuxId"
+    output = _get_number(
+      path=device_config, key=key, text=_get_setting(path=device_config, settings=values, key=key)
+    )
+    if output != 2:
+      raise MantisConfigurationError(
+        f"{device_config}: unsupported pneumatic clamp output {output}"
+      )
+    blocks["plate_clamp"] = {"controller": "pressure_regulator", "auxiliary_output": int(output)}
+  if values.get("PlateClampController") == "MotorDC":
+    pwms = [
+      _get_number(path=device_config, key="PlateClampInisiatePWM", text=text)
+      for text in _get_setting(
+        path=device_config, settings=values, key="PlateClampInisiatePWM"
+      ).split(",")
+    ]
+    timeouts_ms = [
+      int(_get_number(path=device_config, key="PlateClampTimer", text=text))
+      for text in _get_setting(path=device_config, settings=values, key="PlateClampTimer").split(
+        ","
+      )
+    ]
+    if len(pwms) != len(timeouts_ms):
+      raise MantisConfigurationError(
+        f"{device_config} lists {len(pwms)} clamp PWM duties but {len(timeouts_ms)} timeouts"
+      )
+    blocks["plate_clamp"] = {
+      "levels": {
+        str(level): [pwm, timeout_ms]
+        for level, (pwm, timeout_ms) in enumerate(zip(pwms, timeouts_ms), start=1)
+      }
+    }
+
+  if "NumberOfLed" in values:
+    blocks["led_bar"] = {
+      "number_of_leds": int(
+        _get_number(path=device_config, key="NumberOfLed", text=values["NumberOfLed"])
+      )
+    }
+
+  rfid_config = os.path.join(oem_config_directory, "RFID.config")
+  if os.path.isfile(rfid_config):
+    rfid_values = _parse_config_entries(path=rfid_config)
+    slot_to_antenna = {}
+    for key in rfid_values:
+      match = re.fullmatch(r"RFIDAntennaId\.ACC(\d+)", key)
+      if match is not None:
+        slot = int(match.group(1))
+        slot_to_antenna[str(slot)] = int(
+          _get_number(path=rfid_config, key=key, text=rfid_values[key])
+        )
+    if not slot_to_antenna:
+      raise MantisConfigurationError(f"{rfid_config} has no RFIDAntennaId.ACC<n>")
+    blocks["rfid"] = {
+      "slot_to_antenna": dict(sorted(slot_to_antenna.items(), key=lambda item: int(item[0]))),
+      "multiplexer_delay_raw": _get_number(
+        path=device_config,
+        key="RfidMultiplexerDelay",
+        text=_get_setting(path=device_config, settings=values, key="RfidMultiplexerDelay"),
+      ),
+    }
+
+  if "MicroplateTransformationMatrix" in values:
+    blocks["stage"] = _load_stage(
+      path=device_config,
+      values=values,
+      adapter_path=os.path.join(
+        os.path.dirname(os.path.normpath(oem_config_directory)), SBS_ADAPTER_FILE
+      ),
+      stage_tuning_path=os.path.join(oem_config_directory, STAGE_TUNING_FILE),
+    )
+
+  robot_arm_config = os.path.join(oem_config_directory, "RobotArm.config")
+  arm_values = (
+    _parse_config_entries(path=robot_arm_config) if os.path.isfile(robot_arm_config) else {}
+  )
+  # The arm motors are 0 and 1 here, Motor.1 and Motor.2 in the file.
+  if any(f"Motor.{motor + 1}.HomingPositionA" in arm_values for motor in (0, 1)):
+    data_directory = os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory)))
+    correction: Dict[str, List[List[float]]] = {}
+    for motor in (0, 1):
+      path = os.path.join(
+        data_directory, ENCODER_CORRECTION_DIRECTORY, ENCODER_CORRECTION_FILE.format(motor=motor)
+      )
+      if not os.path.isfile(path):
+        raise MantisConfigurationError(f"motor {motor}'s encoder correction is missing: {path}")
+      correction[str(motor)] = _parse_correction_table(path=path)
+    blocks["arm"] = {
+      field: {
+        str(motor): _get_number(
+          path=robot_arm_config,
+          key=f"Motor.{motor + 1}.{key}",
+          text=_get_setting(
+            path=robot_arm_config, settings=arm_values, key=f"Motor.{motor + 1}.{key}"
+          ),
+        )
+        for motor in (0, 1)
+      }
+      for field, key in (("offsets", "Offset"), ("homing_position_a", "HomingPositionA"))
+    }
+    blocks["arm"]["encoder_correction"] = correction
+  elif arm_values:
+    blocks["arm"] = _load_v3_arm_configuration(values=arm_values)
+
+  # The routes, from the unit's sequences: the zones only where DeviceZone.config exists (a v4).
+  sequence_directory = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory))),
+    COMMON_SEQUENCE_DIRECTORY,
+  )
+  zone_config = os.path.join(oem_config_directory, "DeviceZone.config")
+  is_v4 = os.path.isfile(zone_config)
+  if is_v4:
+    blocks["zones"] = _load_zones(path=zone_config, sequence_directory=sequence_directory)
+  approach_paths = _load_approach_paths(
+    sequence_directory=sequence_directory,
+    waste_file=WASTE_APPROACH_PATH_FILE if is_v4 else WASTE_APPROACH_PATH_ADAPTER_FILE,
+  )
+  chip_changer_config = os.path.join(oem_config_directory, "ChipChanger.config")
+  if os.path.isfile(chip_changer_config):
+    data_directory = os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory)))
+    approach_paths.update(
+      _load_chip_slot_approach_paths(
+        path=chip_changer_config,
+        sequence_directory=os.path.join(data_directory, CHIP_CHANGER_SEQUENCE_DIRECTORY),
+      )
+    )
+  if approach_paths:
+    blocks["approach_paths"] = approach_paths
+  return blocks

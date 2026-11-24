@@ -1,0 +1,683 @@
+{
+  "serial_number": "C196069",
+  "firmware": "1.0.7.378-trunk",
+  "head": "flex8_angled",
+  "fluid": "water",
+  "physical_channels": [
+    2,
+    3
+  ],
+  "confirmed_plate_doses": 4,
+  "paused_after_doses": 2,
+  "aborted_plan_doses": 0,
+  "flush_duration": 0.05,
+  "idle_purge_duration": 0.002,
+  "idle_pulse_duration": 0.001,
+  "final_position": [
+    -62.0009765625,
+    30.0,
+    65.50048828125
+  ],
+  "final_pressure": 0.0,
+  "faults": [],
+  "exchanges": [
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Msg.Msg",
+      "arguments": [],
+      "sequence": 3,
+      "request": "100103020101ff0100f74d616368696e652e456e746974792e44697370656e7365722e4d73672e4d736700100317",
+      "response": "10060300000100f500000000000000000d1003ef",
+      "value": 0.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Head.Act.Id",
+      "arguments": [],
+      "sequence": 9,
+      "request": "100109020101ff0100f14d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e486561642e4163742e4964001003c1",
+      "response": "10060900000100ef00000004000000000d1003eb",
+      "value": 4.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.RowNum",
+      "arguments": [],
+      "sequence": 10,
+      "request": "10010a020101ff0100f04d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e526f774e756d00100374",
+      "response": "10060a00000100ee00000008000000010d1003e6",
+      "value": 8.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.ColNum",
+      "arguments": [],
+      "sequence": 11,
+      "request": "10010b020101ff0100ef4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e436f6c4e756d0010038e",
+      "response": "10060b00000100ed0000000c000000010d1003e2",
+      "value": 12.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.XGrid",
+      "arguments": [],
+      "sequence": 12,
+      "request": "10010c020101ff0100ee4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e5847726964001003fe",
+      "response": "10060c00000100ec00000009000000010d1003e5",
+      "value": 9.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.YGrid",
+      "arguments": [],
+      "sequence": 13,
+      "request": "10010d020101ff0100ed4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e5947726964001003fd",
+      "response": "10060d00000100eb00000009000000010d1003e5",
+      "value": 9.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.XPosFirstWell",
+      "arguments": [],
+      "sequence": 14,
+      "request": "10010e020101ff0100ec4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e58506f73466972737457656c6c001003b6",
+      "response": "10060e00000100ea0000000e6147ae150d100376",
+      "value": 14.379999999888241
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.YPosFirstWell",
+      "arguments": [],
+      "sequence": 15,
+      "request": "10010f020101ff0100eb4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e59506f73466972737457656c6c001003b5",
+      "response": "10060f00000100e90000000b3d70a3d70d1003bd",
+      "value": 11.239999999757856
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve0",
+      "arguments": [],
+      "sequence": 16,
+      "request": "10011010020101ff0100ea4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766530001003a8",
+      "response": "1006101000000100e800000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve0",
+      "arguments": [],
+      "sequence": 17,
+      "request": "100111020101ff0100e94d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766530001003a7",
+      "response": "10061100000100e700000029333333330d1003fa",
+      "value": 41.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve0",
+      "arguments": [],
+      "sequence": 18,
+      "request": "100112020101ff0100e84d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766530001003a6",
+      "response": "10061200000100e600000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve1",
+      "arguments": [],
+      "sequence": 19,
+      "request": "100113020101ff0100e74d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766531001003a7",
+      "response": "10061300000100e500000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve1",
+      "arguments": [],
+      "sequence": 20,
+      "request": "100114020101ff0100e64d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766531001003a6",
+      "response": "10061400000100e400000032333333330d1003f1",
+      "value": 50.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve1",
+      "arguments": [],
+      "sequence": 21,
+      "request": "100115020101ff0100e54d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766531001003a5",
+      "response": "10061500000100e300000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve2",
+      "arguments": [],
+      "sequence": 22,
+      "request": "100116020101ff0100e44d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766532001003a6",
+      "response": "10061600000100e200000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve2",
+      "arguments": [],
+      "sequence": 23,
+      "request": "100117020101ff0100e34d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766532001003a5",
+      "response": "10061700000100e10000003b333333330d1003e8",
+      "value": 59.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve2",
+      "arguments": [],
+      "sequence": 24,
+      "request": "100118020101ff0100e24d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766532001003a4",
+      "response": "10061800000100e000000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve3",
+      "arguments": [],
+      "sequence": 25,
+      "request": "100119020101ff0100e14d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766533001003a5",
+      "response": "10061900000100df00000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve3",
+      "arguments": [],
+      "sequence": 26,
+      "request": "10011a020101ff0100e04d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766533001003a4",
+      "response": "10061a00000100de00000044333333330d1003df",
+      "value": 68.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve3",
+      "arguments": [],
+      "sequence": 27,
+      "request": "10011b020101ff0100df4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766533001003a3",
+      "response": "10061b00000100dd00000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve4",
+      "arguments": [],
+      "sequence": 28,
+      "request": "10011c020101ff0100de4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766534001003a4",
+      "response": "10061c00000100dc00000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve4",
+      "arguments": [],
+      "sequence": 29,
+      "request": "10011d020101ff0100dd4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766534001003a3",
+      "response": "10061d00000100db0000004d333333330d1003d6",
+      "value": 77.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve4",
+      "arguments": [],
+      "sequence": 30,
+      "request": "10011e020101ff0100dc4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766534001003a2",
+      "response": "10061e00000100da00000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve5",
+      "arguments": [],
+      "sequence": 31,
+      "request": "10011f020101ff0100db4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766535001003a3",
+      "response": "10061f00000100d900000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve5",
+      "arguments": [],
+      "sequence": 32,
+      "request": "100120020101ff0100da4d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766535001003a2",
+      "response": "10062000000100d800000056333333330d1003cd",
+      "value": 86.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve5",
+      "arguments": [],
+      "sequence": 33,
+      "request": "100121020101ff0100d94d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766535001003a1",
+      "response": "10062100000100d700000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve6",
+      "arguments": [],
+      "sequence": 34,
+      "request": "100122020101ff0100d84d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766536001003a2",
+      "response": "10062200000100d600000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve6",
+      "arguments": [],
+      "sequence": 35,
+      "request": "100123020101ff0100d74d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766536001003a1",
+      "response": "10062300000100d50000005f333333330d1003c4",
+      "value": 95.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve6",
+      "arguments": [],
+      "sequence": 36,
+      "request": "100124020101ff0100d64d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c766536001003a0",
+      "response": "10062400000100d400000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.XValve7",
+      "arguments": [],
+      "sequence": 37,
+      "request": "100125020101ff0100d54d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5856616c766537001003a1",
+      "response": "10062500000100d300000022000000010d1003cc",
+      "value": 34.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.YValve7",
+      "arguments": [],
+      "sequence": 38,
+      "request": "100126020101ff0100d44d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5956616c766537001003a0",
+      "response": "10062600000100d200000068333333330d1003bb",
+      "value": 104.1999999997206
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Valve.Prop.ZValve7",
+      "arguments": [],
+      "sequence": 39,
+      "request": "100127020101ff0100d34d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e56616c76652e50726f702e5a56616c7665370010039f",
+      "response": "10062700000100d100000015000000010d1003d9",
+      "value": 21.0
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Wellplatedefinition.Prop.WellplateHeight",
+      "arguments": [],
+      "sequence": 40,
+      "request": "100128020101ff0100d24d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e57656c6c706c617465646566696e6974696f6e2e50726f702e57656c6c706c617465486569676874001003d9",
+      "response": "10062800000100d00000000e666666670d100348",
+      "value": 14.399999999906868
+    },
+    {
+      "operation": "get_number",
+      "path": "Machine.Entity.Dispenser.Data.Entity.Module.Position.Park.Prop.PosZ",
+      "arguments": [],
+      "sequence": 41,
+      "request": "100129020101ff0100d14d616368696e652e456e746974792e44697370656e7365722e446174612e456e746974792e4d6f64756c652e506f736974696f6e2e5061726b2e50726f702e506f735a00100312",
+      "response": "10062900000100cf00000041800000010d10032d",
+      "value": 65.5
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Cmd.Start",
+      "arguments": [],
+      "sequence": 44,
+      "request": "10012c040001ff0100cd000000004d616368696e652e456e746974792e44697370656e7365722e436d642e53746172740000100343",
+      "response": "10062c00000100ccfed4c20500000001100362"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        -62.0009765625,
+        30.0,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 103,
+      "request": "100167040101ff01009100000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000ffffffc1ffc000000000001e000000000000004180000000536c6f7700000000100370",
+      "response": "1006670000010091fed4c093000000011003d6"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        57.37999999988824,
+        29.959999999962747,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 201,
+      "request": "1001c9040101ff01002f00000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000396147ae140000001df5c28f5c0000004180000000536c6f77000000001003a9",
+      "response": "1006c9000001002ffed4c02a0000000110033f"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        57.37999999988824,
+        29.959999999962747,
+        35.39999999990687,
+        "Slow"
+      ],
+      "sequence": 7,
+      "request": "100107040101ff0100f100000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000396147ae140000001df5c28f5c0000002366666666536c6f77000000001003af",
+      "response": "10060700000100f1fed4bfe700000001100383"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.Dispens",
+      "arguments": [
+        1000.0
+      ],
+      "sequence": 81,
+      "request": "100151040101ff0100a700000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e44697370656e73000000000003e8000000001003f1",
+      "response": "10065100000100a7fed4bfa4000000011003c6"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.Dispens",
+      "arguments": [
+        1000.0
+      ],
+      "sequence": 82,
+      "request": "100152040101ff0100a600000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e44697370656e73000000000003e8000000001003f0",
+      "response": "10065200000100a6fed4bfa3000000011003c7"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Head.Cmd.SyncValves",
+      "arguments": [],
+      "sequence": 84,
+      "request": "100154040001ff0100a5000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e486561642e436d642e53796e6356616c7665730000100364",
+      "response": "10065400000100a4fed4bfa2000000011003c8"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        57.37939453125,
+        29.959716796875,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 164,
+      "request": "1001a4040101ff01005400000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a0000000000000039612000000000001df5b000000000004180000000536c6f770000000010038f",
+      "response": "1006a40000010054fed4bf5c0000000110030e"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        66.37999999988824,
+        29.959999999962747,
+        65.5,
+        "Slow"
+      ],
+      "sequence": 169,
+      "request": "1001a9040101ff01004f00000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000426147ae140000001df5c28f5c0000004180000000536c6f77000000001003a0",
+      "response": "1006a9000001004ffed4bf5500000001100315"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYZ",
+      "arguments": [
+        66.37999999988824,
+        29.959999999962747,
+        35.39999999990687,
+        "Slow"
+      ],
+      "sequence": 177,
+      "request": "1001b1040101ff01004700000004000f00074d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f766558595a00000000000000426147ae140000001df5c28f5c0000002366666666536c6f77000000001003a6",
+      "response": "1006b10000010047fed4bf4a00000001100320"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve0.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 97,
+      "request": "100161040001ff010098000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665302e436d642e53746f7044697370656e7300000010033a",
+      "response": "1006610000010097fed4bebd000000011003ae"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 98,
+      "request": "100162040001ff010097000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e53746f7044697370656e73000000100339",
+      "response": "1006620000010096fed4bebc000000011003af"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve0.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 99,
+      "request": "100163040001ff010096000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665302e436d642e436c6f736556616c7665000000001003c2",
+      "response": "1006630000010095fed4bebb000000011003b0"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 100,
+      "request": "100164040001ff010095000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e53746f7044697370656e73000000100338",
+      "response": "1006640000010094fed4beba000000011003b1"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 102,
+      "request": "100166040001ff010093000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e436c6f736556616c7665000000001003c1",
+      "response": "1006660000010092fed4beb8000000011003b3"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 104,
+      "request": "100168040001ff010091000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e436c6f736556616c7665000000001003c0",
+      "response": "1006680000010090fed4beb6000000011003b5"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve3.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 105,
+      "request": "100169040001ff010090000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665332e436d642e53746f7044697370656e73000000100337",
+      "response": "100669000001008ffed4beb5000000011003b6"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve3.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 106,
+      "request": "10016a040001ff01008f000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665332e436d642e436c6f736556616c7665000000001003bf",
+      "response": "10066a000001008efed4beb4000000011003b7"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve4.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 107,
+      "request": "10016b040001ff01008e000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665342e436d642e53746f7044697370656e73000000100336",
+      "response": "10066b000001008dfed4beb3000000011003b8"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve4.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 108,
+      "request": "10016c040001ff01008d000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665342e436d642e436c6f736556616c7665000000001003be",
+      "response": "10066c000001008cfed4beb2000000011003b9"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve5.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 109,
+      "request": "10016d040001ff01008c000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665352e436d642e53746f7044697370656e73000000100335",
+      "response": "10066d000001008bfed4beb1000000011003ba"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve5.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 110,
+      "request": "10016e040001ff01008b000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665352e436d642e436c6f736556616c7665000000001003bd",
+      "response": "10066e000001008afed4beb0000000011003bb"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve6.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 111,
+      "request": "10016f040001ff01008a000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665362e436d642e53746f7044697370656e73000000100334",
+      "response": "10066f0000010089fed4bead000000011003be"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve6.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 112,
+      "request": "100170040001ff010089000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665362e436d642e436c6f736556616c7665000000001003bc",
+      "response": "1006700000010088fed4beac000000011003bf"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve7.Cmd.StopDispens",
+      "arguments": [],
+      "sequence": 113,
+      "request": "100171040001ff010088000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665372e436d642e53746f7044697370656e73000000100333",
+      "response": "1006710000010087fed4beab000000011003c0"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve7.Cmd.CloseValve",
+      "arguments": [],
+      "sequence": 114,
+      "request": "100172040001ff010087000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665372e436d642e436c6f736556616c7665000000001003bb",
+      "response": "1006720000010086fed4beaa000000011003c1"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveZToPark",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 143,
+      "request": "10018f040101ff01006900000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655a546f5061726b00000000536c6f7700000000100344",
+      "response": "10068f0000010069fed4bea8000000011003c3"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYToPrime",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 151,
+      "request": "100197040101ff01006100000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655859546f5072696d650000536c6f770000000010037e",
+      "response": "1006970000010061fed4bea1000000011003ca"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveZToPrime",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 215,
+      "request": "1001d7040101ff01002100000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655a546f5072696d65000000536c6f77000000001003d5",
+      "response": "1006d70000010021fed4be5b0000000110031010"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.Prime",
+      "arguments": [
+        50000.0
+      ],
+      "sequence": 40,
+      "request": "100128040101ff0100d000000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e5072696d65000000c350000000001003a2",
+      "response": "10062800000100d0fed4be0400000001100367"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.Prime",
+      "arguments": [
+        50000.0
+      ],
+      "sequence": 41,
+      "request": "100129040101ff0100cf00000001000100014d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e5072696d65000000c350000000001003a1",
+      "response": "10062900000100cffed4be0300000001100368"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYToPark",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 142,
+      "request": "10018e040101ff01006a00000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655859546f5061726b000000536c6f77000000001003ed",
+      "response": "10068e000001006afed4bdaa000000011003c2"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveXYToPurge",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 167,
+      "request": "1001a7040101ff01005100000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655859546f50757267650000536c6f7700000000100378",
+      "response": "1006a70000010051fed4bd99000000011003d3"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PosSystem.Cmd.MoveZToPurge",
+      "arguments": [
+        "Slow"
+      ],
+      "sequence": 171,
+      "request": "1001ab040101ff01004d00000001000100004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e506f7353797374656d2e436d642e4d6f76655a546f5075726765000000536c6f77000000001003cf",
+      "response": "1006ab000001004dfed4bd93000000011003d9"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve1.Cmd.Purge",
+      "arguments": [
+        2000.0,
+        1000.0
+      ],
+      "sequence": 255,
+      "request": "1001ff040101ff0100f900000002000300034d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665312e436d642e507572676500000007d000000000000003e8000000001003e8",
+      "response": "1006ff00000100f9fed4bd3c00000001100330"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.Valve2.Cmd.Purge",
+      "arguments": [
+        2000.0,
+        1000.0
+      ],
+      "sequence": 13,
+      "request": "10010d040101ff0100eb00000002000300034d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e56616c7665322e436d642e507572676500000007d000000000000003e8000000001003e7",
+      "response": "10060d00000100ebfed4bd3a00000001100332"
+    },
+    {
+      "operation": "call",
+      "path": "Machine.Entity.Dispenser.Module.Entity.PressureRegulator.Cmd.Discharge",
+      "arguments": [],
+      "sequence": 110,
+      "request": "10016e040001ff01008b000000004d616368696e652e456e746974792e44697370656e7365722e4d6f64756c652e456e746974792e5072657373757265526567756c61746f722e436d642e446973636861726765000010034c",
+      "response": "10066e000001008afed4bcd900000001100394"
+    }
+  ]
+}

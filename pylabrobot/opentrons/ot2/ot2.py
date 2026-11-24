@@ -1,26 +1,31 @@
 """OT-2 lifecycle, deck ownership, and physical pipette discovery."""
 
+import asyncio
 import math
+import time
 from typing import List, Optional, Tuple, Union
 
-from pylabrobot.io.http import HTTP
+from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.api import HTTP_API_VERSION, OpentronsAPI
 from pylabrobot.opentrons.labware import (
   LabwareRegistry,
   build_tip_rack_definition,
 )
 from pylabrobot.opentrons.operations import OperationLock
+from pylabrobot.opentrons.ot2.modules import OT2Module, OT2ModuleMismatchError
 from pylabrobot.opentrons.ot2.pipette import (
   _PIPETTE_SPECS,
   OT2_8ChannelPipette,
   OT2SingleChannelPipette,
 )
-from pylabrobot.opentrons.run import OpentronsRun
+from pylabrobot.opentrons.run import OpentronsRun, slot_wire_location
 from pylabrobot.opentrons.types import (
+  DoorStatus,
   ModuleInfo,
   MountedPipette,
   RobotInfo,
   RunInfo,
+  _string,
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.opentrons import OT2RobotGeometry, OTDeck
@@ -122,8 +127,99 @@ class OT2:
     self._require_connected()
     return await self._api.get_runs()
 
+  async def get_run(self, run_id: str) -> RunInfo:
+    """Read one server run by id, without selecting or stopping it."""
+    self._require_connected()
+    return await self._api.get_run(run_id)
+
+  async def get_unfinished_run(self) -> Optional[RunInfo]:
+    """Return the robot's current run when it is not finished, or None.
+
+    Such a run is left by another client or an earlier session: a script stopped half way, or a
+    protocol loaded or paused in the Opentrons App. The robot creates no other run beside it.
+    """
+    for run in await self.get_runs():
+      if run.current and not run.finished:
+        return run
+    return None
+
+  async def stop_run(self, run_id: str, timeout: Optional[float] = None) -> RunInfo:
+    """Stop a run the robot holds and wait until the robot reports it finished.
+
+    For a run this object did not create, such as the one ``get_unfinished_run`` returns. A run
+    already finished is left as it is. This object's own run is stopped by ``stop()``.
+
+    Args:
+      run_id: the run to stop.
+      timeout: how long to wait for it to finish, in s. ``command_timeout`` when None.
+
+    Returns:
+      The run as last read.
+
+    Raises:
+      ValueError: If ``timeout`` is not finite and greater than zero.
+      RuntimeError: If ``run_id`` is this object's own run.
+      OpentronsError: If the robot does not take the stop request.
+      TimeoutError: If the run has not finished within ``timeout``.
+    """
+    wait = self.command_timeout if timeout is None else timeout
+    if not math.isfinite(wait) or wait <= 0:
+      raise ValueError("timeout must be finite and greater than zero")
+    async with self._operation_lock:
+      self._require_connected()
+      if self._run is not None and self._run.id == run_id:
+        raise RuntimeError("This is the OT-2's own run; stop it with stop()")
+      run = await self._api.get_run(run_id)
+      if run.finished:
+        return run
+      await self._api.stop_run(run_id)
+      deadline = time.monotonic() + wait
+      while True:
+        try:
+          run = await self._api.get_run(run_id)
+        except HTTPError as error:
+          if error.status == 404:  # The legacy stop route can delete the run.
+            return RunInfo(run_id, "stopped")
+          raise
+        if run.finished:
+          return run
+        if time.monotonic() >= deadline:
+          raise TimeoutError(
+            f"Run {run_id} did not finish within {wait:g} s (status {run.status!r})"
+          )
+        await asyncio.sleep(self.command_poll_interval)
+
+  async def get_rail_lights(self) -> bool:
+    """Read whether the rail lights are on. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_rail_lights()
+
+  async def set_rail_lights(self, on: bool) -> None:
+    """Turn the rail lights on or off. Needs a connection, not a run.
+
+    Args:
+      on: True for on, False for off.
+
+    Raises:
+      TypeError: If ``on`` is not a bool.
+    """
+    if not isinstance(on, bool):
+      raise TypeError(f"on must be a bool, got {on!r}")
+    async with self._operation_lock:
+      self._require_connected()
+      await self._api.set_rail_lights(on)
+
+  async def get_door_status(self) -> DoorStatus:
+    """Read the front door's switch. Needs a connection, not a run."""
+    self._require_connected()
+    return await self._api.get_door_status()
+
   async def setup(self, skip_home: bool = False) -> None:
-    """Connect, discover and bind pipettes to a run, and optionally home."""
+    """Connect, discover and bind pipettes to a run, and optionally home.
+
+    Raises:
+      RuntimeError: If the robot holds an unfinished run (see ``get_unfinished_run``).
+    """
     async with self._operation_lock:
       if self._run is not None:
         raise RuntimeError("The OT-2 is already set up")
@@ -134,6 +230,13 @@ class OT2:
         for pipette in mounted:
           if pipette.name not in _PIPETTE_SPECS:
             raise ValueError(f"Unsupported OT-2 pipette {pipette.name!r} on {pipette.mount}")
+        unfinished = await self.get_unfinished_run()
+        if unfinished is not None:
+          raise RuntimeError(
+            f"The OT-2 holds an unfinished run {unfinished.id} ({unfinished.status}, created "
+            f"{unfinished.created_at}), so it cannot create its own. Stop it with stop_run() or "
+            "the Opentrons App."
+          )
         receipt = await self._api.create_run()
         self._run = OpentronsRun(
           self._api,
@@ -192,10 +295,53 @@ class OT2:
     return self._labware
 
   async def home(self) -> None:
-    """Home the gantry and pipette axes."""
+    """Home the gantry and pipette axes.
+
+    Homing is a robot endpoint rather than a run command, so it needs a connection and no run:
+    after ``stop_run``, it brings the robot back to a known position before ``setup()``.
+    """
     async with self._operation_lock:
-      self._require_run()
+      self._require_connected()
       await self._api.home()
+
+  async def load_module(self, module: OT2Module) -> str:
+    """Load a module into the run at the slot it stands in, and return its id there.
+
+    A module this robot loaded into the current run already is left as it is. With several modules
+    of the model connected, the robot chooses the one it loads for the slot; the module's serial
+    number then says which it took.
+
+    Args:
+      module: a module standing directly in a deck slot.
+
+    Returns:
+      The module's id in the run.
+
+    Raises:
+      ValueError: If the module does not stand directly in a deck slot.
+      OT2ModuleMismatchError: If the module was given a serial number and the robot loaded another.
+        The module is then not bound.
+    """
+    async with self._operation_lock:
+      run = self._require_run()
+      if module.is_loaded and module._robot is self:
+        assert module.module_id is not None
+        return module.module_id
+      slot = self.deck.get_slot(module)
+      if slot is None:
+        raise ValueError(f"{module.name} must stand directly in an OT-2 deck slot")
+      result = (
+        await run.execute(
+          "loadModule", {"model": module.model, "location": slot_wire_location(str(slot))}
+        )
+      ).result
+      module_id = _string(result, "moduleId")
+      took = result.get("serialNumber")
+      took = took if isinstance(took, str) else None
+      if module.serial_number is not None and took is not None and took != module.serial_number:
+        raise OT2ModuleMismatchError(module, slot, took)
+      module._bind(self, run, module_id, took or module.serial_number)
+      return module_id
 
   async def _load_tip_rack(self, tip_rack: TipRack, tip: Tip) -> None:
     slot = self.deck.get_slot(tip_rack)

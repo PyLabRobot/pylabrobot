@@ -3,7 +3,7 @@ import math
 import re
 import unittest
 import unittest.mock
-from typing import Any, Dict, List, Literal, Mapping, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple, Union, cast
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.device import RECORDING_STAR
@@ -218,6 +218,22 @@ class TestXYMove(unittest.IsolatedAsyncioTestCase):
       moves[2:], ["X0XPla05000lr3lw7", jy("4200 3000 2000 1600 1420 1240 1060 0880")]
     )
 
+  async def test_a_given_speed_and_levels_reach_x_and_y(self):
+    await self.pipettes.move_to_xy_positions(
+      500.0, {0: 420.0}, x_acceleration_level=1, y_speed=100.0, y_acceleration_level=1
+    )
+    self.assertIn("X0XPla05000lr1lw7", self.sent)
+    move = self._first("C0JY")
+    self.assertIn("P1AAyv2160", self.sent[:move])
+    self.assertIn("P1AAyr1", self.sent[:move])
+
+  async def test_an_out_of_range_speed_or_level_moves_nothing(self):
+    for given in ({"x_acceleration_level": 9}, {"y_speed": 1000.0}, {"y_acceleration_level": 9}):
+      with self.assertRaises(ValueError):
+        await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, **given)
+    moves = [command for command in self.sent if command[2:4] in ("ZA", "XP", "JY", "AA")]
+    self.assertEqual(moves, [])
+
   async def test_a_raise_out_of_reach_moves_nothing(self):
     with self.assertRaises(ValueError):
       await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, minimum_traverse_height_start=400)
@@ -236,6 +252,67 @@ class TestXYMove(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(RuntimeError, "X refused"):
       await self.pipettes.move_to_xy_positions(500.0, {0: 420.0})
     self.assertEqual(self.sent[-1], jy("4200 3000 2000 1600 1420 1240 1060 0880"))
+
+
+class TestXMove(unittest.IsolatedAsyncioTestCase):
+  """`move_to_x_position`: checked first, the low channels and head up, then the arm."""
+
+  async def asyncSetUp(self):
+    self.pipettes, self.sent = await channels(width=9.0, positions=TestXYMove.SPREAD)
+    await self.pipettes.move_stop_disc_to_z_positions({0: 200.0, 1: 250.0})
+    self.sent.clear()
+
+  def _moves(self) -> List[str]:
+    return [command for command in self.sent if command[2:4] in ("ZA", "XP")]
+
+  async def test_only_the_low_channels_rise_and_before_x(self):
+    await self.pipettes.move_to_x_position(x=500.0)
+    self.assertEqual(self._moves(), ["P1ZAza22838zv11652zr075zw3", "X0XPla05000lr3lw7"])
+
+  async def test_a_refused_x_or_raise_moves_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_to_x_position(x=5000.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_to_x_position(x=500.0, minimum_traverse_height_start=400)
+    self.assertEqual(self._moves(), [])
+
+  async def test_moving_x_with_y_raises_only_once(self):
+    await self.pipettes.move_to_xy_positions(500.0, {0: 420.0})
+    raised = [command for command in self.sent if command[2:4] == "ZA"]
+    self.assertEqual(raised, ["P1ZAza22838zv11652zr075zw3"])
+
+  def _low_head(self) -> None:
+    """Put the 96-head below every traverse height; its safe-Z moves are recorded as sent."""
+    head = self.pipettes.arm.head96
+    assert head is not None
+
+    async def low() -> float:
+      return 150.0
+
+    async def to_safe_z(*args: Any, **kwargs: Any) -> float:
+      self.sent.append("head to safe Z")
+      return 300.0
+
+    head.request_z_position = low  # type: ignore[method-assign]
+    head.move_to_safe_z = to_safe_z  # type: ignore[method-assign]
+
+  async def test_a_low_head_rises_before_x(self):
+    self._low_head()
+    await self.pipettes.move_to_x_position(x=500.0)
+    x_move = next(i for i, command in enumerate(self.sent) if command.startswith("X0XP"))
+    self.assertLess(self.sent.index("head to safe Z"), x_move)
+
+  async def test_a_height_of_0_raises_neither_channels_nor_head(self):
+    self._low_head()
+    await self.pipettes.move_to_x_position(x=500.0, minimum_traverse_height_start=0)
+    self.assertEqual(self._moves(), ["X0XPla05000lr3lw7"])
+    await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, minimum_traverse_height_start=0)
+    self.assertNotIn("head to safe Z", self.sent)
+
+  async def test_without_safety_checks_only_the_arm_moves(self):
+    await self.pipettes.move_to_x_position(x=500.0, perform_safety_checks=False)
+    self.assertTrue(self.sent)
+    self.assertEqual([command for command in self.sent if not command.startswith("X0")], [])
 
 
 async def simulated_channels() -> Pipettes:
@@ -382,7 +459,7 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
       speed=46.3, acceleration_level=1, channels=[7]
     ):
       self.assertEqual(self.sent, ["P8AAyv1000", "P8AAyr1"])
-    self.assertEqual(self.sent[2:], ["P8AAyv7559", "P8AAyr4"])
+    self.assertEqual(self.sent[2:], ["P8AAyv5939", "P8AAyr4"])
 
   async def test_profile_touches_only_the_named_channels(self):
     async with self.pipettes._temporary_y_drive_profile(acceleration_level=1, channels=[6, 7]):
@@ -391,17 +468,17 @@ class TestDriveParameters(unittest.IsolatedAsyncioTestCase):
 
 
 class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
-  """Setup writes the driver's defaults into every channel, whatever an earlier session left."""
+  """Setup gives every channel the driver's defaults, whatever an earlier session left."""
 
   async def test_every_channel_holds_the_defaults_after_setup(self):
     pipettes = await simulated_channels()
     for channel in range(pipettes.num_channels):
-      self.assertEqual(await pipettes.request_y_speed(channel), 350.0)
+      self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
       self.assertEqual(await pipettes.request_y_acceleration_level(channel), 4)
       self.assertEqual(await pipettes.request_z_speed(channel), 125.0)
       self.assertEqual(await pipettes.request_z_acceleration(channel), 804.6)
 
-  async def test_setup_writes_four_per_channel(self):
+  async def test_setup_writes_z_per_channel_and_y_only_where_it_differs(self):
     driver = STARSimulationDriver(deck=STARDeck(), declared_configuration_json=RECORDING_STAR)
     sent: List[str] = []
     answer = driver.send_command
@@ -414,8 +491,17 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     driver.send_command = recorded  # type: ignore[assignment]
     await driver.setup()
     written = [command for command in sent if command[0] == "P"]
-    self.assertEqual(len(written), 32)
-    self.assertEqual(written[:4], ["P1AAyv7559", "P1AAyr4", "P1AAzv11652", "P1AAzr075"])
+    # the simulated drives start at the firmware's 6000 steps/s and level 4: only the speed differs
+    self.assertEqual(len(written), 24)
+    self.assertEqual(written[:2], ["P1AAyv5939", "P2AAyv5939"])
+
+  async def test_setup_does_not_take_what_every_channel_holds_as_the_default(self):
+    pipettes = await simulated_channels()
+    for channel in range(pipettes.num_channels):
+      await pipettes._set_y_speed(channel=channel, speed=350.0)
+    await pipettes._driver.setup()
+    for channel in range(pipettes.num_channels):
+      self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
 
   async def test_a_repeated_setup_puts_back_what_a_session_changed(self):
     pipettes = await simulated_channels()
@@ -424,6 +510,89 @@ class TestDriveParametersAtSetup(unittest.IsolatedAsyncioTestCase):
     await pipettes._driver.setup()
     self.assertEqual(await pipettes.request_z_speed(2), 125.0)
     self.assertEqual(await pipettes.request_y_acceleration_level(2), 4)
+
+  async def recorded_y_moves(self, pipettes: Pipettes) -> List[str]:
+    """Record every `AA` and `JY` the channels are sent, answered as before."""
+    sent: List[str] = []
+    answer = pipettes._driver.send_command
+
+    async def recorded(module: str, command: str, **kwargs: Any):
+      if command in ("AA", "JY"):
+        fields = {key: value for key, value in kwargs.items() if key != "subsystem"}
+        sent.append(assemble_command(module=module, command=command, id_=None, **fields))
+      return await answer(module=module, command=command, **kwargs)
+
+    pipettes._driver.send_command = recorded  # type: ignore[assignment]
+    return sent
+
+  async def test_a_y_move_first_gives_a_channel_left_at_another_speed_the_default(self):
+    pipettes = await simulated_channels()
+    await pipettes._set_y_speed(channel=7, speed=10.0)
+    await pipettes._set_y_acceleration_level(channel=7, level=1)
+    sent = await self.recorded_y_moves(pipettes)
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_positions(ys={7: ys[7] - 5.0})
+    self.assertEqual(sent[:2], ["P8AAyv5939", "P8AAyr4"])
+    self.assertTrue(sent[2].startswith("C0JY"))
+    self.assertEqual(len(sent), 3)
+
+  async def test_a_y_move_never_sends_one_channel_two_commands_at_once(self):
+    pipettes = await simulated_channels()
+    await pipettes._set_y_speed(channel=7, speed=10.0)
+    await pipettes._set_y_acceleration_level(channel=7, level=1)
+    answer = pipettes._driver.send_command
+    in_flight: Set[str] = set()
+    overlaps: List[str] = []
+
+    async def one_at_a_time(module: str, command: str, **kwargs: Any):
+      if module != "C0" and module in in_flight:
+        overlaps.append(f"{module}{command}")
+      in_flight.add(module)
+      try:
+        await asyncio.sleep(0)
+        return await answer(module=module, command=command, **kwargs)
+      finally:
+        in_flight.discard(module)
+
+    pipettes._driver.send_command = one_at_a_time  # type: ignore[assignment]
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_position(channel=7, y=ys[7] - 5.0, speed=100.0, acceleration_level=1)
+    self.assertEqual(overlaps, [])
+
+  async def test_a_y_move_given_a_speed_holds_it_for_that_move_only(self):
+    pipettes = await simulated_channels()
+    sent = await self.recorded_y_moves(pipettes)
+    ys = await pipettes.request_y_positions()
+    await pipettes.move_to_y_position(channel=7, y=ys[7] - 5.0, speed=100.0, acceleration_level=1)
+    move = next(index for index, command in enumerate(sent) if command.startswith("C0JY"))
+    channels = range(1, pipettes.num_channels + 1)
+    given = {f"P{n}AAyv2160" for n in channels} | {f"P{n}AAyr1" for n in channels}
+    default = {f"P{n}AAyv5939" for n in channels} | {f"P{n}AAyr4" for n in channels}
+    self.assertEqual(set(sent[:move]), given)
+    self.assertEqual(set(sent[move + 1 :]), default)
+    for channel in range(pipettes.num_channels):
+      self.assertEqual(await pipettes.request_y_speed(channel), 274.99)
+      self.assertEqual(await pipettes.request_y_acceleration_level(channel), 4)
+
+  async def test_a_failed_y_move_given_a_speed_still_puts_the_default_back(self):
+    pipettes = await simulated_channels()
+    sent = await self.recorded_y_moves(pipettes)
+    recording = pipettes._driver.send_command
+
+    async def failing(module: str, command: str, **kwargs: Any):
+      answer = await recording(module=module, command=command, **kwargs)
+      if command == "JY":
+        raise RuntimeError("the move")
+      return answer
+
+    pipettes._driver.send_command = failing  # type: ignore[assignment]
+    ys = await pipettes.request_y_positions()
+    with self.assertRaises(RuntimeError):
+      await pipettes.move_to_y_position(channel=7, y=ys[7] - 5.0, speed=100.0)
+    move = next(index for index, command in enumerate(sent) if command.startswith("C0JY"))
+    self.assertEqual(
+      set(sent[move + 1 :]), {f"P{n}AAyv5939" for n in range(1, pipettes.num_channels + 1)}
+    )
 
   async def test_a_channel_move_writes_what_it_moved_with(self):
     pipettes = await simulated_channels()
@@ -578,18 +747,38 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     reads.assert_awaited_once_with(module="P3", command="RD", fmt="rd#####")
 
   async def test_x_firmware(self):
-    await self.pipettes._unchecked_fw_probe_x_using_clld(134.0)
-    self.assertEqual(self.sent, ["C0XLxs01340"])
+    await self.pipettes._unchecked_fw_probe_x_using_clld(channel=4, end_position=134.0)
+    self.assertEqual(self.sent, ["C0XLpn05xs01340"])
 
   async def test_y_firmware(self):
     await self.pipettes._unchecked_fw_probe_y_using_clld(0, 2160, 10, 216, 4, 7)
     self.assertEqual(self.sent, ["P1YLya02160gt0010gl0000yv0216yr4yw7"])
 
+  async def test_move_y_relative_firmware(self):
+    for channel, distance_increments in ((0, 43), (2, -11)):
+      await self.pipettes._unchecked_fw_move_y_relative(
+        channel=channel,
+        distance_increments=distance_increments,
+        speed_increments=216,
+        acceleration_level=4,
+        current_limit=7,
+      )
+    self.assertEqual(self.sent, ["P1YSys00043yt0yv0216yr4yw7", "P3YSys00011yt1yv0216yr4yw7"])
+
   async def test_x_probe_searches_backs_away_and_corrects_for_the_tip(self):
     self._stand_at_x(300.0, 250.04)
     x = await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0)
-    self.assertEqual(self.sent, ["C0XLxs02000"])
-    self.moves.assert_awaited_once_with(252.0)
+    self.assertEqual(self.sent, ["C0XLpn01xs02000"])
+    self.moves.assert_awaited_once_with(x=252.0, perform_safety_checks=False)
+    self.assertEqual(x, 249.4)
+
+  async def test_x_probe_with_no_post_detection_distance_sends_only_the_search(self):
+    self._stand_at_x(300.0, 250.04)
+    x = await self.pipettes.probe_x_using_clld(
+      channel=0, direction="left", search_end_position=200.0, post_detection_distance=0
+    )
+    self.assertEqual(self.sent, ["C0XLpn01xs02000"])
+    self.moves.assert_not_awaited()
     self.assertEqual(x, 249.4)
 
   async def test_x_probe_searches_to_the_end_of_its_reach_by_default(self):
@@ -598,8 +787,8 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     high = device.instrument_size_slots * 22.5 + 125.0
     self._stand_at_x(300.0, 400.0)
     x = await self.pipettes.probe_x_using_clld(0, "right")
-    self.assertEqual(self.sent, [f"C0XLxs{round(high * 10):05}"])
-    self.moves.assert_awaited_once_with(398.0)
+    self.assertEqual(self.sent, [f"C0XLpn01xs{round(high * 10):05}"])
+    self.moves.assert_awaited_once_with(x=398.0, perform_safety_checks=False)
     self.assertEqual(x, 400.6)
 
   async def test_x_probe_refuses_an_end_behind_the_arm_or_out_of_reach(self):
@@ -613,25 +802,58 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
   async def test_y_probe_searches_to_the_neighbour_by_default(self):
     after = list(self.ys)
     after[1] = 250.0
-    self._stand_at_y(self.ys, self.ys, after)
+    self._stand_at_y(self.ys, self.ys, after, after)
     front = 200.0 + self.pipettes._min_spacing_between(1, 2)
     y = await self.pipettes.probe_y_using_clld(1, "forward")
     end = self.pipettes.configuration.y_drive_mm_to_increments(front)
-    self.assertEqual(self.sent, [f"P2YLya{end:05}gt0010gl0000yv0216yr4yw7"])
-    self.moves.assert_awaited_once_with(1, 252.0)
+    self.assertEqual(
+      self.sent,
+      [f"P2YLya{end:05}gt0010gl0000yv0216yr4yw7", "P2YSys00043yt0yv0216yr4yw7", "P2AAyv5939"],
+    )
+    self.moves.assert_not_awaited()
     self.assertEqual(y, 249.4)
 
-  async def test_y_probe_backs_away_no_further_than_the_neighbour_allows(self):
+  async def test_y_probe_post_detection_move_stays_within_the_searched_path(self):
     back = 300.0 - self.pipettes._min_spacing_between(1, 2)
-    front = 100.0 + self.pipettes._min_spacing_between(2, 3)
     after = list(self.ys)
-    after[2] = front + 0.5
-    self._stand_at_y(self.ys, self.ys, after)
+    after[2] = 200.5
+    self._stand_at_y(self.ys, self.ys, after, after)
     y = await self.pipettes.probe_y_using_clld(2, "backward")
     end = self.pipettes.configuration.y_drive_mm_to_increments(back)
-    self.assertEqual(self.sent, [f"P3YLya{end:05}gt0010gl0000yv0216yr4yw7"])
-    self.moves.assert_awaited_once_with(2, front)
-    self.assertEqual(y, round(front + 0.5 + 0.6, 1))
+    self.assertEqual(
+      self.sent,
+      [f"P3YLya{end:05}gt0010gl0000yv0216yr4yw7", "P3YSys00011yt1yv0216yr4yw7", "P3AAyv5939"],
+    )
+    self.moves.assert_not_awaited()
+    self.assertEqual(y, 201.1)
+
+  async def test_y_probe_with_no_post_detection_distance_sends_only_the_search(self):
+    after = list(self.ys)
+    after[1] = 250.0
+    self._stand_at_y(self.ys, self.ys, after)
+    y = await self.pipettes.probe_y_using_clld(
+      channel=1, direction="forward", post_detection_distance=0
+    )
+    self.assertEqual([command[2:4] for command in self.sent], ["YL", "AA"])
+    self.moves.assert_not_awaited()
+    self.assertEqual(y, 249.4)
+
+  async def test_y_probe_that_fails_still_reads_where_it_stopped_and_puts_the_default_back(self):
+    after = list(self.ys)
+    after[1] = 250.0
+    sending = self.pipettes._driver.send_command
+    # The search fails after 2 reads, the post-detection move after 3: each adds one read.
+    for command, read_count in (("YL", 3), ("YS", 4)):
+      self.pipettes._driver.send_command = sending  # type: ignore[method-assign]
+      self._answer_the_search_with(command, f"P2{command}id0001er99")
+      reads = unittest.mock.AsyncMock(side_effect=[self.ys, self.ys, after, after])
+      self.pipettes.request_y_positions = reads  # type: ignore[method-assign]
+      self.sent.clear()
+      with self.assertRaises(STARFirmwareError):
+        await self.pipettes.probe_y_using_clld(1, "forward")
+      self.assertEqual(reads.await_count, read_count)
+      # and the default speed is back in the drive
+      self.assertEqual(self.sent[-1], "P2AAyv5939")
 
   async def test_y_probe_refuses_a_start_or_end_past_the_neighbour(self):
     for kwargs in ({"search_start_position": 399.0}, {"search_end_position": 150.0}):
@@ -651,15 +873,19 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._answer_the_search_with("XL", "C0XLid0001er12/00")
     self._stand_at_x(300.0, 200.0)
     self.assertIsNone(await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0))
-    self.moves.assert_awaited_once_with(202.0)
+    self.moves.assert_awaited_once_with(x=202.0, perform_safety_checks=False)
 
-  async def test_y_probe_that_finds_nothing_backs_away_and_answers_none(self):
+  async def test_y_probe_that_finds_nothing_makes_its_post_detection_move_and_answers_none(self):
     for trace in (70, 73):
       self.moves.reset_mock()
       self._answer_the_search_with("YL", f"P2YLid0001er{trace}")
-      self._stand_at_y(self.ys, self.ys, self.ys)
+      self.sent.clear()
+      after = list(self.ys)
+      after[1] = 200.0 + self.pipettes._min_spacing_between(1, 2)
+      self._stand_at_y(self.ys, self.ys, after, after)
       self.assertIsNone(await self.pipettes.probe_y_using_clld(1, "forward"))
-      self.moves.assert_awaited_once_with(1, 302.0)
+      self.assertEqual(self.sent[-2:], ["P2YSys00043yt0yv0216yr4yw7", "P2AAyv5939"])
+      self.moves.assert_not_awaited()
 
   async def test_any_other_error_is_raised_and_nothing_backs_away(self):
     self._answer_the_search_with("XL", "C0XLid0001er02/00")
@@ -795,14 +1021,17 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
   async def test_a_bare_channel_z_probes_on_its_stop_disc_when_allowed(self):
     self._carry_tips(False)
     self.pipettes.move_to_safe_z = self.moves  # type: ignore[method-assign]
-    self._answer_the_heights_with({"lh": [1234] * self.pipettes.num_channels})
+    c = self.pipettes.configuration
+    self._answer_the_heights_with({"rh": c.z_drive_mm_to_increments(234.74)})
     z = await self.pipettes.probe_z_using_clld(1, allow_without_tip=True)
-    # No overhang: the window is the drive's own, floor to top.
-    floor, top = self.pipettes.configuration.z_range_increments
+    # No overhang: the window is the drive's own, floor to top, and the height the stop disc's,
+    # from the channel: the master's `C0 RL` can still subtract a tool put back since.
+    floor, top = c.z_range_increments
     self.assertEqual(
-      self.sent, [f"P2ZLzh{floor:05}zc{top:05}zl00932zr075gt0010gl0002zj1zi0186", "C0RL"]
+      self.sent, [f"P2ZLzh{floor:05}zc{top:05}zl00932zr075gt0010gl0002zj1zi0186", "P2RH"]
     )
-    self.assertEqual(z, 123.4)
+    assert z is not None
+    self.assertAlmostEqual(z, 234.74, delta=0.01)
 
   async def test_plld_firmware(self):
     self._answer_the_heights_with({"if": [22964, 0]})
@@ -1313,7 +1542,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes = self.driver.pipettes
     self.deck = deck
     self.sent: List[str] = []
-    self.lh = [1500] * self.pipettes.num_channels
+    self.lh = [1100] * self.pipettes.num_channels
     # Where a z-touch stops, in stop disc increments; a list gives one reply per search.
     self.rz: Union[int, List[int]] = 22300
     self.fail_with: dict = {}  # module -> list of error strings, one per search, in order
@@ -1381,7 +1610,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
       + ["C0RL"],
     )
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    self.assertEqual(heights, [round(150.0 - bottom, 2)] * 4)
+    self.assertEqual(heights, [round(110.0 - bottom, 2)] * 4)
     self.xy.assert_awaited_once()
     assert self.xy.await_args is not None
     x, ys = self.xy.await_args.args
@@ -1408,7 +1637,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     overhang = 334.7 - 282.8
     found, nothing = (self.pipettes.get_reference_point_location(ch) for ch in (0, 1))
     assert found is not None and nothing is not None
-    self.assertAlmostEqual(found.z, 150.0 + overhang)
+    self.assertAlmostEqual(found.z, 110.0 + overhang)
     bottom = wells[1].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     self.assertAlmostEqual(nothing.z, bottom - 1.0 + overhang, places=1)
 
@@ -1463,7 +1692,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.safe_z.await_count, 2, "up before the first batch and after the failure")
 
   async def test_replicates_are_averaged(self):
-    self.lh = [1500] * self.pipettes.num_channels
+    self.lh = [1100] * self.pipettes.num_channels
     calls = {"n": 0}
     original = self.pipettes._driver.send_command
 
@@ -1471,14 +1700,56 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
       result = await original(module=module, command=command, **kwargs)
       if command == "RL":
         calls["n"] += 1
-        result["lh"] = [1500 + 10 * calls["n"]] * self.pipettes.num_channels
+        result["lh"] = [1100 + 10 * calls["n"]] * self.pipettes.num_channels
       return result
 
     self.pipettes._driver.send_command = varying  # type: ignore[assignment]
     wells = self._wells("A1")
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     heights = await self.pipettes.probe_liquid_heights(wells, n_replicates=3)
-    self.assertEqual(heights, [round(152.0 - bottom, 2)])
+    self.assertEqual(heights, [round(112.0 - bottom, 2)])
+
+  async def test_a_surface_above_the_top_raises_naming_every_channel_and_comes_up(self):
+    # Sensors that trigger as the search begins answer a height above the wells searched.
+    wells = self._wells("A1", "B1", "C1")
+    top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    surface = round(top + 3.0, 1)
+    self.lh[0] = self.lh[1] = round(surface * 10)
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.probe_liquid_heights(wells)
+    message = str(refused.exception)
+    self.assertIn("cannot be a liquid surface", message)
+    self.assertIn(f"channel 0 in {wells[0].name}: {surface:.1f} mm", message)
+    self.assertIn(f"channel 1 in {wells[1].name}", message)
+    self.assertIn(f"its top is at {top:.2f} mm", message)
+    self.assertNotIn("channel 2", message)
+    self.assertEqual(self.safe_z.await_count, 2, "up before the first batch and after the failure")
+
+  async def test_a_surface_above_the_top_in_one_round_is_not_averaged_away(self):
+    wells = self._wells("A1")
+    top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    n = self.pipettes.num_channels
+    reads = [[1100] * n, [round((top + 3.0) * 10)] * n]
+    original = self.pipettes._driver.send_command
+
+    async def varying(module: str, command: str, **kwargs: Any):
+      result = await original(module=module, command=command, **kwargs)
+      if command == "RL":
+        result["lh"] = reads.pop(0)
+      return result
+
+    self.pipettes._driver.send_command = varying  # type: ignore[assignment]
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.probe_liquid_heights(wells, n_replicates=3)
+    self.assertIn("cannot be a liquid surface", str(refused.exception))
+    self.assertEqual(self.sent.count("C0RL"), 2, "the third round is not searched")
+
+  async def test_a_surface_up_to_a_seating_error_above_the_top_is_liquid(self):
+    wells = self._wells("A1")
+    surface = round(wells[0].get_location_wrt(self.deck, "c", "c", "t").z + 1.0, 1)
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    self.lh = [round(surface * 10)] * self.pipettes.num_channels
+    self.assertEqual(await self.pipettes.probe_liquid_heights(wells), [round(surface - bottom, 2)])
 
   async def test_any_other_channel_error_is_raised_after_coming_up(self):
     self.fail_with["P1"] = ["P1ZLid0001er99"]
@@ -1683,7 +1954,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(self.xy.await_count, 2)
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    self.assertEqual(heights, [round(150.0 - bottom, 2)] * 6)
+    self.assertEqual(heights, [round(110.0 - bottom, 2)] * 6)
 
   async def test_a_turned_plate_is_searched_where_its_wells_stand(self):
     turned = cor_axy_96_wellplate_500uL_Ub("turned")
@@ -3098,7 +3369,9 @@ class TestSimulatedMotionTime(unittest.IsolatedAsyncioTestCase):
     await pipettes.request_y_positions()
     self.sleep.assert_awaited_once()
     self.assertAlmostEqual(
-      self.sleep.await_args_list[0].args[0], 30.0 / Pipettes.default_y_speed, places=3
+      self.sleep.await_args_list[0].args[0],
+      30.0 / pipettes.default_y_speed,
+      places=3,
     )
 
   async def test_nothing_is_waited_when_the_device_keeps_no_time(self):
@@ -4130,6 +4403,24 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       )
     self.assertIn("met no floor", str(refused.exception))
     self.assertEqual(sent, [])
+
+  async def test_a_surface_found_above_the_top_is_refused_before_the_command(self):
+    # The simulator answers a search from the tracker, so the read is stood in for: every channel
+    # answers the height the search of a well starts from.
+    top = self.wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    start = round(top + self.pipettes.well_search_start_clearance, 1)
+    self.pipettes.request_last_lld_z_positions = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=[start] * self.pipettes.num_channels
+    )
+    sent = self._record_aspirations()
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.aspirate(self.wells[:2], [10.0] * 2, lld_mode=Pipettes.LLDMode.CAPACITIVE)
+    message = str(refused.exception)
+    self.assertIn("cannot be a liquid surface", message)
+    self.assertIn(f"channel 0 in {self.wells[0].name}", message)
+    self.assertIn(f"channel 1 in {self.wells[1].name}", message)
+    self.assertEqual(sent, [])
+    self.assertEqual(self.wells[0].tracker.get_used_volume(), 150.0)
 
   async def test_no_liquid_found_is_refused_and_earlier_batches_stand(self):
     for row in "EFGH":

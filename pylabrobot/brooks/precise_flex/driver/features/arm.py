@@ -83,6 +83,14 @@ _ZTOUCH_MINIMUM_SEARCH_SPEED_PERCENT = 5
 # How near the column the gripper may be sent, in mm, seen from above; and how near the base plate,
 # seen from above or from its top face, whichever is further.
 _COLUMN_CLEARANCE = 5.0
+# Position tolerance of each joint stopped at its target, the largest error read on the device: a
+# pose read within it of a soft limit counts as within the limit. Targets are held to the limit.
+_JOINT_OVERSHOOT_TOLERANCES: Dict[PreciseFlexAxis, float] = {
+  PreciseFlexAxis.BASE: 0.052,
+  PreciseFlexAxis.SHOULDER: 0.013,
+  PreciseFlexAxis.ELBOW: 0.004,
+  PreciseFlexAxis.WRIST: 0.004,
+}
 
 
 def _snap_to_current(
@@ -418,6 +426,28 @@ class PreciseFlexArm:
       # Here the rail's value goes first.
       angles_str = f"{joint_position[PreciseFlexAxis.RAIL]} {angles_str}"
     await self._driver.send_command(f"locAngles {station_index} {angles_str}")
+
+  async def _unchecked_fw_set_station_cartesian(
+    self, station_index: int, joint_position: JointState
+  ) -> None:
+    """Write a station as the controller's Cartesian location, from the joint state to stand at.
+
+    ``pickplate`` and ``placeplate`` take a Cartesian station, and ``StationType`` empties one set
+    by ``locAngles``. The controller's z is the Z joint.
+
+    Raises:
+      NotImplementedError: On an arm with a rail, whose station has not been run on an arm.
+    """
+    if self._driver._has_rail:
+      raise NotImplementedError("a pick or a place is not supported on a rail-equipped arm yet")
+    pose = kinematics.fk(joint_position, self._driver._kinematics_params)
+    heading = (round(pose.rotation.z, 3) + 180) % 360 - 180
+    await self._driver.send_command(
+      f"locXyz {station_index} {round(pose.location.x, 3)} {round(pose.location.y, 3)} "
+      f"{round(joint_position[PreciseFlexAxis.BASE], 3)} {round(heading, 3)} 90 180"
+    )
+    config = 1 if pose.orientation == "right" else 2
+    await self._driver.send_command(f"locConfig {station_index} {config}")
 
   def _plan_cartesian_pose(
     self,
@@ -1107,17 +1137,24 @@ class PreciseFlexArm:
     PreciseFlexAxis.ELBOW,
   )
 
-  def _axes_outside_soft_limits(self, joints: JointState) -> Dict[PreciseFlexAxis, tuple]:
+  def _axes_outside_soft_limits(
+    self, joints: JointState, tolerances: Optional[Dict[PreciseFlexAxis, float]] = None
+  ) -> Dict[PreciseFlexAxis, tuple]:
     """Axes whose value lies outside their soft limit, as ``axis -> (value, (lo, hi))``.
 
     Iterates the soft-limit set (keyed by :class:`PreciseFlexAxis`) and looks each axis up in
     ``joints`` so the comparison stays PreciseFlexAxis-typed. Empty until the configuration has
     been discovered.
+
+    Args:
+      joints: the joint state to check.
+      tolerances: per axis, how far past a limit a value still counts as within it; 0 if left out.
     """
     outside: Dict[PreciseFlexAxis, tuple] = {}
     for axis, (lo, hi) in self._get_soft_limits().items():
       value = joints.get(axis)
-      if value is not None and not (lo <= value <= hi):
+      tolerance = (tolerances or {}).get(axis, 0.0)
+      if value is not None and not (lo - tolerance <= value <= hi + tolerance):
         outside[axis] = (value, (lo, hi))
     return outside
 
@@ -1152,7 +1189,9 @@ class PreciseFlexArm:
         rotary axes are absolute); ``recover_axes_within_limits()`` does.
       ValueError: If the target is out of range, as a pose taught in freedrive can be; re-teach it.
     """
-    out_of_range = self._axes_outside_soft_limits(current)
+    out_of_range = self._axes_outside_soft_limits(
+      joints=current, tolerances=_JOINT_OVERSHOOT_TOLERANCES
+    )
     if out_of_range:
       raise OutOfRangeOfMotionError(
         f"axis out of range: {self._fmt_axes(out_of_range)}. The controller rejects every "
@@ -1160,7 +1199,7 @@ class PreciseFlexArm:
         "axes are absolute); call recover_axes_within_limits() to drive it back into range.",
         axes=out_of_range,
       )
-    for axis, (value, limit) in self._axes_outside_soft_limits(target).items():
+    for axis, (value, limit) in self._axes_outside_soft_limits(joints=target).items():
       raise ValueError(
         f"{axis.name} target {value} is outside its soft limit {limit}; the controller "
         f"would reject the move (-1012). Re-teach this pose within the envelope."
@@ -1494,7 +1533,7 @@ class PreciseFlexArm:
     if speed_percent is None:
       speed_percent = self.default_recovery_speed_percent
     joints = await self.request_joint_state()
-    outside = self._axes_outside_soft_limits(joints)
+    outside = self._axes_outside_soft_limits(joints=joints, tolerances=_JOINT_OVERSHOOT_TOLERANCES)
     if not outside:
       return {}
     prior_speed = await self._request_speed()
@@ -1554,7 +1593,9 @@ class PreciseFlexArm:
       )
       return
 
-    outside = self._axes_outside_soft_limits(await self.request_joint_state())
+    outside = self._axes_outside_soft_limits(
+      joints=await self.request_joint_state(), tolerances=_JOINT_OVERSHOOT_TOLERANCES
+    )
     if not outside:
       return
     logger.warning(
@@ -1564,7 +1605,9 @@ class PreciseFlexArm:
     )
     if self._driver._recover_out_of_range:
       await self.recover_axes_within_limits()
-      outside = self._axes_outside_soft_limits(await self.request_joint_state())
+      outside = self._axes_outside_soft_limits(
+        joints=await self.request_joint_state(), tolerances=_JOINT_OVERSHOOT_TOLERANCES
+      )
     if outside:
       raise OutOfRangeOfMotionError(
         f"axis outside its soft limit after setup: {self._fmt_axes(outside)}. The controller "
@@ -1603,9 +1646,15 @@ class PreciseFlexArm:
       targets = build_targets(current)
       start = current
       for target in targets:
-        if check_soft_limits:
-          self._assert_within_soft_limits(start, target)
-        self._check_path_reachable(start, target)
+        try:
+          if check_soft_limits:
+            self._assert_within_soft_limits(start, target)
+          self._check_path_reachable(start, target)
+        except ValueError as exc:
+          logger.error(
+            "[PreciseFlex %s] move refused, nothing sent: %s", self._driver.io._host, exc
+          )
+          raise
         start = target
       try:
         await unchecked_fw_move(targets)
@@ -1616,9 +1665,10 @@ class PreciseFlexArm:
     try:
       await attempt()
     except OutOfRangeOfMotionError as exc:
-      if not (retry_out_of_range and self._driver._recover_out_of_range):
-        raise
       host = self._driver.io._host
+      if not (retry_out_of_range and self._driver._recover_out_of_range):
+        logger.error("[PreciseFlex %s] move refused: %s", host, exc)
+        raise
       logger.warning(
         "[PreciseFlex %s] commanded move blocked - %s; auto-recovery on -> recovering and retrying",
         host,
@@ -2029,7 +2079,9 @@ class PreciseFlexArm:
     """Write the station and run the controller's pick or place at it, guarded.
 
     Only the straight joint move to the station is checked against the column and the base plate.
-    The controller's own approach, depart and any detour through its park pose are not seen by it.
+    The wrist is checked where the controller takes it: the heading wrapped to +-180, less the
+    shoulder and the elbow. The controller's own approach, depart and any detour through its park
+    pose are not seen by it.
 
     Args:
       build_station: maps the pose just read to the station's full joint state.
@@ -2040,12 +2092,21 @@ class PreciseFlexArm:
         base plate.
     """
 
+    def controller_station(current: JointState) -> List[JointState]:
+      station = dict(build_station(current))
+      # The heading as `_unchecked_fw_set_station_cartesian` sends it, so a wrap of +-180 cannot
+      # differ between the check and the wire.
+      pose = kinematics.fk(joints=station, p=self._driver._kinematics_params)
+      heading = round(pose.rotation.z, 3)
+      station[PreciseFlexAxis.WRIST] += (heading + 180) % 360 - 180 - heading
+      return [station]
+
     async def unchecked_fw_move(targets: Sequence[JointState]) -> None:
-      await self._unchecked_fw_set_joint_angles(self.station_index, targets[0])
+      await self._unchecked_fw_set_station_cartesian(self.station_index, targets[0])
       await self._unchecked_fw_set_grip_detail()
       await unchecked_fw_plate()
 
-    await self._guarded_move(lambda current: [build_station(current)], unchecked_fw_move)
+    await self._guarded_move(build_targets=controller_station, unchecked_fw_move=unchecked_fw_move)
 
   @evented_operation(
     "precise_flex.pick_up_at_joint_position",

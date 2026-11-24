@@ -37,6 +37,8 @@ brooks/index
 byonoy/index
 cole_parmer/index
 curiox/index
+formulatrix/index
+gyger/index
 hamilton/index
 high_res/index
 inheco/index
@@ -47,6 +49,7 @@ mettler_toledo/index
 micronic/index
 molecular_devices/index
 opentrons/index
+paa/index
 qinstruments/index
 revvity/index
 sartorius/index

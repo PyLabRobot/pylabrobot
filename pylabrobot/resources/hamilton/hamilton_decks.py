@@ -448,6 +448,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       "extent": round(front_ahead_y - back_ahead_y, 4),
       "label_every": DEFAULT_TRACK_LABEL_EVERY,
       "label": "track",
+      "closing_mark": True,
     }
     self.assign_child_resource(tray, location=Coordinate(left, _CARRIER_Y - front_ahead_y, 0.0))
     self._declare_front_panel()
