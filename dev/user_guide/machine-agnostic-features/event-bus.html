@@ -910,7 +910,7 @@ diagnostic events preserve controller and transport activity for debugging.</p>
 <h2>Current event coverage<a class="headerlink" href="#current-event-coverage" title="Link to this heading">#</a></h2>
 <p>EventBus adoption is incremental. The current implementation instruments the following public
 frontends. Each listed semantic operation emits <code class="docutils literal notranslate"><span class="pre">started</span></code>, <code class="docutils literal notranslate"><span class="pre">completed</span></code>, and <code class="docutils literal notranslate"><span class="pre">failed</span></code> lifecycle
-events.</p>
+events; separately listed observations have no lifecycle suffix.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Frontend</p></th>
@@ -942,28 +942,31 @@ events.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.thermocycling.Thermocycler</span></code></p></td>
 <td><p>lid open/close; block/lid temperature set/deactivate; protocol submission</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.shaking.Shaker</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">inheco.ODTC</span></code></p></td>
+<td><p>setup/stop; drawer open/close; block/lid preparation; protocol upload/execution; temperature-control stop; <code class="docutils literal notranslate"><span class="pre">thermocycler.temperature_samples</span></code> observations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.shaking.Shaker</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">shaker.shake</span></code>, <code class="docutils literal notranslate"><span class="pre">shaker.stop_shaking</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.temperature_controlling.TemperatureController</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.temperature_controlling.TemperatureController</span></code></p></td>
 <td><p>set temperature, wait for temperature, deactivate</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Centrifuge</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Centrifuge</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Loader</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">legacy.centrifuge.Loader</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.VSpin</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.VSpin</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge.setup</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge.stop</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge.spin</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.Access2</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">agilent.vspin.Access2</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">centrifuge_loader.setup</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.stop</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.load</span></code>, <code class="docutils literal notranslate"><span class="pre">centrifuge_loader.unload</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">brooks.precise_flex.PreciseFlexDriver</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">brooks.precise_flex.PreciseFlexDriver</span></code></p></td>
 <td><p>lifecycle, fault/home/freedrive, joint/cartesian/rail/gripper motion, pick/drop, park</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">manual_operator.ManualOperator</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">manual_operator.ManualOperator</span></code></p></td>
 <td><p>arbitrary acknowledged manual actions; resource moves</p></td>
 </tr>
 </tbody>
@@ -1009,10 +1012,23 @@ families without double instrumentation.</p>
 </section>
 <section id="thermocycler">
 <h3>Thermocycler<a class="headerlink" href="#thermocycler" title="Link to this heading">#</a></h3>
-<p>Thermocycler events cover the seven primitive lid, thermal-control, and protocol-submission
+<p>Legacy Thermocycler events cover the seven primitive lid, thermal-control, and protocol-submission
 operations. Zoned setpoints use <code class="docutils literal notranslate"><span class="pre">target_temperatures</span></code>. Protocol events contain counts and volume
 metadata rather than the full profile, and completion means backend submission returned rather
 than physical execution finished.</p>
+<p>The direct Inheco ODTC uses <code class="docutils literal notranslate"><span class="pre">thermocycler.open_door</span></code> and <code class="docutils literal notranslate"><span class="pre">close_door</span></code> for drawer access,
+<code class="docutils literal notranslate"><span class="pre">prepare</span></code> for combined block/lid preparation, and <code class="docutils literal notranslate"><span class="pre">execute_protocol</span></code> for an awaited thermal run.
+Its execution completion means the method finished, although configured post-heating may remain
+active. <code class="docutils literal notranslate"><span class="pre">stop_protocol</span></code> records an acknowledged temperature-control stop. Cancelling a wait or
+timing out emits a failed operation but does not stop the device. Read-only polling does not
+emit semantic events. SiLA data callbacks emit <code class="docutils literal notranslate"><span class="pre">thermocycler.temperature_samples</span></code> batches with
+method-relative elapsed seconds and target/block/lid temperatures in degrees Celsius. They
+retain the originating run/operation context and identify preparation and protocol executions
+separately. Subscribe before dispatching the method to collect observations; <code class="docutils literal notranslate"><span class="pre">request_progress()</span></code>
+continues to return just the latest sample. See the
+<a class="reference internal" href="../../contributor_guide/event-schemas.html#direct-thermocycler-operations-odtc"><span class="std std-ref">ODTC event contract</span></a>
+and <a class="reference internal" href="../../contributor_guide/event-schemas.html#thermocycler-temperature-observations"><span class="std std-ref">temperature observations</span></a>
+for payloads, units, cached calls, and completion semantics.</p>
 </section>
 <section id="shaker-and-environmental-controllers">
 <h3>Shaker and environmental controllers<a class="headerlink" href="#shaker-and-environmental-controllers" title="Link to this heading">#</a></h3>

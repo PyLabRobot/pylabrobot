@@ -1250,6 +1250,138 @@ keyword arguments are deliberately excluded from the event payload.</p>
 instrumented primitive calls emit their normal events. Thermocycler status queries and wait helpers
 are not yet instrumented because their polling and completion semantics need to be stabilized
 before they can define canonical EventBus operations.</p>
+<section id="direct-thermocycler-operations-odtc">
+<h3>Direct thermocycler operations (ODTC)<a class="headerlink" href="#direct-thermocycler-operations-odtc" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">inheco.ODTC</span></code> emits the following operations at its public API boundary. Each has
+<code class="docutils literal notranslate"><span class="pre">device=device_reference(controller,</span> <span class="pre">name=controller.name)</span></code> and <code class="docutils literal notranslate"><span class="pre">resources</span></code> containing the
+directly loaded plate at invocation, or an empty list. Opening a drawer is not a resource
+transfer: these events have no <code class="docutils literal notranslate"><span class="pre">source</span></code> or <code class="docutils literal notranslate"><span class="pre">destination</span></code>.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Operation</p></th>
+<th class="head"><p>Additional fields</p></th>
+<th class="head"><p>Completion semantics</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.setup</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">simulation_mode</span></code>, <code class="docutils literal notranslate"><span class="pre">already_satisfied</span></code></p></td>
+<td><p>Connection, callback registration, and initialization succeeded, or the session was already connected.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.stop</span></code></p></td>
+<td><p>—</p></td>
+<td><p>Temperature stop and transport cleanup returned successfully.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.open_door</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">already_satisfied</span></code></p></td>
+<td><p>Drawer opening completed, or the last confirmed command state already matched.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.close_door</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">already_satisfied</span></code></p></td>
+<td><p>Drawer closing completed, or the last confirmed command state already matched.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.prepare</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">target_temperatures</span></code>, <code class="docutils literal notranslate"><span class="pre">target_lid_temperatures</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>; <strong>completed only:</strong> <code class="docutils literal notranslate"><span class="pre">already_satisfied</span></code></p></td>
+<td><p>Thermal preparation finished, or the cached prepared targets matched after acquiring the workflow lock.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.execute_protocol</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">protocol_source</span></code>, <code class="docutils literal notranslate"><span class="pre">method_name</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code>; profile-only invocation fields: <code class="docutils literal notranslate"><span class="pre">block_max_volume</span></code>, <code class="docutils literal notranslate"><span class="pre">lid_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">post_heating</span></code>; <strong>completed only for profiles:</strong> <code class="docutils literal notranslate"><span class="pre">stage_count</span></code>, <code class="docutils literal notranslate"><span class="pre">step_definition_count</span></code>, <code class="docutils literal notranslate"><span class="pre">step_execution_count</span></code>, <code class="docutils literal notranslate"><span class="pre">temperature_zone_count</span></code>; <strong>completed only for stored methods:</strong> <code class="docutils literal notranslate"><span class="pre">post_heating</span></code></p></td>
+<td><p>Preparation and thermal execution finished. Optional post-heating may remain active.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.upload_protocol</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">method_name</span></code>, <code class="docutils literal notranslate"><span class="pre">overwrite</span></code></p></td>
+<td><p>Upload of a validated compiled method finished.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">thermocycler.stop_protocol</span></code></p></td>
+<td><p>—</p></td>
+<td><p>The instrument acknowledged the temperature-control stop.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">prepare</span></code> controls block and lid together and waits for a firmware premethod. It does not emit
+separate setpoint, sensor-tolerance, or timed-hold events. Its two target lists each contain one
+temperature for ODTC. Temperatures use degrees Celsius, <code class="docutils literal notranslate"><span class="pre">timeout</span></code> uses seconds, and
+<code class="docutils literal notranslate"><span class="pre">block_max_volume</span></code> uses microliters. <code class="docutils literal notranslate"><span class="pre">already_satisfied</span></code> describes cached command/preparation
+state, not a fresh sensor measurement.</p>
+<p><code class="docutils literal notranslate"><span class="pre">execute_protocol</span></code> is distinct from the legacy submission-only <code class="docutils literal notranslate"><span class="pre">run_protocol</span></code> lifecycle above.
+<code class="docutils literal notranslate"><span class="pre">protocol_source</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;profile&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">run_protocol()</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;stored&quot;</span></code> for
+<code class="docutils literal notranslate"><span class="pre">run_stored_protocol()</span></code>. <code class="docutils literal notranslate"><span class="pre">method_name=None</span></code> selects the driver’s working slot. For profiles,
+<code class="docutils literal notranslate"><span class="pre">stage_count</span></code> counts top-level stages, <code class="docutils literal notranslate"><span class="pre">step_definition_count</span></code> counts authored leaf steps, and
+<code class="docutils literal notranslate"><span class="pre">step_execution_count</span></code> includes all nested repeats. Counts are computed after successful profile
+validation, before hardware I/O, and published only on completion. <code class="docutils literal notranslate"><span class="pre">temperature_zone_count</span></code> is 1.
+Stored native methods do not retain authored stages or exact sample volume; these fields are
+omitted rather than inferred from firmware compensation settings. No full profiles, XML, PID
+tables, or raw responses are included.</p>
+<p>Every scope emits <code class="docutils literal notranslate"><span class="pre">started</span></code> followed by exactly one <code class="docutils literal notranslate"><span class="pre">completed</span></code> or <code class="docutils literal notranslate"><span class="pre">failed</span></code> record. Validation,
+firmware errors, timeouts, and cancellation retain invocation data on failure. A failed execution
+or preparation wait does <strong>not</strong> prove that temperature control stopped: the physical method may
+continue after timeout or cancellation. An explicit stop emits its own lifecycle; interrupted
+waiters fail with <code class="docutils literal notranslate"><span class="pre">ODTCProtocolStopped</span></code>. Completion never asserts that sample liquid reached a
+sensor temperature or that post-heating is disabled.</p>
+<p>Internal preparation, upload, and execution helpers do not emit extra lifecycles during a public
+execution. <code class="docutils literal notranslate"><span class="pre">stop()</span></code> calls public <code class="docutils literal notranslate"><span class="pre">stop_protocol()</span></code> when connected, producing a nested stop-control
+lifecycle followed by the outer transport-lifecycle result. Reads and <code class="docutils literal notranslate"><span class="pre">wait_for_completion()</span></code>
+do not emit operation lifecycles; late callbacks do not reopen a failed lifecycle.</p>
+</section>
+<section id="thermocycler-temperature-observations">
+<h3>Thermocycler temperature observations<a class="headerlink" href="#thermocycler-temperature-observations" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">thermocycler.temperature_samples</span></code> is an instantaneous observation, with <strong>no lifecycle suffix</strong>.
+ODTC emits one event per validated SiLA data callback while its firmware method remains pending.
+Consumers may ignore this event without losing the operation-level execution lifecycle.
+Invalid temperature batches are logged and skipped without changing the latest valid progress
+or failing the pending method. Device completion/error responses still govern command success;
+missing telemetry must not be interpreted as stopped temperature control.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">device</span></code></p></td>
+<td><p>Named controller, using the same device reference as its operation events.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resources</span></code></p></td>
+<td><p>Directly loaded resource references captured when this method was dispatched; empty if unloaded.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">execution_id</span></code></p></td>
+<td><p>Unique opaque ID for one firmware method invocation, distinct from the enclosing public operation ID.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">method_name</span></code></p></td>
+<td><p>The actual firmware method name.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">method_kind</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;preparation&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;protocol&quot;</span></code>; identifies the method’s role without inspecting reserved names.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">samples</span></code></p></td>
+<td><p>Ordered list of samples from this callback, in the shape below.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Each sample contains <code class="docutils literal notranslate"><span class="pre">elapsed</span></code> in <strong>seconds</strong> and <code class="docutils literal notranslate"><span class="pre">target_temperature</span></code>, <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">lid_temperature</span></code> in <strong>degrees Celsius</strong>. <code class="docutils literal notranslate"><span class="pre">current_temperature</span></code> is the reported block
+measurement, not sample-liquid temperature. Firmware milliseconds and hundredths of a degree
+are converted at the XML boundary. All samples are preserved; the driver neither interpolates
+nor infers a cycle, step, ramp, or hold. It does not deduplicate overlapping batches.</p>
+<p><code class="docutils literal notranslate"><span class="pre">elapsed</span></code> is the device-reported method-relative time. Preparation and protocol execution have
+separate <code class="docutils literal notranslate"><span class="pre">execution_id</span></code> values and may restart their elapsed clock even within one public
+<code class="docutils literal notranslate"><span class="pre">execute_protocol</span></code> operation. Event <code class="docutils literal notranslate"><span class="pre">timestamp</span></code> is host receipt/publication time, not the
+measurement time of each sample. Do not plot all samples at that receipt timestamp or assume
+elapsed time starts at the public operation’s <code class="docutils literal notranslate"><span class="pre">started</span></code> timestamp.</p>
+<p>The observation retains the originating operation’s <code class="docutils literal notranslate"><span class="pre">context.operation_id</span></code> and caller context
+(for example a run ID), even when delivered by an unrelated HTTP callback task. The driver
+captures its event bus and resource references at method dispatch with observation active.
+No bus/subscriber is required for execution or latest-progress caching. Telemetry does not
+enable additional instrument traffic: the driver already requests method data callbacks.</p>
+<p>Cancelling or timing out the public waiter does not stop the instrument. Its pending command
+may continue to emit observations with the original correlation after the operation’s <code class="docutils literal notranslate"><span class="pre">failed</span></code>
+event. Command completion, an acknowledged stop, a session fault, or disconnect ends that
+command’s telemetry routing; late callbacks do not emit more samples for the ended execution.
+The driver keeps only the latest progress sample for <code class="docutils literal notranslate"><span class="pre">request_progress()</span></code>; consumers own any
+history. No per-sample Slack, plotting, or other presentation policy is part of this contract.</p>
+</section>
 </section>
 <section id="shaking-and-environmental-control">
 <h2>Shaking and environmental control<a class="headerlink" href="#shaking-and-environmental-control" title="Link to this heading">#</a></h2>
@@ -1648,7 +1780,11 @@ canonical operation name, lifecycle, and payload fields.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#imaging">Imaging</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#thermocycling">Thermocycling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#thermocycling">Thermocycling</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#direct-thermocycler-operations-odtc">Direct thermocycler operations (ODTC)</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#thermocycler-temperature-observations">Thermocycler temperature observations</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shaking-and-environmental-control">Shaking and environmental control</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#centrifugation">Centrifugation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#brooks-preciseflex">Brooks PreciseFlex</a><ul class="nav section-nav flex-column">
