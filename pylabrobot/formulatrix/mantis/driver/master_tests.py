@@ -286,6 +286,9 @@ class FakeLink:
 class DriverTestCase(unittest.IsolatedAsyncioTestCase):
   # every recorded reply is answered; a slow test runner must not time one out
   default_read_timeout = 5.0
+  # Boards a test leaves silent: only a command to one of them waits briefly, as it is never
+  # answered, so a slow runner cannot time out one that is.
+  absent_boards: Tuple[int, ...] = ()
 
   def setUp(self):
     # The LED bar's holds are taken, not waited: setup holds "setup_done" for a second.
@@ -300,6 +303,16 @@ class DriverTestCase(unittest.IsolatedAsyncioTestCase):
   def make_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
     driver = MantisDriver(io=link.io, rfid_io=link.reader.io, **kwargs)
     driver.default_read_timeout = self.default_read_timeout
+    if self.absent_boards:
+      send_command = driver._send_command
+      absent_boards = self.absent_boards
+
+      async def send(**command):
+        if command["board"] in absent_boards:
+          command["timeout"] = 0.25
+        return await send_command(**command)
+
+      driver._send_command = send  # type: ignore[method-assign]
     return driver
 
   async def set_up_driver(self, *, link: FakeLink, skip_arm: bool = True, **kwargs) -> MantisDriver:
@@ -340,7 +353,7 @@ class SetupTests(DriverTestCase):
     )
 
   async def test_only_board_0_must_answer_and_board_11_is_asked_twice(self):
-    self.default_read_timeout = 0.25  # boards 10 to 12 never answer
+    self.absent_boards = (10, 11, 12)
     link = FakeLink(answers=make_answers(absent_boards=(10, 11, 12)))
     driver = await self.set_up_driver(link=link)
     self.assertEqual(driver.configuration.generation, "v3")
@@ -353,7 +366,7 @@ class SetupTests(DriverTestCase):
         self.assertEqual(sent.count((board, 1, b"")), count)
 
   async def test_board_11_answering_its_second_attempt_makes_a_v4(self):
-    self.default_read_timeout = 0.25  # board 11's first version request goes unanswered
+    self.absent_boards = (11,)  # its first version request goes unanswered
     link = FakeLink(answers=make_answers())
     write = link.write
     dropped: List[bytes] = []
@@ -376,8 +389,8 @@ class SetupTests(DriverTestCase):
       with open(path, "w", encoding="utf-8") as f:
         json.dump({"arm": {"homing_position_a": {"0": 0.0, "1": 0.0}}}, f)
       link = FakeLink(answers=make_answers(absent_boards=(11,)))
+      self.absent_boards = (11,)
       driver = self.make_driver(link=link, declared_configuration_json=path)
-      driver.default_read_timeout = 0.25  # board 11 never answers
       with self.assertRaisesRegex(MantisConfigurationError, "absolute-encoder references"):
         await driver.setup()
     sent = [parse_frame(frame=frame)[1:3] for frame in link.written]
@@ -405,8 +418,8 @@ class SetupTests(DriverTestCase):
       with open(path, "w", encoding="utf-8") as f:
         json.dump({"device": RECORDING["device"]}, f)
       link = FakeLink(answers=make_answers(absent_boards=(12,)))
+      self.absent_boards = (12,)
       driver = self.make_driver(link=link, declared_configuration_json=path)
-      driver.default_read_timeout = 0.25  # board 12 never answers
       with self.assertRaisesRegex(
         MantisConfigurationError, "board 12: declared '0.1.8 DBG', device did not"
       ):
