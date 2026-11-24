@@ -171,14 +171,14 @@ class PlateClampDiscoveryTests(DriverTestCase):
   async def test_built_only_when_the_lc3_board_answers(self):
     for absent_boards, built in (((), True), ((12,), False)):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
         self.assertEqual(driver.plate_clamp is not None, built)
 
   async def test_declared_levels_where_board_12_does_not_answer_are_refused(self):
-    self.default_read_timeout = 0.25  # board 12 never answers
+    self.absent_boards = (12,)
     with tempfile.TemporaryDirectory() as directory:
       path = os.path.join(directory, "unit.json")
       with open(path, "w", encoding="utf-8") as file:

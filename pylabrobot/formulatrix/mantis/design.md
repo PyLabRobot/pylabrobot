@@ -281,11 +281,10 @@ motors, never remembered. A head on a path's descended part (after its last line
 height, within `APPROACH_PATH_TOLERANCE` of a line) is on that path. On the target's path it goes
 on from there. On a neighbouring path, one sharing the target's descent (the two washes), it goes
 back to that path's safe-Z line (its last line but one), then to the target's and down. On another it goes back to the last line the two share, then
-forward. In the open it is parked first. Going back, a path's lines play backwards, one queued
-item each; a line that moves the arms and raises Z is preceded by the arms alone, Z held, so they
-go back at the depth the path took them across before Z rises. Every other move across, and
-`park`, from a pose on a path first goes back along it to its start, every argument checked
-before; a move of Z alone there is refused.
+forward. In the open it is parked first. Going back, a path's lines play backwards as written, one
+queued item each, as captured; back to the path's start, the line the head stands at is sent
+first. Every other move across, and `park`, from a pose on a path first goes back along it to its
+start, every argument checked before; a move of Z alone there is refused.
 
 `park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (False by default). True: each queued
 item is played on its own (61, 62, 68) and each route step moved, then the pose read (84) and
@@ -572,8 +571,8 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     move's reply; it took a far faster arm command than the route profile's, which then failed on
     its following error. Speeds in mm/s are scaled from the route profile only when given, untested
     on a device.
-50. **The way out along an approach path is the path backwards, line for line,** as recorded
-    leaving a wash, and the move between the washes goes safe Z to safe Z, as recorded. Where the
-    recording moves the arms and raises Z in one item, the arms move first, Z held: in it the arms
-    end within the first 2 mm of the rise. A head stopped between two lines of a path is not
-    placed on it: it is in the open, and rises straight up.
+50. **The way out along an approach path is the path backwards, line for line,** as captured
+    leaving the waste and a wash: the line the head stands at first, then every line, a line that
+    moves the arms and raises Z in one item as written. The move between the washes goes safe Z
+    to safe Z, as captured. A head stopped between two lines of a path is not placed on it: it is
+    in the open, and rises straight up.

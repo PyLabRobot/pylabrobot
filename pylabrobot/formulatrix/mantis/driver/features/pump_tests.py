@@ -197,7 +197,7 @@ class PumpDiscoveryTests(DriverTestCase):
   async def test_built_only_when_the_pressure_board_answers(self):
     for absent_boards, built in (((), True), ((10,), False)):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         link = FakeLink(answers=make_answers(absent_boards=absent_boards))
         driver = await self.set_up_driver(link=link)
         self.assertEqual(driver.pump is not None, built)
