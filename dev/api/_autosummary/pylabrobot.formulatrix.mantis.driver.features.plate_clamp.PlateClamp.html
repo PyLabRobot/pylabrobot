@@ -591,8 +591,8 @@
 <p>The plate clamp, on board 12 or on a pressure-board output, with the same methods.</p>
 <p>On board 12, locking waits until the device reports clamping done. On a pressure-board output
 the valve’s readback is read, never plate contact; it has no lock levels and no clamp state.
-Locking it starts the pump when needed, and unlocking restores a pump this clamp started; a
-failed lock and shutdown release the valve.</p>
+Locking it starts the pump when needed; unlocking leaves the pump on. A failed lock or unlock and
+shutdown release the valve, then turn off a pump this clamp started.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
@@ -621,7 +621,7 @@ failed lock and shutdown release the valve.</p>
 <td><p>The clamp's state (GetMotorClampState); <code class="docutils literal notranslate"><span class="pre">CLAMP_STATE_DESCRIPTIONS</span></code> says what each means.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.unlock.html#pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.unlock" title="pylabrobot.formulatrix.mantis.driver.features.plate_clamp.PlateClamp.unlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unlock</span></code></a>()</p></td>
-<td><p>Release the clamp: on board 12 wait until it reads unclamping done; on a pressure-board output switch the valve off and restore a pump this clamp started.</p></td>
+<td><p>Release the clamp: on board 12 wait until it reads unclamping done; on a pressure-board output switch the valve off and leave the pump on.</p></td>
 </tr>
 </tbody>
 </table>
