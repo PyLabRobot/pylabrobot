@@ -423,6 +423,9 @@ class Pipettes:
   # A liquid search stops looking this far below the modelled cavity bottom, in mm: the seating
   # error of a plate, no more.
   search_limit_below_cavity_bottom: float = 1.0
+  # A surface found more than this above its container's top, in mm, is refused: the seating
+  # error of a plate, no more.
+  surface_limit_above_top: float = 1.0
   # A Z-touch starts this fraction of the cavity depth above the cavity bottom: the channels get
   # there fast, then touch slowly. Never under the tracked liquid; the top when tracking is off.
   ztouch_search_start_fraction: float = 0.5
@@ -3869,11 +3872,13 @@ class Pipettes:
     From `z_start` to `search_limit_below_cavity_bottom` under the cavity bottom, on the stop disc.
     One `C0 RL` per round; None where a channel found nothing. Each channel is then modelled where
     its search left it: its stop disc an overhang above the surface found, or at its window's end.
+    A surface more than `surface_limit_above_top` above its container's top on the deck ends the
+    round with an error.
 
     Args:
       batch: the channels and which container each has, by job index.
-      containers: per job, what each channel searches in. Nothing here reads them: the simulator
-        answers the searches from their trackers.
+      containers: per job, what each channel searches in; their tops are read off the deck, and
+        the simulator answers the searches from their trackers.
       overhangs: each channel's tip overhang in mm, keyed by channel.
       z_cavity_bottom: per job, on the deck in mm.
       z_start: per job, tip bottom height the search starts from, on the deck in mm.
@@ -3888,7 +3893,13 @@ class Pipettes:
 
     Raises:
       STARFirmwareError: Anything a channel answered other than that it found nothing.
+      RuntimeError: No deck, or a surface found more than that above its container's top, every
+        such channel of the round named.
     """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("containers are placed from the deck; this driver was given none")
+    z_top = {job: containers[job].get_location_wrt(deck, "c", "c", "t").z for job in batch.indices}
     searches = self._get_stop_disc_search_windows(
       batch, overhangs, z_cavity_bottom, z_start, self.search_limit_below_cavity_bottom
     )
@@ -3908,6 +3919,7 @@ class Pipettes:
         return_exceptions=True,
       )
       heights = await self.request_last_lld_z_positions()
+      above_top = []
       for (channel, job, end, _), result in zip(searches, results):
         if isinstance(result, STARFirmwareError) and self._found_nothing(
           result, self.channel_id(channel)
@@ -3919,9 +3931,20 @@ class Pipettes:
         else:
           found[job].append(heights[channel])
           stopped = heights[channel] + overhangs[channel]
+          # A plate seated higher than modelled holds liquid above its modelled top.
+          if heights[channel] > round(z_top[job] + self.surface_limit_above_top, 1):
+            above_top.append(
+              f"channel {channel} in {containers[job].name}: {heights[channel]:.1f} mm, its top "
+              f"is at {z_top[job]:.2f} mm"
+            )
         # No post-detection move, so the stop disc stays where the search left it: the model has
         # it there, not still up at the start.
         self.update_location_by_reference_point(channel, z=round(stopped, 2))
+      if above_top:
+        raise RuntimeError(
+          "a surface found more than a plate's seating error above the top of its container "
+          "cannot be a liquid surface in this container: " + "; ".join(above_top)
+        )
     return found
 
   async def probe_liquid_heights(
@@ -3968,8 +3991,9 @@ class Pipettes:
 
     Raises:
       ValueError: If an argument is out of range, or the lists do not match.
-      RuntimeError: If a channel used carries no tip, the driver was given no deck, or liquid was
-        found in some rounds and not in others.
+      RuntimeError: If a channel used carries no tip, the driver was given no deck, liquid was
+        found in some rounds and not in others, or a surface was found more than 1 mm above its
+        container's top.
     """
     if resource_offsets is not None:
       warnings.warn(
@@ -5680,7 +5704,7 @@ class Pipettes:
         volume, warning when 20 % off.
 
     Raises:
-      RuntimeError: No liquid found.
+      RuntimeError: No liquid found, or a surface found more than 1 mm above its container's top.
     """
     pairs = [(ch, job) for ch, job in zip(batch.channels, batch.indices) if job in searched]
     if not pairs:
@@ -6530,8 +6554,8 @@ class Pipettes:
         or over a surface outside the container's height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
         container without height-volume functions under CAPACITIVE, PRESSURE or auto surface
-        following, no liquid found where the channels searched, or no floor met where they
-        touched.
+        following, no liquid found where the channels searched, a surface found more than 1 mm
+        above its container's top, or no floor met where they touched.
       NotImplementedError: DUAL.
       TooLittleVolumeError: A tip without room for what it is to draw.
     """
@@ -7377,8 +7401,9 @@ class Pipettes:
         height-volume data, or `blow_out` contradicting `blow_out_air_volumes`.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
         container without height-volume functions under CAPACITIVE or auto surface following, no
-        liquid found where the channels searched, a container the search found without the room,
-        or no floor met where they touched.
+        liquid found where the channels searched, a surface found more than 1 mm above its
+        container's top, a container the search found without the room, or no floor met where
+        they touched.
     """
     if resource_offsets is not None:
       warnings.warn(
