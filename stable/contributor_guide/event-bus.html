@@ -624,7 +624,8 @@ one subscriber is active. Use one of these helpers:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">&#64;evented_operation(...)</span></code> for a trivial projection of one public async method’s invocation.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">with</span> <span class="pre">event_operation(...):</span></code> for explicit semantic context assembled inside an operation.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">emit_event(...)</span></code> only for a meaningful state transition that is not an operation lifecycle.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">emit_event(...)</span></code> for a meaningful state transition or instrument-reported observation that
+is not an operation lifecycle.</p></li>
 </ul>
 <p>Use a low-level diagnostic event only when the transport boundary itself is useful to observe.
 Diagnostic events may inherit the enclosing semantic operation context, but do not define a new
