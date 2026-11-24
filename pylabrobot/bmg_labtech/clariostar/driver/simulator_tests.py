@@ -17,10 +17,6 @@ from pylabrobot.bmg_labtech.clariostar.driver.configuration import (
   read_configuration,
 )
 from pylabrobot.bmg_labtech.clariostar.driver.configuration_tests import decoded
-from pylabrobot.bmg_labtech.clariostar.driver.simulator import (
-  CLARIOstarSimulationDriver,
-  CLARIOstarSimulationPumps,
-)
 from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   PARAMETERS_REPLY,
   STATUS_IDLE,
@@ -28,6 +24,10 @@ from pylabrobot.bmg_labtech.clariostar.driver.master_tests import (
   load_session_replies,
   make_driver,
   parse_status,
+)
+from pylabrobot.bmg_labtech.clariostar.driver.simulator import (
+  CLARIOstarSimulationDriver,
+  CLARIOstarSimulationPumps,
 )
 from pylabrobot.lib.results.reading import load_rows
 from pylabrobot.lib.results.table import get_table
