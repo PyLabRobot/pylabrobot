@@ -25,7 +25,7 @@ from pylabrobot.formulatrix.mantis.driver.events import (
   decode_sequence_stopped,
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
-from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
+from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController, Pump
 from pylabrobot.formulatrix.mantis.driver.features.rfid import (
   RFID_PING_DEVICE_COMMAND,
   RFID_READ_TAG_COMMAND,
@@ -92,6 +92,27 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (10, 16, "0000"): "0000",
   (10, 12, "0000"): "0000",
   (10, 14, ""): "0000",
+  (10, 12, "0100"): "0000",
+  # The tare's writes, answered with no payload: each controller off, its proportional valve shut,
+  # its solenoid at 10000 then 0, and its sensor's offset lowered by the reading above.
+  (10, 13, "00000000"): "",
+  (10, 13, "01000000"): "",
+  (10, 32, "00000000"): "",
+  (10, 32, "01000000"): "",
+  (10, 34, "00001027"): "",
+  (10, 34, "01001027"): "",
+  (10, 34, "00000000"): "",
+  (10, 34, "01000000"): "",
+  (10, 21, "00000000004049d0853f00000020f7802dc0"): "",
+  (10, 21, "010000000080d1d5853f000000e0bda32dc0"): "",
+  # Each tared sensor's calibration written back at stop, as read above.
+  (10, 21, "00000000004049d0853f000000e06f292bc0"): "",
+  (10, 21, "010000000080d1d5853f00000000b4572bc0"): "",
+  # The release at stop, as captured: the vacuum's controller off, the reservoir valves opened.
+  (10, 13, "02000000"): "",
+  (10, 15, "0000"): "",
+  (10, 34, "0000204e"): "",
+  (10, 32, "0000204e"): "",
   # The release and the lock at levels 1, 2 and 3.
   (12, 31, "000000000000e83f000000000000000088130000"): "",
   (12, 30, "0000000000000000105839b4c876be3fd0070000"): "",
@@ -167,6 +188,15 @@ RECORDED_LINK_FAILURE = D2XXError("FT_GetQueueStatus returned FT_IO_ERROR (4)", 
 # Interface A: what the RFID reader on a Mantis v4 sent, chunked as it arrived.
 READER_PING_REPLY = [b"TRF7970A EVM \r\n\r\n"]
 READER_EMPTY_SLOT_REPLY = [b"Request mode.\r\n", b"[]\r\n"]
+
+
+# What a stop sends board 10 with the pump off: the pump read, then each tared sensor's calibration
+# written back, as setup read it.
+PUMP_READ = (10, 14, b"")
+CALIBRATION_WRITTEN_BACK = [
+  (10, 21, bytes.fromhex("00000000004049d0853f000000e06f292bc0")),
+  (10, 21, bytes.fromhex("010000000080d1d5853f00000000b4572bc0")),
+]
 
 
 def make_answers(
@@ -261,6 +291,10 @@ class DriverTestCase(unittest.IsolatedAsyncioTestCase):
     # The LED bar's holds are taken, not waited: setup holds "setup_done" for a second.
     patcher = mock.patch.object(LedBar, "_sleep", autospec=True)
     self.led_bar_sleep = patcher.start()
+    self.addCleanup(patcher.stop)
+    # The pump's waits too: the tare waits between its readings.
+    patcher = mock.patch.object(Pump, "_sleep", autospec=True)
+    self.pump_sleep = patcher.start()
     self.addCleanup(patcher.stop)
 
   def make_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
