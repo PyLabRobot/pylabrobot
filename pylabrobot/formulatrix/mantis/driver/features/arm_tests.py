@@ -765,7 +765,7 @@ class DiscoveryTests(ArmTestCase):
   async def test_board_11_selects_the_arm_implementation(self):
     for absent_boards, generation in (((), "v4"), ((11,), "v3")):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
@@ -1703,18 +1703,8 @@ class ApproachPathTests(ArmTestCase):
     self.assertEqual(self.sent(link), [])
 
   async def test_leaving_the_waste_plays_its_path_backwards(self):
-    # From the waste's last line back to its start, line by line; a line naming nothing is skipped.
-    # A line moving the arms and raising Z is preceded by the arms alone at depth, Z held.
-    way_out = [
-      (-60.0, 10.0, 30.0),
-      (None, None, 30.0),
-      (-50.0, 20.0, None),
-      (-50.0, 20.0, -1.57),
-      (None, None, -1.57),
-      (15.0, 30.0, -1.57),
-      (None, None, -1.57),
-      (15.0, 30.0, None),
-    ]
+    # From the line the head stands at back to the waste's start, every line as written.
+    way_out = list(reversed(SYNTHETIC_WASTE_ROUTE))
     first_item = 16 - len(way_out) + 1
     expected = []
     for item, (x, y, z) in enumerate(way_out, start=first_item):
@@ -2391,6 +2381,123 @@ def parse_captured_moves(*, captured: List[str]) -> List[Dict[int, float]]:
     {motor: float(value) for motor, value in enumerate(move.split(",")) if value != "-"}
     for move in captured
   ]
+
+
+# A unit's waste and wash approach paths, in the arm frame, as its sequence files give them.
+WASTE_PATH: List[List[Optional[float]]] = [
+  [None, None, None],
+  [15.0, 30.0, None],
+  [None, None, -1.57],
+  [15.0, 30.0, -1.57],
+  [None, None, -1.57],
+  [-32.284, 40.775, -1.57],
+  [-49.717, 19.808, -1.57],
+  [-62.821, 5.233, -1.57],
+  [-69.677, -20.8, -1.57],
+  [-78.522, -43.101, -1.57],
+  [-78.264, -46.479, -1.57],
+  [None, None, 32.032],
+  [-84.7, -44.797, 32.032],
+  [-84.7, -44.797, 37.032],
+]
+WASH_PATH_START: List[List[Optional[float]]] = [
+  [None, None, -1.57],
+  [None, None, -1.57],
+  [54.676, 41.632, -1.57],
+  [82.278, 31.695, -1.57],
+  [84.698, 3.782, -1.57],
+  [86.913, -22.157, -1.57],
+  [88.371, -42.402, -1.57],
+  [71.77, -56.117, -1.57],
+  [None, None, 36.978],
+]
+WASH_1_PATH = WASH_PATH_START + [
+  [None, None, 49.355],
+  [74.179, -50.948, 49.355],
+  [74.179, -50.948, 54.355],
+]
+WASH_2_PATH = WASH_PATH_START + [
+  [None, None, 49.763],
+  [90.181, -50.918, 49.763],
+  [90.181, -50.918, 54.763],
+]
+# The moves a Mantis v4 was sent leaving the waste after a prime, and wash 1 after a wash, each from
+# the path's last line to its start; and leaving wash 2 for wash 1, to wash 2's safe-Z line.
+CAPTURED_WASTE_EXIT = """
+-48.623750510575164,90.60297564169927,1457.9527559055118
+-48.623750510575164,90.60297564169927,1261.1023622047242
+-,-,1261.1023622047242
+-52.06422696457573,89.18090048846733,-61.811023622047244
+-51.54971403777015,87.83676970166538,-61.811023622047244
+-51.49355633418472,76.11624480382535,-61.811023622047244
+-43.772995879562316,64.29607679895277,-61.811023622047244
+-38.963765283785115,54.111835306886775,-61.811023622047244
+-23.154317512109415,40.336540148989464,-61.811023622047244
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-
+""".split()
+CAPTURED_WASH_1_EXIT = """
+83.7483705378616,-71.40425655137432,2139.9606299212596
+83.7483705378616,-71.40425655137432,1943.1102362204722
+-,-,1943.1102362204722
+-,-,1455.8267716535433
+86.14833664284704,-72.7025263954954,-61.811023622047244
+81.96456120656154,-62.15362930864285,-61.811023622047244
+72.42144291456674,-58.796324530733784,-61.811023622047244
+61.14162609777459,-47.81667445795686,-61.811023622047244
+52.179786593815464,-29.60155803665411,-61.811023622047244
+35.35445745832783,-20.570740782776905,-61.811023622047244
+-,-,-61.811023622047244
+-,-,-61.811023622047244
+""".split()
+CAPTURED_WASH_2_TO_SAFE_Z = """
+86.28565064513707,-61.79819724116115,1959.1732283464567
+""".split()
+
+
+class ApproachPathExitTests(ArmTestCase):
+  async def assert_leaving_sends(self, *, name: str, index: int, until: int, captured: List[str]):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_arm(
+      link=link,
+      approach_paths={"waste": WASTE_PATH, "wash_1": WASH_1_PATH, "wash_2": WASH_2_PATH},
+    )
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._next_item = 1
+    await driver.arm._leave_approach_path(name=name, index=index, until=until)
+    sent = [payload for _, command, payload in self.sent(link) if command == 68]
+    expected = parse_captured_moves(captured=captured)
+    self.assertEqual(len(sent), len(expected))
+    for move, (payload, targets) in enumerate(zip(sent, expected)):
+      with self.subTest(move=move):
+        expected_payload = get_queued_move(item=move + 1, targets=targets)
+        self.assertEqual(payload[:6], expected_payload[:6])
+        for offset in range(6, len(payload), 8):
+          (sent_value,) = struct.unpack_from("<d", payload, offset)
+          (expected_value,) = struct.unpack_from("<d", expected_payload, offset)
+          self.assertAlmostEqual(sent_value, expected_value, places=9)
+
+  async def test_leaving_the_waste_sends_the_captured_moves(self):
+    # The line the head stands at first, the arms and Z together on the line out of the waste.
+    await self.assert_leaving_sends(
+      name="waste", index=len(WASTE_PATH) - 1, until=0, captured=CAPTURED_WASTE_EXIT
+    )
+
+  async def test_leaving_a_wash_sends_the_captured_moves(self):
+    await self.assert_leaving_sends(
+      name="wash_1", index=len(WASH_1_PATH) - 1, until=0, captured=CAPTURED_WASH_1_EXIT
+    )
+
+  async def test_leaving_a_wash_for_the_other_goes_to_its_safe_z_line_only(self):
+    await self.assert_leaving_sends(
+      name="wash_2",
+      index=len(WASH_2_PATH) - 1,
+      until=len(WASH_2_PATH) - 2,
+      captured=CAPTURED_WASH_2_TO_SAFE_Z,
+    )
 
 
 # Slot 1's antenna switch (antenna 0): what a chip slot's tag read sends board 0.

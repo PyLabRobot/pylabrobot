@@ -1882,10 +1882,10 @@ class Arm:
     self, *, name: str, index: int, until: int, with_model_updates: bool = False
   ) -> None:
     """Move the head back along an approach path from the line it stands at to an earlier line:
-    the path's lines played backwards, one queued move each at the route profile.
+    the path's lines played backwards as written, one queued move each at the route profile.
 
-    A line that moves the arms and raises Z is preceded by the arms' move alone, Z held: the arms
-    go back at the depth the path took them across, then Z rises, never both at once.
+    Back to the path's start, the line the head stands at is sent first; back to an earlier line
+    between the washes, it is not. Both as captured.
 
     Args:
       name: the approach path's name.
@@ -1895,22 +1895,13 @@ class Arm:
     """
     assert self.configuration.approach_paths is not None
     path = self.configuration.approach_paths[name]
-    empty = MantisArmCoordinate(x=None, y=None, z=None)
-    steps = [line for line in reversed(path[until:index]) if line != empty]
+    last = index + 1 if until == 0 else index
+    steps = list(reversed(path[until:last]))
     profiles = self._get_route_profiles()
-    here = self._get_approach_path_states(path=path)[index]
-    moves = []
-    for line, targets in zip(steps, self._get_route_targets(route=steps)):
-      arms = line.x is not None and line.y is not None
-      arms_move = arms and (line.x, line.y) != (here.x, here.y)
-      if arms_move and line.z is not None and line.z < cast(float, here.z):
-        arm_targets = {motor: targets[motor] for motor in ARM_MOTORS}
-        moves.append(self._get_queued_move(targets=arm_targets, profiles=profiles))
-      moves.append(self._get_queued_move(targets=targets, profiles=profiles))
-      if arms:
-        here = dataclasses.replace(here, x=line.x, y=line.y)
-      if line.z is not None:
-        here = dataclasses.replace(here, z=line.z)
+    moves = [
+      self._get_queued_move(targets=targets, profiles=profiles)
+      for targets in self._get_route_targets(route=steps)
+    ]
     await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
 
   async def _leave_approach_path_if_on_one(
