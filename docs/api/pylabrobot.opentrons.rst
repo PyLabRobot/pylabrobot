@@ -11,11 +11,18 @@ pylabrobot.opentrons package
     OT2
     OT2SingleChannelPipette
     OT2_8ChannelPipette
+    OT2TemperatureModule
+    OT2MagneticModule
+    OT2Module
+    OT2ModuleMismatchError
+    TemperatureModuleStatus
+    MagneticModuleStatus
     OpentronsAPI
     OpentronsRun
     RobotInfo
     MountedPipette
     ModuleInfo
+    DoorStatus
     InstrumentInfo
     find_ot2_ip
     OpentronsError

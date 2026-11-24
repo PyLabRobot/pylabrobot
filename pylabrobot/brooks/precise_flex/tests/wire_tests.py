@@ -197,7 +197,12 @@ _Case = Tuple[
 
 # (name, call, commands sent, exception raised or None), each on an arm already set up.
 _CASES: List[_Case] = [
-  ("stop", lambda arm: arm.stop(), ["attach 0", "hp 0", "<io.write> exit"], None),
+  (
+    "stop",
+    lambda arm: arm.stop(with_light_farewell=False),
+    ["attach 0", "hp 0", "<io.write> exit"],
+    None,
+  ),
   ("request_mode", lambda arm: arm.request_mode(), ["mode"], None),
   ("set_response_mode_pc", lambda arm: arm.set_response_mode("pc"), ["mode 0"], None),
   ("set_response_mode_verbose", lambda arm: arm.set_response_mode("verbose"), ["mode 1"], None),
@@ -583,6 +588,27 @@ _CASES: List[_Case] = [
     ["state", "state", "wherej", "MoveOneAxis 5 70.0 1", "state", "state", "wherej"],
     None,
   ),
+  (
+    "open",
+    lambda arm: arm.gripper.open(),
+    ["state", "state", "wherej", "ReleasePlate 133.5 50.0", "state", "state", "wherej"],
+    None,
+  ),
+  (
+    "close",
+    lambda arm: arm.gripper.close(),
+    [
+      "state",
+      "state",
+      "wherej",
+      "GraspPlate 69.5 50.0 10.0",
+      "ReleasePlate 69.5 50.0",
+      "state",
+      "state",
+      "wherej",
+    ],
+    None,
+  ),
   ("sense_fully_closed", lambda arm: arm.gripper.sense_fully_closed(), ["IsFullyClosed"], None),
   ("sense_each_fully_closed", lambda arm: arm.gripper.sense_each_fully_closed(), [], ValueError),
   (
@@ -593,7 +619,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 200.0 10.0 170.0 20.0 100.0",
+      "locXyz 1 -143.818 -2.966 200.0 -160.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "pickplate 1 0 0",
       "state",
@@ -609,7 +636,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 200.0 10.0 170.0 20.0 100.0",
+      "locXyz 1 -143.818 -2.966 200.0 -160.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "placeplate 1 0 0",
       "state",
@@ -626,7 +654,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 201.25 -38.74046014630248 128.25603427878514 -89.51557413248264 70.685",
+      "locXyz 1 400.0 100.0 201.25 0.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "pickplate 1 0 0",
       "state",
@@ -642,7 +671,8 @@ _CASES: List[_Case] = [
       "state",
       "state",
       "wherej",
-      "locAngles 1 201.25 -38.74046014630248 128.25603427878514 -89.51557413248264 70.685",
+      "locXyz 1 400.0 100.0 201.25 0.0 90 180",
+      "locConfig 1 1",
       "StationType 1 1 0 100 0 10",
       "placeplate 1 0 0",
       "state",
@@ -817,15 +847,15 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     return arm, fake
 
   async def test_setup(self):
-    _, fake = await self._run_setup(has_rail=False)
+    _, fake = await self._run_setup(has_rail=False, with_light_greeting=False)
     self.assert_wire(fake.sent, _SETUP)
 
   async def test_setup_skip_home(self):
-    _, fake = await self._run_setup(has_rail=False, skip_home=True)
+    _, fake = await self._run_setup(has_rail=False, skip_home=True, with_light_greeting=False)
     self.assert_wire(fake.sent, _SETUP_SKIP_HOME)
 
   async def test_setup_with_rail(self):
-    _, fake = await self._run_setup(has_rail=True)
+    _, fake = await self._run_setup(has_rail=True, with_light_greeting=False)
     self.assert_wire(fake.sent, _SETUP)
 
   async def test_a_failed_setup_hands_the_arm_back_and_closes_the_links(self):
@@ -835,7 +865,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     image_io, server_io = MagicMock(stop=AsyncMock()), MagicMock(stop=AsyncMock())
     arm._vision_image_io, arm._vision_server_io = image_io, server_io
     with self.assertRaises(PreciseFlexError):
-      await arm.setup(skip_home=True)
+      await arm.setup(skip_home=True, with_light_greeting=False)
     self.assertEqual(fake.sent[-3:], ["attach 0", "hp 0", "<io.write> exit"])
     image_io.stop.assert_awaited_once()
     server_io.stop.assert_awaited_once()
@@ -846,7 +876,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     arm = _make_arm(fake)
     with self.assertRaises(PreciseFlexError):
       try:
-        await arm.setup(skip_home=True)
+        await arm.setup(skip_home=True, with_light_greeting=False)
       finally:
         sent = len(fake.sent)
         await arm.stop()
@@ -856,7 +886,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     fake = _FakeController({"mode 0": "-1"})
     arm = _make_arm(fake)
     with self.assertRaises(PreciseFlexError):
-      await arm.setup(skip_home=True)
+      await arm.setup(skip_home=True, with_light_greeting=False)
     cast(AsyncMock, arm.io.stop).assert_awaited_once()
 
   async def test_the_setup_error_is_raised_when_handing_back_fails(self):
@@ -864,7 +894,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     arm = _make_arm(fake)
     cast(AsyncMock, arm.io.stop).side_effect = OSError("closed")
     with self.assertRaises(PreciseFlexError) as raised, self.assertLogs(level="WARNING"):
-      await arm.setup(skip_home=True)
+      await arm.setup(skip_home=True, with_light_greeting=False)
     self.assertEqual(raised.exception.replycode, -3101)
     self.assertIn("hp 0", fake.sent)
 
@@ -922,7 +952,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
     failing_read = AsyncMock(side_effect=TimeoutError("pd 116"))
     arm._request_configuration = failing_read  # type: ignore[method-assign]
     with self.assertRaises(TimeoutError):
-      await arm.setup()
+      await arm.setup(with_light_greeting=False)
     self.assertIsNone(arm.arm.configuration)
 
   async def test_at_speed_restores_the_profile_speed(self):
@@ -945,7 +975,7 @@ class TestPreciseFlexWire(unittest.IsolatedAsyncioTestCase):
   async def test_recovering_an_axis_out_of_range(self):
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"
     self.assertEqual(await arm.arm.recover_axes_within_limits(), {PreciseFlexAxis.SHOULDER: 92.0})
@@ -985,7 +1015,7 @@ class TestProbeZUsingZtouch(unittest.IsolatedAsyncioTestCase):
       }
     )
     arm = _make_arm(fake)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     return arm, fake
 
@@ -1132,7 +1162,7 @@ class TestPreciseFlexDefaults(unittest.IsolatedAsyncioTestCase):
   async def _arm(self) -> Tuple[PreciseFlexDriver, _FakeController]:
     fake = _FakeController({"Speed 1": "0 1 60"})
     arm = _make_arm(fake)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     return arm, fake
 
@@ -1166,7 +1196,7 @@ async def _arm_after_homing() -> Tuple[PreciseFlexDriver, _FakeController]:
     {"Speed 1": "0 1 60", "wherej": "0 301.105 2.235 179.732 -180.776 125.844"}
   )
   arm = _make_arm(fake)
-  await arm.setup()
+  await arm.setup(with_light_greeting=False)
   fake.sent.clear()
   return arm, fake
 
@@ -1192,6 +1222,51 @@ class TestGripperTargetsStayInsideTheirLimits(unittest.IsolatedAsyncioTestCase):
     await arm.gripper.move_to_jaw_position(114.0, force_sensing=False)  # the advertised maximum
     moves = [c for c in fake.sent if c.startswith("MoveOneAxis 5")]
     self.assertEqual(moves, ["MoveOneAxis 5 133.5 1"] * 2)
+
+
+class TestPickAndPlaceStation(unittest.IsolatedAsyncioTestCase):
+  """`StationType` empties a station set by `locAngles`, so it is written as a Cartesian one."""
+
+  async def test_the_station_is_where_the_controller_says_those_joints_are(self):
+    # Joints as `wherej` read them, with `wherec`'s x, y, z, heading and configuration there.
+    for joints, station, config in (
+      ((16.484, -31.943, 134.929, -105.062), "353.222 115.96 16.484 -2.076", 1),
+      ((10.192, 69.106, 198.097, -267.011), "255.596 -5.976 10.192 0.19", 2),
+    ):
+      with self.subTest(config=config):
+        fake = _FakeController()
+        arm = _make_arm(fake)
+        axes = (
+          PreciseFlexAxis.BASE,
+          PreciseFlexAxis.SHOULDER,
+          PreciseFlexAxis.ELBOW,
+          PreciseFlexAxis.WRIST,
+        )
+        await arm.arm._unchecked_fw_set_station_cartesian(1, dict(zip(axes, joints)))
+        sent_x, sent_y, sent_z, sent_heading = map(float, fake.sent[0].split()[2:6])
+        for sent, recorded in zip(
+          (sent_x, sent_y, sent_z, sent_heading), map(float, station.split())
+        ):
+          self.assertAlmostEqual(sent, recorded, delta=0.02)
+        self.assertEqual(fake.sent[1], f"locConfig 1 {config}")
+
+  async def test_a_rail_arm_is_refused_before_the_station_is_written(self):
+    fake = _FakeController()
+    arm = _make_arm(fake, has_rail=True)
+    with self.assertRaises(NotImplementedError):
+      await arm.arm._unchecked_fw_set_station_cartesian(1, dict(_J))
+    self.assertEqual(fake.sent, [])
+
+  async def test_joint_angles_are_written_with_the_rail_first(self):
+    for has_rail, joints, sent in (
+      (False, _J, "locAngles 1 200.0 10.0 170.0 20.0 100.0"),
+      (True, _JR, "locAngles 1 500.0 200.0 10.0 170.0 20.0 100.0"),
+    ):
+      with self.subTest(has_rail=has_rail):
+        fake = _FakeController()
+        arm = _make_arm(fake, has_rail=has_rail)
+        await arm.arm._unchecked_fw_set_joint_angles(station_index=1, joint_position=dict(joints))
+        self.assertEqual(fake.sent, [sent])
 
 
 class TestClosingTheGripperSensesForce(unittest.IsolatedAsyncioTestCase):
@@ -1287,7 +1362,7 @@ class TestMotionSettlesBeforeTheNextCommand(unittest.IsolatedAsyncioTestCase):
       with self.subTest(name):
         fake = _FakeController(_RAIL_REPLIES)
         arm = _make_arm(fake, has_rail=True)
-        await arm.setup()
+        await arm.setup(with_light_greeting=False)
         fake.sent.clear()
         stopped = AsyncMock(side_effect=lambda: fake.sent.append("<stopped>"))
         arm.arm._wait_for_eom = stopped  # type: ignore[method-assign]
@@ -1524,7 +1599,7 @@ class TestDeprecatedDriverMembers(unittest.IsolatedAsyncioTestCase):
   ):
     fake = _FakeController(_RAIL_REPLIES if has_rail else {"Speed 1": "0 1 60"})
     arm = _make_arm(fake, has_rail=has_rail)
-    await arm.setup()
+    await arm.setup(with_light_greeting=False)
     fake.sent.clear()
     if out_of_range:  # so recovery sets its speed
       fake._replies["wherej"] = "0 301.02 93.476 179.609 83.93 125.867"

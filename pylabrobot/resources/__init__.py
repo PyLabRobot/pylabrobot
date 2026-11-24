@@ -3,6 +3,7 @@ from .agenbio import *
 from .agilent import *
 from .alpaqua import *
 from .azenta import *
+from .beckman_coulter import *
 from .biorad import *
 from .boekel import *
 from .btx import *
@@ -26,6 +27,7 @@ from .diy import *
 from .end_effector import MechanicalGripper
 from .eppendorf import *
 from .errors import ResourceNotFoundError
+from .formulatrix import *
 from .greiner import *
 from .hamilton import *
 from .head_tool import HeadTool
@@ -33,6 +35,7 @@ from .itemized_resource import ItemizedResource
 from .lid import Lid, Liddable
 from .liquid import Liquid
 from .manipulator import LinkBody
+from .mckesson import *
 from .n_channel_pipettes import NChannelPipette, TipMountingShaft, TipPickupMode
 from .nest import *
 from .opentrons import *
@@ -58,6 +61,7 @@ from .resource_state import (
 )
 from .revvity import *
 from .rotation import Rotation
+from .sarstedt import *
 from .sergi import *
 from .tecan import *
 from .thermo_fisher import *

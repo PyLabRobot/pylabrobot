@@ -22,6 +22,11 @@ SIZE_X = 450.0
 SIZE_Y = 510.0
 SIZE_Z = 400.0
 
+# Preliminary: where the plate holder sits with the drawer in and out, estimated from the
+# resource model's loading opening and the plate holder's size; not yet measured.
+LOCATION_IN = Coordinate(x=72.0, y=30.0, z=72.0)
+LOCATION_OUT = Coordinate(x=72.0, y=-100.0, z=72.0)
+
 # The recording a simulated CLARIOstar Plus takes its configuration from, by default.
 RECORDING_CLARIOSTAR_PLUS = os.path.join(
   os.path.dirname(__file__),
@@ -153,9 +158,11 @@ class CLARIOstarDevice(Resource):
         declared_configuration_json=declared_configuration_json,
       )
     self.plate_holder = _CLARIOstarPlateHolder(f"{name}_plate_holder", self.driver.drawer)
-    self.assign_child_resource(self.plate_holder, location=Coordinate.zero())
-    # The drawer moves the plate holder once its in and out locations are set; neither is measured.
+    # Drawn in until the drawer is first sensed; every sense and move then updates it.
+    self.assign_child_resource(self.plate_holder, location=LOCATION_IN)
     self.driver.drawer.plate_holder = self.plate_holder
+    self.driver.drawer.location_in = LOCATION_IN
+    self.driver.drawer.location_out = LOCATION_OUT
 
   def check_can_drop_resource_here(self, resource: Resource, *, reassign: bool = True) -> None:
     """Raise: a plate goes on the plate holder, not on the reader."""

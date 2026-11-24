@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MethodSet>
+  <DeleteAllMethods>false</DeleteAllMethods>
+  <Method methodName="FlatLoop" creator="test" dateTime="2025-01-01T00:00:00">
+    <Variant>960000</Variant><PlateType>0</PlateType><FluidQuantity>0</FluidQuantity>
+    <PostHeating>false</PostHeating>
+    <StartBlockTemperature>25</StartBlockTemperature>
+    <StartLidTemperature>110</StartLidTemperature>
+    <Step><Number>1</Number><Slope>4.4</Slope><PlateauTemperature>95</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>0</GotoNumber><LoopNumber>0</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <Step><Number>2</Number><Slope>2.2</Slope><PlateauTemperature>55</PlateauTemperature><PlateauTime>10</PlateauTime><OverShootSlope1>0.1</OverShootSlope1><OverShootTemperature>0</OverShootTemperature><OverShootTime>0</OverShootTime><OverShootSlope2>0.1</OverShootSlope2><GotoNumber>1</GotoNumber><LoopNumber>2</LoopNumber><PIDNumber>1</PIDNumber><LidTemp>110</LidTemp></Step>
+    <PIDSet><PID number="1"><PHeating>60</PHeating><PCooling>80</PCooling><IHeating>250</IHeating><ICooling>100</ICooling><DHeating>10</DHeating><DCooling>10</DCooling><PLid>100</PLid><ILid>70</ILid></PID></PIDSet>
+  </Method>
+</MethodSet>
