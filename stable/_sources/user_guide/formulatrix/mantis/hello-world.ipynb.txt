@@ -555,7 +555,7 @@
    "source": [
     "### Picking up a chip (v4)\n",
     "\n",
-    "Place a chip in an input slot. `pick_up_chip(slot=...)` picks it up along the unit's path into that slot, from wherever the head stands, and returns to idle; `attached_chip` names the slot the chip came from."
+    "Place a chip in an input slot. `pick_up_chip(slot=...)` picks it up along the unit's path into that slot, from wherever the head stands, and returns to idle; `attached_chip` names the slot the chip came from. Before it moves, it reads the slot's tag and refuses an empty slot; without an RFID reader it refuses. A simulated Mantis checks the slot against `mantis.chip_spots` instead: a pick-up needs a chip assigned there."
    ]
   },
   {
@@ -574,7 +574,7 @@
    "id": "chip-place",
    "metadata": {},
    "source": [
-    "`place_chip(slot=...)` places the chip on the head back into the slot it came from, along that slot's path played backwards, and refuses any other slot; `return_chip()` does the same without naming the slot. `stop()` refuses while a chip is on the head: it stops every motor without parking, so Z is not lowered with the chip on, and stays connected with the arm brought up, so the chip can be returned. `stop(accept_chip_left_on_head=True)` stops with it there."
+    "`place_chip(slot=...)` places the chip on the head back into the slot it came from, along that slot's path played backwards, and refuses any other slot, or a slot whose tag shows a chip already there; `return_chip()` does the same without naming the slot. `stop()` refuses while a chip is on the head: it stops every motor without parking, so Z is not lowered with the chip on, and stays connected with the arm brought up, so the chip can be returned. `stop(accept_chip_left_on_head=True)` stops with it there."
    ]
   },
   {
