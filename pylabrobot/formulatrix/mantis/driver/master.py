@@ -1321,10 +1321,13 @@ class MantisDriver:
         except Exception:
           logger.warning("[%s] the RFID reader's link did not close", self.name, exc_info=True)
 
-  async def _halt(self) -> None:
+  async def _halt(self, *, park: bool = True) -> None:
     """Abort the sequencer, then stop the motors and park an arm brought up (``Arm._halt``).
 
     The arm halts whether or not the abort succeeded; a failed abort is logged.
+
+    Args:
+      park: as ``Arm._halt``.
     """
     if self.arm is None:
       return
@@ -1332,7 +1335,7 @@ class MantisDriver:
       await self._unchecked_fw_abort_sequencer()
     except Exception:
       logger.warning("[%s] could not abort the sequencer", self.name, exc_info=True)
-    await self.arm._halt()
+    await self.arm._halt(park=park)
 
   async def stop(self, accept_chip_left_on_head: bool = False) -> None:
     """Fail the command in flight and every event waiter; abort the sequencer, stop the
@@ -1346,8 +1349,9 @@ class MantisDriver:
       accept_chip_left_on_head: stop with a chip on the head instead of refusing.
 
     Raises:
-      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; the arm is
-        halted and parked, and the link stays open for ``Arm.return_chip``.
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; every motor
+        is stopped, the arm stays where it stopped, brought up, and the link stays open for
+        ``Arm.return_chip``.
     """
     if self._reader is not None and self._reader.done() and self._connected:
       failure = None if self._reader.cancelled() else self._reader.exception()
@@ -1363,13 +1367,14 @@ class MantisDriver:
       if not waiter.done():
         waiter.set_exception(MantisNotConnectedError(stopped))
     if self._connected:
-      await self._halt()
       chip_on_head = self.arm is not None and self.arm.attached_chip is not None
       if chip_on_head and not accept_chip_left_on_head:
+        await self._halt(park=False)  # no park: Z is not lowered with the chip on the head
         raise MantisMotionError(
           f"{self.name}: a chip is still on the head; return it with return_chip(), or pass "
           "accept_chip_left_on_head=True"
         )
+      await self._halt()
     if self.plate_clamp is not None and self._connected:
       try:
         await self.plate_clamp._release()

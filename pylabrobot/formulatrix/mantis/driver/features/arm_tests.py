@@ -318,12 +318,12 @@ class ArmTestCase(DriverTestCase):
 
 
 def wait_briefly_for_unpower(*, driver):
-  """Only unpowering the arms (command 19), never answered, waits briefly: a slow runner cannot time
-  out a command that is answered."""
+  """Only unpowering an arm motor (command 19, open loop), never answered, waits briefly: a slow
+  runner cannot time out a command that is answered, such as energising it."""
   send_command = driver._send_command
 
   async def send(**kwargs):
-    if kwargs["command"] == 19:
+    if kwargs["command"] == 19 and kwargs["payload"][2:] == b"\x01\x00":
       kwargs["timeout"] = 0.25
     return await send_command(**kwargs)
 
@@ -629,7 +629,7 @@ class StopTests(ArmTestCase):
     self.assertEqual(sent[-2:], TURN_OFF)
     self.assertFalse(driver.arm.is_initialized)
 
-  async def test_stop_with_a_chip_on_the_head_parks_then_refuses_and_stays_connected(self):
+  async def test_stop_with_a_chip_on_the_head_stops_without_parking_then_refuses(self):
     link = self.close_link()
     driver = await self.set_up_arm(link=link)
     driver.arm._initialized = True
@@ -639,8 +639,9 @@ class StopTests(ArmTestCase):
       await driver.stop()
     sent = self.sent(link)
     self.assertEqual(sent[:4], HALT)
-    self.assertEqual(sent[-1], (0, 68, bytes.fromhex(CLOSE_QUEUED_MOVES[16])))  # parked, no more
+    self.assertEqual([frame for frame in sent if frame[1] in (22, 68)], [])  # Z not lowered
     self.assertTrue(driver._connected)
+    self.assertTrue(driver.arm.is_initialized)
     self.sent_before = len(link.written)
     await driver.stop(accept_chip_left_on_head=True)
     self.assertEqual(self.sent(link)[-2:], TURN_OFF)
@@ -2421,6 +2422,24 @@ class ChipSlotTests(ArmTestCase):
     await driver.arm.pick_up_chip(slot=1)
     with self.assertRaisesRegex(MantisMotionError, "the chip from slot 1 is on the head"):
       await driver.arm.pick_up_chip(slot=1)
+
+  async def test_after_a_refused_stop_the_chip_returns_then_stop_runs(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
+      await driver.stop()
+    driver._next_item = 1
+    driver._wait_for_queue_item.reset_mock()
+    self.sent_before = len(link.written)
+    await driver.arm.return_chip()
+    self.assert_captured(
+      link=link,
+      driver=driver,
+      captured=CAPTURED_CHIP_SLOT_1_PLACE,
+      waits=CAPTURED_CHIP_SLOT_WAITS["place"],
+    )
+    self.assertIsNone(driver.arm.attached_chip)
 
   async def test_a_placement_into_another_slot_is_refused_and_nothing_moves(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
