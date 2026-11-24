@@ -1,3 +1,4 @@
+import math
 import unittest
 from dataclasses import replace
 from datetime import datetime
@@ -159,22 +160,19 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       (calibration, replace(measurement, label=2), 0, "differ"),
       (replace(calibration, items=[]), measurement, 0, "empty"),
       (calibration, replace(measurement, items=[]), 0, "empty"),
-      (
-        calibration,
-        replace(measurement, items=[replace(measurement.items[0], reference_count=100)]),
-        0,
-        "too low",
-      ),
-      (
-        calibration,
-        replace(measurement, items=[replace(measurement.items[0], reference_count=65535)]),
-        0,
-        "saturated",
-      ),
     ]
     for cal, data, channel, error in cases:
       with self.subTest(error=error), self.assertRaisesRegex(ValueError, error):
         infinite_m1000_pro._calculate_absorbance_4channel(cal, data, channel=channel)
+    low = replace(measurement, items=[replace(measurement.items[0], reference_count=100)])
+    self.assertTrue(
+      math.isnan(infinite_m1000_pro._calculate_absorbance_4channel(calibration, low, channel=0))
+    )
+    over = replace(measurement, items=[replace(measurement.items[0], reference_count=65535)])
+    self.assertEqual(
+      infinite_m1000_pro._calculate_absorbance_4channel(calibration, over, channel=0),
+      infinite_m1000_pro.OVER,
+    )
 
   def test_format_absorbance_result_uses_shared_plr_result_and_well_names(self):
     plate = biorad_96_wellplate_200uL_Vb("plate")
@@ -347,17 +345,16 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       await device._write_command("QQ")
       self.assertEqual([call.args[0][-5] for call in usb.write.await_args_list], [254, 0])
 
-  async def test_stale_sequence_faults_session_without_motion(self):
+  async def test_stale_sequence_raises_but_session_stays_usable(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.write = AsyncMock()
       usb.read = AsyncMock(return_value=reader_frame("IN", 254))
       device = InfiniteM1000Pro()
       device._ready = True
-      device._initialized = True
       with self.assertRaisesRegex(ValueError, "sequence"):
         await device.open()
-      self.assertTrue(device._faulted)
+      self.assertTrue(device._ready)
       self.assertEqual(usb.write.await_count, 1)
 
   async def test_request_instrument_status_reports_busy(self):
@@ -445,7 +442,7 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
         ],
       )
 
-  async def test_temperature_failed_readback_faults_without_enabling(self):
+  async def test_temperature_failed_readback_raises(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.write = AsyncMock()
@@ -459,25 +456,34 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       )
       device = InfiniteM1000Pro()
       device._ready = True
-      device._initialized = True
       with self.assertRaisesRegex(RuntimeError, "target was not confirmed"):
         await device.set_temperature(30.0)
-      self.assertTrue(device._faulted)
+      self.assertTrue(device._ready)
       self.assertEqual(usb.write.await_count, 4)
-      with self.assertRaisesRegex(RuntimeError, "uncertain"):
-        await connect_without_initialization(device)
 
-  async def test_temperature_rejects_unsafe_values_without_io(self):
+  async def test_temperature_has_no_software_range_limit(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.write = AsyncMock()
       device = InfiniteM1000Pro()
       device._ready = True
-      device._initialized = True
-      for temperature in (19.9, 40.1, float("nan"), float("inf"), 30.01):
+      for temperature in (float("nan"), float("inf")):
         with self.subTest(temperature=temperature), self.assertRaises(ValueError):
           await device.set_temperature(temperature)
       usb.write.assert_not_awaited()
+      usb.read = AsyncMock(
+        side_effect=[
+          reader_frame("250", 0),
+          reader_frame("ON", 1),
+          reader_frame("ST", 2),
+          reader_frame("450", 3),
+        ]
+      )
+      await device.set_temperature(45.0)
+      self.assertEqual(
+        usb.write.await_args_list[2].args[0],
+        infinite_m1000_pro._encode("TEMPERATURE PLATE,TARGET=450", sequence=2),
+      )
 
   async def test_stop_temperature_control_is_idempotent(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
@@ -554,32 +560,39 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       await device.open()
       self.assertEqual(usb.write.await_count, 5)
 
-  async def test_tray_refuses_motion_before_initialization(self):
+  async def test_tray_moves_without_initialization(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
       usb.write = AsyncMock()
-      usb.read = AsyncMock(return_value=reader_frame("OUT"))
+      usb.read = AsyncMock(
+        side_effect=[reader_frame("IN"), reader_frame("ST", 1), reader_frame("OUT", 2)]
+      )
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      with self.assertRaisesRegex(RuntimeError, "initialize"):
-        await device.open()
-      usb.write.assert_not_awaited()
+      await device.open()
+      self.assertEqual(usb.write.await_count, 3)
 
-  async def test_initialize_refuses_unexpected_buffered_response_before_reset(self):
+  async def test_initialize_discards_unexpected_buffered_response(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
       usb.drain = AsyncMock()
       usb.write = AsyncMock()
-      usb.read = AsyncMock(return_value=reader_frame("ST") + reader_frame("ST"))
+      usb.read = AsyncMock(
+        side_effect=[
+          reader_frame("ST") + reader_frame("ST"),
+          reader_frame("BY", 1),
+          reader_frame("ST", 1),
+        ]
+      )
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      with self.assertRaisesRegex(RuntimeError, "pending"):
-        await device.initialize()
-      self.assertEqual(usb.write.await_count, 1)
+      await device.initialize()
+      self.assertTrue(device._initialized)
+      self.assertEqual(usb.write.await_count, 2)
 
-  async def test_initialize_refuses_extra_response_after_completion(self):
+  async def test_initialize_discards_extra_response_after_completion(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
@@ -594,44 +607,49 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       )
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      with self.assertRaisesRegex(RuntimeError, "pending"):
-        await device.initialize()
-      with self.assertRaisesRegex(RuntimeError, "not ready"):
-        await device.open()
+      await device.initialize()
+      self.assertTrue(device._initialized)
+      self.assertFalse(device._buffer)
 
-  async def test_initialize_refuses_busy_reader_without_reset(self):
-    with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
-      usb = usb_class.return_value
-      usb.setup = AsyncMock()
-      usb.drain = AsyncMock()
-      usb.write = AsyncMock()
-      usb.read = AsyncMock(return_value=reader_frame("BY"))
-      device = InfiniteM1000Pro()
-      await connect_without_initialization(device)
-      with self.assertRaisesRegex(RuntimeError, "not in standby"):
-        await device.initialize()
-      self.assertEqual(usb.write.await_count, 1)
-      with self.assertRaisesRegex(RuntimeError, "uncertain"):
-        await connect_without_initialization(device)
-
-  async def test_initialize_timeout_faults_session_without_retry(self):
+  async def test_initialize_resets_busy_reader(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
       usb.drain = AsyncMock()
       usb.write = AsyncMock()
       usb.read = AsyncMock(
-        side_effect=[reader_frame("ST"), reader_frame("BY#T85000", 1), TimeoutError()]
+        side_effect=[reader_frame("BY"), reader_frame("BY", 1), reader_frame("ST", 1)]
+      )
+      device = InfiniteM1000Pro()
+      await connect_without_initialization(device)
+      await device.initialize()
+      self.assertEqual(
+        usb.write.await_args_list[1].args[0], infinite_m1000_pro._encode("INIT FORCE", sequence=1)
+      )
+
+  async def test_initialize_timeout_raises_and_allows_retry(self):
+    with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
+      usb = usb_class.return_value
+      usb.setup = AsyncMock()
+      usb.drain = AsyncMock()
+      usb.write = AsyncMock()
+      usb.read = AsyncMock(
+        side_effect=[
+          reader_frame("ST"),
+          reader_frame("BY#T85000", 1),
+          TimeoutError(),
+          reader_frame("ST", 2),
+          reader_frame("BY", 3),
+          reader_frame("ST", 3),
+        ]
       )
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
       with self.assertRaises(TimeoutError):
         await device.initialize()
-      self.assertEqual(usb.write.await_count, 2)
-      with self.assertRaisesRegex(RuntimeError, "not ready"):
-        await device.open()
-      with self.assertRaisesRegex(RuntimeError, "uncertain"):
-        await connect_without_initialization(device)
+      self.assertFalse(device._initialized)
+      await device.initialize()
+      self.assertTrue(device._initialized)
 
   async def test_initialize_waits_for_completion_once_per_session(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
@@ -677,13 +695,12 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       usb.setup.assert_awaited_once_with(empty_buffer=False)
       self.assertEqual(device._buffer, reader_frame("ST"))
 
-  async def test_failed_reconnect_disables_session(self):
+  async def test_failed_reconnect_can_be_retried(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock(side_effect=[None, RuntimeError("usb failure"), None])
       usb.stop = AsyncMock()
       usb.write = AsyncMock()
-      usb.read = AsyncMock(return_value=reader_frame("OUT"))
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
       await device.stop()
@@ -691,10 +708,9 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
         await connect_without_initialization(device)
       with self.assertRaisesRegex(RuntimeError, "not ready"):
         await device.open()
-      usb.write.assert_not_awaited()
-      with self.assertRaisesRegex(RuntimeError, "uncertain"):
-        await connect_without_initialization(device)
-      self.assertEqual(usb.setup.await_count, 2)
+      await connect_without_initialization(device)
+      self.assertTrue(device._ready)
+      self.assertEqual(usb.setup.await_count, 3)
 
   async def test_open_skips_informational_frames_before_command_response(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
@@ -725,7 +741,7 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await device._receive(), "ST")
       self.assertGreaterEqual(usb.read.await_args_list[0].kwargs["timeout"], 29.9)
 
-  async def test_oversized_complete_response_faults_session(self):
+  async def test_oversized_complete_response_raises(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
@@ -733,10 +749,7 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       usb.read = AsyncMock(return_value=reader_frame("MSG" + "x" * 4100) + reader_frame("OUT"))
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      device._initialized = True
       with self.assertRaisesRegex(ValueError, "too long"):
-        await device.open()
-      with self.assertRaisesRegex(RuntimeError, "not ready"):
         await device.open()
       self.assertEqual(usb.write.await_count, 1)
 
@@ -773,37 +786,36 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(usb.write.await_count, 3)
       self.assertIn(b"ABSOLUTE MTP,IN", usb.write.await_args_list[1].args[0])
 
-  async def test_unexpected_position_refuses_motion_and_faults_session(self):
+  async def test_unknown_position_still_moves(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
       usb.write = AsyncMock()
-      usb.read = AsyncMock(return_value=reader_frame("UNKNOWN"))
+      usb.read = AsyncMock(
+        side_effect=[reader_frame("UNKNOWN"), reader_frame("ST", 1), reader_frame("OUT", 2)]
+      )
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      device._initialized = True
-      with self.assertRaisesRegex(RuntimeError, "Unexpected carrier position"):
-        await device.open()
-      with self.assertRaisesRegex(RuntimeError, "not ready"):
-        await device.open()
-      self.assertEqual(usb.write.await_count, 1)
+      await device.open()
+      self.assertEqual(
+        usb.write.await_args_list[1].args[0],
+        infinite_m1000_pro._encode("ABSOLUTE MTP,OUT", sequence=1),
+      )
 
-  async def test_faulted_session_cannot_be_reenabled_by_reconnecting(self):
+  async def test_session_can_reconnect_after_error(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
       usb.stop = AsyncMock()
       usb.write = AsyncMock()
-      usb.read = AsyncMock(return_value=reader_frame("UNKNOWN"))
+      usb.read = AsyncMock(side_effect=[reader_frame("IN"), reader_frame("ER", 1)])
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      device._initialized = True
-      with self.assertRaisesRegex(RuntimeError, "Unexpected carrier position"):
+      with self.assertRaisesRegex(RuntimeError, "Unexpected movement status"):
         await device.open()
       await device.stop()
-      with self.assertRaisesRegex(RuntimeError, "uncertain"):
-        await connect_without_initialization(device)
-      self.assertEqual(usb.setup.await_count, 1)
+      await connect_without_initialization(device)
+      self.assertEqual(usb.setup.await_count, 2)
 
   async def test_unexpected_movement_status_fails_without_retry(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
@@ -818,7 +830,7 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
         await device.open()
       self.assertEqual(usb.write.await_count, 2)
 
-  async def test_checksum_failure_faults_session(self):
+  async def test_checksum_failure_raises(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
@@ -828,14 +840,12 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       usb.read = AsyncMock(return_value=bytes(corrupt))
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      device._initialized = True
       with self.assertRaisesRegex(ValueError, "checksum"):
         await device.open()
-      with self.assertRaisesRegex(RuntimeError, "not ready"):
-        await device.open()
+      self.assertTrue(device._ready)
       self.assertEqual(usb.write.await_count, 1)
 
-  async def test_position_mismatch_raises(self):
+  async def test_position_mismatch_logs_warning(self):
     with patch("pylabrobot.tecan.infinite_m1000_pro.USB") as usb_class:
       usb = usb_class.return_value
       usb.setup = AsyncMock()
@@ -845,8 +855,7 @@ class InfiniteM1000ProTests(unittest.IsolatedAsyncioTestCase):
       )
       device = InfiniteM1000Pro()
       await connect_without_initialization(device)
-      device._initialized = True
-      with self.assertRaisesRegex(RuntimeError, "not 'OUT'"):
+      with self.assertLogs("pylabrobot.tecan.infinite_m1000_pro", "WARNING"):
         await device.open()
 
   async def test_stop_closes_transport(self):
