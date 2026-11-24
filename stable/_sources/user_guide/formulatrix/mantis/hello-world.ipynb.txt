@@ -575,7 +575,7 @@
    "id": "chip-place",
    "metadata": {},
    "source": [
-    "`place_chip(slot=...)` places the chip on the head back into the slot it came from, along that slot's path played backwards, and refuses any other slot; `return_chip()` does the same without naming the slot. `stop()` refuses while a chip is on the head: it halts and parks, then stays connected so the chip can be returned. `stop(accept_chip_left_on_head=True)` stops with it there."
+    "`place_chip(slot=...)` places the chip on the head back into the slot it came from, along that slot's path played backwards, and refuses any other slot; `return_chip()` does the same without naming the slot. `stop()` refuses while a chip is on the head: it stops every motor without parking, so Z is not lowered with the chip on, and stays connected with the arm brought up, so the chip can be returned. `stop(accept_chip_left_on_head=True)` stops with it there."
    ]
   },
   {
