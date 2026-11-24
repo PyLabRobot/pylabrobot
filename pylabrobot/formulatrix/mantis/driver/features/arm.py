@@ -229,7 +229,8 @@ class Arm:
   and encoder correction; on a v3 its homing settings, home frame and route to idle. Without it
   nothing is sent and ``initialize`` refuses; it never falls back to another unit's values. A v3
   has no absolute encoders: what needs them raises ``MantisConfigurationError``, and its moves
-  after the bring-up raise ``NotImplementedError`` until one has run on a v3.
+  after the bring-up raise ``NotImplementedError`` until one has run on a v3; the chip pick-up and
+  placement from idle have.
   The ``zones`` and ``approach_paths`` blocks give the routes; without them
   the head is moved to idle only from near it, and the waste and the washes refuse. Without the ``stage`` block the
   deck-frame moves and ``request_pose`` refuse. Routes (bring-up, park, the approach paths, stop) move at the
@@ -469,16 +470,35 @@ class Arm:
         "(oem_config_directory) or a configuration saved with it, or set up with skip_arm=True"
       )
 
-  def _check_initialized(self) -> None:
+  def _check_initialized(self, *, run_on_v3: bool = False) -> None:
     """Raise ``MantisMotionError`` unless the arm was brought up: where it is is not known.
 
+    Args:
+      run_on_v3: the move has run on a v3 after its bring-up (the chip pick-up and placement).
+
     Raises:
-      NotImplementedError: on a v3 after its bring-up: no move after it has run on a v3.
+      NotImplementedError: on a v3 after its bring-up, unless ``run_on_v3``: no other move has run
+        on a v3.
     """
     if not self._initialized:
       raise MantisMotionError(f"{self._driver.name}: the arm is not brought up; call setup()")
-    if self._get_generation() == "v3":
-      raise NotImplementedError(f"{self._driver.name}: a v3 arm moves only in its bring-up for now")
+    if self._get_generation() == "v3" and not run_on_v3:
+      raise NotImplementedError(
+        f"{self._driver.name}: a v3 arm moves only in its bring-up and the chip pick-up and "
+        "placement from idle for now"
+      )
+
+  async def _check_v3_at_idle(self) -> None:
+    """On a v3, refuse a chip pick-up or placement away from idle: it would park first, and no v3
+    has run ``park``. Only the head's position is read.
+
+    Raises:
+      NotImplementedError: on a v3 not parked.
+    """
+    if self._get_generation() == "v3" and not await self.request_is_parked():
+      raise NotImplementedError(
+        f"{self._driver.name}: a v3 picks up and places a chip only from idle for now; nothing moves"
+      )
 
   # -- raw firmware calls ----------------------------------------------------
 
@@ -2484,12 +2504,15 @@ class Arm:
         model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
-      MantisConfigurationError: without the slot's path or an RFID reader; nothing is sent.
+      MantisConfigurationError: without the slot's path or an RFID reader; nothing moves (on a v3
+        the head's position is read first).
       MantisMotionError: if the arm is not brought up, a chip is already on the head, or a motor
         faults; or if the tag rules the pick-up out, after the tag read only.
-      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
+      NotImplementedError: on a v3 not parked: it would park first, which no v3 has run; nothing
+        moves, only the head's position is read. A v3 picks up from idle (run on two v3 units,
+        every chip slot).
     """
-    self._check_initialized()
+    self._check_initialized(run_on_v3=True)
     if self._attached_chip is not None:
       raise MantisMotionError(
         f"{self._driver.name}: the chip from slot {self._attached_chip} is on the head; "
@@ -2497,6 +2520,7 @@ class Arm:
       )
     path = self._get_chip_slot_path(slot=slot)
     attach_line = self._get_attach_line(path=path)
+    await self._check_v3_at_idle()
     await self._check_chip_slot_tag(slot=slot, action="pick_up_chip")
     async with self._driver._show_action(action="pick_up_chip"):
       await self._move_through_chip_slot(
@@ -2519,13 +2543,14 @@ class Arm:
       with_model_updates: as for ``pick_up_chip``.
 
     Raises:
-      MantisConfigurationError: without the slot's path or an RFID reader; nothing is sent.
+      MantisConfigurationError: without the slot's path or an RFID reader; nothing moves (on a v3
+        the head's position is read first).
       MantisMotionError: if the arm is not brought up, no chip is on the head, the chip is from
         another slot (nothing moves), or a motor faults; or if the slot's tag reads a chip, after
         the tag read only.
-      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
+      NotImplementedError: on a v3 not parked, as for ``pick_up_chip``.
     """
-    self._check_initialized()
+    self._check_initialized(run_on_v3=True)
     if self._attached_chip is None:
       raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
     if slot != self._attached_chip:
@@ -2535,6 +2560,7 @@ class Arm:
       )
     path = self._get_chip_slot_path(slot=slot)
     attach_line = self._get_attach_line(path=path)
+    await self._check_v3_at_idle()
     await self._check_chip_slot_tag(slot=slot, action="place_chip")
     async with self._driver._show_action(action="place_chip"):
       await self._move_through_chip_slot(

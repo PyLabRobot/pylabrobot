@@ -2291,6 +2291,91 @@ class V3ArmTests(DriverTestCase):
     with open(saved, encoding="utf-8") as file:
       self.assertEqual(json.load(file)["arm"], SYNTHETIC_V3_ARM_BLOCK)
 
+  def declare_chip_slots(self) -> None:
+    """Declare chip slot 1's path and the stage beside the v3 arm block."""
+    with open(self.path, "w", encoding="utf-8") as file:
+      json.dump(
+        {
+          "arm": SYNTHETIC_V3_ARM_BLOCK,
+          "approach_paths": {"chip_slot_1": CHIP_SLOT_1_PATH},
+          "stage": SYNTHETIC_STAGE_BLOCK,
+          "rfid": RECORDING["rfid"],
+        },
+        file,
+      )
+
+  async def set_up_chip_slots(self, *, parked: bool = True):
+    """Bring the v3 arm up with chip slot 1, the sequencer's queue taken as played at once."""
+    self.declare_chip_slots()
+    driver, link = await self.set_up_arm()
+    # A v3 answers the antenna switch empty, as a v4 does; the v3 bring-up capture has none.
+    link.answers[CHIP_SLOT_1_TAG_READ] = [b""]
+    link.reader.tags = {0: LOW_VOLUME_HI_FI_TAG_REPLY}  # slot 1's antenna
+    self.link = link
+    self.sent_before = len(link.written)
+    arm = driver.arm
+    queued: List[List[Tuple[float, float, float]]] = []
+
+    async def queue_move_item(*, targets):
+      queued.append(targets)
+      return len(queued)
+
+    driver._queue_move_item = queue_move_item  # type: ignore[method-assign]
+    driver._unchecked_fw_clear_sequencer = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._unchecked_fw_start_sequencer = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    arm.request_is_parked = mock.AsyncMock(return_value=parked)  # type: ignore[method-assign]
+    arm._report_pose = mock.AsyncMock()  # type: ignore[method-assign]
+    return driver, queued
+
+  def tag_reads(self) -> int:
+    """How often chip slot 1's tag was read since ``sent_before``."""
+    written = self.link.written[self.sent_before :]
+    return [parse_frame(frame=frame)[1:] for frame in written].count(CHIP_SLOT_1_TAG_READ)
+
+  async def test_a_declared_v3_gets_its_chip_slot_paths_and_stage(self):
+    """A v3's arm takes the approach paths and the stage as a v4's does; it has no zones."""
+    self.declare_chip_slots()
+    driver, _ = await self.make_arm()
+    configuration = driver.arm.configuration
+    self.assertEqual(sorted(configuration.approach_paths or {}), ["chip_slot_1"])
+    self.assertEqual(len(configuration.approach_paths["chip_slot_1"]), len(CHIP_SLOT_1_PATH))
+    self.assertEqual(configuration.stage_origin, (-50.0, 40.0, 51.0))
+    self.assertIsNone(configuration.zone_rectangles)
+
+  async def test_a_v3_picks_up_and_places_a_chip_from_idle(self):
+    """Run on two v3 units, every chip slot: the slot's whole route queued, the chip recorded."""
+    driver, queued = await self.set_up_chip_slots()
+    route_length = 2 * (2 + len(arm_module.CHIP_CHANGER_ROUTE)) + len(CHIP_SLOT_1_PATH)
+    await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(len(queued), route_length)
+    self.assertEqual(driver.arm.attached_chip, 1)
+    self.assertEqual(self.tag_reads(), 1)
+    queued.clear()
+    self.link.reader.tags = {}  # the chip is on the head
+    self.sent_before = len(self.link.written)
+    await driver.arm.place_chip(slot=1)
+    self.assertEqual(len(queued), route_length)
+    self.assertIsNone(driver.arm.attached_chip)
+    self.assertEqual(self.tag_reads(), 1)
+
+  async def test_a_v3_not_parked_refuses_a_chip_slot_before_moving(self):
+    """A pick-up away from idle would park first, which no v3 has run; the other moves still
+    refuse."""
+    driver, queued = await self.set_up_chip_slots(parked=False)
+    with self.assertRaisesRegex(NotImplementedError, "a chip only from idle"):
+      await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(queued, [])
+    self.assertEqual(self.tag_reads(), 0)
+    self.assertIsNone(driver.arm.attached_chip)
+    driver.arm._attached_chip = 1
+    with self.assertRaisesRegex(NotImplementedError, "a chip only from idle"):
+      await driver.arm.place_chip(slot=1)
+    self.assertEqual(queued, [])
+    self.assertEqual(self.tag_reads(), 0)
+    with self.assertRaisesRegex(NotImplementedError, "only in its bring-up"):
+      await driver.arm.move_to_z_position(z=1.0)
+
 
 # A unit's path through chip slot 1, in the arm frame, as its chip changer routes give it.
 CHIP_SLOT_1_PATH: List[List[Optional[float]]] = [

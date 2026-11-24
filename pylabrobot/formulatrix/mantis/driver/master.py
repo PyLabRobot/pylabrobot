@@ -1084,12 +1084,15 @@ class MantisDriver:
       v3_arm_configuration = (
         V3ArmConfiguration.from_block(block=block) if block is not None else None
       )
+      # A v3 has no zones: its routes are its approach paths (chip slots, waste, washes).
       self.arm = Arm(
         driver=self,
         configuration=MantisArmConfiguration(
           motor_limits=motor_limits,
           offsets=v3_arm_configuration.offsets if v3_arm_configuration is not None else None,
           v3_arm_configuration=v3_arm_configuration,
+          **self._get_route_blocks(),
+          **self._get_stage_calibration(),
         ),
       )
 
