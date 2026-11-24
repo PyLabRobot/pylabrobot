@@ -20,15 +20,6 @@ from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
 from .biomek_resource import _WellSegment, height_volume_data_from_segments
 
-_96_WELLPLATE_VB_SEGMENTS = (
-  _WellSegment(2.0, 2.735, 2.735, 0.0, 0.0),
-  _WellSegment(8.5, 4.0, 4.0, 4.0, 4.0),
-)
-_96_WELLPLATE_VB_DEPTH = 10.5
-_96_WELLPLATE_VB_HVD = height_volume_data_from_segments(
-  _96_WELLPLATE_VB_SEGMENTS, _96_WELLPLATE_VB_DEPTH
-)
-
 _96_WELLPLATE_FLAT_SEGMENTS = (_WellSegment(10.668, 3.43, 3.43, 3.175, 3.175),)
 _96_WELLPLATE_FLAT_DEPTH = 10.668
 _96_WELLPLATE_FLAT_HVD = height_volume_data_from_segments(
@@ -62,54 +53,6 @@ _RESERVOIR_350CB_HVD = height_volume_data_from_segments(
 _RESERVOIR_SEGMENTS = (_WellSegment(14.53, 55.52, 36.325, 55.52, 36.325, round=False),)
 _RESERVOIR_DEPTH = 14.53
 _RESERVOIR_HVD = height_volume_data_from_segments(_RESERVOIR_SEGMENTS, _RESERVOIR_DEPTH)
-
-
-def beckman_coulter_biomek_96_wellplate_vb(name: str, with_lid: bool = False) -> Plate:
-  """Greiner polystyrene microplate with 96 round, V-bottomed wells. Part no. 651XXX.
-
-  Biomek labware class Thermo96VB_PP."""
-  lid: Optional[Lid] = None
-  if with_lid:
-    # PyLabRobot's lid covers the plate's footprint; Biomek seats it
-    # (stackablelabwareclasses TiterplateLid: x 0.04, y 0.152, z 0.8 cm) 6.1 mm into the plate.
-    lid = Lid(
-      name=f"{name}_lid",
-      size_x=127.8,
-      size_y=85.6,
-      size_z=10.0,  # TiterplateLid height 1.0 cm
-      nesting_z_height=6.1,
-      model="beckman_coulter_biomek_lid_titerplatelid",
-    )
-    # Biomek's pads: the TiterplateLid's own centre on its seat, gripperzoffset above its bottom.
-    lid.preferred_pickup_location = Coordinate(63.9, 42.805, 2.0)
-  plate = Plate(
-    name=name,
-    size_x=127.8,  # xspan 12.78 cm
-    size_y=85.6,  # yspan 8.56 cm
-    size_z=14.1,  # height 1.41 cm
-    model=beckman_coulter_biomek_96_wellplate_vb.__name__,
-    lid=lid,
-    ordered_items=create_ordered_items_2d(
-      Well,
-      num_items_x=12,
-      num_items_y=8,
-      dx=11.31,  # well1xoffset 1.44 cm, less half the well
-      dy=8.31,  # the front row; A1 (well1yoffset 1.12 cm) is at the back
-      dz=3.6,
-      item_dx=9.0,
-      item_dy=9.0,
-      size_x=6.18,
-      size_y=6.18,
-      size_z=_96_WELLPLATE_VB_DEPTH,  # welldepth 1.05 cm
-      bottom_type=WellBottomType.V,
-      cross_section_type=CrossSectionType.CIRCLE,
-      height_volume_data=_96_WELLPLATE_VB_HVD,
-      max_volume=440.0,  # wellvolume
-      name_prefix=name,
-    ),
-  )
-  plate.preferred_pickup_location = Coordinate(63.9, 42.8, -2.3)
-  return plate
 
 
 def beckman_coulter_biomek_96_wellplate_flat(name: str, with_lid: bool = False) -> Plate:
