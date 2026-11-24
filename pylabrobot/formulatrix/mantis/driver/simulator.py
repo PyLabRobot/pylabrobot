@@ -92,10 +92,39 @@ class MantisSimulationPump(Pump):
     """Start with the simulated air pump off."""
     super().__init__(driver=driver)
     self._on = False
+    self._enabled: Dict[PressureController, bool] = {}
 
   async def _unchecked_fw_set_pump_on(self, *, on: bool) -> None:
     """Set the simulated pump's control state at once."""
     self._on = on
+
+  async def _unchecked_fw_set_controller_enabled(
+    self, *, controller: PressureController, enabled: bool
+  ) -> None:
+    """Set the simulated controller's state at once."""
+    self._get_controller_index(controller=controller)
+    self._enabled[controller] = enabled
+
+  async def _unchecked_fw_set_proportional_valve(
+    self, *, controller: PressureController, value: int
+  ) -> None:
+    """Set nothing: no line holds pressure."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_solenoid_valve(
+    self, *, controller: PressureController, value: int
+  ) -> None:
+    """Set nothing: no line holds pressure."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_feedback_sensor_parameters(
+    self, *, controller: PressureController, scale: float, offset: float
+  ) -> None:
+    """Store nothing: the simulated calibration is the one in the configuration."""
+    self._get_controller_index(controller=controller)
+
+  async def _sleep(self, *, seconds: float) -> None:
+    """Return at once."""
 
   async def measure_pressure(self, *, controller: PressureController) -> float:
     """0: no line holds pressure."""
@@ -125,9 +154,9 @@ class MantisSimulationPump(Pump):
     return 0
 
   async def request_controller_enabled(self, *, controller: PressureController) -> bool:
-    """False: no controller regulates."""
+    """The simulated controller's state, as last set; disabled until then."""
     self._get_controller_index(controller=controller)
-    return False
+    return self._enabled.get(controller, False)
 
   async def request_pump_on(self) -> bool:
     """The simulated pump's control state."""
