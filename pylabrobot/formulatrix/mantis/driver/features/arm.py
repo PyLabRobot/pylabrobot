@@ -65,6 +65,7 @@ from ..errors import (
 from ..events import HOME_DONE_EVENT, decode_home_done
 from ..framing import MOTION_BOARD
 from ..oem_config import (
+  CHIP_SLOT_APPROACH_PATH,
   UNKNOWN_ZONE,
   WASH_APPROACH_PATH,
   WASH_POSITIONS,
@@ -145,6 +146,14 @@ HOLDER_EDGE_TOLERANCE = 1e-6
 # PyLabRobot design choice: how close, mm, the head must stand to a route line below the safe height on
 # an approach path, in x, y and Z, to count as on that path.
 APPROACH_PATH_TOLERANCE = 0.5
+# Before and after each chip slot's path, the head goes to (15, 30) at the safe height, as in every
+# recorded pick-up and placement. These are the first four lines of the waste route.
+CHIP_CHANGER_ROUTE: List[MantisArmCoordinate] = [
+  MantisArmCoordinate(x=None, y=None, z=None),
+  MantisArmCoordinate(x=15.0, y=30.0, z=None),
+  MantisArmCoordinate(x=None, y=None, z=0.0 - SAFE_HEIGHT),
+  MantisArmCoordinate(x=15.0, y=30.0, z=0.0 - SAFE_HEIGHT),
+]
 
 JointState = Dict[int, float]
 """Where each motor is, by motor: 0 and 1 in degrees, 2 (Z) in mm down from its flag."""
@@ -264,11 +273,18 @@ class Arm:
     self.configuration = configuration
     self._initialized = False
     self._pose_observer: Optional[Callable[..., None]] = None
+    # The chip slot the head's chip came from; None without a chip.
+    self._attached_chip: Optional[int] = None
     # The two link angles last passed on, degrees, the geometry's own; None before any.
     self._link_angles: Optional[Tuple[float, float]] = None
     self._deck_to_arm_transform: Optional[Tuple[float, float, float]] = None
     if configuration.v3_arm_configuration is not None and self._get_generation() == "v4":
       raise MantisConfigurationError(f"{driver.name}: a v4 takes no v3 arm block")
+
+  @property
+  def attached_chip(self) -> Optional[int]:
+    """The chip slot the chip on the head was picked up from; None without a chip."""
+    return self._attached_chip
 
   @property
   def is_initialized(self) -> bool:
@@ -1251,6 +1267,7 @@ class Arm:
     *,
     moves: List[List[Tuple[float, float, float]]],
     with_model_updates: bool = False,
+    wait_after: Tuple[int, ...] = (),
   ) -> None:
     """Clear and start the sequencer, queue each move, then wait until the last is played.
 
@@ -1261,6 +1278,8 @@ class Arm:
       moves: each queued move, from ``_get_queued_move``.
       with_model_updates: play each move on its own, then read and pass on the pose, as
         ``_report_pose``; each item ends with every motor's move done, so the path is the same.
+      wait_after: indices of the moves after which queuing pauses until the device has played
+        them.
 
     Raises:
       MantisMotionError: if a motor reports an error first.
@@ -1276,9 +1295,14 @@ class Arm:
     await self._driver._unchecked_fw_clear_sequencer()
     await self._driver._unchecked_fw_start_sequencer()
     try:
-      for targets in moves:
+      queued = 0
+      for index, targets in enumerate(moves):
         item = await self._driver._queue_move_item(targets=targets)
-      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(moves))
+        queued += 1
+        if index in wait_after and index < len(moves) - 1:
+          await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * queued)
+          queued = 0
+      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * queued)
     except BaseException:
       try:
         await self._driver._unchecked_fw_abort_sequencer()
@@ -1789,10 +1813,12 @@ class Arm:
     return states
 
   def _get_place(self, *, joint_state: JointState) -> Optional[Tuple[str, int]]:
-    """The approach path, by name, and its line the head stands at, if it stands at a line of one's
-    descended part (after the path's last line at the safe height), within
-    ``APPROACH_PATH_TOLERANCE``; None in the open. Of lines the head matches on several paths, the
-    deepest along its path is taken.
+    """The approach path, by name, and the index of its line where the head stands; None in the
+    open.
+
+    Only lines below the safe height count, after the path's first line at the safe height. The head
+    must be within ``APPROACH_PATH_TOLERANCE`` of the line. If the head matches lines on several
+    paths, the line furthest along its path wins.
 
     Args:
       joint_state: where the motors stand, as ``request_joint_state`` reads them.
@@ -1802,8 +1828,15 @@ class Arm:
     place: Optional[Tuple[str, int]] = None
     for name, path in (self.configuration.approach_paths or {}).items():
       states = self._get_approach_path_states(path=path)
-      for index in range(self._get_descent_start(path=path), len(states)):
+      at_safe_height = [
+        cast(float, state.z) <= APPROACH_PATH_TOLERANCE - SAFE_HEIGHT for state in states
+      ]
+      if True not in at_safe_height:
+        continue
+      for index in range(at_safe_height.index(True) + 1, len(states)):
         state = states[index]
+        if at_safe_height[index]:
+          continue
         line_x, line_y = cast(float, state.x), cast(float, state.y)
         near = (
           math.hypot(x - line_x, y - line_y) <= APPROACH_PATH_TOLERANCE
@@ -2337,6 +2370,148 @@ class Arm:
       name=WASH_APPROACH_PATH.format(position=position), with_model_updates=with_model_updates
     )
 
+  def _get_chip_slot_path(self, *, slot: int) -> List[MantisArmCoordinate]:
+    """A chip slot's path from its safe start into the slot and back out, with every line checked.
+
+    Raises:
+      MantisConfigurationError: without the slot's path; nothing moves.
+      MantisKinematicsError, ValueError: as ``_get_route_line_targets``.
+    """
+    name = CHIP_SLOT_APPROACH_PATH.format(slot=slot)
+    path = (self.configuration.approach_paths or {}).get(name)
+    if path is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no path into chip slot {slot} for this unit; give its "
+        "configuration folder (oem_config_directory) or a configuration saved with it"
+      )
+    self._get_route_targets(route=path)
+    return path
+
+  @staticmethod
+  def _get_attach_line(*, path: List[MantisArmCoordinate]) -> int:
+    """The index of the line where a chip slot's descent ends: the last line before the head first
+    moves sideways below the safe height. Every recorded pick-up and placement waits at this line
+    until the device has played it.
+
+    Raises:
+      MantisConfigurationError: if the path never moves sideways below the safe height.
+    """
+    route_end = CHIP_CHANGER_ROUTE[-1]
+    x, y, z = route_end.x, route_end.y, cast(float, route_end.z)
+    for index, line in enumerate(path):
+      sideways = line.x is not None and (line.x, line.y) != (x, y)
+      if sideways and z > APPROACH_PATH_TOLERANCE - SAFE_HEIGHT:
+        return index - 1
+      if line.x is not None and line.y is not None:
+        x, y = line.x, line.y
+      if line.z is not None:
+        z = line.z
+    raise MantisConfigurationError("a chip slot path never moves sideways below the safe height")
+
+  async def _move_through_chip_slot(
+    self, *, path: List[MantisArmCoordinate], attach_line: int, with_model_updates: bool
+  ) -> None:
+    """Move from idle along ``CHIP_CHANGER_ROUTE``, through a chip slot's path and back the same way
+    to idle, queued as in the recordings. Queuing pauses at the attach line and before idle until
+    the device has played the moves so far.
+
+    Args:
+      path: the slot's path, in the order played.
+      attach_line: the line of ``path`` to wait at.
+      with_model_updates: as ``_play_queued_moves``.
+    """
+    if not await self.request_is_parked():
+      await self.park(with_model_updates=with_model_updates)
+    idle = [FRONT_IDLE_ROUTE[0], FRONT_IDLE_ROUTE[-1]]
+    route = [*idle, *CHIP_CHANGER_ROUTE, *path, *CHIP_CHANGER_ROUTE, *idle]
+    profiles = self._get_route_profiles()
+    moves = [
+      self._get_queued_move(targets=targets, profiles=profiles)
+      for targets in self._get_route_targets(route=route)
+    ]
+    first_path_line = len(idle) + len(CHIP_CHANGER_ROUTE)
+    await self._play_queued_moves(
+      moves=moves,
+      with_model_updates=with_model_updates,
+      wait_after=(first_path_line + attach_line, len(route) - len(idle) - 1),
+    )
+    if not with_model_updates:  # else passed on after the last move
+      await self._report_pose()
+
+  async def pick_up_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
+    """Pick up the chip in a chip slot along the unit's path into it, from wherever the head stands,
+    and return to idle, as the recorded pick-ups do.
+
+    Args:
+      slot: the chip slot, 1 to 6.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
+
+    Raises:
+      MantisConfigurationError: without the slot's path; nothing moves.
+      MantisMotionError: if the arm is not brought up, a chip is already on the head, or a motor
+        faults.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
+    """
+    self._check_initialized()
+    if self._attached_chip is not None:
+      raise MantisMotionError(
+        f"{self._driver.name}: the chip from slot {self._attached_chip} is on the head; "
+        "place it first"
+      )
+    path = self._get_chip_slot_path(slot=slot)
+    async with self._driver._show_action(action="pick_up_chip"):
+      await self._move_through_chip_slot(
+        path=path,
+        attach_line=self._get_attach_line(path=path),
+        with_model_updates=with_model_updates,
+      )
+    self._attached_chip = slot
+    logger.info("[%s] picked up the chip in slot %d", self._driver.name, slot)
+
+  async def place_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
+    """Place the chip on the head back into its chip slot along the unit's path into it played
+    backwards, from wherever the head stands, and return to idle, as the recorded placements do.
+
+    Args:
+      slot: the chip slot the chip was picked up from, 1 to 6.
+      with_model_updates: as for ``pick_up_chip``.
+
+    Raises:
+      MantisConfigurationError: without the slot's path; nothing moves.
+      MantisMotionError: if the arm is not brought up, no chip is on the head, the chip is from
+        another slot (nothing moves), or a motor faults.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
+    """
+    self._check_initialized()
+    if self._attached_chip is None:
+      raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
+    if slot != self._attached_chip:
+      raise MantisMotionError(
+        f"{self._driver.name}: the chip on the head is from slot {self._attached_chip}, not "
+        f"{slot}; place it back there"
+      )
+    path = self._get_chip_slot_path(slot=slot)
+    attach_line = self._get_attach_line(path=path)
+    async with self._driver._show_action(action="place_chip"):
+      await self._move_through_chip_slot(
+        path=path[::-1],
+        attach_line=len(path) - 1 - attach_line,
+        with_model_updates=with_model_updates,
+      )
+    logger.info("[%s] placed the chip back into slot %d", self._driver.name, slot)
+    self._attached_chip = None
+
+  async def return_chip(self, *, with_model_updates: bool = False) -> None:
+    """Place the chip on the head back into the slot it was picked up from.
+
+    Raises:
+      MantisMotionError: if no chip is on the head, or as for ``place_chip``.
+    """
+    if self._attached_chip is None:
+      raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
+    await self.place_chip(slot=self._attached_chip, with_model_updates=with_model_updates)
+
   async def _park(self, *, with_model_updates: bool = False) -> None:
     """Park at idle and lower Z to ``SHUTDOWN_Z``, as in the recorded close.
 
@@ -2396,12 +2571,15 @@ class Arm:
     if not with_model_updates:  # else passed on after the last move
       await self._report_pose()
 
-  async def _halt(self) -> None:
+  async def _halt(self, *, park: bool = True) -> None:
     """Stop every motor at its default deceleration, then park a v4 arm if it was brought up and
     every motor stopped; a v3 arm is not parked until a v3 has run its moves.
 
     Each stop runs whether or not the one before it succeeded, its failure logged; the arm is no
     longer brought up after it. Without a park, where the motors stopped is read and logged.
+
+    Args:
+      park: False leaves the arm where it stopped and, if every motor stopped, still brought up.
     """
     initialized, self._initialized = self._initialized, False
     if self._get_generation() == "v3":
@@ -2413,7 +2591,8 @@ class Arm:
         logger.warning("[%s] a motor did not stop; the arm is not parked", self._driver.name)
       await self._log_where_it_stopped()
       return
-    if not initialized:
+    if not initialized or not park:
+      self._initialized = initialized
       await self._log_where_it_stopped()
       return
     try:
