@@ -22,7 +22,7 @@ from .driver.features.plate_clamp import PlateClamp
 from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
-from .driver.simulator import MantisSimulationDriver
+from .driver.simulator import MantisSimulationArm, MantisSimulationDriver
 from .resource_model import (
   ARM_BASE_X,
   ARM_BASE_Y,
@@ -256,6 +256,8 @@ class MantisDevice(Resource):
     if arm is not None:
       # Every move from here on passes where it ended to the model; the bring-up's is read here.
       arm._pose_observer = self._update_arm_model
+      if isinstance(arm, MantisSimulationArm):
+        arm._chip_spots = self.chip_spots  # a simulated slot is checked against the model
       if arm.is_initialized:
         await arm._report_pose()
 

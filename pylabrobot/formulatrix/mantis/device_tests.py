@@ -11,6 +11,7 @@ from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
   MantisArmCoordinate,
   compute_joint_angles,
 )
+from pylabrobot.formulatrix.mantis.driver.errors import MantisMotionError
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources import Coordinate
@@ -106,6 +107,24 @@ class ArmModelTests(unittest.IsolatedAsyncioTestCase):
           location.y + distal.x * math.sin(turned) + distal.y * math.cos(turned),
           places=6,
         )
+
+
+class SimulatedChipSlotTests(unittest.IsolatedAsyncioTestCase):
+  async def test_a_simulated_chip_slot_is_checked_against_its_chip_spot(self):
+    device = Mantis(simulation=True)
+    with mock.patch.object(LedBar, "_sleep", autospec=True):
+      await device.setup(skip_arm=True)
+    self.addAsyncCleanup(device.stop, accept_chip_left_on_head=True)
+    arm = device.arm
+    assert arm is not None
+    with self.assertRaisesRegex(MantisMotionError, "chip slot 1 holds no chip in the model"):
+      await arm._check_chip_slot_tag(slot=1, action="pick_up_chip")
+    device.chip_spots[1].assign_child_resource(resource=mantis_chip_low_volume_hi_fi(name="chip_1"))
+    await arm._check_chip_slot_tag(slot=1, action="pick_up_chip")
+    with self.assertRaisesRegex(MantisMotionError, "chip slot 1 already holds chip chip_1"):
+      await arm._check_chip_slot_tag(slot=1, action="place_chip")
+    arm._attached_chip = 1  # its chip is on the head
+    await arm._check_chip_slot_tag(slot=1, action="place_chip")
 
 
 if __name__ == "__main__":

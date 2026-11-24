@@ -2438,9 +2438,45 @@ class Arm:
     if not with_model_updates:  # else passed on after the last move
       await self._report_pose()
 
+  async def _check_chip_slot_tag(
+    self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
+  ) -> None:
+    """Read a chip slot's tag: a pick-up needs a chip there, a placement an empty slot.
+
+    A tag not read whole in time reads as an empty slot.
+
+    Args:
+      slot: the chip slot, 1 to 6.
+      action: "pick_up_chip" or "place_chip".
+
+    Raises:
+      MantisConfigurationError: without an RFID reader, or as ``Rfid.request_tag``; nothing is sent.
+      MantisMotionError: if the tag rules the action out; only the tag read is sent.
+    """
+    rfid = self._driver.rfid
+    if rfid is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no RFID reader answered at setup, so chip slot {slot} cannot be "
+        "read; nothing moves"
+      )
+    tag = await rfid.request_tag(slot=slot)
+    if action == "place_chip":
+      if tag is not None:
+        chip = "a chip" if tag["chip_type"] is None else f"a {tag['chip_type']} chip"
+        raise MantisMotionError(
+          f"{self._driver.name}: chip slot {slot} already holds {chip} by its tag; nothing moves"
+        )
+      return
+    if tag is None:
+      raise MantisMotionError(
+        f"{self._driver.name}: chip slot {slot} holds no chip by its tag; nothing moves"
+      )
+
   async def pick_up_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
     """Pick up the chip in a chip slot along the unit's path into it, from wherever the head stands,
     and return to idle, as the recorded pick-ups do.
+
+    First the slot's tag is read (``_check_chip_slot_tag``): the pick-up refuses an empty slot.
 
     Args:
       slot: the chip slot, 1 to 6.
@@ -2448,9 +2484,9 @@ class Arm:
         model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
-      MantisConfigurationError: without the slot's path; nothing moves.
+      MantisConfigurationError: without the slot's path or an RFID reader; nothing is sent.
       MantisMotionError: if the arm is not brought up, a chip is already on the head, or a motor
-        faults.
+        faults; or if the tag rules the pick-up out, after the tag read only.
       NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
     """
     self._check_initialized()
@@ -2460,10 +2496,12 @@ class Arm:
         "place it first"
       )
     path = self._get_chip_slot_path(slot=slot)
+    attach_line = self._get_attach_line(path=path)
+    await self._check_chip_slot_tag(slot=slot, action="pick_up_chip")
     async with self._driver._show_action(action="pick_up_chip"):
       await self._move_through_chip_slot(
         path=path,
-        attach_line=self._get_attach_line(path=path),
+        attach_line=attach_line,
         with_model_updates=with_model_updates,
       )
     self._attached_chip = slot
@@ -2473,14 +2511,18 @@ class Arm:
     """Place the chip on the head back into its chip slot along the unit's path into it played
     backwards, from wherever the head stands, and return to idle, as the recorded placements do.
 
+    First the slot's tag is read (``_check_chip_slot_tag``): the placement refuses a slot that
+    holds a chip.
+
     Args:
       slot: the chip slot the chip was picked up from, 1 to 6.
       with_model_updates: as for ``pick_up_chip``.
 
     Raises:
-      MantisConfigurationError: without the slot's path; nothing moves.
+      MantisConfigurationError: without the slot's path or an RFID reader; nothing is sent.
       MantisMotionError: if the arm is not brought up, no chip is on the head, the chip is from
-        another slot (nothing moves), or a motor faults.
+        another slot (nothing moves), or a motor faults; or if the slot's tag reads a chip, after
+        the tag read only.
       NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
     """
     self._check_initialized()
@@ -2493,6 +2535,7 @@ class Arm:
       )
     path = self._get_chip_slot_path(slot=slot)
     attach_line = self._get_attach_line(path=path)
+    await self._check_chip_slot_tag(slot=slot, action="place_chip")
     async with self._driver._show_action(action="place_chip"):
       await self._move_through_chip_slot(
         path=path[::-1],

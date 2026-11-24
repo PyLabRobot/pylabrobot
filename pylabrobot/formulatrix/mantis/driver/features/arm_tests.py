@@ -51,6 +51,7 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   led_bar_frames,
   make_led_bar_answers,
 )
+from pylabrobot.formulatrix.mantis.driver.features.rfid_tests import LOW_VOLUME_HI_FI_TAG_REPLY
 from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   RECORDED_MOTOR_ERROR_EVENTS,
@@ -2371,9 +2372,14 @@ def parse_captured_moves(*, captured: List[str]) -> List[Dict[int, float]]:
   ]
 
 
+# Slot 1's antenna switch (antenna 0): what a chip slot's tag read sends board 0.
+CHIP_SLOT_1_TAG_READ = (0, 41, bytes.fromhex("780001000000"))
+
+
 class ChipSlotTests(ArmTestCase):
   async def set_up_chip_slots(self, *, link: RouteLink):
     driver = await self.set_up_arm(link=link, approach_paths={"chip_slot_1": CHIP_SLOT_1_PATH})
+    link.reader.tags = {0: LOW_VOLUME_HI_FI_TAG_REPLY}  # slot 1's antenna
     driver.arm._initialized = True
     driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
     driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
@@ -2407,6 +2413,8 @@ class ChipSlotTests(ArmTestCase):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
     await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(self.sent(link)[0], CHIP_SLOT_1_TAG_READ)
+    self.assertEqual(self.sent(link).count(CHIP_SLOT_1_TAG_READ), 1)
     self.assert_captured(
       link=link,
       driver=driver,
@@ -2417,7 +2425,10 @@ class ChipSlotTests(ArmTestCase):
     self.sent_before = len(link.written)
     driver._next_item = 1
     driver._wait_for_queue_item.reset_mock()
+    link.reader.tags = {}  # the chip is on the head
     await driver.arm.place_chip(slot=1)
+    self.assertEqual(self.sent(link)[0], CHIP_SLOT_1_TAG_READ)
+    self.assertEqual(self.sent(link).count(CHIP_SLOT_1_TAG_READ), 1)
     self.assert_captured(
       link=link,
       driver=driver,
@@ -2430,6 +2441,7 @@ class ChipSlotTests(ArmTestCase):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
     await driver.arm.pick_up_chip(slot=1)
+    link.reader.tags = {}  # the chip is on the head
     await driver.arm.return_chip()
     written = link.written[self.sent_before :]
     self.assertEqual(bar_states(written=written), [CYAN, "idle", VIOLET, "idle"])
@@ -2447,6 +2459,7 @@ class ChipSlotTests(ArmTestCase):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
     await driver.arm.pick_up_chip(slot=1)
+    link.reader.tags = {}  # the chip is on the head
     with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
       await driver.stop()
     driver._next_item = 1
@@ -2476,6 +2489,36 @@ class ChipSlotTests(ArmTestCase):
     driver = await self.set_up_chip_slots(link=link)
     with self.assertRaisesRegex(MantisConfigurationError, "no path into chip slot 2"):
       await driver.arm.pick_up_chip(slot=2)
+    self.assertEqual(self.sent(link), [])
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_pick_up_from_an_empty_slot_is_refused_after_the_tag_read(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    link.reader.tags = {}
+    with self.assertRaisesRegex(MantisMotionError, "chip slot 1 holds no chip by its tag"):
+      await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(self.sent(link), [CHIP_SLOT_1_TAG_READ])
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_placement_into_a_slot_that_holds_a_chip_is_refused_after_the_tag_read(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    self.sent_before = len(link.written)
+    with self.assertRaisesRegex(
+      MantisMotionError, "chip slot 1 already holds a low_volume_hi_fi chip by its tag"
+    ):
+      await driver.arm.place_chip(slot=1)
+    self.assertEqual(self.sent(link), [CHIP_SLOT_1_TAG_READ])
+    self.assertEqual(driver.arm.attached_chip, 1)
+
+  async def test_without_an_rfid_reader_nothing_is_sent(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    driver.rfid = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no RFID reader answered at setup"):
+      await driver.arm.pick_up_chip(slot=1)
     self.assertEqual(self.sent(link), [])
     self.assertIsNone(driver.arm.attached_chip)
 
