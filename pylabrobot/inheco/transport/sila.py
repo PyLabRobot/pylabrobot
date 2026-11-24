@@ -50,6 +50,7 @@ class SiLACommand:
   request_id: int
   future: asyncio.Future[Any]
   duration: float | None = None
+  on_data: Callable[[int, str], None] | None = None
 
   async def wait(self, timeout: float | None = None) -> Any:
     """Wait without canceling the instrument command when the caller stops waiting."""
@@ -166,8 +167,14 @@ class InhecoSiLAInterface:
       else:
         request_id = int(required_text(event, "requestId"))
         if name == "DataEvent":
-          if self._on_data is not None:
-            self._on_data(request_id, required_text(event, "dataValue"))
+          command = self._pending.get(request_id)
+          on_data = (
+            command.on_data
+            if command is not None and not command.future.done() and command.on_data
+            else self._on_data
+          )
+          if on_data is not None:
+            on_data(request_id, required_text(event, "dataValue"))
         else:
           self._finish(request_id, event, error_event=name == "ErrorEvent")
     except (ValueError, ET.ParseError) as error:
@@ -216,13 +223,20 @@ class InhecoSiLAInterface:
       self._lock_id = None
       await self.io.stop()
 
-  async def start_command(self, command: str, **kwargs: Any) -> SiLACommand:
-    """Register before sending so an early callback cannot be lost."""
+  async def start_command(
+    self, command: str, *, on_data: Callable[[int, str], None] | None = None, **kwargs: Any
+  ) -> SiLACommand:
+    """Register before sending so early callbacks reach this command's optional data handler.
+
+    A command-specific handler overrides the session's data handler while the command is pending.
+    It observes data only; it does not change response/error completion or timeout semantics.
+    """
     if self._server is None:
       raise RuntimeError("SiLA session is not set up")
     self._next_id = self._next_id % (2**31 - 1) + 1
     request_id = self._next_id
     pending = SiLACommand(command, request_id, asyncio.get_running_loop().create_future())
+    pending.on_data = on_data
     pending.future.add_done_callback(_observe_completion)
     pending.future.add_done_callback(lambda _: self._pending.pop(request_id, None))
     self._pending[request_id] = pending
