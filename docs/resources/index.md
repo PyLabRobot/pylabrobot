@@ -176,6 +176,7 @@ library/agenbio
 library/agilent
 library/alpaqua
 library/azenta
+library/beckman_coulter
 library/bioer
 library/biorad
 library/boekel

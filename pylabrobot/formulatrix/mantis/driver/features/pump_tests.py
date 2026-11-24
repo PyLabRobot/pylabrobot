@@ -11,6 +11,8 @@ from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
+  CALIBRATION_WRITTEN_BACK,
+  PUMP_READ,
   RECORDED_CALIBRATION,
   RECORDING,
   DriverTestCase,
@@ -28,6 +30,46 @@ CHIP_CONTROLLER_SETTLED = (10, 16, bytes.fromhex("0100"), bytes.fromhex("0100"))
 VACUUM_CONTROLLER_UNSETTLED = (10, 16, bytes.fromhex("0200"), bytes.fromhex("0200"))
 
 
+# A Mantis v4's tare at startup (board, command, request, reply; "-" is empty): for each sensor it
+# turns the controller off, vents the line, reads twice 0.3 s apart, lowers the offset, closes it.
+CAPTURED_TARE = """
+10:20:0000:0000004049d0853f000000e06f292bc0
+10:12:0000:0000
+10:13:00000000:-
+10:32:00000000:-
+10:34:00001027:-
+10:30:0000:000000003abcf23f
+10:30:0000:000000003abcf23f
+10:21:00000000004049d0853f00000020f7802dc0:-
+10:34:00000000:-
+10:20:0100:00000080d1d5853f00000000b4572bc0
+10:12:0100:0000
+10:13:01000000:-
+10:32:01000000:-
+10:34:01001027:-
+10:30:0100:00000000f808f23f
+10:30:0100:00000000f808f23f
+10:21:010000000080d1d5853f00000000d3982dc0:-
+10:34:01000000:-
+""".split()
+
+
+# A Mantis v4 ending an operation, as captured: the pump read running, each controller disabled,
+# the pump off, the reservoir valves open for 2 s and closed, the pump read off.
+CAPTURED_RELEASE = """
+10:14:-:0100
+10:13:00000000:-
+10:13:01000000:-
+10:13:02000000:-
+10:15:0000:-
+10:34:0000204e:-
+10:32:0000204e:-
+10:34:00000000:-
+10:32:00000000:-
+10:14:-:0000
+""".split()
+
+
 class PumpTests(DriverTestCase):
   async def asyncSetUp(self):
     self.link = FakeLink(answers=make_answers())
@@ -39,10 +81,61 @@ class PumpTests(DriverTestCase):
   def sent(self) -> List[Tuple[int, int, bytes]]:
     return [parse_frame(frame=frame)[1:] for frame in self.link.written[self.sent_before :]]
 
-  async def test_setup_reads_the_calibration_and_writes_nothing(self):
-    self.assertEqual(self.driver.configuration.feedback_sensor_parameters, RECORDED_CALIBRATION)
-    sent = [parse_frame(frame=frame)[1:] for frame in self.link.written[: self.sent_before]]
-    self.assertEqual([read for read in sent if read[0] == 10], [(10, 1, b"")] + CALIBRATION_READS)
+  async def test_setup_reads_the_calibration_then_tares_as_recorded(self):
+    exchanges = [
+      (int(board), int(command), bytes.fromhex(request.strip("-")), bytes.fromhex(reply.strip("-")))
+      for board, command, request, reply in (exchange.split(":") for exchange in CAPTURED_TARE)
+    ]
+    link = FakeLink(answers=make_answers())
+    for board, command, request, _ in exchanges:
+      link.answers[(board, command, request)] = [
+        reply for *key, reply in exchanges if tuple(key) == (board, command, request)
+      ]
+    sleeps = self.pump_sleep.await_count
+    driver = await self.set_up_driver(link=link)
+    sent = [parse_frame(frame=frame)[1:] for frame in link.written]
+    self.assertEqual(
+      [frame for frame in sent if frame[0] == 10],
+      [(10, 1, b"")] + CALIBRATION_READS + [exchange[:3] for exchange in exchanges],
+    )
+    # Twice 0.3 s per sensor; the calibration kept is the one read before.
+    self.assertEqual(
+      [call.kwargs["seconds"] for call in self.pump_sleep.await_args_list[sleeps:]], [0.3] * 4
+    )
+    self.assertEqual(driver.configuration.feedback_sensor_parameters, RECORDED_CALIBRATION)
+
+  def answer_release(self) -> List[Tuple[int, int, bytes]]:
+    """Answer the captured release; return its requests, in order."""
+    requests = []
+    for exchange in CAPTURED_RELEASE:
+      board, command, request, reply = exchange.split(":")
+      key = (int(board), int(command), bytes.fromhex(request.strip("-")))
+      if key[1] != 14:
+        self.link.answers[key] = [bytes.fromhex(reply.strip("-"))]
+      requests.append(key)
+    self.link.answers[(10, 14, b"")] = [bytes.fromhex("0100"), bytes.fromhex("0000")]
+    return requests
+
+  async def test_stop_releases_the_pressure_as_recorded_then_writes_back(self):
+    requests = self.answer_release()
+    sleeps = self.pump_sleep.await_count
+    await self.driver.stop()
+    sent = [frame for frame in self.sent() if frame[0] == 10]
+    self.assertEqual(sent, requests + CALIBRATION_WRITTEN_BACK)
+    sleeps = [call.kwargs["seconds"] for call in self.pump_sleep.await_args_list[sleeps:]]
+    self.assertEqual(sleeps, [2.0])
+
+  async def test_a_v3_has_no_reservoir_to_release(self):
+    requests = self.answer_release()
+    self.driver.configuration.generation = "v3"
+    await self.pump._stop()
+    released = [request for request in requests if request[1] not in (32, 34)]
+    self.assertEqual(self.sent(), released + CALIBRATION_WRITTEN_BACK)
+
+  async def test_stop_with_the_pump_off_writes_the_calibration_back_once(self):
+    await self.pump._stop()
+    await self.pump._stop()
+    self.assertEqual(self.sent(), [PUMP_READ, *CALIBRATION_WRITTEN_BACK, PUMP_READ])
 
   async def test_measure_pressure(self):
     cases: List[Tuple[PressureController, str, float]] = [
@@ -104,14 +197,14 @@ class PumpDiscoveryTests(DriverTestCase):
   async def test_built_only_when_the_pressure_board_answers(self):
     for absent_boards, built in (((), True), ((10,), False)):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         link = FakeLink(answers=make_answers(absent_boards=absent_boards))
         driver = await self.set_up_driver(link=link)
         self.assertEqual(driver.pump is not None, built)
         sent = [parse_frame(frame=frame)[1:] for frame in link.written]
         self.assertEqual(any(read in sent for read in CALIBRATION_READS), built)
 
-  async def test_calibration_not_answered_leaves_it_empty(self):
+  async def test_calibration_not_answered_fails_the_tare(self):
     answers = make_answers()
     for board, command, request in CALIBRATION_READS:
       del answers[(board, command, request)]
@@ -125,8 +218,8 @@ class PumpDiscoveryTests(DriverTestCase):
       return await send_command(**kwargs)
 
     with mock.patch.object(driver, "_send_command", side_effect=send):
-      await driver.setup(skip_arm=True)
-    self.addAsyncCleanup(driver.stop)
+      with self.assertRaises(TimeoutError):
+        await driver.setup(skip_arm=True)
     self.assertIsNotNone(driver.pump)
     self.assertEqual(driver.configuration.feedback_sensor_parameters, {})
 

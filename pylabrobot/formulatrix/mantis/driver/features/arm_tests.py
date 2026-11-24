@@ -39,16 +39,19 @@ from pylabrobot.formulatrix.mantis.driver.features.arm import (
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   BLUE,
+  CYAN,
   GREEN,
   OFF,
   RED,
   START_IDLE_ANIMATION,
   STOP_ANIMATION,
+  VIOLET,
   bar_states,
   color_write,
   led_bar_frames,
   make_led_bar_answers,
 )
+from pylabrobot.formulatrix.mantis.driver.features.rfid_tests import LOW_VOLUME_HI_FI_TAG_REPLY
 from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   RECORDED_MOTOR_ERROR_EVENTS,
@@ -316,12 +319,12 @@ class ArmTestCase(DriverTestCase):
 
 
 def wait_briefly_for_unpower(*, driver):
-  """Only unpowering the arms (command 19), never answered, waits briefly: a slow runner cannot time
-  out a command that is answered."""
+  """Only unpowering an arm motor (command 19, open loop), never answered, waits briefly: a slow
+  runner cannot time out a command that is answered, such as energising it."""
   send_command = driver._send_command
 
   async def send(**kwargs):
-    if kwargs["command"] == 19:
+    if kwargs["command"] == 19 and kwargs["payload"][2:] == b"\x01\x00":
       kwargs["timeout"] = 0.25
     return await send_command(**kwargs)
 
@@ -627,6 +630,24 @@ class StopTests(ArmTestCase):
     self.assertEqual(sent[-2:], TURN_OFF)
     self.assertFalse(driver.arm.is_initialized)
 
+  async def test_stop_with_a_chip_on_the_head_stops_without_parking_then_refuses(self):
+    link = self.close_link()
+    driver = await self.set_up_arm(link=link)
+    driver.arm._initialized = True
+    driver.arm._attached_chip = 1
+    driver._next_item = 14  # numbered as in the recorded close
+    with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
+      await driver.stop()
+    sent = self.sent(link)
+    self.assertEqual(sent[:4], HALT)
+    self.assertEqual([frame for frame in sent if frame[1] in (22, 68)], [])  # Z not lowered
+    self.assertTrue(driver._connected)
+    self.assertTrue(driver.arm.is_initialized)
+    self.sent_before = len(link.written)
+    await driver.stop(accept_chip_left_on_head=True)
+    self.assertEqual(self.sent(link)[-2:], TURN_OFF)
+    self.assertFalse(driver._connected)
+
   async def test_z_not_up_by_its_encoder_stops_before_the_arms_move(self):
     link = self.close_link()
     link.answers[(0, 84, b"\x02\x00")] = [bytes.fromhex(Z_DOWN_ENCODER_REPLY)]
@@ -744,7 +765,7 @@ class DiscoveryTests(ArmTestCase):
   async def test_board_11_selects_the_arm_implementation(self):
     for absent_boards, generation in (((), "v4"), ((11,), "v3")):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
@@ -1682,18 +1703,8 @@ class ApproachPathTests(ArmTestCase):
     self.assertEqual(self.sent(link), [])
 
   async def test_leaving_the_waste_plays_its_path_backwards(self):
-    # From the waste's last line back to its start, line by line; a line naming nothing is skipped.
-    # A line moving the arms and raising Z is preceded by the arms alone at depth, Z held.
-    way_out = [
-      (-60.0, 10.0, 30.0),
-      (None, None, 30.0),
-      (-50.0, 20.0, None),
-      (-50.0, 20.0, -1.57),
-      (None, None, -1.57),
-      (15.0, 30.0, -1.57),
-      (None, None, -1.57),
-      (15.0, 30.0, None),
-    ]
+    # From the line the head stands at back to the waste's start, every line as written.
+    way_out = list(reversed(SYNTHETIC_WASTE_ROUTE))
     first_item = 16 - len(way_out) + 1
     expected = []
     for item, (x, y, z) in enumerate(way_out, start=first_item):
@@ -1874,7 +1885,8 @@ CAPTURED_STATUS_RUNS = {
   2: [("0000", 8), ("0400", 13), ("0500", 1), ("0400", 12)],
 }
 # board, command, request payload, reply payload; "-" is an empty payload. Each following-error
-# configuration read (command 82) answers as captured: enabled, at most 4.0.
+# configuration read (command 82) answers as captured: enabled, at most 4.0. Last, the captured
+# tare of the bottle and chip sensors; the stop's pump read and their calibration written back.
 CAPTURED_EXCHANGES = """
 0:1:-:34002e00320030002e0036000000
 10:1:-:31002e0030002e0035000000
@@ -1961,6 +1973,25 @@ CAPTURED_EXCHANGES = """
 0:24:0000814e1be8b40a8a40:0000
 0:24:0100814e1be8b40a8a40:0000
 0:24:0200bb34be4f05c2be40:0000
+10:12:0000:0000
+10:13:00000000:-
+10:32:00000000:-
+10:34:00001027:-
+10:30:0000:00000000ade6f33f
+10:30:0000:00000000ade6f33f
+10:21:000000000040ed05873f0000004080232dc0:-
+10:34:00000000:-
+10:12:0100:0000
+10:13:01000000:-
+10:32:01000000:-
+10:34:01001027:-
+10:30:0100:00000000d170f43f
+10:30:0100:000000000029f53f
+10:21:010000000040ed05873f000000a0ca4b2dc0:-
+10:34:01000000:-
+10:14:-:0000
+10:21:000000000040ed05873f000000a0aaa62ac0:-
+10:21:010000000040ed05873f000000a0aaa62ac0:-
 """.split()
 
 
@@ -2249,6 +2280,370 @@ class V3ArmTests(DriverTestCase):
     driver.save_configuration(path=saved)
     with open(saved, encoding="utf-8") as file:
       self.assertEqual(json.load(file)["arm"], SYNTHETIC_V3_ARM_BLOCK)
+
+
+# A unit's path through chip slot 1, in the arm frame, as its chip changer routes give it.
+CHIP_SLOT_1_PATH: List[List[Optional[float]]] = [
+  [70.394, 63.965, -1.57],
+  [80.052, 12.077, -1.57],
+  [94.052, -7.923, -1.57],
+  [124.052, 2.077, -1.57],
+  [124.052, 12.077, -1.57],
+  [124.052, 12.077, 10.938],
+  [124.052, 12.077, 10.938],
+  [122.385, 12.398, 10.561],
+  [122.385, 12.398, None],
+  [122.385, 12.398, -1.57],
+  [89.714, 10.769, -1.57],
+]
+# The moves a Mantis v4 was sent to pick up slot 1's chip and place it back: each motor's target in
+# device units, "-" held, at the recorded profiles; on the unit the recorded idle targets are from.
+CAPTURED_CHIP_SLOT_1_PICK_UP = """
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+43.109383064569144,-8.651398664407912,-61.811023622047244
+56.29303487592246,-44.245804640535354,-61.811023622047244
+68.97776972857237,-49.32540175358294,-61.811023622047244
+78.33455945880014,-32.777253468679135,-61.811023622047244
+76.05956795856261,-29.122652531670656,-61.811023622047244
+76.05956795856261,-29.122652531670656,430.62992125984255
+76.05956795856261,-29.122652531670656,430.62992125984255
+75.13806588014809,-29.569602303281187,415.78740157480314
+75.13806588014809,-29.569602303281187,-
+75.13806588014809,-29.569602303281187,-61.811023622047244
+60.931962501316455,-41.48356515074482,-61.811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+""".split()
+CAPTURED_CHIP_SLOT_1_PLACE = """
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+60.931962501316455,-41.48356515074482,-61.811023622047244
+75.13806588014809,-29.569602303281187,-61.811023622047244
+75.13806588014809,-29.569602303281187,-
+75.13806588014809,-29.569602303281187,415.78740157480314
+76.05956795856261,-29.122652531670656,430.62992125984255
+76.05956795856261,-29.122652531670656,430.62992125984255
+76.05956795856261,-29.122652531670656,-61.811023622047244
+78.33455945880014,-32.777253468679135,-61.811023622047244
+68.97776972857237,-49.32540175358294,-61.811023622047244
+56.29303487592246,-44.245804640535354,-61.811023622047244
+43.109383064569144,-8.651398664407912,-61.811023622047244
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,0.0
+0.020103664148598502,0.35838363081526514,-0.11811023622047244
+""".split()
+CAPTURED_CHIP_SLOT_WAITS = {"pick_up": (12, 20, 22), "place": (10, 20, 22)}
+# The captures send Z at idle after a chip slot as this value, which no unit file holds. PyLabRobot
+# sends 0, the flag, as it does for every other move to idle.
+CAPTURED_CHIP_SLOT_IDLE_Z = -0.11811023622047244
+
+
+def parse_captured_moves(*, captured: List[str]) -> List[Dict[int, float]]:
+  """Each captured queued move's targets, by motor; a held motor left out."""
+  return [
+    {motor: float(value) for motor, value in enumerate(move.split(",")) if value != "-"}
+    for move in captured
+  ]
+
+
+# A unit's waste and wash approach paths, in the arm frame, as its sequence files give them.
+WASTE_PATH: List[List[Optional[float]]] = [
+  [None, None, None],
+  [15.0, 30.0, None],
+  [None, None, -1.57],
+  [15.0, 30.0, -1.57],
+  [None, None, -1.57],
+  [-32.284, 40.775, -1.57],
+  [-49.717, 19.808, -1.57],
+  [-62.821, 5.233, -1.57],
+  [-69.677, -20.8, -1.57],
+  [-78.522, -43.101, -1.57],
+  [-78.264, -46.479, -1.57],
+  [None, None, 32.032],
+  [-84.7, -44.797, 32.032],
+  [-84.7, -44.797, 37.032],
+]
+WASH_PATH_START: List[List[Optional[float]]] = [
+  [None, None, -1.57],
+  [None, None, -1.57],
+  [54.676, 41.632, -1.57],
+  [82.278, 31.695, -1.57],
+  [84.698, 3.782, -1.57],
+  [86.913, -22.157, -1.57],
+  [88.371, -42.402, -1.57],
+  [71.77, -56.117, -1.57],
+  [None, None, 36.978],
+]
+WASH_1_PATH = WASH_PATH_START + [
+  [None, None, 49.355],
+  [74.179, -50.948, 49.355],
+  [74.179, -50.948, 54.355],
+]
+WASH_2_PATH = WASH_PATH_START + [
+  [None, None, 49.763],
+  [90.181, -50.918, 49.763],
+  [90.181, -50.918, 54.763],
+]
+# The moves a Mantis v4 was sent leaving the waste after a prime, and wash 1 after a wash, each from
+# the path's last line to its start; and leaving wash 2 for wash 1, to wash 2's safe-Z line.
+CAPTURED_WASTE_EXIT = """
+-48.623750510575164,90.60297564169927,1457.9527559055118
+-48.623750510575164,90.60297564169927,1261.1023622047242
+-,-,1261.1023622047242
+-52.06422696457573,89.18090048846733,-61.811023622047244
+-51.54971403777015,87.83676970166538,-61.811023622047244
+-51.49355633418472,76.11624480382535,-61.811023622047244
+-43.772995879562316,64.29607679895277,-61.811023622047244
+-38.963765283785115,54.111835306886775,-61.811023622047244
+-23.154317512109415,40.336540148989464,-61.811023622047244
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-
+""".split()
+CAPTURED_WASH_1_EXIT = """
+83.7483705378616,-71.40425655137432,2139.9606299212596
+83.7483705378616,-71.40425655137432,1943.1102362204722
+-,-,1943.1102362204722
+-,-,1455.8267716535433
+86.14833664284704,-72.7025263954954,-61.811023622047244
+81.96456120656154,-62.15362930864285,-61.811023622047244
+72.42144291456674,-58.796324530733784,-61.811023622047244
+61.14162609777459,-47.81667445795686,-61.811023622047244
+52.179786593815464,-29.60155803665411,-61.811023622047244
+35.35445745832783,-20.570740782776905,-61.811023622047244
+-,-,-61.811023622047244
+-,-,-61.811023622047244
+""".split()
+CAPTURED_WASH_2_TO_SAFE_Z = """
+86.28565064513707,-61.79819724116115,1959.1732283464567
+""".split()
+
+
+class ApproachPathExitTests(ArmTestCase):
+  async def assert_leaving_sends(self, *, name: str, index: int, until: int, captured: List[str]):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_arm(
+      link=link,
+      approach_paths={"waste": WASTE_PATH, "wash_1": WASH_1_PATH, "wash_2": WASH_2_PATH},
+    )
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._next_item = 1
+    await driver.arm._leave_approach_path(name=name, index=index, until=until)
+    sent = [payload for _, command, payload in self.sent(link) if command == 68]
+    expected = parse_captured_moves(captured=captured)
+    self.assertEqual(len(sent), len(expected))
+    for move, (payload, targets) in enumerate(zip(sent, expected)):
+      with self.subTest(move=move):
+        expected_payload = get_queued_move(item=move + 1, targets=targets)
+        self.assertEqual(payload[:6], expected_payload[:6])
+        for offset in range(6, len(payload), 8):
+          (sent_value,) = struct.unpack_from("<d", payload, offset)
+          (expected_value,) = struct.unpack_from("<d", expected_payload, offset)
+          self.assertAlmostEqual(sent_value, expected_value, places=9)
+
+  async def test_leaving_the_waste_sends_the_captured_moves(self):
+    # The line the head stands at first, the arms and Z together on the line out of the waste.
+    await self.assert_leaving_sends(
+      name="waste", index=len(WASTE_PATH) - 1, until=0, captured=CAPTURED_WASTE_EXIT
+    )
+
+  async def test_leaving_a_wash_sends_the_captured_moves(self):
+    await self.assert_leaving_sends(
+      name="wash_1", index=len(WASH_1_PATH) - 1, until=0, captured=CAPTURED_WASH_1_EXIT
+    )
+
+  async def test_leaving_a_wash_for_the_other_goes_to_its_safe_z_line_only(self):
+    await self.assert_leaving_sends(
+      name="wash_2",
+      index=len(WASH_2_PATH) - 1,
+      until=len(WASH_2_PATH) - 2,
+      captured=CAPTURED_WASH_2_TO_SAFE_Z,
+    )
+
+
+# Slot 1's antenna switch (antenna 0): what a chip slot's tag read sends board 0.
+CHIP_SLOT_1_TAG_READ = (0, 41, bytes.fromhex("780001000000"))
+
+
+class ChipSlotTests(ArmTestCase):
+  async def set_up_chip_slots(self, *, link: RouteLink):
+    driver = await self.set_up_arm(link=link, approach_paths={"chip_slot_1": CHIP_SLOT_1_PATH})
+    link.reader.tags = {0: LOW_VOLUME_HI_FI_TAG_REPLY}  # slot 1's antenna
+    driver.arm._initialized = True
+    driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._next_item = 1
+    return driver
+
+  def assert_captured(
+    self, *, link: RouteLink, driver, captured: List[str], waits: Tuple[int, ...]
+  ):
+    sent = [payload for _, command, payload in self.sent(link) if command == 68]
+    expected = parse_captured_moves(captured=captured)
+    self.assertEqual(len(sent), len(expected))
+    for index, (payload, targets) in enumerate(zip(sent, expected)):
+      with self.subTest(move=index):
+        if index in (1, len(expected) - 1):  # the move to idle: Z at its flag, see above
+          self.assertEqual(targets[2], CAPTURED_CHIP_SLOT_IDLE_Z)
+          targets = {**targets, 2: 0.0}
+        expected_payload = get_queued_move(item=index + 1, targets=targets)
+        self.assertEqual(payload[:6], expected_payload[:6])
+        for offset in range(6, len(payload), 8):
+          (sent_value,) = struct.unpack_from("<d", payload, offset)
+          (expected_value,) = struct.unpack_from("<d", expected_payload, offset)
+          self.assertAlmostEqual(sent_value, expected_value, places=9)
+    self.assertEqual(
+      [(0, 61, b""), (0, 62, b"")], [frame for frame in self.sent(link) if frame[1] in (61, 62)]
+    )
+    waited = [call.kwargs["item"] - 1 for call in driver._wait_for_queue_item.await_args_list]
+    self.assertEqual(tuple(waited), waits)
+
+  async def test_a_pick_up_and_a_placement_queue_the_recorded_moves(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(self.sent(link)[0], CHIP_SLOT_1_TAG_READ)
+    self.assertEqual(self.sent(link).count(CHIP_SLOT_1_TAG_READ), 1)
+    self.assert_captured(
+      link=link,
+      driver=driver,
+      captured=CAPTURED_CHIP_SLOT_1_PICK_UP,
+      waits=CAPTURED_CHIP_SLOT_WAITS["pick_up"],
+    )
+    self.assertEqual(driver.arm.attached_chip, 1)
+    self.sent_before = len(link.written)
+    driver._next_item = 1
+    driver._wait_for_queue_item.reset_mock()
+    link.reader.tags = {}  # the chip is on the head
+    await driver.arm.place_chip(slot=1)
+    self.assertEqual(self.sent(link)[0], CHIP_SLOT_1_TAG_READ)
+    self.assertEqual(self.sent(link).count(CHIP_SLOT_1_TAG_READ), 1)
+    self.assert_captured(
+      link=link,
+      driver=driver,
+      captured=CAPTURED_CHIP_SLOT_1_PLACE,
+      waits=CAPTURED_CHIP_SLOT_WAITS["place"],
+    )
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_the_led_bar_shows_cyan_for_a_pick_up_and_violet_for_a_placement(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    link.reader.tags = {}  # the chip is on the head
+    await driver.arm.return_chip()
+    written = link.written[self.sent_before :]
+    self.assertEqual(bar_states(written=written), [CYAN, "idle", VIOLET, "idle"])
+
+  async def test_return_chip_without_a_chip_and_a_second_pick_up_are_refused(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    with self.assertRaisesRegex(MantisMotionError, "no chip is on the head"):
+      await driver.arm.return_chip()
+    await driver.arm.pick_up_chip(slot=1)
+    with self.assertRaisesRegex(MantisMotionError, "the chip from slot 1 is on the head"):
+      await driver.arm.pick_up_chip(slot=1)
+
+  async def test_after_a_refused_stop_the_chip_returns_then_stop_runs(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    link.reader.tags = {}  # the chip is on the head
+    with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
+      await driver.stop()
+    driver._next_item = 1
+    driver._wait_for_queue_item.reset_mock()
+    self.sent_before = len(link.written)
+    await driver.arm.return_chip()
+    self.assert_captured(
+      link=link,
+      driver=driver,
+      captured=CAPTURED_CHIP_SLOT_1_PLACE,
+      waits=CAPTURED_CHIP_SLOT_WAITS["place"],
+    )
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_placement_into_another_slot_is_refused_and_nothing_moves(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    self.sent_before = len(link.written)
+    with self.assertRaisesRegex(MantisMotionError, "from slot 1, not 2"):
+      await driver.arm.place_chip(slot=2)
+    self.assertEqual(self.sent(link), [])
+    self.assertEqual(driver.arm.attached_chip, 1)
+
+  async def test_without_a_slot_path_nothing_moves(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    with self.assertRaisesRegex(MantisConfigurationError, "no path into chip slot 2"):
+      await driver.arm.pick_up_chip(slot=2)
+    self.assertEqual(self.sent(link), [])
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_pick_up_from_an_empty_slot_is_refused_after_the_tag_read(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    link.reader.tags = {}
+    with self.assertRaisesRegex(MantisMotionError, "chip slot 1 holds no chip by its tag"):
+      await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(self.sent(link), [CHIP_SLOT_1_TAG_READ])
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_placement_into_a_slot_that_holds_a_chip_is_refused_after_the_tag_read(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(slot=1)
+    self.sent_before = len(link.written)
+    with self.assertRaisesRegex(
+      MantisMotionError, "chip slot 1 already holds a low_volume_hi_fi chip by its tag"
+    ):
+      await driver.arm.place_chip(slot=1)
+    self.assertEqual(self.sent(link), [CHIP_SLOT_1_TAG_READ])
+    self.assertEqual(driver.arm.attached_chip, 1)
+
+  async def test_without_an_rfid_reader_nothing_is_sent(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    driver.rfid = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no RFID reader answered at setup"):
+      await driver.arm.pick_up_chip(slot=1)
+    self.assertEqual(self.sent(link), [])
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_head_stopped_inside_a_slot_is_on_its_path(self):
+    # Below the safe height, inside the slot; at it, before and after, in the open.
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    offsets = driver.arm.configuration.offsets
+    z = 0.0
+    for index, (x, y, line_z) in enumerate(CHIP_SLOT_1_PATH):
+      z = z if line_z is None else line_z
+      angles = compute_joint_angles(location=MantisArmCoordinate(x=x, y=y, z=None))
+      joint_state = {0: angles[0] - offsets[0], 1: angles[1] - offsets[1], 2: z}
+      with self.subTest(line=index):
+        place = driver.arm._get_place(joint_state=joint_state)
+        self.assertEqual(place is not None, z > 0)
+        if place is not None:
+          self.assertEqual(place[0], "chip_slot_1")
 
 
 if __name__ == "__main__":

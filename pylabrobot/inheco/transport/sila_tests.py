@@ -62,6 +62,35 @@ class SiLATests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual((await pending.wait()).tag, "ResponseData")
     self.assertEqual(pending.duration, 10)
 
+  async def test_command_data_handlers_are_request_scoped_and_do_not_enter_soap(self):
+    """Concurrent command callbacks use their own observer, with the session as fallback."""
+    first_data, second_data, default_data = [], [], []
+    self.session._on_data = lambda request, data: default_data.append((request, data))
+    self.post.return_value = response("ExecuteMethod")
+    first = await self.session.start_command(
+      "ExecuteMethod", on_data=lambda request, data: first_data.append((request, data))
+    )
+    second = await self.session.start_command(
+      "ExecuteMethod", on_data=lambda request, data: second_data.append((request, data))
+    )
+    third = await self.session.start_command("ExecuteMethod")
+    for pending in (second, first, third):
+      await self.session._handle_event(
+        soap_encode(
+          "DataEvent",
+          {"requestId": pending.request_id, "dataValue": "sample"},
+          method_ns="http://sila.coop",
+        ).encode()
+      )
+    self.assertEqual(first_data, [(first.request_id, "sample")])
+    self.assertEqual(second_data, [(second.request_id, "sample")])
+    self.assertEqual(default_data, [(third.request_id, "sample")])
+    for invocation in self.post.await_args_list:
+      self.assertNotIn(b"on_data", invocation.args[2])
+    for pending in (first, second, third):
+      await self.session._handle_event(event(pending.request_id))
+      await pending.wait()
+
   async def test_error_is_still_raised_by_later_waiter(self):
     self.post.return_value = response("ExecuteMethod")
     pending = await self.session.start_command("ExecuteMethod", methodName="PCR")

@@ -448,29 +448,6 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.assert_head_at(x=-57.0, y=0.0, z=1.57)
 
-  async def test_leaving_a_path_never_moves_the_arms_while_z_rises(self):
-    # Z down positive in device units: a target below where Z stands raises it.
-    driver = self.arm._driver
-    for name in ("waste", "wash_1"):
-      with self.subTest(path=name):
-        if name == "waste":
-          await self.arm.move_to_waste()
-        else:
-          await self.arm.move_to_wash(position=1)
-        positions = dict(self.arm._positions)
-        with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
-          await self.arm.park()
-        self.assertTrue(queue.called)
-        for call in queue.call_args_list:
-          targets = call.kwargs["targets"]
-          named = {motor: target[0] for motor, target in enumerate(targets) if target[1] != 0}
-          arms_move = any(positions[motor] != named[motor] for motor in (0, 1) if motor in named)
-          z_rises = 2 in named and named[2] < positions[2]
-          self.assertFalse(
-            arms_move and z_rises, f"one item moves the arms and raises Z: {targets}"
-          )
-          positions.update(named)
-
   async def test_on_a_path_z_alone_and_bad_arguments_move_nothing(self):
     await self.arm.move_to_waste()
     positions = dict(self.arm._positions)
