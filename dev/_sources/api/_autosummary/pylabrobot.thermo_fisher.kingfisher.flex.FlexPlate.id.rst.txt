@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlate.id
+======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoattribute:: FlexPlate.id

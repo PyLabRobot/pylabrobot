@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlateHolder.unassign\_child\_resource
+===================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: FlexPlateHolder.unassign_child_resource

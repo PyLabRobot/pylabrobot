@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlateHolder.rotate\_to
+====================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: FlexPlateHolder.rotate_to

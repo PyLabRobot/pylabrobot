@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexCommand.opcode
+============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoproperty:: FlexCommand.opcode

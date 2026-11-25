@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlate
+===================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexPlate
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexPlate.id
+      ~FlexPlate.name
+      ~FlexPlate.type_id
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexPlate.__init__
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexCommand.text
+==========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoattribute:: FlexCommand.text

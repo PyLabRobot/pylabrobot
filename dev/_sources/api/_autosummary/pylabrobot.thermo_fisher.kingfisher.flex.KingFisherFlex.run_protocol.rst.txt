@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.KingFisherFlex.run\_protocol
+======================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: KingFisherFlex.run_protocol

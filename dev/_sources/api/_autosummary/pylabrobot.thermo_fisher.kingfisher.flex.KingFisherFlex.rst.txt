@@ -1,0 +1,45 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.KingFisherFlex
+========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: KingFisherFlex
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KingFisherFlex.inventory_verified
+      ~KingFisherFlex.loading_holder
+      ~KingFisherFlex.loading_slot
+      ~KingFisherFlex.processing_holder
+      ~KingFisherFlex.processing_slot
+      ~KingFisherFlex.transcript
+      ~KingFisherFlex.state
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~KingFisherFlex.__init__
+      ~KingFisherFlex.abort
+      ~KingFisherFlex.events
+      ~KingFisherFlex.initialize
+      ~KingFisherFlex.reconcile_inventory
+      ~KingFisherFlex.run_protocol
+      ~KingFisherFlex.setup
+      ~KingFisherFlex.stop
+      ~KingFisherFlex.wait_for_physical_start
+   
+   

@@ -1,0 +1,37 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPrompt
+====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexPrompt
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexPrompt.additions
+      ~FlexPrompt.plate_id
+      ~FlexPrompt.line_number
+      ~FlexPrompt.action
+      ~FlexPrompt.label
+      ~FlexPrompt.processing_slot
+      ~FlexPrompt.loading_slot
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexPrompt.__init__
+   
+   

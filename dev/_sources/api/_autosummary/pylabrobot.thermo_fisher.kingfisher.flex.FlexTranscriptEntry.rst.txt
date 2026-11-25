@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexTranscriptEntry
+=============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexTranscriptEntry
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexTranscriptEntry.timestamp
+      ~FlexTranscriptEntry.direction
+      ~FlexTranscriptEntry.text
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexTranscriptEntry.__init__
+   
+   

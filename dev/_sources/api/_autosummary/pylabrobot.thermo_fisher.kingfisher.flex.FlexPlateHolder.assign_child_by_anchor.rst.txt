@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlateHolder.assign\_child\_by\_anchor
+===================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: FlexPlateHolder.assign_child_by_anchor

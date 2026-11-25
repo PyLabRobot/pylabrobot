@@ -1,0 +1,35 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexRunResult
+=======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexRunResult
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexRunResult.host_confirmations
+      ~FlexRunResult.source_kind
+      ~FlexRunResult.protocol_name
+      ~FlexRunResult.source_sha256
+      ~FlexRunResult.completed_commands
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexRunResult.__init__
+   
+   

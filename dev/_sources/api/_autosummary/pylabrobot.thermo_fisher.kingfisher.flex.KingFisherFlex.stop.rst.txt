@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.KingFisherFlex.stop
+=============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: KingFisherFlex.stop

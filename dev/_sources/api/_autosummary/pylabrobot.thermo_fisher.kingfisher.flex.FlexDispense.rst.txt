@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexDispense
+======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexDispense
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexDispense.plate_id
+      ~FlexDispense.plate_name
+      ~FlexDispense.reagent_name
+      ~FlexDispense.volume
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexDispense.__init__
+   
+   

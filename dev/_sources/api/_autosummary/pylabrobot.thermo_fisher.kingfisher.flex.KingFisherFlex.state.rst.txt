@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.KingFisherFlex.state
+==============================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoattribute:: KingFisherFlex.state

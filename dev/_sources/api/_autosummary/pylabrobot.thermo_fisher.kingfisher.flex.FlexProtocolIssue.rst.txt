@@ -1,0 +1,34 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexProtocolIssue
+===========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexProtocolIssue
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexProtocolIssue.line_number
+      ~FlexProtocolIssue.code
+      ~FlexProtocolIssue.location
+      ~FlexProtocolIssue.message
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexProtocolIssue.__init__
+   
+   

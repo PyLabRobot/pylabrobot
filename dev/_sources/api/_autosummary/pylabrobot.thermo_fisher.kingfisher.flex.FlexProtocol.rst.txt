@@ -1,0 +1,43 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexProtocol
+======================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexProtocol
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexProtocol.sha256
+      ~FlexProtocol.name
+      ~FlexProtocol.bindit_version
+      ~FlexProtocol.original_bytes
+      ~FlexProtocol.properties_xml
+      ~FlexProtocol.exported_xml
+      ~FlexProtocol.script
+      ~FlexProtocol.plates
+      ~FlexProtocol.tips
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexProtocol.__init__
+      ~FlexProtocol.bind_plates
+      ~FlexProtocol.compatibility_issues
+      ~FlexProtocol.preflight
+      ~FlexProtocol.prompts
+   
+   
