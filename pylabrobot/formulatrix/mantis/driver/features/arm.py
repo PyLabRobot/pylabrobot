@@ -4,8 +4,8 @@ On a v4, board 11 reads each arm motor's absolute encoder, so where the arm stan
 power-on: the arms are declared there, never homed. Z homes on its flag. Every bring-up step and
 its order matches the recorded v4 startup.
 
-A v3 has no absolute encoders: its bring-up seats the arms against their stops, homes every motor
-on its flag and follows the unit's route to idle, as captured on a v3.
+A v3 has no absolute encoders: its bring-up homes Z first, then seats the arms against their stops,
+homes every motor on its flag and follows the unit's route to idle, as captured on a v3.
 
 The head goes to idle along the unit's routes: the zone it stands in names a route to a safe XY
 and one to idle. Without them, only from near idle. The nozzle moves in the deck frame, through
@@ -1626,8 +1626,8 @@ class Arm:
       )
 
   async def _initialize_v3(self) -> None:
-    """Bring a v3's arm and Z up, as captured: seat the arms and home Z twice, home the arms,
-    declare the home frame, then follow the unit's route to idle.
+    """Bring a v3's arm and Z up: home Z first, then as captured: seat the arms and home Z twice,
+    home the arms, declare the home frame, then follow the unit's route to idle.
 
     Every target is checked against its motor's limits before anything is sent. A failure or
     cancellation stops all three motors and logs where they stopped before it raises.
@@ -1656,6 +1656,15 @@ class Arm:
     }
     try:
       await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT, expected_following_error=True)
+      # Z first, straight up to its flag, before the arms swing to their stops: after a power
+      # cycle the head can stand low, and seating the arms then drags it over the deck. The
+      # vendor's recorded start-up seats the arms first. An arm fault from before (a skip, a
+      # crash) is cleared so the check for a slipped motor doesn't refuse; the arms don't move
+      # here, and the seating that follows finds where they are again.
+      logger.info("[%s] homing Z before the arms move", self._driver.name)
+      for motor in ARM_MOTORS:
+        await self._unchecked_fw_clear_motor_faults(motor=motor)
+      await self._home_z(speed=homing[Z_MOTOR].speed, acceleration=homing[Z_MOTOR].acceleration)
       for pass_index in range(2):
         logger.info("[%s] seating the arms, pass %d", self._driver.name, pass_index + 1)
         await self._seat_arm_motors()
