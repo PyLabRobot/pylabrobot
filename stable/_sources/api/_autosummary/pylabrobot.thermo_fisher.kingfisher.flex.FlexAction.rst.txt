@@ -1,0 +1,42 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexAction
+====================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexAction
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexAction.additions
+      ~FlexAction.plate_id
+      ~FlexAction.command
+      ~FlexAction.source_sha256
+      ~FlexAction.plate_name
+      ~FlexAction.plate
+      ~FlexAction.holder
+      ~FlexAction.line_number
+      ~FlexAction.action
+      ~FlexAction.label
+      ~FlexAction.processing_slot
+      ~FlexAction.loading_slot
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexAction.__init__
+   
+   

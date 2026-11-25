@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.KingFisherFlex.inventory\_verified
+============================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoproperty:: KingFisherFlex.inventory_verified

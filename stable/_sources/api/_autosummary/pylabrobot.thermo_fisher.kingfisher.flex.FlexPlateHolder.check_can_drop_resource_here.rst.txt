@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlateHolder.check\_can\_drop\_resource\_here
+==========================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: FlexPlateHolder.check_can_drop_resource_here

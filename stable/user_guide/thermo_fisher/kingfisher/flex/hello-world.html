@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>KingFisher Flex &#8212; PyLabRobot dev documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plr_devices.css?v=c92e449a" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/plr_cards.css?v=ed9dfa64" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8" />
+
+    <script src="../../../../_static/documentation_options.js?v=3ce10a4d"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../../_static/plr_devices.js?v=ba1a2da2"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user_guide/thermo_fisher/kingfisher/flex/hello-world';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.24.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pylabrobot.org/dev/_static/switcher.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'dev';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../../_static/graphviz.js?v=0710df9f"></script>
+    <script src="../../../../_static/plr_cards.js?v=9ebdf6b1"></script>
+    <link rel="canonical" href="https://docs.pylabrobot.org/user_guide/thermo_fisher/kingfisher/flex/hello-world.html" />
+    <link rel="icon" href="../../../../_static/favicon.ico"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="Thermo Fisher NanoDrop 1000" href="../../nanodrop_1000/index.html" />
+    <link rel="prev" title="KingFisher Presto" href="../presto/hello-world.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="1.0.0b1" />
+  
+    
+    <script src="../../../../_static/searchtools.js"></script>
+    <script src="../../../../_static/language_data.js"></script>
+    <script src="../../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button type="button" class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation" aria-expanded="false" aria-controls="pst-primary-sidebar-modal">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/logo.png" class="logo__image only-light" alt=""/>
+    <img src="../../../../_static/logo.png" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">PyLabRobot</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button type="button" class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+        <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button type="button" class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg me-1"></i>System Settings</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg me-1"></i>Light</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button type="button" class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+    </div>
+  
+
+  
+    <button type="button" class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page" aria-expanded="false" aria-controls="pst-secondary-sidebar-modal">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal" tabindex="-1"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    User guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../resources/index.html">
+     Resource Management
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../cookbook/index.html">
+     Cookbook
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../contributor_guide/index.html">
+    Contributor guide
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../api/pylabrobot.html">
+    API
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../community-protocols/index.html">
+    Community Protocols
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://discuss.pylabrobot.org/">
+    Community
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        
+          <div class="navbar-item">
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button type="button" class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg me-1"></i>System Settings</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg me-1"></i>Light</button></li>
+    <li><button type="button" class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg me-1"></i>Dark</button></li>
+  </ul>
+</div></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/pylabrobot" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i><span class="visually-hidden">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pylabrobot/pylabrobot" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://youtube.com/@pylabrobot" title="YouTube" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-youtube fa-lg" aria-hidden="true"></i><span class="visually-hidden">YouTube</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://bsky.app/profile/pylabrobot.bsky.social" title="Bluesky" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-bluesky fa-lg" aria-hidden="true"></i><span class="visually-hidden">Bluesky</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button type="button" id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/rpi.html">Setting up PLR on a Raspberry Pi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting-started/units.html">Default Units</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machines</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../machines.html">Supported Machines</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../needs-testing.html">Devices that need testing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../definitions.html">Definitions</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../generic/index.html">Generic devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../generic/line-barcode-scanner/hello-world.html">Line-oriented serial barcode scanners</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../00_liquid-handling/_liquid-handling.html">Liquid Handling</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/moving-channels-around.html">Manually moving channels around</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/tutorial_tip_inventory_consolidation.html">Tip Inventory Consolidation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/mixing.html">Mixing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../00_liquid-handling/container_no_go_zones.html">Container No-Go Zones</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Manufacturers</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../agilent/index.html">Agilent</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../agilent/benchcel/hello-world.html">Agilent BenchCel 4R quickstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../agilent/plateloc/hello-world.html">Agilent PlateLoc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../agilent/synergy_ht/hello-world.html">BioTek Synergy HT</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../agilent/vspin/index.html">VSpin</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/hello-world.html">Agilent VSpin centrifuge quickstart</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/state-machine.html">VSpin and Access2 state machine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../agilent/vspin/events.html">VSpin and Access2 events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../azenta/index.html">Azenta</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../azenta/fluidx/intellixcap96/hello-world.html">FluidX IntelliXcap 96</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../big_bear/index.html">BigBear</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../big_bear/orbital-shaker/hello-world.html">BigBear Orbital Shaker</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../bmg_labtech/index.html">BMG Labtech</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../bmg_labtech/vantastar/hello-world.html">BMG Labtech VANTAstar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../brooks/index.html">Brooks</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../brooks/precise_flex/hello-world.html">Brooks PreciseFlex PF400 / PF3400</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../brooks/precise_flex/events.html">PreciseFlex events</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../byonoy/index.html">Byonoy</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../byonoy/absorbance_96/hello-world.html">Byonoy Absorbance 96</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../byonoy/luminescence_96/hello-world.html">Byonoy Luminescence 96 — lab guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../byonoy/luminescence_96/led_bar.html">Byonoy L96 — LED bar</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../cole_parmer/index.html">Cole-Parmer</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../cole_parmer/genogrinder/hello-world.html">Cole-Parmer GenoGrinder (fka SPEX GenoGrinder)</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../curiox/index.html">Curiox</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../curiox/curiox-ht2000/hello-world.html">Curiox Laminar Wash HT2000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../formulatrix/index.html">Formulatrix</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../formulatrix/mantis/hello-world.html">Formulatrix Mantis</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../gyger/index.html">Fritz Gyger</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../gyger/certus_flex/hello-world.html">CERTUS FLEX</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../gyger/certus_flex/protocol.html">CERTUS FLEX protocol and verification</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../hamilton/index.html">Hamilton</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../hamilton/star/index.html">Hamilton STAR and STARlet</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../hamilton/star/debug.html">Debugging STAR issues</a></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../hamilton/star/diagnostics/index.html">Diagnostics</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/diagnostics/core-gripper-tool-centers.html">CoRe gripper tool centres</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../hamilton/star/hardware/index.html">Hamilton STAR Hardware Guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/replacing-iswap.html">Replacing iSWAP arm on Hamilton STAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/adjusting-iswap.html">Auto-Adjustment of iSWAP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/adjusting-robot.html">Complete Adjustment Procedure for STAR(let)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../hamilton/star/hardware/adjusting-iswap-gripper-parrallelity.html">Adjust iSWAP gripper parallelity</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../hamilton/prep/index.html">Prep</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../00_liquid-handling/hamilton-prep/prep_basic_demo.html">Hamilton Prep: getting started</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../high_res/index.html">HighRes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../high_res/lid-valet/hello-world.html">HighRes LidValet</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../high_res/sample-storage/index.html">Sample storage</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../high_res/sample-storage/ambistore/hello-world.html">HighRes AmbiStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../high_res/sample-storage/steristore/hello-world.html">HighRes SteriStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../high_res/sample-storage/tundrastore/hello-world.html">HighRes TundraStore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../high_res/sample-storage/events.html">Sample-storage events</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../inheco/index.html">Inheco</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/cpac/hello-world.html">Inheco CPAC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/incubator_shaker/hello-world.html">Inheco Incubator Shaker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/odtc/hello-world.html">Inheco ODTC</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/scila/hello-world.html">Inheco SCILA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../inheco/thermoshake/hello-world.html">Inheco ThermoShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../kbioscience/index.html">KBioscience</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbioscience/kube/hello-world.html">KBioscience KUBE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../kbiosystems/index.html">KBiosystems</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbiosystems/ultraseal-epro/hello-world.html">KBiosystems Ultraseal ePRO</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbiosystems/ultraseal-pro/hello-world.html">KBiosystems Ultraseal PRO (formerly WASP)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../kbiosystems/ultraseal-xt-pro/hello-world.html">KBiosystems Ultraseal XT Pro</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../li_cor/index.html">LI-COR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../li_cor/odyssey/hello-world.html">LI-COR Odyssey Classic</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../mettler_toledo/index.html">Mettler Toledo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../mettler_toledo/scales/hello-world.html">Mettler Toledo MT-SICS scales</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../micronic/index.html">Micronic</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../micronic/code_reader/hello-world.html">Micronic RD235 Code Reader</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../molecular_devices/index.html">Molecular Devices</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../molecular_devices/spectramax/hello-world.html">Molecular Devices SpectraMax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../molecular_devices/imageXpress/pico.html">ImageXpress Pico</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../opentrons/index.html">Opentrons</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../opentrons/ot2/hello-world.html">Opentrons OT-2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../opentrons/flex/hello-world.html">Opentrons Flex</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../opentrons/flex/usb.html">Flex over USB</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../paa/index.html">PAA</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../paa/kx2/installation.html">KX2 installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../paa/kx2/hello-world.html">PAA KX2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../paa/kx2/continuous-motion.html">KX2 continuous motion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../paa/kx2/proximity-sensor.html">KX2 proximity sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../paa/kx2/barcode-reader.html">KX2 barcode reader</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../qinstruments/index.html">QInstruments</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../qinstruments/bioshake/hello-world.html">QInstruments BioShake</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../revvity/index.html">Revvity</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../revvity/celigo/index.html">Celigo</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../revvity/celigo/hello-world.html">Celigo hello world</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../revvity/celigo/advanced-imaging.html">Advanced imaging and coordinates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../revvity/celigo/scan-planning.html">Scan specifications and planning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../revvity/celigo/components-and-diagnostics.html">Hardware components and diagnostics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../revvity/celigo/cli.html">Celigo CLI</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../sartorius/index.html">Sartorius</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../sartorius/entris2/hello-world.html">Sartorius Entris II</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">Thermo Fisher</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../alps/index.html">ALPS Heat Sealers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../alps/alps300/hello-world.html">Thermo Scientific ALPS 300</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../alps/alps3000/hello-world.html">Thermo Scientific ALPS 3000</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../alps/alps5000/hello-world.html">Thermo Scientific ALPS 5000</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../btx/index.html">BTX</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../btx/gemini/X2/installation.html">BTX Gemini X2 installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../btx/gemini/X2/hello-world.html">BTX Gemini X2</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../index.html">KingFisher</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../cli.html">Command-line tools</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../presto/hello-world.html">KingFisher Presto</a></li>
+<li class="toctree-l3 current active"><a aria-current="page" class="current reference internal" href="#">KingFisher Flex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../nanodrop_1000/index.html">Thermo Fisher NanoDrop 1000</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../nanodrop_1000/setup.html">NanoDrop 1000 setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../nanodrop_1000/hello-world.html">Thermo Fisher NanoDrop 1000</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../ufactory/index.html">UFACTORY</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../ufactory/xarm6/hello-world.html">UFACTORY xArm 6</a></li>
+</ul>
+</details></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Machine-Agnostic Features</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-the-visualizer.html">Using the Visualizer</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/using-trackers.html">Using Trackers</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../machine-agnostic-features/event-bus.html">EventBus</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/event-bus/machine-lifecycle.html">Machine lifecycle events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/event-bus/incubator.html">Incubator events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/event-bus/liquid-handler.html">LiquidHandler events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/event-bus/thermal-and-shaking.html">Shaker and environmental-controller events</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/event-bus/diagnostic-transports.html">Diagnostic transport events</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/writing-robot-agnostic-protocols.html">Writing Machine-Agnostic Protocols</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/tip-spot-generators.html">Use of Iterators &amp; Generators</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging-and-validation.html">Logging &amp; Validation</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/logging.html">Setting Up Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../machine-agnostic-features/logging-and-validation/validation.html">Protocol Validation using Stored Logs</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/error-handling-general.html">Error Handling in PLR</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/sila-discovery.html">SiLA Device Discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../machine-agnostic-features/manual-operator.html">Operator actions</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuring PLR</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-house"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">User guide</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Thermo Fisher</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">KingFisher</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">KingFisher Flex</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="kingfisher-flex">
+<h1>KingFisher Flex<a class="headerlink" href="#kingfisher-flex" title="Link to this heading">#</a></h1>
+<div class="plr-device-card" id="device-thermo-fisher-kingfisher-flex">
+  <div class="plr-device-card__head">
+    <div>
+      <div class="plr-device-card__vendor">Thermo Fisher</div>
+      <div class="plr-device-card__name">KingFisher Flex</div>
+    </div>
+    <div class="plr-device-card__status"><span class="plr-device-status plr-device-status--basic">Basic</span><span class="plr-device-api-version">v1</span></div>
+  </div>
+  <div class="plr-device-card__kind">magnetic particle processor</div>
+  <div class="plr-device-card__badges"><span class="plr-device-badge" style="--plr-badge-hue: 140">magnetic bead processing</span></div>
+  
+  <div class="plr-device-card__row"><span class="plr-device-card__key">API</span><span class="plr-device-card__value"><code class="plr-device-api">pylabrobot.thermo_fisher.kingfisher.flex.KingFisherFlex</code></span></div><div class="plr-device-card__row"><span class="plr-device-card__key">Notes</span><span class="plr-device-card__value">Tested on actual KingFisher Flex hardware with the 96-well head and 96DW plates only, on macOS/firmware 1.01.0. Other heads, including the 24-well head, have not been tested. Local BDZ execution checks include 37 C heating, beads, drying and PLR confirmations. Requires plate bindings and reconciled inventory. Resource-aware ManualOperator host and physical-Start transfers tested in two-plate runs, plus a host-confirmed reagent-addition intervention. Robotic transfers are application-owned. Partial tip pickup remains unresolved; other formats, onboard protocol management and general protocol authoring remain unsupported.</span></div>
+  <div class="plr-device-card__links"><a class="plr-device-link" href="https://github.com/pylabrobot/pylabrobot/blob/main/pylabrobot/thermo_fisher/kingfisher/flex"><svg class="plr-device-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.13em;margin-right:0.3em;"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/></svg>code</a></div>
+</div><p>Run computer-hosted BindIt BDZ exports with a matching <strong>96DW head, tip comb and plates</strong>.
+PLR validates the export, binds its plates to resource objects, and streams its generated
+commands over USB HID. BindIt does not need to be running during execution.</p>
+<p><strong>Hardware tested:</strong> actual KingFisher Flex testing covers only the 96-well head with
+96DW plates, on firmware 1.01.0 and macOS. Other heads, including the 24-well head,
+have not been tested. The driver remains experimental. Tested operations include mixing,
+bead collection/release, drying, 37 C heating, timed pauses, loops and host confirmations.
+Resource-aware ManualOperator host and physical-Start handling have passed two-plate
+loading, mixing and unloading runs, including inventory checks after all four transfers.
+The physical-Start check used a diagnostic with mixing shortened to 20 seconds.
+A carousel-only reagent-addition diagnostic also passed: the host handler identified
+the bound plate and presented holder, awaited confirmation of a 50 uL-per-well water
+addition, and verified unchanged plate occupancy before continuing. Robotic transfers
+remain application-owned. Command completion does not verify tip-comb
+attachment; inspect pickup and clearances. Other head/plate formats, onboard
+protocol management and generation of protocols without a BDZ are outside this driver.</p>
+<p>See <a class="reference internal" href="../installation.html"><span class="std std-doc">installation</span></a> and <a class="reference internal" href="../cli.html"><span class="std std-doc">command-line tools</span></a>.</p>
+<section id="physical-setup">
+<h2>Physical setup<a class="headerlink" href="#physical-setup" title="Link to this heading">#</a></h2>
+<p>Prepare the 96DW head, matching tips and supported plates according to the instrument
+instructions. Close BindIt before connecting. Run hardware cells individually.</p>
+</section>
+<section id="inspect-a-protocol-offline">
+<h2>Inspect a protocol offline<a class="headerlink" href="#inspect-a-protocol-offline" title="Link to this heading">#</a></h2>
+<p>Set the path to your BindIt export. Reading and preflight do not open USB.
+<code class="docutils literal notranslate"><span class="pre">compatibility_issues()</span></code> lists blockers; <code class="docutils literal notranslate"><span class="pre">preflight()</span></code> raises if any remain.
+<code class="docutils literal notranslate"><span class="pre">prompts()</span></code> shows plate actions and reagent additions. Plate labels are not tray numbers.</p>
+<p>Use an executable export produced by BindIt for the installed 96DW configuration.
+The driver retains the exported motions, timing and heating commands; it does not
+calculate coordinates from volumes or reconstruct a method from step names. An
+unsupported export is rejected as a whole. Passing validation does not prove the
+physical setup, plate contents or protocol outcome.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.thermo_fisher.kingfisher.flex</span><span class="w"> </span><span class="kn">import</span> <span class="n">KingFisherFlex</span><span class="p">,</span> <span class="n">read_flex_bdz</span>
+
+<span class="n">protocol</span> <span class="o">=</span> <span class="n">read_flex_bdz</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"protocol.bdz"</span><span class="p">))</span>
+<span class="n">commands</span> <span class="o">=</span> <span class="n">protocol</span><span class="o">.</span><span class="n">preflight</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">protocol</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">protocol</span><span class="o">.</span><span class="n">sha256</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">commands</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">([(</span><span class="n">plate</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">plate</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">plate</span> <span class="ow">in</span> <span class="n">protocol</span><span class="o">.</span><span class="n">plates</span><span class="p">])</span>
+<span class="n">protocol</span><span class="o">.</span><span class="n">prompts</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="logical-carousel-resources">
+<h2>Logical carousel resources<a class="headerlink" href="#logical-carousel-resources" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">flex.carousel</span></code> is a <code class="docutils literal notranslate"><span class="pre">PlateCarrier</span></code> with eight persistent <code class="docutils literal notranslate"><span class="pre">PlateHolder</span></code> sites,
+keyed <strong>1–8</strong> to match the printed trays. Each tray holds at most one PLR <code class="docutils literal notranslate"><span class="pre">Plate</span></code>.
+Remove its current plate explicitly before assigning another. Assignment and
+unassignment only update the resource tree; they do not move hardware.</p>
+<p>The following offline example assigns a KingFisher plate, then removes it.
+Plate compatibility with a BDZ is a separate execution check.</p>
+<p>Carousel dimensions and pedestal heights are <strong>unmeasured zero placeholders</strong>;
+holder locations are undefined. Local plate coordinates are organizational only.
+This model is not calibrated for robot transfers or collision checking.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span>
+
+<span class="n">flex</span> <span class="o">=</span> <span class="n">KingFisherFlex</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"flex_a"</span><span class="p">)</span>
+<span class="n">plate</span> <span class="o">=</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span><span class="p">(</span><span class="s2">"sample_plate"</span><span class="p">)</span>
+<span class="n">tray</span> <span class="o">=</span> <span class="n">flex</span><span class="o">.</span><span class="n">carousel</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="n">tray</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>  <span class="c1"># Equivalent to flex.carousel[2] = plate.</span>
+<span class="k">assert</span> <span class="n">plate</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="n">tray</span>
+<span class="k">assert</span> <span class="n">tray</span><span class="o">.</span><span class="n">resource</span> <span class="ow">is</span> <span class="n">plate</span>
+<span class="n">plate</span><span class="o">.</span><span class="n">unassign</span><span class="p">()</span>  <span class="c1"># Equivalent to flex.carousel[2] = None.</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">processing_slot</span></code> and <code class="docutils literal notranslate"><span class="pre">loading_slot</span></code> identify the trays at the two stations;
+<code class="docutils literal notranslate"><span class="pre">processing_holder</span></code> and <code class="docutils literal notranslate"><span class="pre">loading_holder</span></code> return those same holder objects.
+They are <code class="docutils literal notranslate"><span class="pre">None</span></code> before initialization, during rotation, and after interruption or
+disconnect. Orientation updates only after successful motion completion. Rotation
+does not move plates between holders.</p>
+<p>Plate assignments persist through initialization, disconnect and failures.
+<code class="docutils literal notranslate"><span class="pre">inventory_verified</span></code> starts false: an empty resource tree does not prove the
+physical carousel is empty. Reconcile inventory after connection and before
+execution, as shown below. Homing only establishes orientation.</p>
+<p>BDZ execution requires explicit plate identity bindings. Binding does not assign
+plates to holders. Action handlers perform transfers and update the resource tree;
+the driver checks the result before continuing. Resource changes outside an active
+action invalidate inventory certainty. Reconnection, interruption and disconnection
+also require a fresh inventory reconciliation.</p>
+</section>
+<section id="bind-every-protocol-plate-before-execution">
+<h2>Bind every protocol plate before execution<a class="headerlink" href="#bind-every-protocol-plate-before-execution" title="Link to this heading">#</a></h2>
+<p>Choose the PLR <code class="docutils literal notranslate"><span class="pre">Plate</span></code> object representing each physical plate required by this
+BDZ. Keys must exactly match the names in <code class="docutils literal notranslate"><span class="pre">protocol.plates</span></code>, including case;
+PLR resource names can differ. Include the empty tip-comb pickup/return plate.</p>
+<p>The example below assumes a four-plate export with these names. Replace the
+mapping with all names from your selected BDZ and your corresponding PLR plate
+objects. Use existing objects when those plates are already modeled elsewhere
+in your workcell; do not create another object for the same physical plate.</p>
+<p><code class="docutils literal notranslate"><span class="pre">bind_plates()</span></code> runs offline and rejects missing or unknown names, duplicate BDZ
+names, non-plate resources and reuse of one PLR object for different BDZ plates.
+For duplicate BDZ names, give the plates distinct names in BindIt and re-export.
+The resulting run retains its selected export and a read-only mapping in
+<code class="docutils literal notranslate"><span class="pre">bound_protocol.plates_by_id</span></code>. Editing the input dictionary cannot change it.
+Preparing another protocol requires its own bindings.</p>
+<p>Binding records identity only: it does not rename resources, move plates, validate
+physical plate geometry or prove which plate an operator has loaded.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tip_plate</span> <span class="o">=</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span><span class="p">(</span><span class="s2">"tips_001"</span><span class="p">)</span>
+<span class="n">bead_plate</span> <span class="o">=</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span><span class="p">(</span><span class="s2">"beads_001"</span><span class="p">)</span>
+<span class="n">wash_plate</span> <span class="o">=</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span><span class="p">(</span><span class="s2">"wash_001"</span><span class="p">)</span>
+<span class="n">resuspension_plate</span> <span class="o">=</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span><span class="p">(</span><span class="s2">"resuspension_001"</span><span class="p">)</span>
+
+<span class="n">bound_protocol</span> <span class="o">=</span> <span class="n">protocol</span><span class="o">.</span><span class="n">bind_plates</span><span class="p">({</span>
+  <span class="s2">"Empty Tip Comb Plate"</span><span class="p">:</span> <span class="n">tip_plate</span><span class="p">,</span>
+  <span class="s2">"Bead Plate"</span><span class="p">:</span> <span class="n">bead_plate</span><span class="p">,</span>
+  <span class="s2">"Wash Plate"</span><span class="p">:</span> <span class="n">wash_plate</span><span class="p">,</span>
+  <span class="s2">"Resuspension Plate"</span><span class="p">:</span> <span class="n">resuspension_plate</span><span class="p">,</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="connect-and-identify">
+<h2>Connect and identify<a class="headerlink" href="#connect-and-identify" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">setup()</span></code> opens USB and reads the identity without moving the instrument.
+Pass <code class="docutils literal notranslate"><span class="pre">serial_number=&quot;...&quot;</span></code> to select among multiple instruments.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">name</span></code> argument distinguishes resource names; <code class="docutils literal notranslate"><span class="pre">serial_number</span></code> selects the USB instrument.
+For two instruments, use distinct names and their respective serial numbers.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">flex</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+<span class="p">(</span><span class="n">flex</span><span class="o">.</span><span class="n">version</span><span class="p">,</span> <span class="n">flex</span><span class="o">.</span><span class="n">serial</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="initialize">
+<h2>Initialize<a class="headerlink" href="#initialize" title="Link to this heading">#</a></h2>
+<p><strong>This moves the instrument</strong>, disables heating, and presents tray 4 at loading
+with tray 1 at processing.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">flex</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+<span class="p">(</span><span class="n">flex</span><span class="o">.</span><span class="n">processing_slot</span><span class="p">,</span> <span class="n">flex</span><span class="o">.</span><span class="n">loading_slot</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="reconcile-initial-inventory">
+<h2>Reconcile initial inventory<a class="headerlink" href="#reconcile-initial-inventory" title="Link to this heading">#</a></h2>
+<p>Inspect all eight physical trays and make the resource assignments match them.
+For a preloaded plate, use <code class="docutils literal notranslate"><span class="pre">flex.carousel[tray_number]</span> <span class="pre">=</span> <span class="pre">bound_plate</span></code>; remove stale
+assignments with <code class="docutils literal notranslate"><span class="pre">plate.unassign()</span></code>. The bound object must match the expected tray
+in the BDZ loading sequence. Empty trays must be checked too.</p>
+<p>Only after that inspection, execute the confirmation below. It sends no instrument
+commands. Running before reconciliation raises an error without starting the method.
+Plates can be loaded progressively through action handlers; they need not all be
+present before the run. A successful checked run preserves verified inventory.
+After interruption, inspect retained assignments, establish a fresh session and
+reconcile again before attempting another run.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">flex</span><span class="o">.</span><span class="n">reconcile_inventory</span><span class="p">()</span>
+<span class="n">flex</span><span class="o">.</span><span class="n">inventory_verified</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="observe-events">
+<h2>Observe events<a class="headerlink" href="#observe-events" title="Link to this heading">#</a></h2>
+<p>Start one event consumer before running. Events include temperature readings,
+plate requests, pauses, confirmations, failures, and run completion. Temperature
+readings describe heater and ambient sensors, not well-liquid temperature.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">observe_events</span><span class="p">():</span>
+  <span class="k">async</span> <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">flex</span><span class="o">.</span><span class="n">events</span><span class="p">():</span>
+    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"</span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">; prompt=</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">prompt</span><span class="p">)</span>
+
+
+<span class="n">observer</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">observe_events</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="software-manual-action-handling">
+<span id="softwaremanual-action-handling"></span><h2>Software/manual action handling<a class="headerlink" href="#software-manual-action-handling" title="Link to this heading">#</a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">FlexAction</span></code> supplies the bound <code class="docutils literal notranslate"><span class="pre">plate</span></code>, presented <code class="docutils literal notranslate"><span class="pre">holder</span></code>, BDZ <code class="docutils literal notranslate"><span class="pre">plate_id</span></code> and
+<code class="docutils literal notranslate"><span class="pre">plate_name</span></code>, instructions in <code class="docutils literal notranslate"><span class="pre">label</span></code>, reagent <code class="docutils literal notranslate"><span class="pre">additions</span></code>, and the source command,
+line number and export fingerprint. A generic pause can have no bound plate.</p>
+<p><code class="docutils literal notranslate"><span class="pre">FlexManualHandler</span></code> uses <a class="reference internal" href="../../../machine-agnostic-features/manual-operator.html"><span class="std std-doc">ManualOperator</span></a>:
+<code class="docutils literal notranslate"><span class="pre">move_resource()</span></code> handles transfers, and <code class="docutils literal notranslate"><span class="pre">perform()</span></code> handles interventions and
+confirmations of preloaded plates. Loading uses the plate’s current parent. Your
+application supplies the unloading destination. The operator waits for its provider
+before updating resource assignments, and the Flex checks occupancy before advancing.</p>
+<p>Here the console provider acknowledges completion when you press Enter. You can
+substitute any <code class="docutils literal notranslate"><span class="pre">OperatorActionProvider</span></code>, such as one backed by your application’s UI.
+Finish the action and clear the carousel before acknowledging. Rejection, failure,
+timeout and cancellation prevent further execution and require recovery.</p>
+<p>The logical staging holders below are an example of modeled sources and unloading
+destinations. Replace them with your actual workcell resources. Their zero dimensions
+are unmeasured placeholders, not robot coordinates. Existing parent assignments are
+preserved. A manual load requires a modeled source; binding alone does not supply one.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.manual_operator</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConsoleOperatorActionProvider</span><span class="p">,</span> <span class="n">ManualOperator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resource</span><span class="p">,</span> <span class="n">ResourceHolder</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.thermo_fisher.kingfisher.flex</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlexAction</span><span class="p">,</span> <span class="n">FlexManualHandler</span>
+
+<span class="n">staging</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="n">plate_id</span><span class="p">:</span> <span class="n">ResourceHolder</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"staging_</span><span class="si">{</span><span class="n">plate</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">size_x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">size_z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"geometry"</span><span class="p">:</span> <span class="s2">"unmeasured"</span><span class="p">},</span>
+  <span class="p">)</span>
+  <span class="k">for</span> <span class="n">plate_id</span><span class="p">,</span> <span class="n">plate</span> <span class="ow">in</span> <span class="n">bound_protocol</span><span class="o">.</span><span class="n">plates_by_id</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<span class="p">}</span>
+<span class="k">for</span> <span class="n">plate_id</span><span class="p">,</span> <span class="n">plate</span> <span class="ow">in</span> <span class="n">bound_protocol</span><span class="o">.</span><span class="n">plates_by_id</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+  <span class="k">if</span> <span class="n">plate</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">staging</span><span class="p">[</span><span class="n">plate_id</span><span class="p">]</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">plate</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">unloading_destination</span><span class="p">(</span><span class="n">action</span><span class="p">:</span> <span class="n">FlexAction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Resource</span><span class="p">:</span>
+  <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">plate_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+  <span class="k">return</span> <span class="n">staging</span><span class="p">[</span><span class="n">action</span><span class="o">.</span><span class="n">plate_id</span><span class="p">]</span>
+
+
+<span class="n">operator</span> <span class="o">=</span> <span class="n">ManualOperator</span><span class="p">(</span><span class="n">ConsoleOperatorActionProvider</span><span class="p">(),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"flex_operator"</span><span class="p">)</span>
+<span class="n">manual_handler</span> <span class="o">=</span> <span class="n">FlexManualHandler</span><span class="p">(</span><span class="n">operator</span><span class="p">,</span> <span class="n">unload_destination</span><span class="o">=</span><span class="n">unloading_destination</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="run-a-local-protocol-with-software-acknowledgment">
+<h2>Run a local protocol with software acknowledgment<a class="headerlink" href="#run-a-local-protocol-with-software-acknowledgment" title="Link to this heading">#</a></h2>
+<p>This starts motion and may start heating. Complete each requested transfer or
+intervention before confirming through the provider. The handler updates the model;
+plate assignment events alone never advance execution. Reagent requests include
+reagent names and volumes per well.</p>
+<p>Host acknowledgment omits PAU, so no physical Start press is needed. An unbound
+protocol or unreconciled inventory is rejected before execution commands are sent.
+<code class="docutils literal notranslate"><span class="pre">operator_timeout=None</span></code> permits indefinite operator waits while session failures
+remain monitored. Temperature setpoints do not themselves wait for target attainment.
+The call returns after execution and finalization.</p>
+<p>Only <code class="docutils literal notranslate"><span class="pre">handle_action</span></code> fulfills requests. Use <code class="docutils literal notranslate"><span class="pre">action.action</span></code> to dispatch loading,
+unloading and interventions to different application operations. <code class="docutils literal notranslate"><span class="pre">flex.events()</span></code> is
+an observation stream; consuming an event does not acknowledge or complete an action.
+After the handler returns exactly <code class="docutils literal notranslate"><span class="pre">True</span></code>, the driver checks all eight holders against
+the expected post-action inventory. It does not independently sense plate transfers.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">flex</span><span class="o">.</span><span class="n">run_protocol</span><span class="p">(</span>
+  <span class="n">bound_protocol</span><span class="p">,</span>
+  <span class="n">handle_action</span><span class="o">=</span><span class="n">manual_handler</span><span class="p">,</span>
+  <span class="n">acknowledgement</span><span class="o">=</span><span class="s2">"host"</span><span class="p">,</span>
+  <span class="n">operator_timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">result</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="alternative-physical-start-through-manualoperator">
+<h2>Alternative: physical Start through ManualOperator<a class="headerlink" href="#alternative-physical-start-through-manualoperator" title="Link to this heading">#</a></h2>
+<p>Use this path instead of the software-acknowledged run above when you want the
+instrument’s Start button to acknowledge the actions. Each request gets its own
+<code class="docutils literal notranslate"><span class="pre">FlexStartAcknowledgement</span></code> provider, bound to that exact active action. It sends
+the original PAU and waits for <code class="docutils literal notranslate"><span class="pre">PAU</span> <span class="pre">END</span> <span class="pre">0</span></code> within the ManualOperator lifecycle.
+Transfers are recorded after that completion, and the Flex still checks occupancy
+before issuing the next command. The provider logs transfer instructions and
+ManualOperator publishes lifecycle events; no console Enter press is also required.</p>
+<p><code class="docutils literal notranslate"><span class="pre">acknowledgement=&quot;instrument&quot;</span></code> must be selected before PAU. The adapter cannot
+release an already active pause or reuse an acknowledgment for another action.
+Firmware completion is not independent verification of physical plate identity.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.thermo_fisher.kingfisher.flex</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlexStartAcknowledgement</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">physical_handler</span><span class="p">(</span><span class="n">action</span><span class="p">:</span> <span class="n">FlexAction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+  <span class="n">operator</span> <span class="o">=</span> <span class="n">ManualOperator</span><span class="p">(</span>
+    <span class="n">FlexStartAcknowledgement</span><span class="p">(</span><span class="n">flex</span><span class="p">,</span> <span class="n">action</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"flex_physical_operator"</span>
+  <span class="p">)</span>
+  <span class="n">handler</span> <span class="o">=</span> <span class="n">FlexManualHandler</span><span class="p">(</span><span class="n">operator</span><span class="p">,</span> <span class="n">unload_destination</span><span class="o">=</span><span class="n">unloading_destination</span><span class="p">)</span>
+  <span class="k">return</span> <span class="k">await</span> <span class="n">handler</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+
+
+<span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">flex</span><span class="o">.</span><span class="n">run_protocol</span><span class="p">(</span>
+  <span class="n">bound_protocol</span><span class="p">,</span>
+  <span class="n">handle_action</span><span class="o">=</span><span class="n">physical_handler</span><span class="p">,</span>
+  <span class="n">acknowledgement</span><span class="o">=</span><span class="s2">"instrument"</span><span class="p">,</span>
+  <span class="n">operator_timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="application-selected-handling">
+<h2>Application-selected handling<a class="headerlink" href="#application-selected-handling" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">acknowledgement</span></code> can also be a synchronous function returning <code class="docutils literal notranslate"><span class="pre">&quot;host&quot;</span></code> or
+<code class="docutils literal notranslate"><span class="pre">&quot;instrument&quot;</span></code> for each <code class="docutils literal notranslate"><span class="pre">FlexAction</span></code>. Supply a handler that uses the corresponding
+provider. For example, transfer actions can use software confirmation while protocol
+interventions use physical Start. Selection happens before that action’s PAU is sent.</p>
+<p>A robotic handler uses <code class="docutils literal notranslate"><span class="pre">&quot;host&quot;</span></code> acknowledgment and awaits its own transfer or
+intervention implementation. That implementation must update the resource tree and
+finish clearing the carousel before the handler returns <code class="docutils literal notranslate"><span class="pre">True</span></code>. The Flex driver
+selects no arm, storage location, unloading destination or calibrated robot path.
+Neither ManualOperator nor any specific arm is mandatory for execution.</p>
+</section>
+<section id="hardware-free-robotic-handler-example">
+<h2>Hardware-free robotic-handler example<a class="headerlink" href="#hardware-free-robotic-handler-example" title="Link to this heading">#</a></h2>
+<p>This example exercises only the action interface and resource model. It opens no USB
+connection and operates no robot. <code class="docutils literal notranslate"><span class="pre">simulated_transfer</span></code> stands in for an application
+transfer operation that returns after motion and model updates finish. Replace it
+with a calibrated implementation for a real workcell; these holders have no calibrated
+geometry. The synthetic requests are not an executable instrument protocol.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">replace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pylabrobot.thermo_fisher.kingfisher.flex</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlexCommand</span>
+
+<span class="n">example_flex</span> <span class="o">=</span> <span class="n">KingFisherFlex</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"handler_example"</span><span class="p">)</span>
+<span class="n">example_plate</span> <span class="o">=</span> <span class="n">thermo_TS_kingfisher_96_wellplate_2000uL_Vb</span><span class="p">(</span><span class="s2">"example_plate"</span><span class="p">)</span>
+<span class="n">example_source</span> <span class="o">=</span> <span class="n">ResourceHolder</span><span class="p">(</span><span class="s2">"example_source"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">example_destination</span> <span class="o">=</span> <span class="n">ResourceHolder</span><span class="p">(</span><span class="s2">"example_destination"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">example_source</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">example_plate</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">simulated_transfer</span><span class="p">(</span><span class="n">resource</span><span class="p">:</span> <span class="n">Resource</span><span class="p">,</span> <span class="n">destination</span><span class="p">:</span> <span class="n">Resource</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">  </span><span class="sd">"""Simulate an awaited transfer with completed model updates; no hardware."""</span>
+  <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+  <span class="k">assert</span> <span class="n">resource</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+  <span class="n">resource</span><span class="o">.</span><span class="n">unassign</span><span class="p">()</span>
+  <span class="n">destination</span><span class="o">.</span><span class="n">assign_child_resource</span><span class="p">(</span><span class="n">resource</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">robotic_handler</span><span class="p">(</span><span class="n">action</span><span class="p">:</span> <span class="n">FlexAction</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">  </span><span class="sd">"""Application-owned fulfillment; substitute real awaited operations as appropriate."""</span>
+  <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="s2">"pause"</span><span class="p">:</span>
+    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Simulated intervention completion.</span>
+  <span class="k">else</span><span class="p">:</span>
+    <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">plate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">destination</span> <span class="o">=</span> <span class="n">action</span><span class="o">.</span><span class="n">holder</span> <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="s2">"load"</span> <span class="k">else</span> <span class="n">example_destination</span>
+    <span class="k">await</span> <span class="n">simulated_transfer</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">plate</span><span class="p">,</span> <span class="n">destination</span><span class="p">)</span>
+  <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="n">example_action</span> <span class="o">=</span> <span class="n">FlexAction</span><span class="p">(</span>
+  <span class="n">action</span><span class="o">=</span><span class="s2">"load"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"EXAMPLE"</span><span class="p">,</span> <span class="n">plate_id</span><span class="o">=</span><span class="s2">"example-id"</span><span class="p">,</span> <span class="n">plate_name</span><span class="o">=</span><span class="s2">"EXAMPLE"</span><span class="p">,</span>
+  <span class="n">plate</span><span class="o">=</span><span class="n">example_plate</span><span class="p">,</span> <span class="n">holder</span><span class="o">=</span><span class="n">example_flex</span><span class="o">.</span><span class="n">carousel</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+  <span class="n">processing_slot</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">loading_slot</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">line_number</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+  <span class="n">command</span><span class="o">=</span><span class="n">FlexCommand</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="s1">'PAU 1 "EXAMPLE"'</span><span class="p">),</span> <span class="n">source_sha256</span><span class="o">=</span><span class="s2">"0"</span> <span class="o">*</span> <span class="mi">64</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">await</span> <span class="n">robotic_handler</span><span class="p">(</span><span class="n">example_action</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">example_plate</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="n">example_flex</span><span class="o">.</span><span class="n">carousel</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="k">await</span> <span class="n">robotic_handler</span><span class="p">(</span><span class="n">replace</span><span class="p">(</span>
+  <span class="n">example_action</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">"unload"</span><span class="p">,</span> <span class="n">line_number</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+  <span class="n">command</span><span class="o">=</span><span class="n">FlexCommand</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="s1">'PAU 2 "EXAMPLE"'</span><span class="p">),</span>
+<span class="p">))</span>
+<span class="k">assert</span> <span class="n">example_plate</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="n">example_destination</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="abort-and-recovery">
+<h2>Abort and recovery<a class="headerlink" href="#abort-and-recovery" title="Link to this heading">#</a></h2>
+<p>Call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">flex.abort()</span></code> from another task while execution is pending. Keep the run
+in an <code class="docutils literal notranslate"><span class="pre">asyncio.Task</span></code> when it needs a supervising task. Aborting can move axes.
+Canceling a Python task, interrupting a notebook cell, or calling <code class="docutils literal notranslate"><span class="pre">stop()</span></code> does not
+stop the instrument or guarantee heater shutdown.</p>
+<p>After a rejected action, timeout, fault, abort or disconnect, further execution is
+blocked. The driver preserves the last modeled plate assignments but invalidates
+orientation and inventory verification. A failed transfer may have physically completed
+without its model update, so retained assignments are evidence to inspect, not a
+physical inventory reading.</p>
+<p>Before restarting:</p>
+<ol class="arabic simple">
+<li><p>Ensure motion has stopped and the instrument can be safely inspected. Check the
+tip comb, plates and heater; use the instrument’s recovery procedure as needed.</p></li>
+<li><p>Call <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">flex.stop()</span></code> to close the failed session, then <code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">flex.setup()</span></code>
+to establish a fresh connection.</p></li>
+<li><p>Correct the resource tree to match the observed plates, including external sources
+and destinations. Initialize only when the instrument is safe to home, using
+<code class="docutils literal notranslate"><span class="pre">await</span> <span class="pre">flex.initialize()</span></code>; homing does not empty trays or fix an attached tip comb.</p></li>
+<li><p>Inspect all eight trays and call <code class="docutils literal notranslate"><span class="pre">flex.reconcile_inventory()</span></code>. Recheck your plate
+bindings and handler before explicitly starting another run.</p></li>
+</ol>
+<p>There is no automatic retry or mid-protocol resume. Restarting executes the method
+from its beginning and can repeat chemical operations.</p>
+</section>
+<section id="disconnect">
+<h2>Disconnect<a class="headerlink" href="#disconnect" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">stop()</span></code> closes USB and ends the event stream. It does not stop motion.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">flex</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+<span class="k">await</span> <span class="n">observer</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../presto/hello-world.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">KingFisher Presto</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../nanodrop_1000/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Thermo Fisher NanoDrop 1000</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-setup">Physical setup</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#inspect-a-protocol-offline">Inspect a protocol offline</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logical-carousel-resources">Logical carousel resources</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bind-every-protocol-plate-before-execution">Bind every protocol plate before execution</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#connect-and-identify">Connect and identify</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#initialize">Initialize</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconcile-initial-inventory">Reconcile initial inventory</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#observe-events">Observe events</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#software-manual-action-handling">Software/manual action handling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-a-local-protocol-with-software-acknowledgment">Run a local protocol with software acknowledgment</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#alternative-physical-start-through-manualoperator">Alternative: physical Start through ManualOperator</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#application-selected-handling">Application-selected handling</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-free-robotic-handler-example">Hardware-free robotic-handler example</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#abort-and-recovery">Abort and recovery</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#disconnect">Disconnect</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/user_guide/thermo_fisher/kingfisher/flex/hello-world.ipynb">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="../../../../_sources/user_guide/thermo_fisher/kingfisher/flex/hello-world.ipynb.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, PyLabRobot.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.0.4.
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.24.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -708,6 +708,71 @@
 </table>
 </div>
 </section>
+<section id="kingfisher-flex">
+<h2>KingFisher Flex<a class="headerlink" href="#kingfisher-flex" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.KingFisherFlex.html#pylabrobot.thermo_fisher.kingfisher.flex.KingFisherFlex" title="pylabrobot.thermo_fisher.kingfisher.flex.KingFisherFlex"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KingFisherFlex</span></code></a></p></td>
+<td><p>Run supported 96DW BindIt exports over USB HID.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexError.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexError" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexError</span></code></a></p></td>
+<td><p>A Flex failure preserving the command and raw instrument error code.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexEvent.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexEvent" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexEvent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexEvent</span></code></a></p></td>
+<td><p>An execution event distinguishing instrument waits from host confirmations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexRunResult.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexRunResult" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexRunResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexRunResult</span></code></a></p></td>
+<td><p>Completion counts and the SHA-256 digest of the source BDZ.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexTranscriptEntry.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexTranscriptEntry" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexTranscriptEntry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexTranscriptEntry</span></code></a></p></td>
+<td><p>Monotonic session transcript; feature report payloads are hexadecimal.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocol.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocol" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexProtocol</span></code></a></p></td>
+<td><p>An immutable BindIt export, inspected without reconstructing its XML.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexBoundProtocol.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexBoundProtocol" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexBoundProtocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexBoundProtocol</span></code></a></p></td>
+<td><p>One export with a complete, read-only mapping of BDZ plate IDs to PLR plates.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexAction.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexAction" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexAction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexAction</span></code></a></p></td>
+<td><p>A load, unload or intervention at the single accessible carousel station.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexManualHandler.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexManualHandler" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexManualHandler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexManualHandler</span></code></a></p></td>
+<td><p>Fulfill Flex actions through a caller-configured ManualOperator.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexStartAcknowledgement.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexStartAcknowledgement" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexStartAcknowledgement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexStartAcknowledgement</span></code></a></p></td>
+<td><p>A ManualOperator provider awaiting one active Flex action's original PAU exchange.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocolError.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocolError" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocolError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexProtocolError</span></code></a></p></td>
+<td><p>Invalid container or unsupported script behavior.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocolIssue.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocolIssue" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexProtocolIssue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexProtocolIssue</span></code></a></p></td>
+<td><p>An execution blocker found offline, with a stable category and source location.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexCommand.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexCommand" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexCommand"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexCommand</span></code></a></p></td>
+<td><p>An original script line and its one-based source line number.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexPlate.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexPlate" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexPlate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexPlate</span></code></a></p></td>
+<td><p>A layout plate; its name is not a physical carousel slot.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexPlateHolder.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexPlateHolder" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexPlateHolder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexPlateHolder</span></code></a></p></td>
+<td><p>A Flex tray accepting one plate, without stacks or implicit replacement.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexDispense.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexDispense" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexDispense"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexDispense</span></code></a></p></td>
+<td><p>Required reagent addition to every well of a plate; volume is per well in uL.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexTip.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexTip" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexTip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexTip</span></code></a></p></td>
+<td><p>Tip configuration with all ordered pickup/return plate references.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.FlexPrompt.html#pylabrobot.thermo_fisher.kingfisher.flex.FlexPrompt" title="pylabrobot.thermo_fisher.kingfisher.flex.FlexPrompt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlexPrompt</span></code></a></p></td>
+<td><p>A plate request or protocol pause, with orientation from preceding MOR.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="_autosummary/pylabrobot.thermo_fisher.kingfisher.flex.read_flex_bdz.html#pylabrobot.thermo_fisher.kingfisher.flex.read_flex_bdz" title="pylabrobot.thermo_fisher.kingfisher.flex.read_flex_bdz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_flex_bdz</span></code></a></p></td>
+<td><p>Read a path or bytes, validating Flex identity without rewriting the export.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="bindit-protocol-files">
 <h2>BindIt protocol files<a class="headerlink" href="#bindit-protocol-files" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
@@ -799,6 +864,7 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#kingfisher-presto">KingFisher Presto</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#kingfisher-flex">KingFisher Flex</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bindit-protocol-files">BindIt protocol files</a></li>
 </ul>
   </nav></div>

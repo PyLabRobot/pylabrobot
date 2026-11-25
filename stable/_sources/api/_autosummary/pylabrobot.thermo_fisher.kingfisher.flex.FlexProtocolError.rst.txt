@@ -1,0 +1,6 @@
+﻿pylabrobot.thermo\_fisher.kingfisher.flex.FlexProtocolError
+===========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoexception:: FlexProtocolError

@@ -1,0 +1,6 @@
+pylabrobot.thermo\_fisher.kingfisher.flex.KingFisherFlex.wait\_for\_physical\_start
+===================================================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. automethod:: KingFisherFlex.wait_for_physical_start

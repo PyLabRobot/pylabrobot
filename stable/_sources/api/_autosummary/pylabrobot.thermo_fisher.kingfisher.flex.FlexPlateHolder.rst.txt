@@ -1,0 +1,85 @@
+﻿:orphan:
+
+
+pylabrobot.thermo\_fisher.kingfisher.flex.FlexPlateHolder
+=========================================================
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autoclass:: FlexPlateHolder
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexPlateHolder.location
+      ~FlexPlateHolder.name
+      ~FlexPlateHolder.resource
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FlexPlateHolder.__init__
+      ~FlexPlateHolder.assign_child_by_anchor
+      ~FlexPlateHolder.assign_child_resource
+      ~FlexPlateHolder.at
+      ~FlexPlateHolder.center
+      ~FlexPlateHolder.centers
+      ~FlexPlateHolder.check_can_drop_resource_here
+      ~FlexPlateHolder.copy
+      ~FlexPlateHolder.deregister_did_assign_resource_callback
+      ~FlexPlateHolder.deregister_did_unassign_resource_callback
+      ~FlexPlateHolder.deregister_state_update_callback
+      ~FlexPlateHolder.deregister_will_assign_resource_callback
+      ~FlexPlateHolder.deregister_will_unassign_resource_callback
+      ~FlexPlateHolder.deserialize
+      ~FlexPlateHolder.find_resource
+      ~FlexPlateHolder.find_resources
+      ~FlexPlateHolder.get_absolute_location
+      ~FlexPlateHolder.get_absolute_rotation
+      ~FlexPlateHolder.get_absolute_size_x
+      ~FlexPlateHolder.get_absolute_size_y
+      ~FlexPlateHolder.get_absolute_size_z
+      ~FlexPlateHolder.get_all_children
+      ~FlexPlateHolder.get_anchor
+      ~FlexPlateHolder.get_default_child_location
+      ~FlexPlateHolder.get_highest_known_point
+      ~FlexPlateHolder.get_location_wrt
+      ~FlexPlateHolder.get_resource
+      ~FlexPlateHolder.get_root
+      ~FlexPlateHolder.get_size_x
+      ~FlexPlateHolder.get_size_y
+      ~FlexPlateHolder.get_size_z
+      ~FlexPlateHolder.has_resource
+      ~FlexPlateHolder.is_in_subtree_of
+      ~FlexPlateHolder.load_all_state
+      ~FlexPlateHolder.load_from_json_file
+      ~FlexPlateHolder.load_state
+      ~FlexPlateHolder.load_state_from_file
+      ~FlexPlateHolder.named
+      ~FlexPlateHolder.register_did_assign_resource_callback
+      ~FlexPlateHolder.register_did_unassign_resource_callback
+      ~FlexPlateHolder.register_state_update_callback
+      ~FlexPlateHolder.register_will_assign_resource_callback
+      ~FlexPlateHolder.register_will_unassign_resource_callback
+      ~FlexPlateHolder.rotate
+      ~FlexPlateHolder.rotate_to
+      ~FlexPlateHolder.rotated
+      ~FlexPlateHolder.save
+      ~FlexPlateHolder.save_state_to_file
+      ~FlexPlateHolder.serialize
+      ~FlexPlateHolder.serialize_all_state
+      ~FlexPlateHolder.serialize_state
+      ~FlexPlateHolder.unassign
+      ~FlexPlateHolder.unassign_child_resource
+   
+   
