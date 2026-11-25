@@ -32,7 +32,6 @@ which also carry the tip's cone.
 
 | Description | Image | PLR definition |
 |-|-|-|
-| 'Thermo96VB_PP'<br>96 round, V-bottomed wells; with its 'TiterplateLid' | | `beckman_coulter_biomek_96_wellplate_vb` |
 | 'BCFlat96'<br>Part no.: 609844<br>96 round, flat-bottomed wells; with its 'TiterplateLid' | | `beckman_coulter_biomek_96_wellplate_flat` |
 | 'BCDeep96Square'<br>Part no.: 140504<br>96 deep, square, V-bottomed wells | | `beckman_coulter_biomek_96_deepwell_square` |
 | 'Thomson_24w_Square_RB'<br>Part no.: 931568<br>24 square, round-bottomed wells; with its lid | | `beckman_coulter_biomek_24_wellplate_square_rb` |
