@@ -1887,6 +1887,7 @@ CAPTURED_STATUS_RUNS = {
 # board, command, request payload, reply payload; "-" is an empty payload. Each following-error
 # configuration read (command 82) answers as captured: enabled, at most 4.0. Last, the captured
 # tare of the bottle and chip sensors; the stop's pump read and their calibration written back.
+# Three walk-to-idle moves (command 22) differ from ours in their last bits (`is_captured_move`).
 CAPTURED_EXCHANGES = """
 0:1:-:34002e00320030002e0036000000
 10:1:-:31002e0030002e0035000000
@@ -1952,13 +1953,13 @@ CAPTURED_EXCHANGES = """
 0:22:010000000000000000000000000000407f400000000000005940:0000
 0:28:01000000000000005e40:-
 0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
-0:22:000040877b10d60349c0e359d148c0c74b4025e09b5793b39540:0000
+0:22:000043877b10d60349c0e359d148c0c74b4025e09b5793b39540:0000
 0:22:0100545f88b1d4794940e359d148c0c74b4025e09b5793b39540:0000
 0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
 0:22:0000042e990e845733c0e359d148c0c74b4025e09b5793b39540:0000
-0:22:0100ff8a9491d13f4740e359d148c0c74b4025e09b5793b39540:0000
+0:22:0100fd8a9491d13f4740e359d148c0c74b4025e09b5793b39540:0000
 0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
-0:22:0000aaaaea83a1a3063fe359d148c0c74b4025e09b5793b39540:0000
+0:22:00008ee3d883a1a3063fe359d148c0c74b4025e09b5793b39540:0000
 0:22:01008ee3d883a1a3063fe359d148c0c74b4025e09b5793b39540:0000
 0:27:0000:000000000000073f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
 0:27:0100:000000000000083f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
@@ -1995,8 +1996,8 @@ CAPTURED_EXCHANGES = """
 """.split()
 
 
-# The status reads the bring-up's first Z home adds before the captured sequence (which seats the
-# arms first): each motor's following-error check reads it idle, then Z reads homed.
+# Not captured: no v3 capture homes Z before seating the arms. The status reads that first Z home
+# adds, each motor idle at its following-error check, then Z homed, as the captured homes read.
 Z_FIRST_STATUSES = {0: ["0000"], 1: ["0000"], 2: ["0000", "0400"]}
 # The motion commands it adds: the arms' faults cleared, Z's cleared, Z homed.
 Z_HOME_REQUEST = "0200000001000000d343867e1e874d4064ea130f737482407d2ae7ab04c2ce40"
@@ -2016,6 +2017,17 @@ def make_v3_answers():
     words[1:1] = Z_FIRST_STATUSES[motor]
     answers[0, 20, struct.pack("<h", motor)] = [bytes.fromhex(word) for word in words]
   return answers
+
+
+def is_captured_move(*, sent: bytes, captured: bytes) -> bool:
+  """Whether a move's payload (command 22) is a captured one: the same motor, each value within
+  1e-12 device units, a chosen bound above the captures' largest last-bit difference (2.13e-14)."""
+  sent_motor, *sent_values = struct.unpack("<hddd", sent)
+  captured_motor, *captured_values = struct.unpack("<hddd", captured)
+  return sent_motor == captured_motor and all(
+    math.isclose(value, captured_value, rel_tol=0.0, abs_tol=1e-12)
+    for value, captured_value in zip(sent_values, captured_values)
+  )
 
 
 def get_motion_commands(*, link: FakeLink) -> List[Tuple[int, str]]:
@@ -2064,7 +2076,12 @@ class V3Link(FakeLink):
     )
 
   async def write(self, data: bytes) -> int:
-    packet_number, board, _, _ = parse_frame(frame=data)
+    packet_number, board, command, payload = parse_frame(frame=data)
+    if (board, command) == (0, 22) and (board, command, payload) not in self.answers:
+      for key in [key for key in self.answers if key[:2] == (0, 22)]:
+        if is_captured_move(sent=payload, captured=key[2]):
+          self.answers[board, command, payload] = self.answers[key]
+          break
     if board not in (11, 12):
       return await super().write(data)
     self.written.append(data)
@@ -2122,7 +2139,15 @@ class V3ArmTests(DriverTestCase):
       board, command, request, _ = exchange.split(":")
       if int(board) == 0 and int(command) in (17, 21, 22, 24, 28):
         expected.append((int(command), request))
-    self.assertEqual(get_motion_commands(link=link), expected)
+    sent = get_motion_commands(link=link)
+    self.assertEqual(len(sent), len(expected))
+    for (sent_command, payload), (expected_command, request) in zip(sent, expected):
+      if sent_command == expected_command == 22:
+        self.assertTrue(
+          is_captured_move(sent=bytes.fromhex(payload), captured=bytes.fromhex(request)), payload
+        )
+      else:
+        self.assertEqual((sent_command, payload), (expected_command, request))
     self.assertFalse(driver.arm.is_initialized)
     # Each Z home follows a following-error check of every motor, as captured.
     homes = [
@@ -2140,6 +2165,16 @@ class V3ArmTests(DriverTestCase):
       + precheck
       + [(21, "0200"), (21, "0100"), (21, "0000")],
     )
+
+  async def test_an_arm_fault_before_the_bring_up_is_logged_before_it_is_cleared(self):
+    """The opening read finds motor 0 slipped, a status word captured after a seat."""
+    answers = make_v3_answers()
+    answers[0, 20, struct.pack("<h", 0)][0] = bytes.fromhex("0001")
+    driver, link = await self.make_arm(answers=answers)
+    with self.assertLogs(arm_module.logger, level="WARNING") as logs:
+      await driver.arm.initialize()
+    self.assertIn("motor 0 reports following error while moving (status 0x0100)", logs.output[0])
+    self.assertEqual(get_motion_commands(link=link)[:4], Z_FIRST_COMMANDS)
 
   async def test_stop_sends_three_stops_and_no_park(self):
     driver, link = await self.set_up_arm()
