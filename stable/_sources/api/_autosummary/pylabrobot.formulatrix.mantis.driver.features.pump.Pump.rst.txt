@@ -21,6 +21,8 @@ pylabrobot.formulatrix.mantis.driver.features.pump.Pump
    
       ~Pump.__init__
       ~Pump.measure_pressure
+      ~Pump.prime_chip
+      ~Pump.recover_reagent
       ~Pump.request_controller_enabled
       ~Pump.request_controller_status
       ~Pump.request_feedback_sensor_parameters
