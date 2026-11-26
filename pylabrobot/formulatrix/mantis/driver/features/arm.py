@@ -1680,14 +1680,24 @@ class Arm:
       for motor in (*ARM_MOTORS, Z_MOTOR)
     }
     try:
-      await self._wait_for_motors_idle(timeout=MOVE_TIMEOUT, expected_following_error=True)
-      # Z first, straight up to its flag, before the arms swing to their stops: after a power
-      # cycle the head can stand low, and seating the arms then drags it over the deck. The
-      # vendor's recorded start-up seats the arms first. An arm fault from before (a skip, a
-      # crash) is cleared so the check for a slipped motor doesn't refuse; the arms don't move
-      # here, and the seating that follows finds where they are again.
+      statuses = await self._wait_for_motors_idle(
+        timeout=MOVE_TIMEOUT, expected_following_error=True
+      )
+      # Z first: a low head would be dragged over the deck by the seating. Arm faults are logged,
+      # then cleared so Z's check for a slipped motor passes; the seating finds the arms again.
       logger.info("[%s] homing Z before the arms move", self._driver.name)
       for motor in ARM_MOTORS:
+        faults = [
+          meaning for bit, meaning in MOTOR_STATUS_ERROR_BITS.items() if statuses[motor] & bit
+        ]
+        if faults:
+          logger.warning(
+            "[%s] motor %d reports %s (status 0x%04x) before the bring-up; cleared",
+            self._driver.name,
+            motor,
+            ", ".join(faults),
+            statuses[motor],
+          )
         await self._unchecked_fw_clear_motor_faults(motor=motor)
       await self._home_z(speed=homing[Z_MOTOR].speed, acceleration=homing[Z_MOTOR].acceleration)
       for pass_index in range(2):
