@@ -275,6 +275,8 @@ class Arm:
     self._pose_observer: Optional[Callable[..., None]] = None
     # The chip slot the head's chip came from; None without a chip.
     self._attached_chip: Optional[int] = None
+    # The head's chip's type, as its slot's tag read before the pick-up; None without a chip.
+    self._attached_chip_type: Optional[str] = None
     # The two link angles last passed on, degrees, the geometry's own; None before any.
     self._link_angles: Optional[Tuple[float, float]] = None
     self._deck_to_arm_transform: Optional[Tuple[float, float, float]] = None
@@ -1262,6 +1264,31 @@ class Arm:
       for motor in (*ARM_MOTORS, Z_MOTOR)
     ]
 
+  def _get_route_moves(
+    self, *, route: List[MantisArmCoordinate]
+  ) -> List[List[Tuple[float, float, float]]]:
+    """A route's queued moves at the route profile, one per line, every line checked first.
+
+    Raises:
+      MantisKinematicsError, ValueError: as ``_get_route_line_targets``.
+    """
+    profiles = self._get_route_profiles()
+    return [
+      self._get_queued_move(targets=targets, profiles=profiles)
+      for targets in self._get_route_targets(route=route)
+    ]
+
+  async def _queue_moves(self, *, moves: List[List[Tuple[float, float, float]]]) -> int:
+    """Queue each move on the running sequencer and return the last one's item; the caller waits.
+
+    Args:
+      moves: each queued move, from ``_get_queued_move``; at least one.
+    """
+    item = 0
+    for targets in moves:
+      item = await self._driver._queue_move_item(targets=targets)
+    return item
+
   async def _play_queued_moves(
     self,
     *,
@@ -1295,14 +1322,12 @@ class Arm:
     await self._driver._unchecked_fw_clear_sequencer()
     await self._driver._unchecked_fw_start_sequencer()
     try:
-      queued = 0
-      for index, targets in enumerate(moves):
-        item = await self._driver._queue_move_item(targets=targets)
-        queued += 1
-        if index in wait_after and index < len(moves) - 1:
-          await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * queued)
-          queued = 0
-      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * queued)
+      start = 0
+      pauses = sorted({index for index in wait_after if 0 <= index < len(moves) - 1})
+      for end in [*pauses, len(moves) - 1]:
+        item = await self._queue_moves(moves=moves[start : end + 1])
+        await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * (end + 1 - start))
+        start = end + 1
     except BaseException:
       try:
         await self._driver._unchecked_fw_abort_sequencer()
@@ -1878,6 +1903,20 @@ class Arm:
       count += 1
     return count
 
+  def _get_approach_path(self, *, name: str) -> List[MantisArmCoordinate]:
+    """The unit's approach path by name.
+
+    Raises:
+      MantisConfigurationError: without it.
+    """
+    path = (self.configuration.approach_paths or {}).get(name)
+    if path is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no approach path to the {name} for this unit; give its "
+        "configuration folder (oem_config_directory) or a configuration saved with it"
+      )
+    return path
+
   async def _leave_approach_path(
     self, *, name: str, index: int, until: int, with_model_updates: bool = False
   ) -> None:
@@ -1893,15 +1932,9 @@ class Arm:
       until: the line to stop at, 0 the path's start.
       with_model_updates: as ``_play_queued_moves``.
     """
-    assert self.configuration.approach_paths is not None
-    path = self.configuration.approach_paths[name]
+    path = self._get_approach_path(name=name)
     last = index + 1 if until == 0 else index
-    steps = list(reversed(path[until:last]))
-    profiles = self._get_route_profiles()
-    moves = [
-      self._get_queued_move(targets=targets, profiles=profiles)
-      for targets in self._get_route_targets(route=steps)
-    ]
+    moves = self._get_route_moves(route=list(reversed(path[until:last])))
     await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
 
   async def _leave_approach_path_if_on_one(
@@ -2272,6 +2305,22 @@ class Arm:
     if not with_model_updates:  # else passed on after the route's last step
       await self._report_pose()
 
+  def _get_approach_path_moves(
+    self, *, name: str, reverse: bool
+  ) -> List[List[Tuple[float, float, float]]]:
+    """An approach path's queued moves at the route profile, every line checked: from its start
+    to its end, or back from its end to its start, every line as written.
+
+    Args:
+      name: the approach path's name.
+      reverse: back along it, from the line it ends at.
+
+    Raises:
+      MantisConfigurationError: without the path.
+    """
+    path = self._get_approach_path(name=name)
+    return self._get_route_moves(route=path[::-1] if reverse else path)
+
   async def _move_along_approach_path(self, *, name: str, with_model_updates: bool) -> None:
     """Move the head to the end of an approach path, from wherever it stands.
 
@@ -2294,13 +2343,7 @@ class Arm:
     """
     self._check_initialized()
     paths = self.configuration.approach_paths or {}
-    path = paths.get(name)
-    if path is None:
-      raise MantisConfigurationError(
-        f"{self._driver.name}: no approach path to the {name} for this unit; give its "
-        "configuration folder (oem_config_directory) or a configuration saved with it"
-      )
-    profiles = self._get_route_profiles()
+    path = self._get_approach_path(name=name)
     self._get_route_targets(route=path)  # every line checked before anything moves
     place = self._get_place(joint_state=await self.request_joint_state())
     if place is not None and place[0] == name:
@@ -2327,10 +2370,7 @@ class Arm:
       if not await self.request_is_parked():
         await self.park(with_model_updates=with_model_updates)
       start = 0
-    moves = [
-      self._get_queued_move(targets=targets, profiles=profiles)
-      for targets in self._get_route_targets(route=path[start:])
-    ]
+    moves = self._get_route_moves(route=path[start:])
     await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
     if not (with_model_updates and moves):  # else passed on after the last move
       await self._report_pose()
@@ -2424,11 +2464,7 @@ class Arm:
       await self.park(with_model_updates=with_model_updates)
     idle = [FRONT_IDLE_ROUTE[0], FRONT_IDLE_ROUTE[-1]]
     route = [*idle, *CHIP_CHANGER_ROUTE, *path, *CHIP_CHANGER_ROUTE, *idle]
-    profiles = self._get_route_profiles()
-    moves = [
-      self._get_queued_move(targets=targets, profiles=profiles)
-      for targets in self._get_route_targets(route=route)
-    ]
+    moves = self._get_route_moves(route=route)
     first_path_line = len(idle) + len(CHIP_CHANGER_ROUTE)
     await self._play_queued_moves(
       moves=moves,
@@ -2440,14 +2476,18 @@ class Arm:
 
   async def _check_chip_slot_tag(
     self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
-  ) -> None:
-    """Read a chip slot's tag: a pick-up needs a chip there, a placement an empty slot.
+  ) -> Optional[Dict[str, Any]]:
+    """Read a chip slot's tag and return it: a pick-up needs a chip there, a placement an empty
+    slot.
 
     A tag not read whole in time reads as an empty slot.
 
     Args:
       slot: the chip slot, 1 to 6.
       action: "pick_up_chip" or "place_chip".
+
+    Returns:
+      The tag, as ``Rfid.request_tag`` reads it; None for a placement into an empty slot.
 
     Raises:
       MantisConfigurationError: without an RFID reader, or as ``Rfid.request_tag``; nothing is sent.
@@ -2466,11 +2506,12 @@ class Arm:
         raise MantisMotionError(
           f"{self._driver.name}: chip slot {slot} already holds {chip} by its tag; nothing moves"
         )
-      return
+      return tag
     if tag is None:
       raise MantisMotionError(
         f"{self._driver.name}: chip slot {slot} holds no chip by its tag; nothing moves"
       )
+    return tag
 
   async def pick_up_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
     """Pick up the chip in a chip slot along the unit's path into it, from wherever the head stands,
@@ -2497,7 +2538,7 @@ class Arm:
       )
     path = self._get_chip_slot_path(slot=slot)
     attach_line = self._get_attach_line(path=path)
-    await self._check_chip_slot_tag(slot=slot, action="pick_up_chip")
+    tag = await self._check_chip_slot_tag(slot=slot, action="pick_up_chip")
     async with self._driver._show_action(action="pick_up_chip"):
       await self._move_through_chip_slot(
         path=path,
@@ -2505,6 +2546,7 @@ class Arm:
         with_model_updates=with_model_updates,
       )
     self._attached_chip = slot
+    self._attached_chip_type = None if tag is None else tag["chip_type"]
     logger.info("[%s] picked up the chip in slot %d", self._driver.name, slot)
 
   async def place_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
@@ -2544,6 +2586,7 @@ class Arm:
       )
     logger.info("[%s] placed the chip back into slot %d", self._driver.name, slot)
     self._attached_chip = None
+    self._attached_chip_type = None
 
   async def return_chip(self, *, with_model_updates: bool = False) -> None:
     """Place the chip on the head back into the slot it was picked up from.

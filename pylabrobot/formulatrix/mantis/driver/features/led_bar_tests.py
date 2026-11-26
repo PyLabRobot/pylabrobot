@@ -33,6 +33,7 @@ from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   CALIBRATION_WRITTEN_BACK,
+  CHIP_LINE_VENT,
   PUMP_READ,
   DriverTestCase,
   FakeLink,
@@ -260,6 +261,7 @@ class SetupAndStopTests(LedBarTestCase):
         *HALT,
         STATE_READ,
         PUMP_READ,
+        *CHIP_LINE_VENT,
         *CALIBRATION_WRITTEN_BACK,
         STOP_ANIMATION,
         color_write(colors=[OFF] * 20),

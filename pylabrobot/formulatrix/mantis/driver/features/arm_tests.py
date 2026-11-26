@@ -678,7 +678,7 @@ class StopTests(ArmTestCase):
     )
     sent = self.sent(link)
     self.assertEqual([command for _, command, _ in sent if command == 24], [24, 24, 24])
-    self.assertFalse({22, 30, 68} & {command for _, command, _ in sent})
+    self.assertFalse({22, 30, 68} & {command for board, command, _ in sent if board != 10})
 
   async def test_a_head_away_from_idle_is_not_parked_and_the_clamp_is_still_released(self):
     link = self.close_link()
@@ -704,7 +704,7 @@ class StopTests(ArmTestCase):
     ) as logs:
       await driver.stop()
     self.assertTrue(any("the arm was not parked" in line for line in logs.output))
-    commands = [command for _, command, _ in self.sent(link)]
+    commands = [command for board, command, _ in self.sent(link) if board != 10]
     self.assertNotIn(30, commands)
     self.assertNotIn(68, commands)
 
