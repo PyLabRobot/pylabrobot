@@ -6,6 +6,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 
 import {
+  BOUNDARIES,
   EDGE_WIDTH_3D,
   FILTER,
   FILTER_BELOW_COLLAR,
@@ -148,7 +149,7 @@ function makeDrawing(model, count, encloses, edgeDepth) {
   if (vessel) material.color.setHex(VESSEL_RIM);
   material.userData.lit = material;
 
-  if (MOVING_PARTS.has(model.category)) material.visible = false;
+  if (MOVING_PARTS.has(model.category) || BOUNDARIES.has(model.category)) material.visible = false;
 
   // Culled by the sphere three works out over the instances, as every instanced mesh, overlay
   // and outline here is: what is off screen is not submitted. A move or a hide drops the sphere.

@@ -1,0 +1,94 @@
+"""A pod's drive commands, checked on the wire against a fake board.
+
+Where a command has a counterpart in the Master Controller's log, the expected bytes are that
+logged message (sequence number aside).
+"""
+
+import asyncio
+import unittest
+from typing import List
+
+from pylabrobot.beckman_coulter.biomek_i7.driver.board import AceBoard
+from pylabrobot.beckman_coulter.biomek_i7.driver.board_tests import (
+  FakeAceUSB,
+  accepted,
+  done,
+  recorder,
+)
+from pylabrobot.beckman_coulter.biomek_i7.driver.errors import InterlockTrippedError
+from pylabrobot.beckman_coulter.biomek_i7.driver.features.pod import Pod
+from pylabrobot.beckman_coulter.biomek_i7.driver.framing import split
+from pylabrobot.beckman_coulter.biomek_i7.driver.motors import AxisMove
+from pylabrobot.beckman_coulter.biomek_i7.simulation_tests_support import generic_configuration
+
+TABLES = generic_configuration().motor_tables
+
+
+def without_sequence(message: bytes) -> bytes:
+  return message[:3] + b"\x00" + message[4:]
+
+
+def logged(hex_message: str) -> bytes:
+  return without_sequence(bytes.fromhex(hex_message))
+
+
+def answer_like_a_board(message: bytes) -> List[bytes]:
+  if message[4] in (0x50, 0x51):
+    return [accepted(message), done(message)]
+  return [done(message)]
+
+
+class PodDriveCommandTests(unittest.IsolatedAsyncioTestCase):
+  async def make_pod(self, module: str, side: str) -> Pod:
+    self.usb = FakeAceUSB(answer_like_a_board)
+    board = AceBoard(io=self.usb, default_timeout=1)
+    await board.setup()
+    self.addAsyncCleanup(board.stop)
+    return Pod(board, side, module, TABLES)  # type: ignore[arg-type]
+
+  def sent(self) -> List[bytes]:
+    return [without_sequence(m) for t in self.usb.transfers for m in split(t)]
+
+  async def test_targets_outside_the_limits_send_nothing(self) -> None:
+    pod = await self.make_pod("multichannel", "left")
+    with self.assertRaisesRegex(ValueError, "outside"):
+      await pod._unchecked_fw_set_move_parameters([AxisMove("Y", 0), AxisMove("X", 350721)])
+    self.assertEqual(self.usb.transfers, [])
+
+  async def test_not_homed_is_an_answer_and_other_refusals_raise(self) -> None:
+    pod = await self.make_pod("span8", "right")
+    self.usb.handler = lambda m: [m[:5] + b"\x00\x32"] if m[1] == 0x0A else [done(m)]
+    accepted_ = await pod._unchecked_fw_set_move_parameters(
+      [AxisMove("Z1", 9647), AxisMove("Z2", 9647)]
+    )
+    self.assertEqual(accepted_, [False, True])
+    self.usb.handler = lambda m: [m[:5] + b"\x00\x0f"]
+    with self.assertRaises(InterlockTrippedError):
+      await pod._unchecked_fw_set_move_parameters([AxisMove("X", -2560)])
+
+  async def test_a_batch_travels_together(self) -> None:
+    pod = await self.make_pod("span8", "right")
+    await pod._unchecked_fw_set_move_parameters([AxisMove(f"Z{i}", 9647) for i in range(1, 9)])
+    self.assertEqual(len(self.usb.transfers), 1)
+    self.assertEqual([m[1] for m in self.sent()], list(range(0x0A, 0x12)))
+
+  async def test_home_waits_for_every_axis(self) -> None:
+    pod = await self.make_pod("span8", "right")
+    held: List[bytes] = []
+    self.usb.handler = recorder(held, lambda m: [accepted(m)])
+    task = asyncio.create_task(pod._unchecked_fw_home(["Z1", "Z5"]))
+    while len(held) < 2:
+      await asyncio.sleep(0)
+    self.assertEqual(len(self.usb.transfers), 1)  # both homes start together
+    self.usb.push(done(held[0]))
+    await asyncio.sleep(0.05)
+    self.assertFalse(task.done())
+    self.usb.push(done(held[1]))
+    await task
+    self.assertEqual(
+      [without_sequence(m) for m in held], [logged("110A001051"), logged("110E001151")]
+    )
+
+
+if __name__ == "__main__":
+  unittest.main()
