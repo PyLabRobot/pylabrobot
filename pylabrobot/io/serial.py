@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import IOBase
@@ -24,11 +25,40 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 
-def find_serial_ports(vid_pid_pairs: Collection[tuple[int, int]]) -> list[str]:
+def _as_text(data: bytes) -> str:
+  """Bytes as text for the logs and captures (``unicode_escape``), for binary data too: an
+  invalid escape is kept as it is, without a warning."""
+  with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    return data.decode("unicode_escape", errors="backslashreplace")
+
+
+def serial_number_matches(found: Optional[str], wanted: str) -> bool:
+  """Whether a port's USB serial number is ``wanted``.
+
+  Windows' FTDI driver adds the interface's letter (A to D) to the chip's serial number
+  ("D30G5GV5" is listed as "D30G5GV5A"), so that letter is allowed either way: on the port, or in
+  ``wanted`` when it was copied from Windows and the port is on Linux or macOS.
+  """
+  if not found:
+    return False
+  found, wanted = found.upper(), wanted.upper()
+
+  def plus_letter(longer: str, shorter: str) -> bool:
+    """Whether ``longer`` is ``shorter`` with an interface letter added."""
+    return len(longer) == len(shorter) + 1 and longer.startswith(shorter) and longer[-1] in "ABCD"
+
+  return found == wanted or plus_letter(found, wanted) or plus_letter(wanted, found)
+
+
+def find_serial_ports(
+  vid_pid_pairs: Collection[tuple[int, int]], serial_number: Optional[str] = None
+) -> list[str]:
   """Return serial ports matching any of the supplied USB VID/PID pairs.
 
   Args:
     vid_pid_pairs: USB vendor/product identifier pairs to match.
+    serial_number: only the port whose USB serial number this is (see ``serial_number_matches``).
 
   Raises:
     RuntimeError: If pyserial is not installed.
@@ -44,6 +74,7 @@ def find_serial_ports(vid_pid_pairs: Collection[tuple[int, int]]) -> list[str]:
     str(port.device)
     for port in serial.tools.list_ports.comports()
     if (port.vid, port.pid) in identifiers
+    and (serial_number is None or serial_number_matches(port.serial_number, serial_number))
   ]
 
 
@@ -74,7 +105,24 @@ class Serial(IOBase):
     rtscts: bool = False,
     dsrdtr: bool = False,
     xonxoff: bool = False,
+    serial_number: Optional[str] = None,
+    dtr: Optional[bool] = None,
+    rts: Optional[bool] = None,
+    write_while_reading: bool = False,
   ):
+    """
+    Args:
+      serial_number: with ``vid`` and ``pid``, the device whose USB serial number this is, when
+        several of the same are plugged in (``serial_number_matches``).
+      dtr: the DTR line's state as soon as the port is open; None leaves pyserial's default
+        (on). Some devices take DTR or RTS going on as a reset or a request to talk. (On Linux
+        and macOS the system raises both for a moment as the port opens.)
+      rts: as ``dtr``, for RTS.
+      write_while_reading: writes on a worker of their own, so a write doesn't wait for a read in
+        progress (a read waits up to ``timeout`` for bytes). For protocols that read continuously
+        and must answer quickly; pyserial takes a read and a write from two threads at once. Don't
+        change the timeouts (``set_read_timeout``) while a write may be running.
+    """
     self.human_readable_device_name = human_readable_device_name
     self._port = port
     self._vid = vid
@@ -90,6 +138,11 @@ class Serial(IOBase):
     self.rtscts = rtscts
     self.dsrdtr = dsrdtr
     self.xonxoff = xonxoff
+    self.serial_number = serial_number
+    self._initial_dtr = dtr
+    self._initial_rts = rts
+    self.write_while_reading = write_while_reading
+    self._write_executor: Optional[ThreadPoolExecutor] = None
 
     # Instant parameter validation at init time
     if not self._port and not (self._vid and self._pid):
@@ -170,6 +223,8 @@ class Serial(IOBase):
 
     loop = asyncio.get_running_loop()
     self._executor = ThreadPoolExecutor(max_workers=1)
+    if self.write_while_reading:
+      self._write_executor = ThreadPoolExecutor(max_workers=1)
 
     setup_future = loop.run_in_executor(self._executor, self._setup_sync)
     try:
@@ -193,6 +248,9 @@ class Serial(IOBase):
     assert self._ser is not None
 
   def _shutdown_executor(self) -> None:
+    if self._write_executor is not None:
+      self._write_executor.shutdown(wait=False, cancel_futures=True)
+      self._write_executor = None
     if self._executor is not None:
       # the worker is idle here, so this does not block the event loop
       self._executor.shutdown(wait=False, cancel_futures=True)
@@ -206,14 +264,25 @@ class Serial(IOBase):
 
     # 1. VID:PID specified - port maybe
     if self._vid is not None and self._pid is not None:
-      matching_ports = [
-        p.device
+      found = [
+        p
         for p in serial.tools.list_ports.comports()
         if f"{self._vid:04X}:{self._pid:04X}" in (p.hwid or "")
+      ]
+      matching_ports = [
+        p.device
+        for p in found
+        if self.serial_number is None or serial_number_matches(p.serial_number, self.serial_number)
       ]
 
       # 1.a. No matching devices found AND no port specified
       if self._port is None and len(matching_ports) == 0:
+        if self.serial_number is not None:
+          seen = ", ".join(f"{p.device} ({p.serial_number})" for p in found) or "none"
+          raise RuntimeError(
+            f"No machine with serial number {self.serial_number} for VID={self._vid}, "
+            f"PID={self._pid}; seen: {seen}."
+          )
         raise RuntimeError(
           f"No machines found for VID={self._vid}, PID={self._pid}, and no port specified."
         )
@@ -235,24 +304,32 @@ class Serial(IOBase):
     # 4. VID:PID specified -  port not specified -> Multiple devices found -> ambiguity!
     else:
       raise RuntimeError(
-        f"Multiple devices detected with VID:PID {self._vid}:{self._pid}.\n"
+        f"Multiple devices detected with VID:PID {self._vid}:{self._pid}"
+        + (f" and serial number {self.serial_number}" if self.serial_number else "")
+        + ".\n"
         f"Detected ports: {matching_ports}\n"
         "Please specify the correct port address explicitly (e.g. /dev/ttyUSB0 or COM3)."
       )
 
     try:
-      self._ser = serial.Serial(
-        port=candidate_port,
-        baudrate=self.baudrate,
-        bytesize=self.bytesize,
-        parity=self.parity,
-        stopbits=self.stopbits,
-        write_timeout=self.write_timeout,
-        timeout=self.timeout,
-        rtscts=self.rtscts,
-        dsrdtr=self.dsrdtr,
-        xonxoff=self.xonxoff,
-      )
+      # Configured first and opened after, so the port opens with the DTR and RTS asked for.
+      ser = serial.Serial()
+      ser.port = candidate_port
+      ser.baudrate = self.baudrate
+      ser.bytesize = self.bytesize
+      ser.parity = self.parity
+      ser.stopbits = self.stopbits
+      ser.write_timeout = self.write_timeout
+      ser.timeout = self.timeout
+      ser.rtscts = self.rtscts
+      ser.dsrdtr = self.dsrdtr
+      ser.xonxoff = self.xonxoff
+      if self._initial_dtr is not None:
+        ser.dtr = self._initial_dtr
+      if self._initial_rts is not None:
+        ser.rts = self._initial_rts
+      ser.open()
+      self._ser = ser
     except serial.SerialException:
       logger.error(
         f"Could not connect to device '{self.human_readable_device_name}', is it in use by a different notebook/process?"
@@ -261,16 +338,29 @@ class Serial(IOBase):
 
     return candidate_port
 
+  @property
+  def is_open(self) -> bool:
+    """Whether the port is open."""
+    return self._ser is not None and bool(self._ser.is_open)
+
   async def stop(self):
-    """Close the serial device."""
+    """Close the serial device.
+
+    A read waiting for bytes is cancelled first, and a write in progress (``write_while_reading``)
+    is waited for, so the port is never closed under either.
+    """
 
     if self._ser is not None and self._ser.is_open:
       loop = asyncio.get_running_loop()
 
       if self._executor is None:
         raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
+      self._ser.cancel_read()  # returns a read waiting on the executor at once
+      if self._write_executor is not None:
+        await loop.run_in_executor(self._write_executor, lambda: None)
       await loop.run_in_executor(self._executor, self._ser.close)
 
+    self._ser = None
     self._shutdown_executor()
 
   async def write(self, data: bytes):
@@ -280,11 +370,15 @@ class Serial(IOBase):
     if self._executor is None or self._ser is None:
       raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
 
-    await loop.run_in_executor(self._executor, self._ser.write, data)
+    await loop.run_in_executor(self._write_executor or self._executor, self._ser.write, data)
 
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     capturer.record(
-      SerialCommand(device_id=self.port, action="write", data=data.decode("unicode_escape"))
+      SerialCommand(
+        device_id=self.port,
+        action="write",
+        data=_as_text(data),
+      )
     )
     emit_event(
       "io.write",
@@ -306,7 +400,11 @@ class Serial(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
       capturer.record(
-        SerialCommand(device_id=self.port, action="read", data=data.decode("unicode_escape"))
+        SerialCommand(
+          device_id=self.port,
+          action="read",
+          data=_as_text(data),
+        )
       )
       emit_event(
         "io.read",
@@ -317,6 +415,41 @@ class Serial(IOBase):
       )
 
     return cast(bytes, data)
+
+  async def read_available(self, max_bytes: int = 4096) -> bytes:
+    """Read what has arrived, up to ``max_bytes``: it waits at most ``timeout`` for the first
+    byte, and returns as soon as there is any (``read`` waits until it has ``num_bytes``)."""
+
+    loop = asyncio.get_running_loop()
+    if self._executor is None or self._ser is None:
+      raise RuntimeError(f"Call setup() first for device '{self.human_readable_device_name}'.")
+    ser = self._ser
+
+    def read() -> bytes:
+      """Read what is waiting, or wait for one byte."""
+      waiting = ser.in_waiting
+      return cast(bytes, ser.read(min(max(1, waiting), max_bytes)))
+
+    data = await loop.run_in_executor(self._executor, read)
+
+    if len(data) != 0:
+      logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
+      capturer.record(
+        SerialCommand(
+          device_id=self.port,
+          action="read",
+          data=_as_text(data),
+        )
+      )
+      emit_event(
+        "io.read",
+        transport="serial",
+        device=self.human_readable_device_name,
+        device_id=self.port,
+        data=data.decode("utf-8", errors="backslashreplace"),
+      )
+
+    return data
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     """Read a line from the serial device."""
@@ -330,7 +463,11 @@ class Serial(IOBase):
     if len(data) != 0:
       logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
       capturer.record(
-        SerialCommand(device_id=self.port, action="readline", data=data.decode("unicode_escape"))
+        SerialCommand(
+          device_id=self.port,
+          action="readline",
+          data=_as_text(data),
+        )
       )
       emit_event(
         "io.read",
@@ -418,6 +555,12 @@ class Serial(IOBase):
       "timeout": self.timeout,
       "rtscts": self.rtscts,
       "dsrdtr": self.dsrdtr,
+      "vid": self._vid,
+      "pid": self._pid,
+      "serial_number": self.serial_number,
+      "dtr": self._initial_dtr,
+      "rts": self._initial_rts,
+      "write_while_reading": self.write_while_reading,
     }
 
 
@@ -461,8 +604,11 @@ class SerialValidator(Serial):
       and next_command.action == "write"
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial write")
-    if next_command.data != data.decode("unicode_escape"):
-      align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
+    if next_command.data != _as_text(data):
+      align_sequences(
+        expected=next_command.data,
+        actual=_as_text(data),
+      )
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   async def read(self, num_bytes: int = 1) -> bytes:
@@ -474,6 +620,16 @@ class SerialValidator(Serial):
       and len(next_command.data) == num_bytes
     ):
       raise ValidationError(f"Next line is {next_command}, expected Serial read {num_bytes}")
+    return next_command.data.encode()
+
+  async def read_available(self, max_bytes: int = 4096) -> bytes:
+    next_command = SerialCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "serial"
+      and next_command.device_id == self._port
+      and next_command.action == "read"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected Serial read")
     return next_command.data.encode()
 
   async def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
