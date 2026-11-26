@@ -8,6 +8,7 @@ import {
   ARM_EDGE_WIDTH_3D,
   ARM_EDGE_WIDTH_FLAT,
   ARM_REFERENCE_OPACITY,
+  BOUNDARIES,
   BOX_OPACITY,
   CATEGORY_OPACITY,
   CONTAINERS,
@@ -72,8 +73,14 @@ let renderModeDirty = false;
 // box that stood in for it. Every mode change asks this rather than each one deciding again.
 function fillsBox(entry) {
   // A vessel's box is drawn by its own cavity mesh, which fills it exactly. Drawing the box as well
-  // puts two surfaces on the same plane, and the depth buffer cannot choose between them.
-  return !MOVING_PARTS.has(entry.model.category) && !entry.modelDrawn && !entry.isVessel;
+  // puts two surfaces on the same plane, and the depth buffer cannot choose between them. A
+  // boundary is a collision box: its outline says where it is, and a fill would hide the deck.
+  return (
+    !MOVING_PARTS.has(entry.model.category) &&
+    !BOUNDARIES.has(entry.model.category) &&
+    !entry.modelDrawn &&
+    !entry.isVessel
+  );
 }
 
 // Whether this is a thing you look into. Its walls stay drawn, at the shell's opacity, however much
