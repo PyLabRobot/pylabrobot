@@ -197,6 +197,16 @@ CALIBRATION_WRITTEN_BACK = [
   (10, 21, bytes.fromhex("00000000004049d0853f000000e06f292bc0")),
   (10, 21, bytes.fromhex("010000000080d1d5853f00000000b4572bc0")),
 ]
+# A v4's chip line vented at stop with the frames the captured tare vents it with, then the bottle
+# and chip lines read.
+CHIP_LINE_VENT = [
+  (10, 13, bytes.fromhex("01000000")),
+  (10, 32, bytes.fromhex("01000000")),
+  (10, 34, bytes.fromhex("01001027")),
+  (10, 34, bytes.fromhex("01000000")),
+  (10, 30, bytes.fromhex("0000")),
+  (10, 30, bytes.fromhex("0100")),
+]
 
 
 def make_answers(
