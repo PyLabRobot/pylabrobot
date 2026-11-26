@@ -13,7 +13,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Mapping, Optional, TypeVar, Union
+from typing import Mapping, Optional, Protocol, TypeVar, Union
 
 from pylabrobot.hamilton.transport.tcp.commands import TCPCommand, hamilton_error_for_entry
 from pylabrobot.hamilton.transport.tcp.error_tables import HC_RESULT_PROTOCOL
@@ -24,7 +24,6 @@ from pylabrobot.hamilton.transport.tcp.messages import CommandResponse, Registra
 from pylabrobot.hamilton.transport.tcp.packets import Address, HarpPacket, IpPacket
 from pylabrobot.hamilton.transport.tcp.protocol import Hoi2Action
 from pylabrobot.io.binary import Reader
-from pylabrobot.io.socket import Socket
 from pylabrobot.legacy.liquid_handling.errors import ChannelizedError
 
 logger = logging.getLogger(__name__)
@@ -72,12 +71,33 @@ _TERMINAL_ACTIONS = frozenset(
 )
 
 
+class SessionIO(Protocol):
+  """What a session reads and writes through: PLR's ``Socket``, or a link that carries the same
+  stream another way (Hamilton's serial link)."""
+
+  @property
+  def _unique_id(self) -> str:
+    """A name for the logs (named as PLR's ``Socket`` names it)."""
+
+  async def setup(self) -> None:
+    """Open the connection."""
+
+  async def stop(self) -> None:
+    """Close the connection."""
+
+  async def write(self, data: bytes, timeout: Optional[float] = None) -> None:
+    """Write bytes."""
+
+  async def read_exact(self, num_bytes: int, timeout: Optional[float] = None) -> bytes:
+    """Read exactly ``num_bytes`` bytes."""
+
+
 class TCPSession:
   """Own one connection's I/O, transactions, discovery, and event subscriptions."""
 
   def __init__(
     self,
-    io: Socket,
+    io: SessionIO,
     read_timeout: float = 300.0,
     error_codes: Optional[Mapping[tuple[int, int, int, int, int], str]] = None,
   ):
