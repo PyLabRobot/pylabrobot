@@ -68,7 +68,7 @@ class CoreGrippers:
   # Height the channels travel at and are left at around a tool command, in mm.
   default_minimum_traverse_height: float = 280.0
   # Y gap a channel carrying a tool keeps beyond its width from its neighbours, in mm.
-  tool_width_margin: float = 1.0
+  tool_width_margin: float = 5.0
 
   def __init__(
     self, driver: "STARDriver", configuration: Optional[CoreGrippersConfiguration] = None

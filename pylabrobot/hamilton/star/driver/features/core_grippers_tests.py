@@ -890,11 +890,11 @@ class TestSimulatedChannelPositions(unittest.IsolatedAsyncioTestCase):
     await self.pipettes.drop_tips([rack.get_item("A1")], use_channels=[0])
 
   async def test_channels_carrying_the_tools_keep_the_margin_more(self):
-    """Tools on 6 and 7: every pair with one of them keeps 10.0 mm, until they are returned."""
+    """Tools on 6 and 7: every pair with one of them keeps 14.0 mm, until they are returned."""
     self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 7 + [0.0])
     await self.grippers.pick_up_tools()
     self.assertEqual((self.grippers._back_channel, self.grippers._front_channel), (6, 7))
-    self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 5 + [10.0, 10.0, 0.0])
+    self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 5 + [14.0, 14.0, 0.0])
     await self.grippers.return_tools()
     self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 7 + [0.0])
 
