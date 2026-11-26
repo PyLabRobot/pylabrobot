@@ -305,7 +305,9 @@ in both modes:
 | `move_to_wash(position=2)` from wash 1 | 1.19 s | 1.08 s | +0.11 s (+10%) |
 | `park()` from wash 2 | 6.72 s | 5.44 s | +1.28 s (+24%) |
 
-On a v3, `Arm.initialize` (`_initialize_v3`) follows the captured cold start: it seats the arms
+On a v3, `Arm.initialize` (`_initialize_v3`) first homes Z, before the arms move: a following
+error an arm motor reports at the opening status read is logged as a warning, then cleared so Z's
+check for a slipped motor passes. Then it follows the captured cold start: it seats the arms
 against their stops (`_seat_arm_motors`, at most `SEAT_PASSES` passes) and backs them off from
 where command 27 reads them, homes Z with the unit's Z values (`_home_z`, its following-error
 check and home-done wait as on a v4), repeats both, homes the arms in order 1 then 0
