@@ -1,3 +1,3 @@
 """Thermo Fisher instruments."""
 
-from .kingfisher import KingFisherPresto
+from .kingfisher import KingFisherFlex, KingFisherPresto

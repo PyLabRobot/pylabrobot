@@ -221,7 +221,7 @@ def parse_sensor_values(xml: str) -> ODTCTemperatures:
   )
 
 
-def parse_progress(xml: str) -> ODTCProgress:
+def parse_progress_samples(xml: str) -> list[ODTCProgress]:
   """Read the four documented DataCapture series, rejecting missing or mismatched samples."""
   outer = ET.fromstring(xml)
   data = required_text(outer, "AnyData")
@@ -244,15 +244,25 @@ def parse_progress(xml: str) -> ODTCProgress:
     if not values or (sample_count is not None and len(values) != sample_count):
       raise ValueError("DataEvent series must contain matching nonempty samples")
     sample_count = len(values)
-    text = values[-1].text
-    if text is None:
-      raise ValueError(f"Missing value for {name}")
-    samples[name] = int(text)
+    series_samples = []
+    for value in values:
+      if value.text is None:
+        raise ValueError(f"Missing value for {name}")
+      series_samples.append(int(value.text))
+    samples[name] = series_samples
   if samples.keys() != expected.keys():
     raise ValueError(f"DataEvent is missing series: {expected.keys() - samples.keys()}")
-  return ODTCProgress(
-    samples["Elapsed time"] / 1000,
-    samples["Target temperature"] / 100,
-    samples["Current temperature"] / 100,
-    samples["LID temperature"] / 100,
-  )
+  return [
+    ODTCProgress(elapsed / 1000, target / 100, current / 100, lid / 100)
+    for elapsed, target, current, lid in zip(
+      samples["Elapsed time"],
+      samples["Target temperature"],
+      samples["Current temperature"],
+      samples["LID temperature"],
+    )
+  ]
+
+
+def parse_progress(xml: str) -> ODTCProgress:
+  """Return the latest sample from a validated device-reported batch."""
+  return parse_progress_samples(xml)[-1]

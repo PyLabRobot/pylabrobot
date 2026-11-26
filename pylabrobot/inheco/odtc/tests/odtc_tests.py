@@ -14,6 +14,7 @@ from pylabrobot.inheco.odtc import (
   ODTCProtocolStopped,
   ODTCStage,
   ODTCStep,
+  ODTCTemperatures,
   compile_protocol,
   method_set_to_xml,
   parse_method_set,
@@ -49,6 +50,7 @@ class MockODTC:
     self.started = asyncio.Event()
     self.reject = {}
     self.emit_progress = False
+    self.temperature_response_data: str | None = None
 
   async def complete(self, request_id=None, code=3, data="<ResponseData/>"):
     request_id = self.running_id if request_id is None else request_id
@@ -111,7 +113,14 @@ class MockODTC:
         "<Lid>10500</Lid><Lid_Monitor>10501</Lid_Monitor><Ambient>2500</Ambient>"
         "<PCB>3300</PCB><Heatsink>2600</Heatsink><Heatsink_TEC>2400</Heatsink_TEC></SensorValues>"
       )
-      await self.complete(request_id, data=self.parameter_data("SensorValues", xml))
+      await self.complete(
+        request_id,
+        data=(
+          self.temperature_response_data
+          if self.temperature_response_data is not None
+          else self.parameter_data("SensorValues", xml)
+        ),
+      )
     elif name in ("OpenDoor", "CloseDoor"):
       code = 2
       await self.complete(request_id)
@@ -198,6 +207,42 @@ class ODTCTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(progress.elapsed, 4.355)
     self.assertEqual(self.odtc._prepared, (72, 105))
 
+  async def test_temperatures_from_unnamed_firmware_parameter(self):
+    self.fake.temperature_response_data = (
+      FIXTURES / "firmware_6046_20645_temperature_response.xml"
+    ).read_text()
+    self.assertEqual(
+      await self.odtc.request_temperatures(),
+      ODTCTemperatures(
+        mount=18.86,
+        mount_monitor=18.72,
+        lid=18.64,
+        lid_monitor=18.56,
+        ambient=19.10,
+        pcb=22.48,
+        heatsink=18.96,
+        heatsink_tec=19.00,
+        timestamp="2006-01-01T20:26:53Z",
+      ),
+    )
+
+  async def test_temperatures_reject_ambiguous_or_malformed_parameters(self):
+    responses = [
+      "<ResponseData/>",
+      "<ResponseData><Parameter><String>&lt;SensorValues/&gt;</String></Parameter>"
+      "<Parameter><String>&lt;SensorValues/&gt;</String></Parameter></ResponseData>",
+      '<ResponseData><Parameter name="Other"><String>&lt;SensorValues/&gt;</String>'
+      "</Parameter></ResponseData>",
+      "<ResponseData><Parameter><Integer>1886</Integer></Parameter></ResponseData>",
+      "<ResponseData><Parameter><String>&lt;Other/&gt;</String></Parameter></ResponseData>",
+      "<ResponseData><Parameter><String/></Parameter></ResponseData>",
+      "<ResponseData><Parameter><String>x</String><String>y</String></Parameter></ResponseData>",
+    ]
+    for response in responses:
+      with self.subTest(response=response), self.assertRaises(ValueError):
+        self.fake.temperature_response_data = response
+        await self.odtc.request_temperatures()
+
   async def test_read_while_running_then_complete(self):
     self.fake.hold_name = "plr_currentProtocol"
     task = asyncio.create_task(self.odtc.run_protocol(profile(), volume=25, lid_temperature=105))
@@ -275,14 +320,28 @@ class ODTCTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(self.odtc.door_open)
     self.assertIsNone(self.odtc._prepared)
 
-  async def test_setup_does_not_reset_busy_instrument(self):
+  async def test_setup_from_startup(self):
     await self.odtc.stop()
-    self.fake.state = "Busy"
-    count = self.fake.commands.count("Reset")
-    with self.assertRaisesRegex(RuntimeError, "will not reset"):
-      await self.odtc.setup()
-    self.assertEqual(self.fake.commands.count("Reset"), count)
-    self.assertIsNone(self.odtc._sila._server)
+    self.fake.state = "startup"
+    self.fake.commands.clear()
+    await self.odtc.setup()
+    self.assertEqual(
+      self.fake.commands, ["GetStatus", "Reset", "GetStatus", "Initialize", "GetStatus"]
+    )
+    self.assertEqual(self.fake.receiver_url, self.odtc._sila.event_receiver_uri)
+    self.assertTrue(self.odtc._connected)
+    self.assertEqual(await self.odtc.request_status(), "Idle")
+
+  async def test_setup_does_not_reset_active_faulted_or_unknown_instrument(self):
+    await self.odtc.stop()
+    for state in ("Busy", "InError", "ErrorHandling", "unknown"):
+      self.fake.state = state
+      self.fake.commands.clear()
+      with self.subTest(state=state), self.assertRaisesRegex(RuntimeError, "will not reset"):
+        await self.odtc.setup()
+      self.assertEqual(self.fake.commands, ["GetStatus"])
+      self.assertIsNone(self.odtc._sila._server)
+      self.assertFalse(self.odtc._connected)
 
   async def test_stop_closes_transport_even_if_device_refuses(self):
     self.fake.reject["StopMethod"] = 2000

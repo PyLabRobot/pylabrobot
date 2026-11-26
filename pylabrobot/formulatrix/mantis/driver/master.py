@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import struct
 import time
 from typing import (
@@ -77,6 +78,7 @@ from .framing import (
   split_frames,
 )
 from .oem_config import (
+  CHIP_SLOT_APPROACH_PATH,
   UNKNOWN_ZONE,
   WASH_APPROACH_PATH,
   WASH_POSITIONS,
@@ -937,9 +939,16 @@ class MantisDriver:
     ):
       raise MantisConfigurationError("zones block: a route to safe XY moves the arms only")
     known = {WASTE_APPROACH_PATH, *(WASH_APPROACH_PATH.format(position=p) for p in WASH_POSITIONS)}
-    if routes["approach_paths"] is not None and not set(routes["approach_paths"]) <= known:
+    chip_slot = re.compile(CHIP_SLOT_APPROACH_PATH.format(slot=r"[1-9][0-9]*"))
+    unknown = [
+      name
+      for name in routes["approach_paths"] or {}
+      if name not in known and chip_slot.fullmatch(name) is None
+    ]
+    if unknown:
       raise MantisConfigurationError(
-        f"approach_paths block: the paths are {sorted(known)}, got {sorted(routes['approach_paths'])}"
+        f"approach_paths block: the paths are {sorted(known)} and chip slots "
+        f"({CHIP_SLOT_APPROACH_PATH}), got {sorted(unknown)}"
       )
     return routes
 
@@ -1209,7 +1218,8 @@ class MantisDriver:
       motor_limits = {motor: await self.request_motor_limits(motor=motor) for motor in MOTORS}
     self._discover_features(motor_limits=motor_limits)
     if self.pump is not None:
-      # Nothing uses the calibration yet: a board 10 that does not answer it does not fail setup.
+      # The configuration keeps the calibration as read here. The tare reads it again, and fails
+      # setup if board 10 does not answer.
       try:
         self.configuration.feedback_sensor_parameters = await self.pump._request_calibration()
       except (TimeoutError, CommandRefusedError, FrameError, struct.error) as error:
@@ -1312,10 +1322,13 @@ class MantisDriver:
         except Exception:
           logger.warning("[%s] the RFID reader's link did not close", self.name, exc_info=True)
 
-  async def _halt(self) -> None:
+  async def _halt(self, *, park: bool = True) -> None:
     """Abort the sequencer, then stop the motors and park an arm brought up (``Arm._halt``).
 
     The arm halts whether or not the abort succeeded; a failed abort is logged.
+
+    Args:
+      park: as ``Arm._halt``.
     """
     if self.arm is None:
       return
@@ -1323,15 +1336,23 @@ class MantisDriver:
       await self._unchecked_fw_abort_sequencer()
     except Exception:
       logger.warning("[%s] could not abort the sequencer", self.name, exc_info=True)
-    await self.arm._halt()
+    await self.arm._halt(park=park)
 
-  async def stop(self) -> None:
+  async def stop(self, accept_chip_left_on_head: bool = False) -> None:
     """Fail the command in flight and every event waiter; abort the sequencer, stop the
-    motors and park a v4 arm brought up; release the plate clamp, turn the LED bar off, stop reading
-    the link and close it.
+    motors and park a v4 arm brought up; release the plate clamp and the pressure, turn the LED bar
+    off, stop reading the link and close it.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
     nothing is sent: the link is closed.
+
+    Args:
+      accept_chip_left_on_head: stop with a chip on the head instead of refusing.
+
+    Raises:
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; every motor
+        is stopped, the arm stays where it stopped, brought up, and the link stays open for
+        ``Arm.return_chip``.
     """
     if self._reader is not None and self._reader.done() and self._connected:
       failure = None if self._reader.cancelled() else self._reader.exception()
@@ -1347,12 +1368,24 @@ class MantisDriver:
       if not waiter.done():
         waiter.set_exception(MantisNotConnectedError(stopped))
     if self._connected:
+      chip_on_head = self.arm is not None and self.arm.attached_chip is not None
+      if chip_on_head and not accept_chip_left_on_head:
+        await self._halt(park=False)  # no park: Z is not lowered with the chip on the head
+        raise MantisMotionError(
+          f"{self.name}: a chip is still on the head; return it with return_chip(), or pass "
+          "accept_chip_left_on_head=True"
+        )
       await self._halt()
     if self.plate_clamp is not None and self._connected:
       try:
         await self.plate_clamp._release()
       except Exception:
         logger.warning("[%s] could not release the plate clamp", self.name, exc_info=True)
+    if self.pump is not None and self._connected:
+      try:
+        await self.pump._stop()
+      except Exception:
+        logger.warning("[%s] could not release the pressure", self.name, exc_info=True)
     if self.led_bar is not None and self._connected:
       try:
         await self.led_bar.turn_off()
@@ -1362,8 +1395,8 @@ class MantisDriver:
     await self._close()
 
   async def setup(self, *, skip_arm: bool = False) -> None:
-    """Open the link if it is not open, read the device's configuration and check it, then bring
-    the arm and Z up (``Arm.initialize``). This moves the device.
+    """Open the link if it is not open, read the device's configuration and check it, bring the
+    arm and Z up (``Arm.initialize``), then tare the pressure sensors. This moves the device.
 
     On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
     ``SETUP_DONE_HOLD``, then idle.
@@ -1388,11 +1421,13 @@ class MantisDriver:
       async with self._show_action(action="setup", show_inner_actions=False):
         if self.arm is not None and not skip_arm:
           await self.arm.initialize()
+        if self.pump is not None:
+          await self.pump._tare_pressure_sensors()
         if self.led_bar is not None and self.led_bar.show_actions:
           await self.led_bar._show_setup_done()
     except BaseException:
       try:
-        await self.stop()
+        await self.stop(accept_chip_left_on_head=True)  # the setup's own failure is raised
       except Exception:
         logger.warning("[%s] stop after a failed setup failed", self.name, exc_info=True)
       raise

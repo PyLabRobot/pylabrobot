@@ -22,7 +22,7 @@ from .driver.features.plate_clamp import PlateClamp
 from .driver.features.pump import Pump
 from .driver.features.rfid import Rfid
 from .driver.master import MantisDriver
-from .driver.simulator import MantisSimulationDriver
+from .driver.simulator import MantisSimulationArm, MantisSimulationDriver
 from .resource_model import (
   ARM_BASE_X,
   ARM_BASE_Y,
@@ -256,12 +256,23 @@ class MantisDevice(Resource):
     if arm is not None:
       # Every move from here on passes where it ended to the model; the bring-up's is read here.
       arm._pose_observer = self._update_arm_model
+      if isinstance(arm, MantisSimulationArm):
+        arm._chip_spots = self.chip_spots  # a simulated slot is checked against the model
       if arm.is_initialized:
         await arm._report_pose()
 
-  async def stop(self) -> None:
-    """Stop the motors, park an arm brought up, release the clamp and disconnect."""
-    await self.driver.stop()
+  async def stop(self, accept_chip_left_on_head: bool = False) -> None:
+    """Stop the motors, park an arm brought up, release the clamp and disconnect.
+
+    Args:
+      accept_chip_left_on_head: stop with a chip on the head instead of refusing.
+
+    Raises:
+      MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; every motor
+        is stopped, the arm stays where it stopped, brought up, and the device stays connected for
+        ``arm.return_chip``.
+    """
+    await self.driver.stop(accept_chip_left_on_head=accept_chip_left_on_head)
 
 
 def Mantis(

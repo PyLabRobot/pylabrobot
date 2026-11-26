@@ -3,9 +3,11 @@
 import asyncio
 import dataclasses
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Literal, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources.formulatrix.mantis_chips import MantisChip
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .arm_kinematics import compute_device_position, compute_device_rate
 from .configuration import (
@@ -16,7 +18,7 @@ from .configuration import (
   configuration_from_json,
   read_configuration,
 )
-from .errors import MantisConfigurationError, MantisTimeoutError
+from .errors import MantisConfigurationError, MantisMotionError, MantisTimeoutError
 from .features.arm import (
   ARM_MOTORS,
   MOTOR_HOMED,
@@ -85,17 +87,53 @@ class MantisSimulationPlateClamp(PlateClamp):
 class MantisSimulationPump(Pump):
   """A pump with no device behind it, answering from the declared configuration.
 
-  Off, its controllers off and disabled, every line at 0, with the recorded sensor calibration.
+  Off, its controllers disabled, every line at 0, with the recorded sensor calibration; a controller
+  enabled reads settled at once.
   """
 
   def __init__(self, *, driver: "MantisSimulationDriver"):
     """Start with the simulated air pump off."""
     super().__init__(driver=driver)
     self._on = False
+    self._enabled: Dict[PressureController, bool] = {}
 
   async def _unchecked_fw_set_pump_on(self, *, on: bool) -> None:
     """Set the simulated pump's control state at once."""
     self._on = on
+
+  async def _unchecked_fw_set_controller_enabled(
+    self, *, controller: PressureController, enabled: bool
+  ) -> None:
+    """Set the simulated controller's state at once."""
+    self._get_controller_index(controller=controller)
+    self._enabled[controller] = enabled
+
+  async def _unchecked_fw_set_target_pressure(
+    self, *, controller: PressureController, pressure: float
+  ) -> None:
+    """Set nothing: no line holds pressure."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_proportional_valve(
+    self, *, controller: PressureController, value: int
+  ) -> None:
+    """Set nothing: no line holds pressure."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_solenoid_valve(
+    self, *, controller: PressureController, value: int
+  ) -> None:
+    """Set nothing: no line holds pressure."""
+    self._get_controller_index(controller=controller)
+
+  async def _unchecked_fw_set_feedback_sensor_parameters(
+    self, *, controller: PressureController, scale: float, offset: float
+  ) -> None:
+    """Store nothing: the simulated calibration is the one in the configuration."""
+    self._get_controller_index(controller=controller)
+
+  async def _sleep(self, *, seconds: float) -> None:
+    """Return at once."""
 
   async def measure_pressure(self, *, controller: PressureController) -> float:
     """0: no line holds pressure."""
@@ -120,14 +158,14 @@ class MantisSimulationPump(Pump):
     return parameters
 
   async def request_controller_status(self, *, controller: PressureController) -> int:
-    """0: off."""
+    """1, settled, if the simulated controller is enabled; else 0, off."""
     self._get_controller_index(controller=controller)
-    return 0
+    return 1 if self._enabled.get(controller, False) else 0
 
   async def request_controller_enabled(self, *, controller: PressureController) -> bool:
-    """False: no controller regulates."""
+    """The simulated controller's state, as last set; disabled until then."""
     self._get_controller_index(controller=controller)
-    return False
+    return self._enabled.get(controller, False)
 
   async def request_pump_on(self) -> bool:
     """The simulated pump's control state."""
@@ -194,9 +232,40 @@ class MantisSimulationArm(Arm):
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
     self._statuses: Dict[int, int] = {0: 0, 1: 0, Z_MOTOR: 0}
     self._homed: Set[int] = set()
+    # The device's chip spots by slot, set by its setup; a pick-up or placement checks them.
+    self._chip_spots: Optional[Dict[int, ResourceHolder]] = None
 
   def _check_calibrated(self) -> None:
     """Pass: a simulated arm needs only its offsets, which it always has."""
+
+  async def _check_chip_slot_tag(
+    self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
+  ) -> None:
+    """Check a chip slot against the device's chip spots instead of its tag: a pick-up needs a
+    ``MantisChip`` there, a placement none. The chip on the head counts as out of its spot.
+
+    Without chip spots (a driver used without its device), nothing is checked.
+    """
+    if self._chip_spots is None:
+      logger.info(
+        "[%s] simulated: no chip spots, so chip slot %d is not checked for %s",
+        self._driver.name,
+        slot,
+        action,
+      )
+      return
+    chip_spot = self._chip_spots.get(slot)
+    chip = chip_spot.resource if chip_spot is not None else None
+    held = isinstance(chip, MantisChip) and self._attached_chip != slot
+    if action == "pick_up_chip" and not held:
+      raise MantisMotionError(
+        f"{self._driver.name}: chip slot {slot} holds no chip in the model; nothing moves"
+      )
+    if action == "place_chip" and held:
+      raise MantisMotionError(
+        f"{self._driver.name}: chip slot {slot} already holds chip "
+        f"{chip.name if chip is not None else ''} in the model; nothing moves"
+      )
 
   def _set_position(self, *, motor: int, position: float) -> None:
     """Move a motor: the controller holds it there, and an arm motor's encoder reads it."""

@@ -39,8 +39,8 @@ class PlateClamp:
 
   On board 12, locking waits until the device reports clamping done. On a pressure-board output
   the valve's readback is read, never plate contact; it has no lock levels and no clamp state.
-  Locking it starts the pump when needed, and unlocking restores a pump this clamp started; a
-  failed lock and shutdown release the valve.
+  Locking it starts the pump when needed; unlocking leaves the pump on. A failed lock or unlock and
+  shutdown release the valve, then turn off a pump this clamp started.
   """
 
   # Lock level when the caller names none: 1, the weakest.
@@ -217,7 +217,7 @@ class PlateClamp:
 
   async def unlock(self) -> None:
     """Release the clamp: on board 12 wait until it reads unclamping done; on a pressure-board
-    output switch the valve off and restore a pump this clamp started.
+    output switch the valve off and leave the pump on.
 
     Raises:
       PlateClampError: at once, if it reads a state in ``UNCLAMPING_FAILED``, or the valve does not
@@ -232,7 +232,6 @@ class PlateClamp:
         except BaseException:
           await self._release_after_failure()
           raise
-        await self._restore_pump()
         logger.info("[%s] clamp valve released", self._driver.name)
       return
     await self._unchecked_fw_do_plate_unclamping()
@@ -255,12 +254,14 @@ class PlateClamp:
 
   async def _release(self) -> None:
     """Release at shutdown: on board 12 unless it already reads unclamping done; on a
-    pressure-board output always, with any pump restoration still outstanding."""
+    pressure-board output always, then turn off a pump this clamp started."""
     if self.auxiliary_output is None:
       if await self.request_state(attempts=1) != UNCLAMPING_DONE:
         await self.unlock()
       return
     await self.unlock()
+    async with self._operation_lock:
+      await self._restore_pump()
 
   async def lock(self, *, level: Optional[int] = None) -> None:
     """On board 12, release the clamp, lock it at ``level`` and wait until it reads clamping done;
