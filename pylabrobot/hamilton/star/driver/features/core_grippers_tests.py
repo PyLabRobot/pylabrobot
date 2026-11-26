@@ -873,6 +873,22 @@ class TestSimulatedChannelPositions(unittest.IsolatedAsyncioTestCase):
     assert all(location is not None for location in locations)
     return [location for location in locations if location is not None]
 
+  async def test_no_tip_command_while_a_plate_is_held(self):
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL
+
+    tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
+    tip_carrier[0] = rack = hamilton_96_tiprack_300uL(name="rack")
+    self.star.deck.assign_child_resource(tip_carrier, track=16)
+    await self.pipettes.pick_up_tips([rack.get_item("A1")], use_channels=[0])
+    await self.grippers.pick_up_tools()
+    await self.grippers.pick_up_resource(self.plate, pickup_distance_from_top=5)
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.pick_up_tips([rack.get_item("B1")], use_channels=[1])
+    with self.assertRaises(RuntimeError):
+      await self.pipettes.drop_tips([rack.get_item("A1")], use_channels=[0])
+    await self.grippers.place_resource(self.carrier[0])
+    await self.pipettes.drop_tips([rack.get_item("A1")], use_channels=[0])
+
   async def test_the_tools_are_taken_where_the_holder_holds_them(self):
     holder = self.grippers._holder()
     await self.grippers.pick_up_tools()
