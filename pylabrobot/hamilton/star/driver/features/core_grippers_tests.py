@@ -3,7 +3,7 @@ import dataclasses
 import re
 import unittest
 import unittest.mock
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pylabrobot.hamilton.protocol.text.framing import assemble_command, parse_fw_string
 from pylabrobot.hamilton.star.conftest import BARE_X_ARM
@@ -888,6 +888,36 @@ class TestSimulatedChannelPositions(unittest.IsolatedAsyncioTestCase):
       await self.pipettes.drop_tips([rack.get_item("A1")], use_channels=[0])
     await self.grippers.place_resource(self.carrier[0])
     await self.pipettes.drop_tips([rack.get_item("A1")], use_channels=[0])
+
+  async def test_channels_carrying_the_tools_keep_the_margin_more(self):
+    """Tools on 6 and 7: every pair with one of them keeps 10.0 mm, until they are returned."""
+    self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 7 + [0.0])
+    await self.grippers.pick_up_tools()
+    self.assertEqual((self.grippers._back_channel, self.grippers._front_channel), (6, 7))
+    self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 5 + [10.0, 10.0, 0.0])
+    await self.grippers.return_tools()
+    self.assertEqual(self.pipettes.minimum_y_spacings, [9.0] * 7 + [0.0])
+
+  async def test_the_margin_splits_no_batch_between_channels_without_tools(self):
+    """Channels 0-5 take a column of six in one command with the tools on 6 and 7."""
+    from pylabrobot.resources.hamilton import TIP_CAR_480_A00, hamilton_96_tiprack_300uL
+
+    tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
+    tip_carrier[0] = rack = hamilton_96_tiprack_300uL(name="rack")
+    self.star.deck.assign_child_resource(tip_carrier, track=16)
+    await self.grippers.pick_up_tools()
+    sent: List[str] = []
+    log = self.pipettes._driver._log_exchange  # type: ignore[attr-defined]
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written.startswith("C0TP"):
+        sent.append(written)
+      log(written, read)
+
+    self.pipettes._driver._log_exchange = recorded  # type: ignore[attr-defined]
+    spots = [rack.get_item(f"{row}1") for row in "ABCDEF"]
+    await self.pipettes.pick_up_tips(spots, use_channels=[0, 1, 2, 3, 4, 5])
+    self.assertEqual(len(sent), 1)
 
   async def test_the_tools_are_taken_where_the_holder_holds_them(self):
     holder = self.grippers._holder()

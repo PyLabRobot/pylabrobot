@@ -756,7 +756,8 @@ class Pipettes:
   def _min_pair_spacing(self, i: int, j: int) -> float:
     """The smallest Y gap two channels may sit at by themselves, in mm, whatever lies between them.
 
-    The wider of the two, rounded up to 0.1 mm, since neither may overlap the other.
+    The wider of the two, rounded up to 0.1 mm, since neither may overlap the other. A channel
+    carrying a CoRe gripper tool keeps `CoreGrippers.tool_width_margin` more.
 
     Args:
       i: one channel, 0-indexed from the back.
@@ -771,7 +772,12 @@ class Pipettes:
     widths = [self.configuration.channels[channel].width for channel in (i, j)]
     if any(width is None for width in widths):
       raise RuntimeError(f"channels {i} and {j} have no width read yet; run discovery first")
-    return math.ceil(max(cast(List[float], widths)) * 10) / 10
+    margin = 0.0
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._tools_taken_from is not None:
+      if {i, j} & {grippers._back_channel, grippers._front_channel}:
+        margin = grippers.tool_width_margin
+    return math.ceil((max(cast(List[float], widths)) + margin) * 10) / 10
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """The smallest allowed Y gap two channels may sit at, in mm.
@@ -798,7 +804,9 @@ class Pipettes:
   def minimum_y_spacings(self) -> List[float]:
     """The smallest Y gap each channel keeps from the one in front of it, in mm, one per channel.
 
-    What `plan_batches` asks for; the last channel has nothing in front of it.
+    One gap per pair, the last channel having nothing in front of it. `plan_batches` reads one
+    value per channel instead, and takes the larger of each pair: it is given
+    `_min_pair_spacing(i=channel, j=channel)` for each channel.
 
     Returns:
       One gap per channel, back to front.
@@ -3718,7 +3726,10 @@ class Pipettes:
       for batch in plan_batches(
         use_channels=use_channels[: len(dealt)],
         containers=dealt,
-        channel_spacings=self.minimum_y_spacings,
+        # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+        channel_spacings=[
+          self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+        ],
         wrt_resource=deck,
         x_tolerance=tolerance,
         resource_offsets=offsets,
@@ -4679,7 +4690,10 @@ class Pipettes:
         for batch in plan_batches(
           use_channels=[use_channels[index] for index in group],
           containers=cast(List[Container], [tip_spots[index] for index in group]),
-          channel_spacings=self.minimum_y_spacings,
+          # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+          channel_spacings=[
+            self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+          ],
           wrt_resource=deck,
           x_tolerance=ANY_COLUMN if x_tolerance is None else x_tolerance,
           resource_offsets=[offsets[index] for index in group],
@@ -4978,7 +4992,10 @@ class Pipettes:
           for batch in plan_batches(
             use_channels=[use_channels[index] for index in of_one_collar],
             containers=cast(List[Container], [spots[index] for index in of_one_collar]),
-            channel_spacings=self.minimum_y_spacings,
+            # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+            channel_spacings=[
+              self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+            ],
             wrt_resource=deck,
             x_tolerance=ANY_COLUMN if x_tolerance is None else x_tolerance,
             resource_offsets=[offsets[index] for index in of_one_collar],
