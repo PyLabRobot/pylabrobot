@@ -45,6 +45,8 @@ export const RESOURCE_COLORS = {
   body: 0xb8471f,
   finger: 0xff2d55,
   pad: 0xff7a90,
+  // A collision box with no shape of its own: the tree's dot matches the outline that carries it.
+  boundary: 0x49555e,
   default: 0xbdb163,
 };
 
@@ -53,6 +55,10 @@ export const RESOURCE_COLORS = {
 // case a per-package renderer registry should own: the arm's own package knows it is a moving
 // part, and this list is a stand-in until that exists.
 export const MOVING_PARTS = new Set(["x_arm", "arm", "gripper", "head", "channel"]);
+
+// A collision box with no shape of its own. The fill would hide the deck, so only the outline is
+// drawn, in both the free view and the top view.
+export const BOUNDARIES = new Set(["boundary"]);
 
 // Parts whose reference point says nothing the picture does not already. A single pipetting channel
 // is measured from its own axis, which is where it visibly is, and eight of them side by side turn
