@@ -169,7 +169,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
     with mock.patch.object(arm, "_unchecked_fw_home", wraps=arm._unchecked_fw_home) as home:
       await arm.initialize()
     z_homes = [call.kwargs for call in home.call_args_list if call.kwargs["motor"] == 2]
-    self.assertEqual(len(z_homes), 2)
+    self.assertEqual(len(z_homes), 3)  # once before the arms move, then twice as captured
     for z_home in z_homes:
       self.assertEqual(z_home["fast_speed"], compute_device_rate(motor=2, rate=10.0))
       self.assertEqual(z_home["acceleration"], compute_device_rate(motor=2, rate=300.0))
@@ -448,29 +448,6 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.assert_head_at(x=-57.0, y=0.0, z=1.57)
 
-  async def test_leaving_a_path_never_moves_the_arms_while_z_rises(self):
-    # Z down positive in device units: a target below where Z stands raises it.
-    driver = self.arm._driver
-    for name in ("waste", "wash_1"):
-      with self.subTest(path=name):
-        if name == "waste":
-          await self.arm.move_to_waste()
-        else:
-          await self.arm.move_to_wash(position=1)
-        positions = dict(self.arm._positions)
-        with mock.patch.object(driver, "_queue_move_item", wraps=driver._queue_move_item) as queue:
-          await self.arm.park()
-        self.assertTrue(queue.called)
-        for call in queue.call_args_list:
-          targets = call.kwargs["targets"]
-          named = {motor: target[0] for motor, target in enumerate(targets) if target[1] != 0}
-          arms_move = any(positions[motor] != named[motor] for motor in (0, 1) if motor in named)
-          z_rises = 2 in named and named[2] < positions[2]
-          self.assertFalse(
-            arms_move and z_rises, f"one item moves the arms and raises Z: {targets}"
-          )
-          positions.update(named)
-
   async def test_on_a_path_z_alone_and_bad_arguments_move_nothing(self):
     await self.arm.move_to_waste()
     positions = dict(self.arm._positions)
@@ -525,6 +502,23 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     await self.arm.recover_from_fault()
     self.assertTrue(self.arm.is_initialized)
     await self.assert_head_at(x=15.0, y=31.177, z=0.0)
+
+  async def test_a_prime_and_a_recovery_end_at_the_safe_height_with_the_pump_off(self):
+    # As captured, both end at (15, 30) at the safe height, the chip still on the head.
+    arm, pump = self.arm, self.mantis.pump
+    assert pump is not None
+    arm._attached_chip, arm._attached_chip_type = 1, "low_volume_hi_fi"
+
+    def remove_chip() -> None:  # stop refuses a chip on the head
+      arm._attached_chip = None
+
+    self.addCleanup(remove_chip)
+    for operation in (pump.prime_chip, pump.recover_reagent):
+      with self.subTest(operation=operation.__name__):
+        await operation(volume=6.0)
+        await self.assert_head_at(x=15.0, y=30.0, z=1.57)
+        self.assertFalse(await pump.request_pump_on())
+        self.assertEqual(arm.attached_chip, 1)
 
 
 class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):

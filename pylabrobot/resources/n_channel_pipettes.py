@@ -4,7 +4,7 @@ from collections import OrderedDict
 from typing import Any, Dict, List, Literal, Mapping, Optional, cast, get_args
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.head_tool import HeadTool, move_tool
+from pylabrobot.resources.head_tool import HeadTool, move_tool, release_named_tool
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.well import CrossSectionType
@@ -144,6 +144,31 @@ class TipMountingShaft(Resource):
     if tip is None:
       return None
     return Coordinate(0.0, 0.0, cast(Coordinate, tip.location).z)
+
+  def serialize_state(self) -> Dict[str, Any]:
+    """This shaft's state: the tool it carries (`tip`, as it serializes; None for none), as a tip
+    spot's state holds its tip. A device that cannot sense its tips reads them back from it."""
+    tip = self.tip
+    return {**super().serialize_state(), "tip": None if tip is None else tip.serialize()}
+
+  def load_state(self, state: Dict[str, Any]) -> None:
+    """Load this shaft's state: the saved `tip` goes onto it (a tool of the same name held
+    elsewhere in the same tree gives way first); a saved None takes off the one it carries. State
+    saved before shafts had any leaves it as it is."""
+    super().load_state(state)
+    if "tip" not in state:
+      return
+    saved, current = state["tip"], self.tip
+    if current is not None and saved is not None and current.serialize() == saved:
+      return
+    if current is not None:
+      self.release_tip()
+    if saved is None:
+      return
+    release_named_tool(self.get_root(), saved["name"])
+    tip = Resource.deserialize(saved)
+    assert isinstance(tip, HeadTool)
+    self.mount_tip(tip)
 
   def serialize(self) -> dict:
     """What its size does not say: how it holds a tip, and that it is round rather than a box."""
