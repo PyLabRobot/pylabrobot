@@ -21,6 +21,8 @@ pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump
    
       ~MantisSimulationPump.__init__
       ~MantisSimulationPump.measure_pressure
+      ~MantisSimulationPump.prime_chip
+      ~MantisSimulationPump.recover_reagent
       ~MantisSimulationPump.request_controller_enabled
       ~MantisSimulationPump.request_controller_status
       ~MantisSimulationPump.request_feedback_sensor_parameters
