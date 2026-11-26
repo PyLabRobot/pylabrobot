@@ -17,6 +17,9 @@ RHE = "RHE"
 "ASEND" = "ASEND"
 caf = "caf"
 
+# KingFisher carousel rotation command.
+MOR = "MOR"
+
 # Sartorius Entris II, a product name.
 Entris = "Entris"
 

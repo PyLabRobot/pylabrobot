@@ -3,6 +3,8 @@
 import unittest
 
 from pylabrobot.bmg_labtech.clariostar.device import (
+  LOCATION_IN,
+  LOCATION_OUT,
   CLARIOstar,
   CLARIOstarDevice,
   CLARIOstarPlus,
@@ -130,6 +132,15 @@ class DeviceTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_generic_device_is_not_checked(self):
     await self.setup_reader(CLARIOstarDevice(io=FakeFTDI()))
+
+  async def test_the_drawer_moves_the_plate_holder_by_default(self):
+    reader = CLARIOstarPlus(simulation=True)
+    self.assertEqual(reader.plate_holder.location, LOCATION_IN)
+    await reader.setup()
+    await reader.drawer.open()
+    self.assertEqual(reader.plate_holder.location, LOCATION_OUT)
+    await reader.drawer.close()
+    self.assertEqual(reader.plate_holder.location, LOCATION_IN)
 
 
 class StopTests(unittest.IsolatedAsyncioTestCase):

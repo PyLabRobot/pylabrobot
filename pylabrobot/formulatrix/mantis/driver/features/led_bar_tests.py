@@ -31,7 +31,14 @@ from pylabrobot.formulatrix.mantis.driver.features.plate_clamp_tests import (
 )
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
-from pylabrobot.formulatrix.mantis.driver.master_tests import DriverTestCase, FakeLink, make_answers
+from pylabrobot.formulatrix.mantis.driver.master_tests import (
+  CALIBRATION_WRITTEN_BACK,
+  CHIP_LINE_VENT,
+  PUMP_READ,
+  DriverTestCase,
+  FakeLink,
+  make_answers,
+)
 
 OFF, BLUE, GREEN, WHITE, RED, MAGENTA = 0x0000, 0x001F, 0x07E0, 0xFFFF, 0xF800, 0xF81F
 # "#00FFFF", "#8000FF" and "#FF4000"; a dim white; "#FF0080".
@@ -189,7 +196,7 @@ class LedBarDiscoveryTests(LedBarTestCase):
   async def test_built_only_on_a_v4_whose_board_12_answers(self):
     for absent_boards, built in (((), True), ((11,), False), ((12,), False)):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
@@ -215,7 +222,7 @@ class LedBarDiscoveryTests(LedBarTestCase):
           await driver.setup()
 
   async def test_a_v3_setup_and_stop_send_no_led_bar_frame(self):
-    self.default_read_timeout = 0.25  # board 11 never answers
+    self.absent_boards = (11,)
     link = FakeLink(answers=make_answers(absent_boards=(11,)))
     driver = await self.set_up_driver(link=link)
     await driver.stop()
@@ -245,11 +252,20 @@ class SetupAndStopTests(LedBarTestCase):
     self.assertEqual(led_bar_frames(written=link.written), [START_IDLE_ANIMATION])
     self.led_bar_sleep.assert_not_awaited()
 
-  async def test_stop_halts_then_releases_the_clamp_then_turns_off(self):
+  async def test_stop_halts_then_releases_the_clamp_and_the_pressure_then_turns_off(self):
     driver = await self.set_up_bar()
     await driver.stop()
     self.assertEqual(
-      self.sent(), [*HALT, STATE_READ, STOP_ANIMATION, color_write(colors=[OFF] * 20)]
+      self.sent(),
+      [
+        *HALT,
+        STATE_READ,
+        PUMP_READ,
+        *CHIP_LINE_VENT,
+        *CALIBRATION_WRITTEN_BACK,
+        STOP_ANIMATION,
+        color_write(colors=[OFF] * 20),
+      ],
     )
 
   async def test_stop_without_show_actions_turns_off_only(self):
@@ -369,14 +385,20 @@ class ActionTests(LedBarTestCase):
           self.bar.error_color = color
         with self.assertRaises(ValueError):
           self.bar.dispense_progress_color = color
+        with self.assertRaises(ValueError):
+          self.bar.pick_up_chip_color = color
+        with self.assertRaises(ValueError):
+          self.bar.place_chip_color = color
     self.assertEqual(
       [
         self.bar.setup_color,
         self.bar.setup_done_color,
         self.bar.error_color,
         self.bar.dispense_progress_color,
+        self.bar.pick_up_chip_color,
+        self.bar.place_chip_color,
       ],
-      ["blue", "green", "red", "green"],
+      ["blue", "green", "red", "green", "#00FFFF", "#8000FF"],
     )
     self.assertEqual(self.sent(), [])
 
