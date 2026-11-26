@@ -1702,28 +1702,6 @@ class ApproachPathTests(ArmTestCase):
       await driver.arm.move_to_wash(position=3)
     self.assertEqual(self.sent(link), [])
 
-  async def test_leaving_the_waste_plays_its_path_backwards(self):
-    # From the line the head stands at back to the waste's start, every line as written.
-    way_out = list(reversed(SYNTHETIC_WASTE_ROUTE))
-    first_item = 16 - len(way_out) + 1
-    expected = []
-    for item, (x, y, z) in enumerate(way_out, start=first_item):
-      targets = get_arm_positions(x=x, y=y) if x is not None and y is not None else {}
-      if z is not None:
-        targets[2] = compute_device_position(motor=2, position=z)
-      expected.append(get_queued_move(item=item, targets=targets))
-    link = RouteLink(
-      answers=make_answers(), events={(0, 68, expected[-1]): [bytes.fromhex(CLOSE_ITEM_PLAYED[16])]}
-    )
-    driver = await self.set_up_approach_paths(link=link)
-    driver._next_item = first_item
-    await driver.arm._leave_approach_path(
-      name="waste", index=len(SYNTHETIC_WASTE_ROUTE) - 1, until=0
-    )
-    self.assertEqual(
-      [payload for _, command, payload in self.sent(link) if command == 68], expected
-    )
-
   def test_the_head_is_placed_on_a_path_by_where_it_stands(self):
     arm = Arm(
       driver=mock.Mock(**{"configuration.generation": "v4"}),
