@@ -879,8 +879,11 @@
 <tr class="row-even"><td><p>Unit configuration</p></td>
 <td><p>the clamp’s lock levels, each slot’s RFID antenna, the arm’s calibration, its routes and the stage transform, from the unit’s configuration folder or a saved file; the first two else from a recording of its generation</p></td>
 </tr>
-<tr class="row-odd"><td><p>Not supported yet</p></td>
-<td><p>switching the pump or a pressure controller, chips, dispensing</p></td>
+<tr class="row-odd"><td><p>Prime and recovery</p></td>
+<td><p>the chip on the head primed at the waste, by volume or until the drop sensor (v4) sees drops, and its reagent recovered (v4)</p></td>
+</tr>
+<tr class="row-even"><td><p>Not supported yet</p></td>
+<td><p>switching the pump or a pressure controller, dispensing</p></td>
 </tr>
 </tbody>
 </table>
@@ -1176,6 +1179,30 @@ On a v3, setup seats the arms against their stops, backs off relative to their l
 <div class="cell_input docutils container">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pick_up_chip</span><span class="p">(</span><span class="n">chip_number</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="n">mantis</span><span class="o">.</span><span class="n">current_chip</span><span class="p">,</span> <span class="n">mantis</span><span class="o">.</span><span class="n">attached_chip</span>
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="priming-and-recovering">
+<h3>Priming and recovering<a class="headerlink" href="#priming-and-recovering" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">pump.prime_chip(chip_number=...)</span></code> picks up the chip in that slot (nothing moves for it when it is already on the head), primes it at the waste and brings the head back to (15, 30), at the safe height on a v4 and at Z’s flag on a v3. If it refuses, nothing has moved; after a failure the head may be left in the waste, and <code class="docutils literal notranslate"><span class="pre">mantis.arm.recover_from_fault()</span></code> brings it back. Without a volume it takes the input slot’s default for <code class="docutils literal notranslate"><span class="pre">input_source</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;tube&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;pipette_tip&quot;</span></code>) from the unit’s configuration, else the chip’s. On a v4 with a drop sensor, a prime without a volume of a low volume Hi-Fi chip runs until the sensor sees <code class="docutils literal notranslate"><span class="pre">consecutive_drops</span></code> drops in a row (<code class="docutils literal notranslate"><span class="pre">drop_detection</span></code>); a fixed prime raises <code class="docutils literal notranslate"><span class="pre">MantisPrimeError</span></code> if the sensor saw no drop (<code class="docutils literal notranslate"><span class="pre">verify_sensor</span></code>). A v3 primes only as captured: a high volume chip, from idle, in whole large drops (a multiple of 5 uL), so give it a volume. <code class="docutils literal notranslate"><span class="pre">pump.is_primed</span></code> reads whether the chip on the head was primed.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">generation</span> <span class="o">==</span> <span class="s2">"v4"</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">prime_chip</span><span class="p">(</span><span class="n">chip_number</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">prime_chip</span><span class="p">(</span><span class="n">chip_number</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">volume</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+<span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">is_primed</span>
+</pre></div>
+</div>
+</div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">pump.recover_reagent(chip_number=...)</span></code> draws the chip’s reagent back into its input; it refuses unless that slot’s chip is on the head. By default it takes the input slot’s recovery volume. A v3 recovery is not captured and is refused; nothing is sent.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">mantis</span><span class="o">.</span><span class="n">driver</span><span class="o">.</span><span class="n">configuration</span><span class="o">.</span><span class="n">generation</span> <span class="o">==</span> <span class="s2">"v4"</span><span class="p">:</span>
+  <span class="k">await</span> <span class="n">mantis</span><span class="o">.</span><span class="n">pump</span><span class="o">.</span><span class="n">recover_reagent</span><span class="p">(</span><span class="n">chip_number</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1550,6 +1577,7 @@ On a v3, setup seats the arms against their stops, backs off relative to their l
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arm">Arm</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#moving-the-arm-v4">Moving the arm (v4)</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#picking-up-a-chip">Picking up a chip</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#priming-and-recovering">Priming and recovering</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pressure">Pressure</a></li>

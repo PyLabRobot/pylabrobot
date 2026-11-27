@@ -588,7 +588,8 @@
 <dt class="sig sig-object py" id="pylabrobot.formulatrix.mantis.driver.errors.MantisPrimeError">
 <span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pylabrobot.formulatrix.mantis.driver.errors.</span></span><span class="sig-name descname"><span class="pre">MantisPrimeError</span></span><a class="headerlink" href="#pylabrobot.formulatrix.mantis.driver.errors.MantisPrimeError" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisError"><code class="xref py py-class docutils literal notranslate"><span class="pre">MantisError</span></code></a>, <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code></a></p>
-<p>A prime ran its full volume, but the liquid sensor never confirmed flow.</p>
+<p>A prime the drop sensor did not confirm: a fixed prime that saw no drop, or a drop-detection
+prime at its cycle cap without the drops in a row it ends on.</p>
 </dd></dl>
 
 </section>

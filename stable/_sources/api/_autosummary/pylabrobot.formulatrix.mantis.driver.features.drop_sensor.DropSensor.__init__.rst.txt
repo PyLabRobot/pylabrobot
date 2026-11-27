@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.drop\_sensor.DropSensor.\_\_init\_\_
+==================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.drop_sensor
+
+.. automethod:: DropSensor.__init__

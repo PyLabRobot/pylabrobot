@@ -18,6 +18,7 @@ pylabrobot.formulatrix.mantis.MantisDevice
       ~MantisDevice.arm
       ~MantisDevice.attached_chip
       ~MantisDevice.current_chip
+      ~MantisDevice.drop_sensor
       ~MantisDevice.led_bar
       ~MantisDevice.location
       ~MantisDevice.name

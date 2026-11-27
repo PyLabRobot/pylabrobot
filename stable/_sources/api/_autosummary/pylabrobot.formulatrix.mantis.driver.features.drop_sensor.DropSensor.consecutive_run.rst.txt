@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.driver.features.drop\_sensor.DropSensor.consecutive\_run
+======================================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.features.drop_sensor
+
+.. autoproperty:: DropSensor.consecutive_run

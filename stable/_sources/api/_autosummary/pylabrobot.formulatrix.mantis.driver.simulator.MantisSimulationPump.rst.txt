@@ -10,6 +10,13 @@ pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump
 
    
    
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationPump.is_primed
+   
    
 
    
