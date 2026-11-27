@@ -1,6 +1,5 @@
 """Formulatrix Mantis liquid dispenser."""
 
-from .carousel import MantisCarousel
 from .device import RECORDING_MANTIS_V4, Mantis, MantisDevice
 from .driver import (
   CLAMP_STATE_DESCRIPTIONS,
@@ -17,6 +16,7 @@ from .driver import (
   FrameError,
   InvalidQueueItemError,
   LedBar,
+  MantisCarousel,
   MantisConfigurationError,
   MantisConnectionLostError,
   MantisCoordinateError,
