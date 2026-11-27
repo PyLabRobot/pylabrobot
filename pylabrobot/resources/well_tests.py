@@ -27,6 +27,7 @@ class TestWell(unittest.TestCase):
         "category": "well",
         "model": "model",
         "max_volume": 10,
+        "nominal_volume": 10,
         "material_z_thickness": None,
         "compute_volume_from_height": None,
         "compute_height_from_volume": None,
@@ -38,6 +39,11 @@ class TestWell(unittest.TestCase):
     )
 
     self.assertEqual(Well.deserialize(well.serialize()), well)
+
+  def test_nominal_volume_round_trip(self):
+    well = Well(name="well", size_x=1, size_y=1, size_z=3, max_volume=10, nominal_volume=8)
+    self.assertEqual(well.nominal_volume, 8)
+    self.assertEqual(Well.deserialize(well.serialize()).nominal_volume, 8)
 
   def test_get_index_in_plate(self):
     plate = Plate(

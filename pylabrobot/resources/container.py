@@ -30,6 +30,7 @@ class Container(Liddable, Resource):
     height_volume_data: Optional[Dict[float, float]] = None,
     no_go_zones: Optional[List[Tuple[Coordinate, Coordinate]]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
+    nominal_volume: Optional[float] = None,
   ):
     """Create a new container.
 
@@ -37,6 +38,8 @@ class Container(Liddable, Resource):
       material_z_thickness: Container cavity base to the (outer) base of the container object. If
         `None`, certain operations may not be supported.
       max_volume: Maximum volume of the container. If `None`, will be inferred from resource size.
+      nominal_volume: Rated working volume of the container (what it is sold and named as), in
+        uL. Defaults to `max_volume` when not given.
       height_volume_data: Optional dict mapping height (mm) to volume (uL). When provided,
         ``compute_volume_from_height`` and ``compute_height_from_volume`` are auto-generated
         via piecewise-linear interpolation if not explicitly passed. The data is also available
@@ -84,6 +87,7 @@ class Container(Liddable, Resource):
           return interpolate_1d(v, volume_height_data, bounds_handling="error")
 
     self.max_volume = max_volume or (size_x * size_y * size_z)
+    self.nominal_volume = nominal_volume if nominal_volume is not None else self.max_volume
     self.tracker = VolumeTracker(thing=f"{self.name}_volume_tracker", max_volume=self.max_volume)
     # Notify state-update subscribers (e.g. the Visualizer) on volume changes; without this
     # a bare Container like a Trough updates its volume internally but never broadcasts it.
@@ -144,6 +148,7 @@ class Container(Liddable, Resource):
     return {
       **super().serialize(),
       "max_volume": serialize(self.max_volume),
+      "nominal_volume": serialize(self.nominal_volume),
       "material_z_thickness": self._material_z_thickness,
       "compute_volume_from_height": None
       if self.height_volume_data is not None
