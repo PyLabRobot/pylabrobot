@@ -24,6 +24,7 @@ from .errors import (
   PlateClampError,
 )
 from .features.arm import Arm
+from .features.drop_sensor import DropSensor
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
 from .features.pump import (
@@ -37,6 +38,7 @@ from .master import MantisDriver
 from .simulator import (
   MantisSimulationArm,
   MantisSimulationDriver,
+  MantisSimulationDropSensor,
   MantisSimulationLedBar,
   MantisSimulationPlateClamp,
   MantisSimulationPump,

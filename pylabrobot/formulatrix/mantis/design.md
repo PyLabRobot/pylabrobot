@@ -26,8 +26,8 @@ driver/events.py             The events the device sends unasked: their codes, w
                              and how it is logged.
 driver/simulator.py          MantisSimulationDriver, MantisSimulationArm,
                              MantisSimulationPlateClamp, MantisSimulationPump, MantisSimulationRfid,
-                             MantisSimulationLedBar. Answer from the declared configuration;
-                             nothing reaches a wire.
+                             MantisSimulationLedBar, MantisSimulationDropSensor. Answer from the
+                             declared configuration; nothing reaches a wire.
 driver/framing.py            The frame: header, check word, splitting, payload strings, boards.
 driver/errors.py             MantisError and one error per kind; what the device's codes mean.
 driver/configuration.py      DeviceConfiguration: what the device answered about itself.
@@ -38,7 +38,7 @@ driver/sequence_files.py     The unit's sequence files: the waypoints of a route
 driver/confirmed_firmware_versions.py
                              The firmware sets confirmed on a device, per generation.
 driver/features/             One class per thing the device is fitted with: Arm, PlateClamp, Pump,
-                             Rfid, LedBar.
+                             Rfid, LedBar, DropSensor.
 driver/recordings/           One real Mantis of each generation: its configuration and unit values.
 resource_model/              The parts the device is modelled as, their files and manifest.
 liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity band and chip type.
@@ -67,17 +67,16 @@ stops. Board 0's version string and the serial number decide nothing.
 
 **M3. Nothing exists until the device says it is fitted; one class per feature.** (STAR P2.)
 `discover` reads the configuration (`_request_configuration`), checks it against a declared one,
-then `_discover_features` builds the features it lists; a refused setup builds none. The RFID
-reader is the exception: `discover` builds it when it answers its ping on interface A, after every
-opening of the link. Each feature is an `Optional` attribute of the driver, `None` until built:
+then `_discover_features` builds the features it lists; a refused setup builds none. The RFID reader
+is the exception: `discover` builds it when it answers its ping on interface A, after every opening
+of the link. Each feature is an `Optional` attribute of the driver, `None` until built:
 `plate_clamp` from the unit's `plate_clamp` block, its `controller` key matching the boards (a
-pressure-board output and board 10, or levels and board 12); `pump` when board 10 answered; `arm`
-on every unit; `led_bar` only on a v4 whose board 12 answered. Every feature is one class on both
-generations, with the same public methods. The generation selects only private plumbing, in the
-fork points listed in M6, each written `== "v3"` / `== "v4"` and refusing any other value. Where a
-v3 lacks the hardware (absolute encoders, a motor clamp state) the method raises
-`MantisConfigurationError`; where a v3 path has not run on a device it raises
-`NotImplementedError`.
+pressure-board output and board 10, or levels and board 12); `pump` when board 10 answered; `arm` on
+every unit; `led_bar` and `drop_sensor` only on a v4 whose board 12 answered. Every feature is one
+class on both generations, with the same public methods. The generation selects only private
+plumbing, in the fork points listed in M6, each written `== "v3"` / `== "v4"` and refusing any other
+value. Where a v3 lacks the hardware (absolute encoders, a motor clamp state) the method raises
+`MantisConfigurationError`; where a v3 path has not run on a device it raises `NotImplementedError`.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
 what the device answered: generation, firmware versions and the pressure board's sensor
@@ -110,10 +109,14 @@ exists, `led_bar.number_of_leds` where `Device.config` sets `NumberOfLed`, `arm`
 declares the arms' absolute encoder references (a v4), its encoder correction from the `Data`
 folder, otherwise the v3's home frame, flag searches, retract and backoff settings and route to
 idle; `zones` where the unit declares its zones (a v4), with each zone's routes, and
-`approach_paths`, the unit's paths from idle to the waste (`"waste"`) and to each wash position
+`approach_paths`, the unit's paths from idle to the waste (`"waste"`, the file `Dispense.config`
+names, as the vendor reads it) and to each wash position
 (`"wash_1"`, `"wash_2"`), from `System/Sequences/Common`; `stage` where the unit
 declares its stage transform, with its tilt and arm type and the plate holder's origin from the
-`Data` folder.
+`Data` folder; `inputs` where the install has `System/Inputs`: each chip rack input slot's default
+prime and recovery volumes, by input source (`"tube"`, `"pipette_tip"`) and chip type, from
+`Input<n>.config`, chip slot n's (its `Type` `ACC`, as `ChipChanger.config` and `RFID.config`
+name the chip racks).
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
 (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `approach_paths`, `stage`) comes from the unit's folder or
@@ -135,6 +138,7 @@ Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 | plate holder origin | `Device/Adapters/SBS Adapter.ad.txt` | the unit's |
 | chip changer and sequence safe Z (`ChipChanger.MovementZ`, `*.seq.txt`) | `ChipChanger.config`, sequences | unit or generation, unsettled |
 | clamp levels, RFID antennas, LED count (`NumberOfLed`, v4) | `Device.config`, `RFID.config` | one unit seen; read as the unit's |
+| each input slot's default prime and recovery volumes | `System/Inputs/Input<n>.config` | the unit's, set per slot |
 | deck reference points and heights, arm geometry, drop verification | `StageTuning.config`, `RobotArm.config`, `DropVerification.config` | the same on both units |
 | chip catalogue and liquid classes | `System/`, `Device/Others/` | the software's; liquid classes ship as code (M4c) |
 
@@ -149,21 +153,21 @@ data, one per (viscosity band, chip type) in `mantis_mapping`, taken from a v4 i
 which follows the software's chip catalogue, not the unit. A dispense takes one per call; its
 explicit arguments win. No lookup by viscosity: the bands leave gaps (5.5 cP is in none).
 
-**M5. One command in flight; replies match on packet number and board.** The reader runs from
-setup to stop. A frame with a code from 0x0200 is an event: it is logged by its content
-(`describe_event`; a code not decoded, such as 0x7FFF, by its number) and goes to every waiter
-registered for its board and code whose `match` accepts its payload (`_expect_event`, before the
-command that causes it is sent, then `_wait_for_event`). A motor-error event fails every waiter for
-a motion event (`MOTION_EVENTS`) at once with `MantisMotionError`. An event whose payload does not
+**M5. One command in flight; replies match on packet number and board.** The reader runs from setup
+to stop. A frame with a code from 0x0200 is an event: it is logged by its content (`describe_event`;
+a code not decoded, such as 0x7FFF, by its number) and goes to every waiter registered for its board
+and code whose `match` accepts its payload (`_expect_event`, before the command that causes it is
+sent, then `_wait_for_event`). Board 0's input changes also go to the drop sensor, which counts each
+turn on of its input (`DROP_SENSOR_INPUT`) as a drop. A motor-error event fails every waiter for a
+motion event (`MOTION_EVENTS`) at once with `MantisMotionError`. An event whose payload does not
 match its layout is dropped before any waiter sees it. A reply nobody is waiting for is logged and
-dropped.
-A size field no frame can have (`MAXIMUM_FRAME_SIZE`) drops one byte at a time until a frame
-starts. A read that times out is resent with the same packet number, up to `attempts`. A command
-that writes or moves is sent once (`attempts=1`), never resent. A failed read ends the reader: the
-command in flight and every event waiter fail with it, and every later command, including one
-already waiting for the lock, raises until setup runs again. `stop` fails the command in flight and
-every event waiter. After a failed read, `stop` (and `setup`, which runs it first) sends nothing:
-it closes the dead link with one warning.
+dropped. A size field no frame can have (`MAXIMUM_FRAME_SIZE`) drops one byte at a time until a
+frame starts. A read that times out is resent with the same packet number, up to `attempts`. A
+command that writes or moves is sent once (`attempts=1`), never resent. A failed read ends the
+reader: the command in flight and every event waiter fail with it, and every later command,
+including one already waiting for the lock, raises until setup runs again. `stop` fails the command
+in flight and every event waiter. After a failed read, `stop` (and `setup`, which runs it first)
+sends nothing: it closes the dead link with one warning.
 
 **M5a. The sequencer plays queued items; a queue write is checked by its reply.** Clear (61),
 start (62), stop (63) and abort (64) are `_unchecked_fw_*` calls, sent once, returning the reply's
@@ -217,8 +221,9 @@ The arm's generation fork points (`Arm._get_generation`):
 - `request_joint_state`: a v3 raises `MantisMotionError` before this connection's bring-up, so
   does every read above on a v3.
 - `_check_initialized`: a v3 raises `NotImplementedError` after its bring-up, until a v3 has run
-  its moves; so park, the waste, the washes and recovery too. A chip pick-up and placement run on
-  a v3 from idle only.
+  its moves; so park, the waste, the washes and recovery too. A chip pick-up, a placement and a
+  prime run on a v3 from idle only; a placement also from where a prime left the head
+  (`_check_v3_at_idle`, the end of `V3_CHIP_CHANGER_ROUTE`), as a v3 placed its chip after a prime.
 - `recover_from_fault`: a v4 recovers to idle from its absolute encoders, a v3 runs its bring-up
   again.
 - `_halt`: a v3 stops its motors and is not parked until a v3 has run its moves. A stop refused
@@ -347,26 +352,72 @@ off a pump started by the clamp, and a pump already running stays on. The clamp 
 operations, owns a pump change before sending it, and attempts valve release and pump restoration
 independently on failure or cancellation.
 
-`Pump.prime_chip` and `Pump.recover_reagent` play what a v4 sends, as captured, for the chip on
-the head (low and high volume Hi-Fi, the chip types captured; a v3 is refused). Each clears and
-starts the sequencer, then starts the pump if it is off (`_start_pump`): the first time since
-setup every valve is queued closed first, as a v4's startup does, else the pressure pushes air back
-into the input; then the pump on and each line enabled with the target last set on it, none before
-the first, and `START_PUMP_DELAY`. `_set_pressures` sets the liquid class's prime or recovery
-pressures as the chips' preparing-pressure sequence: the vacuum, through 0 on a v4, settled; the
-bottle let off; the chip line, settled within `SETTLE_TIMEOUT` or `MantisPressureError`. A prime
-then queues the waste's path, the small then the large drops (`_get_pump_cycle`, a v4's
-split), the safe state, the way back out of the waste and the four lines to (15, 30) at the safe
-height; a recovery the four lines, the reverse pump (`_get_reverse_pump_cycle`) and the safe state,
-then the four lines again. A liquid class gives each drop's and reverse pump's fill and empty
-delays (`LIQUID_CLASS_DELAYS`) and the safe state's hold. Both release what they took: the whole
-pressure if they started the pump, else only the chip and vacuum lines, so a pump already running
-for the clamp stays on; a failure or cancellation first aborts the sequencer and stops every motor
-(M10). Each setup's tare starts the pump's state over. The chip stays on the head. An operation
-leaves the chip line pressurised, as a v4 does: it holds the chip's valves shut. `stop` then vents
-a v4's, after the bottle, as the tare does, and warns if a line still reads above `VENT_TOLERANCE`;
-a v4 does not, and a session would end with the line at about 12 psi. With a chip left on the head
-it is not vented, so the chip's valves stay held shut.
+`Pump.prime_chip(chip_number, ...)` and `Pump.recover_reagent(chip_number, ...)` play what a
+device sends, as captured, for the chip from slot `chip_number`. A prime picks it up first
+(`Arm.pick_up_chip`, nothing moves when it is on the head, a swap when another is), as the vendor's
+prime takes a chip; every argument and chip-type check runs before, the slot's tag read for a chip
+not on the head, so a refused prime moves nothing. A recovery refuses with
+`MantisConfigurationError` unless the chip is on the head: it follows a dispense, never a pick-up.
+The chip types each generation's captures show are the ones run (`PRIMED_CHIP_TYPES`,
+`RECOVERED_CHIP_TYPES`): on a v4 the low and high volume Hi-Fi chips, on a v3 a high volume chip's
+prime; a v3 recovery is refused, nothing sent. Each clears and starts the sequencer, then starts the
+pump if it is off (`_start_pump`): on a v4, the first time since setup, every valve is queued closed
+first, as a v4's startup does, else the pressure pushes air back into the input (a v3 never does);
+then the pump on and each line enabled with the target last set on it, none before the first, and
+`START_PUMP_DELAY`. `_set_pressures` sets the liquid class's prime or recovery pressures as the
+chips' preparing-pressure sequence: the vacuum, through 0 on a v4, settled; the bottle let off; the
+chip line, settled within `SETTLE_TIMEOUT` or `MantisPressureError`. A prime then queues the waste's
+path, the small then the large drops (`_get_pump_cycle`, a v4's split), the safe state, the way back
+out of the waste and the four lines to (15, 30) at the safe height (`CHIP_CHANGER_ROUTE`; a v3's at
+Z's flag, `V3_CHIP_CHANGER_ROUTE`, as a v3 sent them); a recovery the four lines, the reverse pump
+(`_get_reverse_pump_cycle`) and the safe state, then the four lines again. A v4 away from idle parks
+first. A v3 primes only as captured: from idle (not from where its prime left the head, which no
+capture starts from), whole large drops, along a waste path at Z's flag; else it refuses, nothing
+moves. Without a volume (`_get_default_volume`), each takes input slot `chip_number`'s default in
+the unit's `inputs` block, for `input_source` and the chip's type; a prime without it the chip's
+`default_prime_volume`, a recovery refuses. A liquid class gives each drop's and reverse pump's fill
+and empty delays (`LIQUID_CLASS_DELAYS`) and the safe state's hold. Both release what they took: the
+whole pressure if they started the pump, else only the chip and vacuum lines, so a pump already
+running for the clamp stays on; a failure or cancellation first aborts the sequencer and stops every
+motor (M10), and the head stays where it stopped, maybe in the waste (`recover_from_fault` brings it
+back). Each setup's tare starts the pump's state over. The chip stays on the head. An operation
+leaves the chip line pressurised, as a v4 does: it holds the chip's valves shut. `stop` then vents a
+v4's, after the bottle, as the tare does, and warns if a line still reads above `VENT_TOLERANCE`; a
+v4 does not, and a session would end with the line at about 12 psi. With a chip left on the head it
+is not vented, so the chip's valves stay held shut. `is_primed` is whether the chip on the head was
+primed since it was picked up: a prime clears it when it starts and sets it only when it completes;
+a recovery and a placement clear it.
+
+Choices made where the captures leave a choice:
+
+- `drop_detection=None` is on only without a volume, with a sensor and a chip type whose
+  drop-detection prime is captured; `True` with a volume raises `ValueError`, not dropping it.
+- `consecutive_run` counts prime pump cycles in a row that saw a drop, not drops close in time:
+  the captured cycles that dropped came about 0.6 s apart.
+- The cycle cap is `MaximumAutoPrimeCyclefor*` itself; one less is not captured (open point 56).
+- A fixed prime's `verify_sensor` raises after the prime has ended (head out, pressure released),
+  so a failed check does not leave the head in the waste.
+- The default volume is input slot `chip_number`'s (`inputs`) for `input_source`, else the chip's
+  `default_prime_volume`; `input_source` is "tube" unless given, not the slot's own source.
+- `DropSensor` has no public `setup`: the driver enables it at setup, as every feature's commands.
+- The waste's path is the file `Dispense.config` names, as the vendor reads it (open point 38).
+- A v3 places its chip from where its prime left the head, (15, 30) at Z's flag, as a v3 did
+  (260528_primeall).
+
+Setup enables a v4's drop sensor after the tare (board 12, command 53), as the captured startup
+does; each drop at the waste then turns board 0's input 0 on, then off. Every prime resets the
+sensor first. With `drop_detection` (by default when the device has a sensor, no volume is given
+and the chip type's drop-detection prime is captured) `prime_chip` plays the chip's prime pump
+sequence (`"prime_pump"`, its fill and empty steps at the liquid class's large drop delays) in
+place of the drops, one cycle at a time, as captured (260811_startup_dispense_0.5_2.5uL_shutdown):
+the next cycle is queued once a dry cycle has played; a cycle that saw a drop adds one to the
+sensor's `consecutive_run` and waits `auto_prime_detect_liquid_delay` and
+`auto_prime_liquid_counted_delay` first; a dry one ends the run. It stops after `consecutive_drops`
+(`AUTO_PRIME_CONSECUTIVE_DROPS`, the install's `AutoPrime.Value`, 5) in a row, and at `max_cycles`
+(None `MAXIMUM_AUTO_PRIME_CYCLES`, Dispense.config's `MaximumAutoPrimeCyclefor*`) ends the prime
+as usual, then raises `MantisPrimeError`. Only a low volume Hi-Fi chip is primed this way. With
+`verify_sensor` a fixed prime on a device with a sensor ends as usual, then raises
+`MantisPrimeError` if the sensor saw no drop (`drop_detected`).
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
@@ -422,17 +473,17 @@ above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clampi
 unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` starts off,
 reads every line at 0 with the recorded calibration, a line enabled as settled at once, and follows
 clamp commands for its air-pump state; `MantisSimulationPlateClamp` also holds a valve's state;
-`MantisSimulationLedBar` takes every command and
-waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
-needs no encoder correction; its offsets are the declared ones, else 0, and its zones, approach paths and
-stage the declared ones, else none. On a v3 it runs the bring-up below the `_unchecked_fw_*`
-calls: a retract seats an arm against its stop (status 0x100, 0x104 once homed), the unit's Z
-values reach the home command, and every awaited event comes at once. Each command moves it at
-once, and the motor reads answer from it; without it the motors read idle at 0, as after
-power-on. A motor read the configuration does
-not hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items,
-stopped and empty after setup, and once started plays each item at once, a queued move moving the
-simulated arm; stop and abort keep what is queued.
+`MantisSimulationLedBar` takes every command and waits no hold; `MantisSimulationDropSensor` sends
+nothing and finds one drop more at each read, so a simulated drop-detection prime sees a drop every
+cycle. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it needs no
+encoder correction; its offsets are the declared ones, else 0, and its zones, approach paths and
+stage the declared ones, else none. On a v3 it runs the bring-up below the `_unchecked_fw_*` calls:
+a retract seats an arm against its stop (status 0x100, 0x104 once homed), the unit's Z values reach
+the home command, and every awaited event comes at once. Each command moves it at once, and the
+motor reads answer from it; without it the motors read idle at 0, as after power-on. A motor read
+the configuration does not hold is not simulated. The sequencer, on the driver, holds
+`SEQUENCER_QUEUE_SIZE` items, stopped and empty after setup, and once started plays each item at
+once, a queued move moving the simulated arm; stop and abort keep what is queued.
 
 **M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
 add commands that the device runs together, each subsystem gets its own lock, taken in declaration
@@ -560,9 +611,9 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     setup raises instead of homing; no recording shows what should follow.
 31. **Unpowering the arm (command 19, open loop) is unrecorded.** A failed bring-up sends it; its
     reply has not been seen.
-32. **The encoder correction files and the sequences are found two levels above
-    `oem_config_directory`, the plate holder's origin one level above.** That argument still names
-    `Data/Device/Configs`; they sit in `Data/System` and `Data/Device/Adapters`.
+32. **The encoder correction files, the sequences and the input slots' files are found two levels
+    above `oem_config_directory`, the plate holder's origin one level above.** That argument still
+    names `Data/Device/Configs`; they sit in `Data/System` and `Data/Device/Adapters`.
 33. **Zones that share an edge are tried in `ZONES` order.** A head on an edge goes to the first
     zone listed that holds it, in the order the unit lists its zones; the tie-break is not
     known.
@@ -582,11 +633,12 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 37. **`recover_from_fault` stops each motor at the route acceleration.** In a recorded recovery
     each was stopped at the acceleration of its last move, the route's there; the order of
     stops, clears and declarations is the recorded one.
-38. **The waste's approach path is the generation's own file.** Every unit seen has both
-    `MoveToWasteStation` and `MoveToWasteStation_Adapter`, two different routes: a unit with zones
-    (a v4) reads the first, which a v4 played on the wire; one without them (a v3) reads the
-    second, not seen played; a v3's arm plays it once a v3 has run its moves. The wash paths are
-    `MoveToWashStation1` and `2`; their `Lc3` variants are not read.
+38. **The waste's approach path is the file `Dispense.config` names, else the generation's own.**
+    Every unit seen has both `MoveToWasteStation` and `MoveToWasteStation_Adapter`, two different
+    routes. The v4 install names the first, which a v4 played on the wire; the v3 install we hold
+    names the second, which no capture shows played, while the captured v3 played the first in its
+    prime. Without `Dispense.config` a unit with zones (a v4) reads the first, one without them the
+    second. The wash paths are `MoveToWashStation1` and `2`; their `Lc3` variants are not read.
 39. **The resource model draws the arm where the manufacturer's model places it,** not where the
     fit puts it: on the unit the fit was checked on, about 2 mm off.
 40. **`request_is_parked`'s tolerance, 0.5 degrees and 0.5 mm, is ours.** In the recordings the
@@ -637,3 +689,27 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     No correction is applied until a caliper measures the link's height over a seated chip.
 54. **A placement that recovers the chip's liquid is not captured,** so `recover_liquid=True` is
     refused. The unit's chips ship a detach-recovery sequence, but no capture shows it played.
+55. **The drop-detection prime's waits are read from one capture** (260811). After a cycle that
+    dropped the next was queued 0.41 to 0.42 s after it played, after a dry one at most 0.13 s
+    (no wait, the link's time); the 1 cP low volume Hi-Fi class's 100 and 300
+    (LiquidDropDetectionConfig.xml) are taken as ms.
+56. **Whether the cycle cap is `MaximumAutoPrimeCyclefor*` or one less** is not captured: no
+    capture reaches it. The high volume cap (100) is not used: no high volume Hi-Fi chip's
+    drop-detection prime is captured.
+57. **A drop-detection prime's end is the fixed prime's.** The one captured went on into a
+    dispense; the safe state and the way out after it are not captured on their own.
+58. **The drop sensor is built wherever a v4's board 12 answers;** whether a v4 without the
+    sensor answers command 53 the same is not known. Nothing disables it at stop: no capture
+    shows it disabled. One capture plays the large drop with a wait after every cycle and ends
+    with an abort after more than a hundred drops; what it is is not known.
+59. **A fixed prime that saw no drop raises (`verify_sensor`), the device does not.** Every
+    captured fixed prime's sensor saw drops; none shows the device checking.
+60. **A v3 recovery is not captured,** so it is refused and nothing is sent. A v3 prime is
+    captured for a high volume chip only, two large drops each (10 uL; the volume asked is not in
+    the capture), the chip's type read from its drops' states and delays. No v3 prime plays small
+    drops, so a volume that needs them is refused; nor a waste path off Z's flag (`_Adapter`).
+61. **`input_source` is "tube" unless given;** the slot's own `InputSourceType`, which the vendor
+    uses, is not read.
+62. **A v3 picks up and places along `CHIP_CHANGER_ROUTE` at -1.57 mm** (run on two v3 units),
+    where the v3 captures queue those lines at Z's flag, as `V3_CHIP_CHANGER_ROUTE` does after a
+    prime.

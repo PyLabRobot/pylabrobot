@@ -16,6 +16,7 @@ from pylabrobot.formulatrix.mantis.driver.oem_config import (
   COMMON_SEQUENCE_DIRECTORY,
   ENCODER_CORRECTION_DIRECTORY,
   ENCODER_CORRECTION_FILE,
+  INPUT_DIRECTORY,
   SBS_ADAPTER_FILE,
   UNKNOWN_ZONE,
   WASTE_APPROACH_PATH_ADAPTER_FILE,
@@ -493,10 +494,23 @@ class RouteBlockTests(unittest.TestCase):
       {"wash_1": SYNTHETIC_WASH_ROUTE, "wash_2": SYNTHETIC_WASH_2_ROUTE},
     )
 
-  def test_each_generation_reads_its_own_waste_approach_path(self):
-    # Every unit seen has both files: a v4 (with DeviceZone.config) reads one, a v3 the other.
-    for zone_config, expected in ((True, SYNTHETIC_WASTE_ROUTE), (False, SYNTHETIC_WASH_ROUTE)):
-      with self.subTest(zone_config=zone_config):
+  def test_each_generation_reads_its_own_waste_approach_path_unless_dispense_config_names_one(
+    self,
+  ):
+    # Every unit seen has both files: a v4 (with DeviceZone.config) reads one, a v3 the other; a
+    # v3 whose Dispense.config names MoveToWasteStation.seq.txt reads that, as a v3 played it.
+    dispense_config = (
+      HEAD
+      + ('    <add key="MoveToWasteStationSequenceFile" value="MoveToWasteStation.seq.txt" />\r\n')
+      + TAIL
+    )
+    cases = (
+      (True, None, SYNTHETIC_WASTE_ROUTE),
+      (False, None, SYNTHETIC_WASH_ROUTE),
+      (False, dispense_config, SYNTHETIC_WASTE_ROUTE),
+    )
+    for zone_config, dispense, expected in cases:
+      with self.subTest(zone_config=zone_config, dispense_config=dispense is not None):
         with tempfile.TemporaryDirectory() as directory:
           configs_directory = write_zone_install(
             directory=directory,
@@ -508,6 +522,8 @@ class RouteBlockTests(unittest.TestCase):
             directory=os.path.join(directory, "Data", COMMON_SEQUENCE_DIRECTORY),
             files={WASTE_APPROACH_PATH_ADAPTER_FILE: get_route_text(route=SYNTHETIC_WASH_ROUTE)},
           )
+          if dispense is not None:
+            write_files(directory=configs_directory, files={"Dispense.config": dispense})
           blocks = _load_unit_configuration(oem_config_directory=configs_directory)
         self.assertEqual(blocks["approach_paths"], {"waste": expected})
 
@@ -658,6 +674,92 @@ class StageBlockTests(unittest.TestCase):
       with self.subTest(message=message):
         with self.assertRaisesRegex(MantisConfigurationError, message):
           self.load(**kwargs)
+
+
+# Lines of input slots' files, as installed: a v4's slot 1 takes a tube, a v3's slot 4 a pipette
+# tip; Continuous Flow is a chip type no tag names. An LC3 position's file is InputR<n>.config.
+INPUT_1_CONFIG = (
+  HEAD
+  + (
+    '    <add key="ChipSerialNumber" value="" />\r\n'
+    '    <add key="Number" value="1" />\r\n'
+    '    <add key="Location" value="Right" />\r\n'
+    '    <add key="Type" value="ACC" />\r\n'
+    '    <add key="ChipType" value="Low Volume Hi-Fi" />\r\n'
+    '    <add key="InputSourceType" value="Tube" />\r\n'
+    '    <add key="Continuous Flow.Tube.Prime.Volume" value="250" />\r\n'
+    '    <add key="Continuous Flow.Tube.ReagentRecovery.Volume" value="250" />\r\n'
+    '    <add key="Low Volume Hi-Fi.Tube.Prime.Volume" value="100.4" />\r\n'
+    '    <add key="Low Volume Hi-Fi.Tube.Wash1.Volume" value="250" />\r\n'
+    '    <add key="Low Volume Hi-Fi.Tube.ReagentRecovery.Volume" value="100" />\r\n'
+    '    <add key="Low Volume Hi-Fi.PipetteTip.Prime.Volume" value="6" />\r\n'
+    '    <add key="Low Volume Hi-Fi.PipetteTip.ReagentRecovery.Volume" value="6" />\r\n'
+    '    <add key="High Volume Hi-Fi.Tube.Prime.Volume" value="264" />\r\n'
+    '    <add key="High Volume Hi-Fi.Tube.ReagentRecovery.Volume" value="400" />\r\n'
+  )
+  + TAIL
+)
+INPUT_4_CONFIG = (
+  HEAD
+  + (
+    '    <add key="Number" value="4" />\r\n'
+    '    <add key="Location" value="Left" />\r\n'
+    '    <add key="Type" value="ACC" />\r\n'
+    '    <add key="ChipType" value="High Volume" />\r\n'
+    '    <add key="InputSourceType" value="PipetteTip" />\r\n'
+    '    <add key="High Volume.Tube.Prime.Volume" value="200" />\r\n'
+    '    <add key="High Volume.Tube.ReagentRecovery.Volume" value="200" />\r\n'
+    '    <add key="High Volume.PipetteTip.Prime.Volume" value="16" />\r\n'
+    '    <add key="High Volume.PipetteTip.ReagentRecovery.Volume" value="16" />\r\n'
+  )
+  + TAIL
+)
+INPUT_R1_CONFIG = INPUT_4_CONFIG.replace('value="ACC"', 'value="LC3"')
+
+
+class InputBlockTests(unittest.TestCase):
+  def load(self, *, inputs: Dict[str, str]) -> Dict[str, Any]:
+    with tempfile.TemporaryDirectory() as directory:
+      configs_directory = os.path.join(directory, "Data", "Device", "Configs")
+      input_directory = os.path.join(directory, "Data", INPUT_DIRECTORY)
+      os.makedirs(configs_directory)
+      os.makedirs(input_directory)
+      write_files(directory=configs_directory, files={"Device.config": V4_DEVICE_CONFIG})
+      write_files(directory=input_directory, files=inputs)
+      return _load_unit_configuration(oem_config_directory=configs_directory)
+
+  def test_each_chip_rack_slot_gives_its_default_volumes_by_input_source(self):
+    blocks = self.load(
+      inputs={
+        "Input1.config": INPUT_1_CONFIG,
+        "Input1.config.bak": INPUT_4_CONFIG,
+        "Input4.config": INPUT_4_CONFIG,
+        "InputR1.config": INPUT_R1_CONFIG,
+        "Default.config": INPUT_4_CONFIG,
+      }
+    )
+    self.assertEqual(
+      blocks["inputs"],
+      {
+        "1": {
+          "prime_volume": {
+            "tube": {"low_volume_hi_fi": 100.4, "high_volume_hi_fi": 264.0},
+            "pipette_tip": {"low_volume_hi_fi": 6.0},
+          },
+          "reagent_recovery_volume": {
+            "tube": {"low_volume_hi_fi": 100.0, "high_volume_hi_fi": 400.0},
+            "pipette_tip": {"low_volume_hi_fi": 6.0},
+          },
+        },
+        "4": {
+          "prime_volume": {"tube": {"high_volume": 200.0}, "pipette_tip": {"high_volume": 16.0}},
+          "reagent_recovery_volume": {
+            "tube": {"high_volume": 200.0},
+            "pipette_tip": {"high_volume": 16.0},
+          },
+        },
+      },
+    )
 
 
 class UnitBlockSourceTests(DriverTestCase):

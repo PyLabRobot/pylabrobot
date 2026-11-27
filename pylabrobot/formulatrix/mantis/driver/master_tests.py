@@ -126,6 +126,8 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (12, 16, "0000"): "",
   (12, 17, "0000000056000100"): "0100",
   **{(12, 13, "00001400" + color * 20): "0100" for color in ("1f00", "e007", "0000")},
+  # The drop sensor enabled at startup.
+  (12, 53, "01000000"): "",
   # The sequencer aborted, and each motor stopped at its default deceleration.
   (0, 64, ""): "0000",
   (0, 24, "0000814e1be8b40a8a40"): "0000",

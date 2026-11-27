@@ -4,7 +4,7 @@ from pylabrobot.serializer import SerializableMixin
 class MantisLiquidClass(SerializableMixin):
   """Dispense tuning for one viscosity band on one chip type.
 
-  The diaphragm delays, and the pressure and vacuum of each step.
+  The diaphragm delays, a drop-detection prime's waits, and the pressure and vacuum of each step.
   """
 
   def __init__(
@@ -16,6 +16,8 @@ class MantisLiquidClass(SerializableMixin):
     small_empty_delay: int,
     recovery_fill_delay: int,
     recovery_empty_delay: int,
+    auto_prime_detect_liquid_delay: int,
+    auto_prime_liquid_counted_delay: int,
     chip_pressure: float,
     bottle_pressure: float,
     vacuum: float,
@@ -34,6 +36,9 @@ class MantisLiquidClass(SerializableMixin):
       small_empty_delay: the small diaphragm's empty delay.
       recovery_fill_delay: the fill delay while drawing reagent back to the input.
       recovery_empty_delay: the empty delay while drawing reagent back to the input.
+      auto_prime_detect_liquid_delay: a drop-detection prime's wait for a drop after each cycle,
+        ms.
+      auto_prime_liquid_counted_delay: its further wait after a cycle that dropped, ms.
       chip_pressure: the chip's pressure while dispensing.
       bottle_pressure: the bottle's pressure while dispensing.
       vacuum: the vacuum while dispensing.
@@ -50,6 +55,8 @@ class MantisLiquidClass(SerializableMixin):
     self.small_empty_delay = small_empty_delay
     self.recovery_fill_delay = recovery_fill_delay
     self.recovery_empty_delay = recovery_empty_delay
+    self.auto_prime_detect_liquid_delay = auto_prime_detect_liquid_delay
+    self.auto_prime_liquid_counted_delay = auto_prime_liquid_counted_delay
     self.chip_pressure = chip_pressure
     self.bottle_pressure = bottle_pressure
     self.vacuum = vacuum

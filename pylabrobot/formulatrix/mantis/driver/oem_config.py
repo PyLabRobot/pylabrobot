@@ -17,6 +17,7 @@ from .arm_kinematics import (
   compute_position,
 )
 from .errors import MantisConfigurationError
+from .features.rfid import RFID_CHIP_TYPE_CODES
 from .sequence_files import parse_move_sequence
 from .v3_arm_configuration import V3ArmConfiguration
 
@@ -28,7 +29,8 @@ COMMON_SEQUENCE_DIRECTORY = os.path.join("System", "Sequences", "Common")
 # The unit's zones, in the order it lists them; a head in none of them is in the Unknown zone.
 ZONES = ("Front", "RightBack", "RightMiddle", "RightFront", "LeftBack", "LeftMiddle", "LeftFront")
 UNKNOWN_ZONE = "Unknown"
-# The unit's approach path to the waste on a v4, and on a v3: every unit seen has both files.
+# The unit's approach path to the waste on a v4, and on a v3, unless Dispense.config names one:
+# every unit seen has both files.
 WASTE_APPROACH_PATH_FILE = "MoveToWasteStation.seq.txt"
 WASTE_APPROACH_PATH_ADAPTER_FILE = "MoveToWasteStation_Adapter.seq.txt"
 # The unit's approach path to each wash position, by number.
@@ -56,6 +58,17 @@ SBS_ADAPTER_FILE = os.path.join("Adapters", "SBS Adapter.ad.txt")
 STAGE_TUNING_FILE = "StageTuning.config"
 # The only arm type on every unit seen; how the stage is framed for another is unknown.
 STANDARD_ARM_TYPE = "Standard"
+# Where an install keeps each input slot's settings, from its ``Data`` folder: Input<n>.config.
+INPUT_DIRECTORY = os.path.join("System", "Inputs")
+INPUT_FILE = re.compile(r"Input(\d+)\.config")
+# An input slot's type in the fixed chip racks, as ChipChanger.config's "0= ACC" and RFID.config's
+# RFIDAntennaId.ACC<n> name them; Input<n> is chip slot n.
+CHIP_RACK_INPUT_TYPE = "ACC"
+# Each input source, as MantisChipInput names it, by the name its volume keys give it.
+INPUT_SOURCES = {"Tube": "tube", "PipetteTip": "pipette_tip"}
+# Where Dispense.config names the waste's path, as the vendor reads it.
+DISPENSE_CONFIG_FILE = "Dispense.config"
+WASTE_APPROACH_PATH_KEY = "MoveToWasteStationSequenceFile"
 
 
 def _parse_config_entries(*, path: str) -> Dict[str, str]:
@@ -289,7 +302,7 @@ def _load_approach_paths(*, sequence_directory: str, waste_file: str) -> Dict[st
 
   Args:
     sequence_directory: the unit's ``System/Sequences/Common``.
-    waste_file: ``WASTE_APPROACH_PATH_FILE`` on a v4, ``WASTE_APPROACH_PATH_ADAPTER_FILE`` on a v3.
+    waste_file: the waste's file, as ``_load_unit_configuration`` chooses it.
 
   Raises:
     MantisConfigurationError: if a path is malformed or moves nothing.
@@ -331,6 +344,45 @@ def _load_chip_slot_approach_paths(*, path: str, sequence_directory: str) -> Dic
       route.extend(_parse_route(path=os.path.join(sequence_directory, file_name)))
     paths[CHIP_SLOT_APPROACH_PATH.format(slot=slot)] = route
   return paths
+
+
+def _load_inputs(*, input_directory: str) -> Dict[str, Any]:
+  """The ``inputs`` block: each chip rack input slot's default prime and reagent recovery volumes,
+  uL, by field, input source (``INPUT_SOURCES``) and chip type, by slot.
+
+  A chip type is named as ``RFID_CHIP_TYPE_CODES`` names it; one no tag names is left out.
+
+  Args:
+    input_directory: the install's ``System/Inputs``.
+
+  Raises:
+    MantisConfigurationError: if a key is missing or a volume is not a number.
+  """
+  chip_types = set(RFID_CHIP_TYPE_CODES.values())
+  inputs: Dict[str, Any] = {}
+  for file_name in sorted(os.listdir(input_directory)):
+    match = INPUT_FILE.fullmatch(file_name)
+    if match is None:
+      continue
+    path = os.path.join(input_directory, file_name)
+    values = _parse_config_entries(path=path)
+    if _get_setting(path=path, settings=values, key="Type") != CHIP_RACK_INPUT_TYPE:
+      continue
+    entry: Dict[str, Dict[str, Dict[str, float]]] = {
+      field: {source: {} for source in INPUT_SOURCES.values()}
+      for field in ("prime_volume", "reagent_recovery_volume")
+    }
+    for key, text in values.items():
+      volume = re.fullmatch(r"(.+)\.(Tube|PipetteTip)\.(Prime|ReagentRecovery)\.Volume", key)
+      if volume is None:
+        continue
+      chip_type = re.sub(r"[ -]", "_", volume.group(1).lower())
+      if chip_type in chip_types:
+        field = "prime_volume" if volume.group(3) == "Prime" else "reagent_recovery_volume"
+        source = INPUT_SOURCES[volume.group(2)]
+        entry[field][source][chip_type] = _get_number(path=path, key=key, text=text)
+    inputs[match.group(1)] = entry
+  return dict(sorted(inputs.items(), key=lambda item: int(item[0])))
 
 
 def _load_v3_arm_configuration(*, values: Dict[str, str]) -> Dict[str, Any]:
@@ -411,11 +463,14 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   ``zones``: ``DeviceZone.config``'s rectangles and each zone's routes to safe XY and to idle,
   from the unit's ``System/Sequences/Common``, only where that file exists (a v4).
   ``approach_paths``: the unit's paths from idle to the waste and to wash positions 1 and 2, from
-  the same folder, those that exist; the waste's ``WASTE_APPROACH_PATH_FILE`` where
+  the same folder, those that exist; the waste's the file ``Dispense.config`` names
+  (``WASTE_APPROACH_PATH_KEY``), without it ``WASTE_APPROACH_PATH_FILE`` where
   ``DeviceZone.config`` exists (a v4), else ``WASTE_APPROACH_PATH_ADAPTER_FILE`` (a v3).
   ``stage``: ``Device.config``'s ``MicroplateTransformationMatrix``, ``MicroplateOffsetX/Y`` and
   ``ArmType*``, and the plate holder's origin from ``Data/Device/Adapters/SBS Adapter.ad.txt``,
   only where ``Device.config`` sets the matrix.
+  ``inputs``: each chip rack input slot's default prime and reagent recovery volumes, by input
+  source, from ``Data/System/Inputs/Input<n>.config``, only where that folder exists.
 
   Args:
     oem_config_directory: the unit's ``Data/Device/Configs`` folder.
@@ -545,9 +600,14 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
   is_v4 = os.path.isfile(zone_config)
   if is_v4:
     blocks["zones"] = _load_zones(path=zone_config, sequence_directory=sequence_directory)
+  waste_file = WASTE_APPROACH_PATH_FILE if is_v4 else WASTE_APPROACH_PATH_ADAPTER_FILE
+  dispense_config = os.path.join(oem_config_directory, DISPENSE_CONFIG_FILE)
+  if os.path.isfile(dispense_config):
+    waste_file = _parse_config_entries(path=dispense_config).get(
+      WASTE_APPROACH_PATH_KEY, waste_file
+    )
   approach_paths = _load_approach_paths(
-    sequence_directory=sequence_directory,
-    waste_file=WASTE_APPROACH_PATH_FILE if is_v4 else WASTE_APPROACH_PATH_ADAPTER_FILE,
+    sequence_directory=sequence_directory, waste_file=waste_file
   )
   chip_changer_config = os.path.join(oem_config_directory, "ChipChanger.config")
   if os.path.isfile(chip_changer_config):
@@ -560,4 +620,9 @@ def _load_unit_configuration(*, oem_config_directory: str) -> Dict[str, Any]:
     )
   if approach_paths:
     blocks["approach_paths"] = approach_paths
+  input_directory = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.normpath(oem_config_directory))), INPUT_DIRECTORY
+  )
+  if os.path.isdir(input_directory):
+    blocks["inputs"] = _load_inputs(input_directory=input_directory)
   return blocks

@@ -21,6 +21,7 @@ from .driver.arm_kinematics import (
 from .driver.configuration import RECORDING_MANTIS_V4
 from .driver.errors import MantisConfigurationError
 from .driver.features.arm import CHIP_CHANGER_ROUTE, Arm
+from .driver.features.drop_sensor import DropSensor
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
 from .driver.features.pump import Pump
@@ -331,6 +332,11 @@ class MantisDevice(Resource):
   def led_bar(self) -> Optional[LedBar]:
     """The LED bar, once setup found board 12 on a v4; None before, without it, or on a v3."""
     return self.driver.led_bar
+
+  @property
+  def drop_sensor(self) -> Optional[DropSensor]:
+    """The drop sensor, once setup found board 12 on a v4; None before, without it, or on a v3."""
+    return self.driver.drop_sensor
 
   @property
   def arm(self) -> Optional[Arm]:
