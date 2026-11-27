@@ -15,7 +15,7 @@ import unittest
 from typing import Dict, List, Mapping, Optional, Tuple, Union
 from unittest import mock
 
-from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
+from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4, Mantis
 from pylabrobot.formulatrix.mantis.driver import master as master_module
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
   MantisArmCoordinate,
@@ -72,9 +72,10 @@ from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
 from pylabrobot.formulatrix.mantis.driver.v3_arm_configuration import V3ArmConfiguration
 from pylabrobot.formulatrix.mantis.resource_model import (
   PLATE_HOLDER_LOCATION,
+  PLATE_HOLDER_SIZE_X,
   PLATE_HOLDER_SIZE_Y,
 )
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Lid, Plate, ResourceHolder, Well
 
 with open(RECORDING_MANTIS_V4, encoding="utf-8") as f:
   RECORDING = json.load(f)
@@ -2330,22 +2331,26 @@ class V3ArmTests(DriverTestCase):
     with open(saved, encoding="utf-8") as file:
       self.assertEqual(json.load(file)["arm"], SYNTHETIC_V3_ARM_BLOCK)
 
-  def declare_chip_slots(self) -> None:
-    """Declare chip slot 1's path and the stage beside the v3 arm block."""
+  def declare_chip_slots(self, *, path: Optional[List[List[Optional[float]]]] = None) -> None:
+    """Declare chip slot 1's path (``CHIP_SLOT_1_PATH`` when None) and the stage beside the v3 arm
+    block."""
     with open(self.path, "w", encoding="utf-8") as file:
       json.dump(
         {
           "arm": SYNTHETIC_V3_ARM_BLOCK,
-          "approach_paths": {"chip_slot_1": CHIP_SLOT_1_PATH},
+          "approach_paths": {"chip_slot_1": CHIP_SLOT_1_PATH if path is None else path},
           "stage": SYNTHETIC_STAGE_BLOCK,
           "rfid": RECORDING["rfid"],
         },
         file,
       )
 
-  async def set_up_chip_slots(self, *, parked: bool = True):
-    """Bring the v3 arm up with chip slot 1, the sequencer's queue taken as played at once."""
-    self.declare_chip_slots()
+  async def set_up_chip_slots(
+    self, *, parked: bool = True, path: Optional[List[List[Optional[float]]]] = None
+  ):
+    """Bring the v3 arm up with chip slot 1 (``declare_chip_slots``), the sequencer's queue taken
+    as played at once."""
+    self.declare_chip_slots(path=path)
     driver, link = await self.set_up_arm()
     # A v3 answers the antenna switch empty, as a v4 does; the v3 bring-up capture has none.
     link.answers[CHIP_SLOT_1_TAG_READ] = [b""]
@@ -2382,21 +2387,35 @@ class V3ArmTests(DriverTestCase):
     self.assertEqual(configuration.stage_origin, (-50.0, 40.0, 51.0))
     self.assertIsNone(configuration.zone_rectangles)
 
-  async def test_a_v3_picks_up_and_places_a_chip_from_idle(self):
-    """Run on two v3 units, every chip slot: the slot's whole route queued, the chip kept."""
-    driver, queued = await self.set_up_chip_slots()
-    route_length = 2 * (2 + len(arm_module.CHIP_CHANGER_ROUTE)) + len(CHIP_SLOT_1_PATH)
-    await driver.arm.pick_up_chip(chip_number=1)
-    self.assertEqual(len(queued), route_length)
-    self.assertEqual(driver.arm.current_chip, 1)
-    self.assertEqual(self.tag_reads(), 1)
-    queued.clear()
-    self.link.reader.tags = {}  # the chip is on the head
-    self.sent_before = len(self.link.written)
-    await driver.arm.place_chip(chip_number=1)
-    self.assertEqual(len(queued), route_length)
-    self.assertIsNone(driver.arm.current_chip)
-    self.assertEqual(self.tag_reads(), 1)
+  async def test_a_v3_picks_up_and_places_a_chip_as_captured(self):
+    """The captured v3's slot path, declared as slot 1: every queued move as it sent them, the
+    chip changer route at Z's flag, the waits at the attach line and before idle."""
+    driver, queued = await self.set_up_chip_slots(path=V3_CHIP_SLOT_PATH)
+    for action, captured, waits in (
+      ("pick_up_chip", CAPTURED_V3_CHIP_SLOT_PICK_UP, (10, 18, 20)),
+      ("place_chip", CAPTURED_V3_CHIP_SLOT_PLACE, (10, 18, 20)),
+    ):
+      with self.subTest(action=action):
+        queued.clear()
+        driver._wait_for_queue_item.reset_mock()
+        self.sent_before = len(self.link.written)
+        if action == "pick_up_chip":
+          await driver.arm.pick_up_chip(chip_number=1)
+          self.assertEqual(driver.arm.current_chip, 1)
+        else:
+          self.link.reader.tags = {}  # the chip is on the head
+          await driver.arm.place_chip(chip_number=1)
+          self.assertIsNone(driver.arm.current_chip)
+        self.assertEqual(self.tag_reads(), 1)
+        expected = parse_captured_moves(captured=captured)
+        self.assertEqual(len(queued), len(expected))
+        for index, (targets, move) in enumerate(zip(queued, expected)):
+          for motor in range(3):
+            self.assertEqual(targets[motor][1] != 0, motor in move, (index, motor))
+            if motor in move:
+              self.assertAlmostEqual(targets[motor][0], move[motor], places=9)
+        waited = [call.kwargs["item"] - 1 for call in driver._wait_for_queue_item.await_args_list]
+        self.assertEqual(tuple(waited), waits)
 
   async def test_a_v3_not_parked_refuses_a_chip_slot_before_moving(self):
     """A pick-up away from idle would park first, which no v3 has run; the other moves still
@@ -2433,6 +2452,66 @@ class V3ArmTests(DriverTestCase):
     self.assertIsNone(driver.arm.current_chip)
 
 
+# A v3 unit's path through its chip slot 3, in the arm frame, as its chip changer routes give it.
+V3_CHIP_SLOT_PATH: List[List[Optional[float]]] = [
+  [-44.967, 67.275, 0.0],
+  [-55.254, 77.627, -1.5],
+  [-67.254, 78.627, -1.5],
+  [-67.254, 78.627, 14.195],
+  [-67.254, 78.627, 14.195],
+  [-67.148, 76.005, 14.112],
+  [-67.148, 76.005, None],
+  [-67.148, 76.005, 0.0],
+  [-55.148, 75.005, -1.5],
+]
+# The moves a Mantis v3 with offsets 0 was sent to pick up that slot's chip and place it back:
+# each motor's target in device units, "-" held; around the path (15, 30) at Z's flag.
+CAPTURED_V3_CHIP_SLOT_PICK_UP = """
+-,-,0.0
+4.3180815265170873e-05,4.3180815265170873e-05,0.0
+-,-,-
+-0.6092570076955263,-0.6092570076955263,-
+-,-,0.0
+-0.6092570076955263,-0.6092570076955263,0.0
+-7.730986407348565,45.49343096048299,0.0
+-3.057174649272799,51.28694405209028,-59.055118110236215
+-2.6575877415134466,57.69848291732877,-59.055118110236215
+-2.6575877415134466,57.69848291732877,558.8582677165355
+-2.6575877415134466,57.69848291732877,558.8582677165355
+-3.985076962725569,57.361895824533306,555.5905511811023
+-3.985076962725569,57.361895824533306,-
+-3.985076962725569,57.361895824533306,0.0
+-4.400341882977199,51.01823148105031,-59.055118110236215
+-,-,-
+-0.6092570076955263,-0.6092570076955263,-
+-,-,0.0
+-0.6092570076955263,-0.6092570076955263,0.0
+-,-,0.0
+4.3180815265170873e-05,4.3180815265170873e-05,0.0
+""".split()
+CAPTURED_V3_CHIP_SLOT_PLACE = """
+-,-,0.0
+4.3180815265170873e-05,4.3180815265170873e-05,0.0
+-,-,-
+-0.6092570076955263,-0.6092570076955263,-
+-,-,0.0
+-0.6092570076955263,-0.6092570076955263,0.0
+-4.400341882977199,51.01823148105031,-59.055118110236215
+-3.985076962725569,57.361895824533306,0.0
+-3.985076962725569,57.361895824533306,-
+-3.985076962725569,57.361895824533306,555.5905511811023
+-2.6575877415134466,57.69848291732877,558.8582677165355
+-2.6575877415134466,57.69848291732877,558.8582677165355
+-2.6575877415134466,57.69848291732877,-59.055118110236215
+-3.057174649272799,51.28694405209028,-59.055118110236215
+-7.730986407348565,45.49343096048299,0.0
+-,-,-
+-0.6092570076955263,-0.6092570076955263,-
+-,-,0.0
+-0.6092570076955263,-0.6092570076955263,0.0
+-,-,0.0
+4.3180815265170873e-05,4.3180815265170873e-05,0.0
+""".split()
 # A unit's path through chip slot 1, in the arm frame, as its chip changer routes give it.
 CHIP_SLOT_1_PATH: List[List[Optional[float]]] = [
   [70.394, 63.965, -1.57],
@@ -2886,6 +2965,222 @@ class ChipSlotTests(ArmTestCase):
         self.assertEqual(place is not None, z > 0)
         if place is not None:
           self.assertEqual(place[0], "chip_slot_1")
+
+
+# A Mantis v4's stage block, as its unit's StageTuning and Device configs give it.
+UNIT_STAGE_BLOCK = {
+  "origin": [-48.818, 40.153, 50.986],
+  "transformation_matrix": [
+    [1.0013871616678054, 0.0010116594650536603, -0.08239099100919134],
+    [-0.0038610249656808, 0.9995449422400997, 0.09063785228667598],
+    [-1.7453568158535004e-05, -2.7554790473336907e-05, 1.0044308229632322],
+  ],
+  "offset_x": [0.0, -0.002, -0.001],
+  "offset_y": [0.001, 0.0, -0.002],
+  "arm_type_rotation_degree": 0.0,
+  "arm_type_translation": [0.0, 0.0, 0.0],
+  "reference_height": 9.665,
+}
+# The wellplate its dispenses used, from its unit's wellplate definition: the height, mm, the well
+# diameter, mm, and each column's x and each row's y, mm from the holder's back-left corner.
+UNIT_WELLPLATE_SIZE_Z = 23.481
+UNIT_WELL_SIZE = 7.0
+UNIT_WELLPLATE_X = [14.160, 23.206, 32.251, 41.297, 50.343, 59.389]
+UNIT_WELLPLATE_X += [68.434, 77.480, 86.526, 95.571, 104.617, 113.663]
+UNIT_WELLPLATE_Y = [11.734, 20.783, 29.832, 38.881, 47.930, 56.979, 66.027, 75.076]
+# A second definition of that wellplate on the unit, which later dispenses used: its wells' height
+# 0.252 mm more (26.233 against 25.981, each its height and PITCH_HEIGHT).
+UNIT_SECOND_WELLPLATE_SIZE_Z = 23.733
+# The moves it was sent from idle onto H12, before its first drop: every motor held, the arms to
+# (15, 30), Z down there, then the arms across.
+CAPTURED_WELL_ENTRY = """
+-,-,-
+-0.5891965243621929,-0.2509165576955263,-
+-,-,1354.574212598425
+49.51462730725017,17.9653542069572,-
+""".split()
+# Where its moves left the nozzle over a well, by well: each motor's target, device units.
+CAPTURED_WELL_TARGETS = {
+  "H12": "49.51462730725017,17.9653542069572,1354.574212598425",
+  "H11": "45.20860389210768,19.259672410425633,1354.9303543307083",
+  "H2": "19.0501512285211,45.45451375212855,1358.1355118110234",
+  "G2": "14.674956371274352,42.524324549384964,1358.8480314960627",
+  "F3": "12.518292367663554,36.14555371990426,1359.2043700787399",
+}
+# Steps between wells it took as one item each: along a row, down a column, the same well again.
+CAPTURED_WELL_TO_WELL = [("H12", "H11"), ("H2", "G2"), ("F3", "F3")]
+
+
+def make_unit_wellplate(*, name: str, size_z: float = UNIT_WELLPLATE_SIZE_Z) -> Plate:
+  """The unit's wellplate, its wells centred where its definition puts them.
+
+  Args:
+    name: the wellplate's name.
+    size_z: its height, mm.
+  """
+  wells = {}
+  for row, y in enumerate(UNIT_WELLPLATE_Y):
+    for column, x in enumerate(UNIT_WELLPLATE_X):
+      identifier = f"{chr(ord('A') + row)}{column + 1}"
+      wells[identifier] = Well(
+        name=f"{name}_{identifier}",
+        size_x=UNIT_WELL_SIZE,
+        size_y=UNIT_WELL_SIZE,
+        size_z=size_z,
+      )
+      wells[identifier].location = Coordinate(
+        x=x - UNIT_WELL_SIZE / 2, y=PLATE_HOLDER_SIZE_Y - y - UNIT_WELL_SIZE / 2, z=0.0
+      )
+  return Plate(
+    name=name,
+    size_x=PLATE_HOLDER_SIZE_X,
+    size_y=PLATE_HOLDER_SIZE_Y,
+    size_z=size_z,
+    ordered_items=wells,
+  )
+
+
+def get_captured_joint_state(*, captured: str) -> Dict[int, float]:
+  """Where a captured move with every motor named leaves each motor, degrees and mm."""
+  return {
+    motor: compute_position(motor=motor, device_position=float(value))
+    for motor, value in enumerate(captured.split(","))
+  }
+
+
+class WellTests(ArmTestCase):
+  async def set_up_wellplate(self, *, link: RouteLink):
+    driver = await self.set_up_arm(link=link, stage=UNIT_STAGE_BLOCK)
+    driver.arm._initialized = True
+    driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
+    driver.arm.park = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._next_item = 1
+    mantis = Mantis(simulation=True)
+    self.wellplate = make_unit_wellplate(name="wellplate")
+    mantis.plate_holder.assign_child_resource(self.wellplate)
+    self.deck = mantis.deck
+    return driver
+
+  def set_joint_state(self, *, driver, joint_state: Dict[int, float]) -> None:
+    request_joint_state = mock.AsyncMock(return_value=joint_state)
+    driver.arm.request_joint_state = request_joint_state  # type: ignore[method-assign]
+
+  def get_queued_moves(self, *, link: RouteLink) -> List[bytes]:
+    return [payload for _, command, payload in self.sent(link) if command == 68]
+
+  def assert_moves(self, *, sent: List[bytes], captured: List[str]):
+    expected = parse_captured_moves(captured=captured)
+    self.assertEqual(len(sent), len(expected))
+    for index, (payload, targets) in enumerate(zip(sent, expected)):
+      with self.subTest(move=index):
+        expected_payload = get_queued_move(item=index + 1, targets=targets)
+        self.assertEqual(payload[:6], expected_payload[:6])
+        for offset in range(6, len(payload), 8):
+          (sent_value,) = struct.unpack_from("<d", payload, offset)
+          (expected_value,) = struct.unpack_from("<d", expected_payload, offset)
+          self.assertAlmostEqual(sent_value, expected_value, places=9)
+
+  async def test_from_idle_the_head_enters_as_captured(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_wellplate(link=link)
+    idle = {**{motor: IDLE_ANGLES[motor] - SYNTHETIC_OFFSETS[motor] for motor in (0, 1)}, 2: 0.0}
+    self.set_joint_state(driver=driver, joint_state=idle)
+    await driver.arm.move_to_well(well=self.wellplate.get_item("H12"))
+    self.assert_moves(sent=self.get_queued_moves(link=link), captured=CAPTURED_WELL_ENTRY)
+    driver.arm.park.assert_not_awaited()
+
+  async def test_from_a_well_the_next_is_one_move_as_captured(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_wellplate(link=link)
+    for start, end in CAPTURED_WELL_TO_WELL:
+      with self.subTest(start=start, end=end):
+        self.sent_before = len(link.written)
+        driver._next_item = 1
+        joint_state = get_captured_joint_state(captured=CAPTURED_WELL_TARGETS[start])
+        self.set_joint_state(driver=driver, joint_state=joint_state)
+        await driver.arm.move_to_well(well=self.wellplate.get_item(end))
+        self.assert_moves(
+          sent=self.get_queued_moves(link=link), captured=[CAPTURED_WELL_TARGETS[end]]
+        )
+    driver.arm.park.assert_not_awaited()
+
+  async def test_elsewhere_or_at_another_height_the_head_is_parked_before_it_enters(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_wellplate(link=link)
+    driver.arm.request_is_parked = mock.AsyncMock(return_value=False)  # type: ignore[method-assign]
+    # Left of the plate holder, in the arm frame, Z at its flag; at H12, 1 mm below the target.
+    angles = compute_joint_angles(location=MantisArmCoordinate(x=-40.0, y=60.0, z=None))
+    away = {**{motor: angles[motor] - SYNTHETIC_OFFSETS[motor] for motor in (0, 1)}, 2: 0.0}
+    at_h12 = get_captured_joint_state(captured=CAPTURED_WELL_TARGETS["H12"])
+    for start, joint_state, offset in (("away", away, 0.0), ("H12", at_h12, 1.0)):
+      with self.subTest(start=start):
+        self.sent_before = len(link.written)
+        driver._next_item = 1
+        driver.arm.park.reset_mock()
+        self.set_joint_state(driver=driver, joint_state=joint_state)
+        await driver.arm.move_to_well(
+          well=self.wellplate.get_item("H11"), offset=Coordinate(x=0.0, y=0.0, z=offset)
+        )
+        driver.arm.park.assert_awaited_once_with(with_model_updates=False)
+        # The entry: its first two items as captured, then Z down and the arms across to H11.
+        sent = self.get_queued_moves(link=link)
+        self.assertEqual(len(sent), len(CAPTURED_WELL_ENTRY))
+        self.assert_moves(sent=sent[:2], captured=CAPTURED_WELL_ENTRY[:2])
+
+  async def test_wells_above_the_frame_raise_the_nozzle(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_wellplate(link=link)
+    idle = {**{motor: IDLE_ANGLES[motor] - SYNTHETIC_OFFSETS[motor] for motor in (0, 1)}, 2: 0.0}
+    self.set_joint_state(driver=driver, joint_state=idle)
+    # Wells reaching the second definition's height on the first's frame: its captured dispenses'.
+    raised = UNIT_SECOND_WELLPLATE_SIZE_Z - UNIT_WELLPLATE_SIZE_Z
+    for well in self.wellplate.get_all_items():
+      assert well.location is not None
+      well.location = well.location + Coordinate(x=0.0, y=0.0, z=raised)
+    await driver.arm.move_to_well(well=self.wellplate.get_item("H12"))
+    sent = self.get_queued_moves(link=link)
+    plate_holder = self.wellplate.parent
+    assert isinstance(plate_holder, ResourceHolder)
+    self.wellplate.unassign()
+    taller = make_unit_wellplate(name="taller", size_z=UNIT_SECOND_WELLPLATE_SIZE_Z)
+    plate_holder.assign_child_resource(taller)
+    self.sent_before = len(link.written)
+    driver._next_item = 1
+    await driver.arm.move_to_well(well=taller.get_item("H12"))
+    self.assertEqual(sent, self.get_queued_moves(link=link))
+
+  async def test_a_well_off_the_plate_holder_under_a_lid_or_below_its_height_is_refused(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_wellplate(link=link)
+    elsewhere = make_unit_wellplate(name="elsewhere")
+    self.deck.assign_child_resource(elsewhere, location=Coordinate(x=200.0, y=15.0, z=0.0))
+    with self.assertRaisesRegex(ValueError, "not over the plate holder"):
+      await driver.arm.move_to_well(well=elsewhere.get_item("A1"))
+    loose = make_unit_wellplate(name="loose")
+    with self.assertRaisesRegex(ValueError, "not on a deck"):
+      await driver.arm.move_to_well(well=loose.get_item("A1"))
+    with self.assertRaisesRegex(ValueError, "not over the plate holder"):
+      await driver.arm.move_to_well(
+        well=self.wellplate.get_item("A1"), offset=Coordinate(x=-20.0, y=0.0, z=0.0)
+      )
+    with self.assertRaisesRegex(ValueError, "below the wellplate's highest point"):
+      await driver.arm.move_to_well(
+        well=self.wellplate.get_item("A1"), offset=Coordinate(x=0.0, y=0.0, z=-2.6)
+      )
+    self.wellplate.assign_child_resource(
+      Lid(
+        name="lid",
+        size_x=PLATE_HOLDER_SIZE_X,
+        size_y=PLATE_HOLDER_SIZE_Y,
+        size_z=8.0,
+        nesting_z_height=6.0,
+      ),
+      location=Coordinate(x=0.0, y=0.0, z=UNIT_WELLPLATE_SIZE_Z - 6.0),
+    )
+    with self.assertRaisesRegex(ValueError, "has a lid"):
+      await driver.arm.move_to_well(well=self.wellplate.get_item("A1"))
+    self.assertEqual(self.sent(link), [])
 
 
 if __name__ == "__main__":

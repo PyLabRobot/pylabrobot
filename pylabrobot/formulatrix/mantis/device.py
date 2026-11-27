@@ -20,7 +20,7 @@ from .driver.arm_kinematics import (
 )
 from .driver.configuration import RECORDING_MANTIS_V4
 from .driver.errors import MantisConfigurationError
-from .driver.features.arm import CHIP_CHANGER_ROUTE, Arm
+from .driver.features.arm import Arm
 from .driver.features.drop_sensor import DropSensor
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
@@ -108,9 +108,10 @@ class MantisDevice(Resource):
     """
     arm = cast(Arm, self.driver.arm)
     path = arm._get_chip_slot_path(slot=slot)
-    attach_line = arm._get_attach_line(path=path)
+    chip_changer_route = arm._get_chip_changer_route()
+    attach_line = arm._get_attach_line(path=path, chip_changer_route=chip_changer_route)
     # A line holds an axis it leaves None; the path starts where the chip changer route ends.
-    line = CHIP_CHANGER_ROUTE[-1]
+    line = chip_changer_route[-1]
     x, y, z = cast(float, line.x), cast(float, line.y), cast(float, line.z)
     for line in path[: attach_line + 1]:
       if line.x is not None and line.y is not None:

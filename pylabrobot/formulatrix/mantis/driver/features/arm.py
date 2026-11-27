@@ -32,7 +32,7 @@ from typing import (
   cast,
 )
 
-from pylabrobot.resources import Coordinate, ResourceHolder
+from pylabrobot.resources import Coordinate, Deck, Plate, ResourceHolder, Well
 from pylabrobot.resources.formulatrix.mantis_chips import (
   MANTIS_CHIP_FACTORIES,
   MantisChip,
@@ -144,6 +144,9 @@ HOME_FRAME_DEVICE_SPEED = 500.0
 HOME_FRAME_DEVICE_ACCELERATION = 100.0
 # The safe height, mm above Z's flag: the routes' Z -1.570.
 SAFE_HEIGHT = 1.57
+# The nozzle's height above a wellplate's highest point over a well, mm: the unit's PitchHeight
+# (StageTuning.config), 2.5 on every unit seen; each captured dispense stood there.
+PITCH_HEIGHT = 2.5
 # PyLabRobot design choice: the plate holder is sampled every 5 mm to fit the deck frame to the arm
 # frame.
 DECK_FIT_SPACING = 5.0
@@ -153,16 +156,18 @@ HOLDER_EDGE_TOLERANCE = 1e-6
 # PyLabRobot design choice: how close, mm, the head must stand to a route line below the safe height on
 # an approach path, in x, y and Z, to count as on that path.
 APPROACH_PATH_TOLERANCE = 0.5
-# Before and after each chip slot's path, the head goes to (15, 30) at the safe height, as in every
-# recorded pick-up and placement. These are the first four lines of the waste route.
+# PyLabRobot design choice: how close, mm, Z must stand to a well's height to go well to well.
+WELL_HEIGHT_TOLERANCE = 0.5
+# The head goes to (15, 30) at the safe height around each chip slot's path on a v4, and the first
+# two lines start each captured move onto a wellplate; the waste route's first four lines.
 CHIP_CHANGER_ROUTE: List[MantisArmCoordinate] = [
   MantisArmCoordinate(x=None, y=None, z=None),
   MantisArmCoordinate(x=15.0, y=30.0, z=None),
   MantisArmCoordinate(x=None, y=None, z=0.0 - SAFE_HEIGHT),
   MantisArmCoordinate(x=15.0, y=30.0, z=0.0 - SAFE_HEIGHT),
 ]
-# A v3's safe height is Z's flag, its MoveToSafeHeight.seq.txt's Z 0: a v3 leaves the waste after a
-# prime along CHIP_CHANGER_ROUTE at Z 0 (260601_homethenprime, 260528_primeall).
+# A v3's safe height is Z's flag, its MoveToSafeHeight.seq.txt's Z 0: a v3 goes around each chip
+# slot's path and leaves the waste along these lines (260528_primeall, 260602_dispense).
 V3_CHIP_CHANGER_ROUTE: List[MantisArmCoordinate] = [
   line if line.z is None else dataclasses.replace(line, z=0.0) for line in CHIP_CHANGER_ROUTE
 ]
@@ -841,6 +846,13 @@ class Arm:
     )
     return self._deck_to_arm_transform
 
+  @staticmethod
+  def _is_over_plate_holder(*, x: float, y: float) -> bool:
+    """Whether a deck-frame (x, y), mm, is over the plate holder, its edges included."""
+    holder_x = x - PLATE_HOLDER_LOCATION.x
+    holder_y = PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - y
+    return 0 <= holder_x <= PLATE_HOLDER_SIZE_X and 0 <= holder_y <= PLATE_HOLDER_SIZE_Y
+
   def _get_arm_frame_xy(self, *, x: float, y: float) -> Tuple[float, float]:
     """A deck-frame (x, y), mm, in the arm frame, unrounded: by the stage transform over the plate
     holder, by the fitted transform elsewhere.
@@ -848,10 +860,10 @@ class Arm:
     Raises:
       MantisConfigurationError: without the unit's ``stage`` block.
     """
-    holder_x = x - PLATE_HOLDER_LOCATION.x
-    holder_y = PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - y
-    if 0 <= holder_x <= PLATE_HOLDER_SIZE_X and 0 <= holder_y <= PLATE_HOLDER_SIZE_Y:
-      stage = self._get_stage_position(x=holder_x, y=holder_y, z=0.0)
+    if self._is_over_plate_holder(x=x, y=y):
+      stage = self._get_stage_position(
+        x=x - PLATE_HOLDER_LOCATION.x, y=PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - y, z=0.0
+      )
       return cast(float, stage.x), cast(float, stage.y)
     turn, shift_x, shift_y = self._get_deck_to_arm_transform()
     model_x, model_y = x - ARM_BASE_X, ARM_BASE_Y - y
@@ -2503,6 +2515,141 @@ class Arm:
       name=WASH_APPROACH_PATH.format(position=position), with_model_updates=with_model_updates
     )
 
+  @staticmethod
+  def _get_wellplate_top(*, well: Well) -> float:
+    """The highest point of a well's wellplate above its base, mm: its frame or its wells' tops.
+
+    Raises:
+      ValueError: if the well is not on a wellplate.
+    """
+    wellplate = well.parent
+    if not isinstance(wellplate, Plate):
+      raise ValueError(f"well {well.name} is not on a wellplate")
+    return max(
+      wellplate.get_size_z(),
+      *(item.get_location_wrt(wellplate, z="t").z for item in wellplate.get_all_items()),
+    )
+
+  def _get_well_arm_frame_location(
+    self, *, well: Well, offset: Coordinate, height: float
+  ) -> MantisArmCoordinate:
+    """Where the nozzle stands over a well's centre, ``height`` above its wellplate's highest point
+    (``_get_wellplate_top``), in the arm frame.
+
+    Args:
+      well: a well of a wellplate over the plate holder.
+      offset: added to the nozzle's location, mm.
+      height: the nozzle's height above the wellplate's highest point, mm.
+
+    Raises:
+      MantisConfigurationError: without the unit's ``stage`` block.
+      ValueError: if ``height`` and ``offset.z`` together are negative, the well is not on a
+        wellplate on a deck, the wellplate has a lid, or the location is not over the plate holder.
+    """
+    if height + offset.z < 0:
+      raise ValueError(
+        f"a height of {height} mm and offset.z {offset.z} mm would take the nozzle below the "
+        "wellplate's highest point; nothing moves"
+      )
+    top = self._get_wellplate_top(well=well)
+    wellplate = cast(Plate, well.parent)
+    if wellplate.has_lid():
+      raise ValueError(f"wellplate {wellplate.name} has a lid; nothing moves")
+    deck = wellplate.parent
+    while deck is not None and not isinstance(deck, Deck):
+      deck = deck.parent
+    if deck is None:
+      raise ValueError(f"wellplate {wellplate.name} is not on a deck")
+    center = well.get_location_wrt(deck, x="c", y="c")
+    location = Coordinate(
+      x=center.x + offset.x,
+      y=center.y + offset.y,
+      z=wellplate.get_location_wrt(deck).z + top + height + offset.z,
+    )
+    if not self._is_over_plate_holder(x=location.x, y=location.y):
+      raise ValueError(
+        f"well {well.name} at ({location.x:.2f}, {location.y:.2f}) mm is not over the plate "
+        "holder; nothing moves"
+      )
+    return self._get_arm_frame_location(location=location)
+
+  def _get_well_entry_moves(
+    self, *, targets: Dict[int, float]
+  ) -> List[List[Tuple[float, float, float]]]:
+    """The queued moves from idle onto a well, as captured on a v4 and a v3, at the route profile:
+    the arms to (15, 30), Z down there to the well's height, then the arms across with Z held.
+
+    Args:
+      targets: each motor's target over the well, device units, from ``_get_route_line_targets``.
+
+    Raises:
+      MantisKinematicsError, ValueError: as ``_get_route_line_targets``.
+    """
+    profiles = self._get_route_profiles()
+    return [
+      *self._get_route_moves(route=CHIP_CHANGER_ROUTE[:2]),
+      self._get_queued_move(targets={Z_MOTOR: targets[Z_MOTOR]}, profiles=profiles),
+      self._get_queued_move(
+        targets={motor: targets[motor] for motor in ARM_MOTORS}, profiles=profiles
+      ),
+    ]
+
+  async def move_to_well(
+    self,
+    *,
+    well: Well,
+    offset: Coordinate = Coordinate.zero(),
+    with_model_updates: bool = False,
+  ) -> None:
+    """Move the nozzle over a well's centre, ``PITCH_HEIGHT`` above its wellplate's highest point
+    (its frame or its wells' tops).
+
+    From idle, queued as captured: the arms to (15, 30), Z down there to the well's height, then
+    the arms across. Below the safe height this entry is unguarded: nothing avoids the chip racks.
+    From over the plate holder at that height or up to ``WELL_HEIGHT_TOLERANCE`` above it: the arms
+    and Z in one item, as captured between wells. From anywhere else the head is parked first.
+
+    Args:
+      well: a well of a wellplate over the plate holder.
+      offset: added to the nozzle's location, mm; with its z the nozzle stays at or above the
+        wellplate's highest point.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
+
+    Raises:
+      MantisConfigurationError: without the unit's ``arm`` or ``stage`` block; nothing is sent.
+      MantisMotionError: if the arm is not brought up, or a motor faults.
+      MantisKinematicsError: if the location is out of the arm's reach; nothing is sent.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
+      ValueError: if the nozzle would stand below the wellplate's highest point, the well is not
+        on a wellplate on a deck, the wellplate has a lid, the location is not over the plate
+        holder, or a target is outside its motor's limits; nothing is sent.
+    """
+    self._check_initialized()
+    self._check_stage()
+    arm_frame_location = self._get_well_arm_frame_location(
+      well=well, offset=offset, height=PITCH_HEIGHT
+    )
+    targets = self._get_route_line_targets(route_line=arm_frame_location)
+    entry_moves = self._get_well_entry_moves(targets=targets)
+    joint_state = await self.request_joint_state()
+    head = self._get_head_position(joint_state=joint_state)
+    head_x, head_y = self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y))
+    z_joint_position = cast(float, arm_frame_location.z)
+    # Z down from its flag: at or above the well's height, never below it before moving across.
+    if (
+      self._is_over_plate_holder(x=head_x, y=head_y)
+      and 0 <= z_joint_position - joint_state[Z_MOTOR] <= WELL_HEIGHT_TOLERANCE
+    ):
+      moves = [self._get_queued_move(targets=targets, profiles=self._get_route_profiles())]
+    else:
+      if not await self.request_is_parked():
+        await self.park(with_model_updates=with_model_updates)
+      moves = entry_moves
+    await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
+    if not with_model_updates:  # else passed on after the last move
+      await self._report_pose()
+
   def _get_chip_slot_path(self, *, slot: int) -> List[MantisArmCoordinate]:
     """A chip slot's path from its safe start into the slot and back out, with every line checked.
 
@@ -2520,20 +2667,32 @@ class Arm:
     self._get_route_targets(route=path)
     return path
 
+  def _get_chip_changer_route(self) -> List[MantisArmCoordinate]:
+    """The lines to (15, 30) at the safe height around each chip slot's path, as the generation
+    sends them: ``CHIP_CHANGER_ROUTE`` on a v4, ``V3_CHIP_CHANGER_ROUTE`` on a v3."""
+    return V3_CHIP_CHANGER_ROUTE if self._get_generation() == "v3" else CHIP_CHANGER_ROUTE
+
   @staticmethod
-  def _get_attach_line(*, path: List[MantisArmCoordinate]) -> int:
+  def _get_attach_line(
+    *, path: List[MantisArmCoordinate], chip_changer_route: List[MantisArmCoordinate]
+  ) -> int:
     """The index of the line where a chip slot's descent ends: the last line before the head first
     moves sideways below the safe height. Every recorded pick-up and placement waits at this line
     until the device has played it.
 
+    Args:
+      path: the slot's path, in the order played.
+      chip_changer_route: the generation's lines around it (``_get_chip_changer_route``), whose
+        last line's Z is the safe height.
+
     Raises:
       MantisConfigurationError: if the path never moves sideways below the safe height.
     """
-    route_end = CHIP_CHANGER_ROUTE[-1]
+    route_end = chip_changer_route[-1]
     x, y, z = route_end.x, route_end.y, cast(float, route_end.z)
     for index, line in enumerate(path):
       sideways = line.x is not None and (line.x, line.y) != (x, y)
-      if sideways and z > APPROACH_PATH_TOLERANCE - SAFE_HEIGHT:
+      if sideways and z > APPROACH_PATH_TOLERANCE + cast(float, route_end.z):
         return index - 1
       if line.x is not None and line.y is not None:
         x, y = line.x, line.y
@@ -2550,9 +2709,9 @@ class Arm:
     attached_chip: Optional[MantisChip],
     with_model_updates: bool,
   ) -> None:
-    """Move from idle along ``CHIP_CHANGER_ROUTE``, through a chip slot's path and back the same way
-    to idle, queued as in the recordings. Queuing pauses at the attach line and before idle until
-    the device has played the moves so far.
+    """Move from idle along the generation's chip changer route (``_get_chip_changer_route``),
+    through a chip slot's path and back the same way to idle, queued as in the captures. Queuing
+    pauses at the attach line and before idle until the device has played the moves so far.
 
     Once the attach line has played, the chip on the head is ``attached_chip``, from slot
     ``current_chip`` (design.md), even if a later move fails or is cancelled, and
@@ -2569,9 +2728,10 @@ class Arm:
     if self._get_generation() == "v4" and not await self.request_is_parked():
       await self.park(with_model_updates=with_model_updates)
     idle = [FRONT_IDLE_ROUTE[0], FRONT_IDLE_ROUTE[-1]]
-    route = [*idle, *CHIP_CHANGER_ROUTE, *path, *CHIP_CHANGER_ROUTE, *idle]
+    chip_changer_route = self._get_chip_changer_route()
+    route = [*idle, *chip_changer_route, *path, *chip_changer_route, *idle]
     moves = self._get_route_moves(route=route)
-    first_path_line = len(idle) + len(CHIP_CHANGER_ROUTE)
+    first_path_line = len(idle) + len(chip_changer_route)
 
     def wait_after_callback(index: int) -> None:
       if index == first_path_line + attach_line:
@@ -2698,7 +2858,9 @@ class Arm:
       logger.info("[%s] the chip from slot %d is on the head", self._driver.name, chip_number)
       return
     path = self._get_chip_slot_path(slot=chip_number)
-    attach_line = self._get_attach_line(path=path)
+    attach_line = self._get_attach_line(
+      path=path, chip_changer_route=self._get_chip_changer_route()
+    )
     await self._check_v3_at_idle()
     tag = await self._check_chip_slot_tag(slot=chip_number, action="pick_up_chip")
     chip = self._get_chip(chip_number=chip_number, tag=tag)
@@ -2760,7 +2922,9 @@ class Arm:
         f"{chip_number}; place it back there"
       )
     path = self._get_chip_slot_path(slot=chip_number)
-    attach_line = self._get_attach_line(path=path)
+    attach_line = self._get_attach_line(
+      path=path, chip_changer_route=self._get_chip_changer_route()
+    )
     await self._check_v3_at_idle()
     await self._check_chip_slot_tag(slot=chip_number, action="place_chip")
     async with self._driver._show_action(action="place_chip"):
