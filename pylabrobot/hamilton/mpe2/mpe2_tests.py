@@ -17,6 +17,7 @@ from pylabrobot.hamilton.mpe2.mpe2 import MPE2
 from pylabrobot.hamilton.mpe2.simulator import MPE2Simulator
 from pylabrobot.hamilton.transport.tcp.packets import Address
 from pylabrobot.hamilton.transport.tcp.wire_types import HcResultEntry
+from pylabrobot.io.serial import HAS_SERIAL
 
 DEST = Address(1, 1, 0x1000)
 
@@ -797,6 +798,7 @@ def _serial_link(mpe: MPE2):
   return cast(HamiltonSerialLink, mpe.io._create_session()._io)  # type: ignore[attr-defined]
 
 
+@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
 class FindByUSBTests(unittest.IsolatedAsyncioTestCase):
   """An MPE2 found on USB by its FTDI chip at setup, through pylabrobot.io."""
 

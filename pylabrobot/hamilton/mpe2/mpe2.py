@@ -343,8 +343,8 @@ class MPE2:
     """Set the connection up again after an exchange that failed or may not have finished."""
     before = self._reconnections
     async with self._reconnect_lock:
-      if self._reconnections != before:
-        return  # reconnected meanwhile by whoever held the lock
+      if self._reconnections != before or not self._uncertain:
+        return  # reconnected meanwhile, or just before, by another caller
       logger.warning("Reconnecting to the MPE2 after a lost or uncertain exchange.")
       try:
         await asyncio.wait_for(self.io.stop(), self.timeout)

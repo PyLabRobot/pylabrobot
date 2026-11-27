@@ -3,7 +3,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.io.serial import find_serial_ports
+from pylabrobot.io.serial import HAS_SERIAL, find_serial_ports
 
 
 class TestSerialDiscovery(unittest.TestCase):
@@ -93,6 +93,7 @@ class FakePort:
     return out
 
 
+@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
 class TestSerialOpenAndBinary(unittest.IsolatedAsyncioTestCase):
   def _serial(self, **kwargs):
     from pylabrobot.io.serial import Serial

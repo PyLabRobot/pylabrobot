@@ -60,7 +60,7 @@ class PlateStep:
 
 
 def parse_control_points(text: str) -> List[PlateStep]:
-  """Hamilton's control point text as ``PlateStep``s, for steps copied from an HSL method::
+  """Hamilton's control point text as a list of ``PlateStep``, for steps copied from an HSL method::
 
     parse_control_points("pressure,5,5;pressure,15,5")  # type, value, seconds; ';' between
 

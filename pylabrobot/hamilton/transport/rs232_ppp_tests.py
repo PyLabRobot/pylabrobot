@@ -8,6 +8,7 @@ from typing import List, Optional
 from unittest import mock
 
 from pylabrobot.hamilton.transport import rs232_ppp as ppp
+from pylabrobot.io.serial import HAS_SERIAL
 
 # Frames an MPE2 sends on its USB port.
 MPE2_DISCOVER = bytes.fromhex("aa1400000000007569 00ffda42 0010050000 00ffff cc".replace(" ", ""))
@@ -159,6 +160,7 @@ def sp0_frame(protocol: int, flags: int, sequence: int, body: bytes, code: int =
   return ppp.encode_frame(sp0, True, ppp.VERSION, SESSION, ppp.DATA_PROTOCOL)
 
 
+@unittest.skipUnless(HAS_SERIAL, "pyserial is not installed")
 class LinkTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     FakeSerial.instances = []
