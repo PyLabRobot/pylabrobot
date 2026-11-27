@@ -87,7 +87,8 @@ class MantisSimulationPlateClamp(PlateClamp):
 class MantisSimulationPump(Pump):
   """A pump with no device behind it, answering from the declared configuration.
 
-  Off, its controllers off and disabled, every line at 0, with the recorded sensor calibration.
+  Off, its controllers disabled, every line at 0, with the recorded sensor calibration; a controller
+  enabled reads settled at once.
   """
 
   def __init__(self, *, driver: "MantisSimulationDriver"):
@@ -106,6 +107,12 @@ class MantisSimulationPump(Pump):
     """Set the simulated controller's state at once."""
     self._get_controller_index(controller=controller)
     self._enabled[controller] = enabled
+
+  async def _unchecked_fw_set_target_pressure(
+    self, *, controller: PressureController, pressure: float
+  ) -> None:
+    """Set nothing: no line holds pressure."""
+    self._get_controller_index(controller=controller)
 
   async def _unchecked_fw_set_proportional_valve(
     self, *, controller: PressureController, value: int
@@ -151,9 +158,9 @@ class MantisSimulationPump(Pump):
     return parameters
 
   async def request_controller_status(self, *, controller: PressureController) -> int:
-    """0: off."""
+    """1, settled, if the simulated controller is enabled; else 0, off."""
     self._get_controller_index(controller=controller)
-    return 0
+    return 1 if self._enabled.get(controller, False) else 0
 
   async def request_controller_enabled(self, *, controller: PressureController) -> bool:
     """The simulated controller's state, as last set; disabled until then."""

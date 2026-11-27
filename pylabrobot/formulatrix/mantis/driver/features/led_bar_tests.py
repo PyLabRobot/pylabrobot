@@ -33,6 +33,7 @@ from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master import MantisDriver
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   CALIBRATION_WRITTEN_BACK,
+  CHIP_LINE_VENT,
   PUMP_READ,
   DriverTestCase,
   FakeLink,
@@ -195,7 +196,7 @@ class LedBarDiscoveryTests(LedBarTestCase):
   async def test_built_only_on_a_v4_whose_board_12_answers(self):
     for absent_boards, built in (((), True), ((11,), False), ((12,), False)):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
@@ -221,7 +222,7 @@ class LedBarDiscoveryTests(LedBarTestCase):
           await driver.setup()
 
   async def test_a_v3_setup_and_stop_send_no_led_bar_frame(self):
-    self.default_read_timeout = 0.25  # board 11 never answers
+    self.absent_boards = (11,)
     link = FakeLink(answers=make_answers(absent_boards=(11,)))
     driver = await self.set_up_driver(link=link)
     await driver.stop()
@@ -260,6 +261,7 @@ class SetupAndStopTests(LedBarTestCase):
         *HALT,
         STATE_READ,
         PUMP_READ,
+        *CHIP_LINE_VENT,
         *CALIBRATION_WRITTEN_BACK,
         STOP_ANIMATION,
         color_write(colors=[OFF] * 20),

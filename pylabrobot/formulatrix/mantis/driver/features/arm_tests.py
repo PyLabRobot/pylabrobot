@@ -678,7 +678,7 @@ class StopTests(ArmTestCase):
     )
     sent = self.sent(link)
     self.assertEqual([command for _, command, _ in sent if command == 24], [24, 24, 24])
-    self.assertFalse({22, 30, 68} & {command for _, command, _ in sent})
+    self.assertFalse({22, 30, 68} & {command for board, command, _ in sent if board != 10})
 
   async def test_a_head_away_from_idle_is_not_parked_and_the_clamp_is_still_released(self):
     link = self.close_link()
@@ -704,7 +704,7 @@ class StopTests(ArmTestCase):
     ) as logs:
       await driver.stop()
     self.assertTrue(any("the arm was not parked" in line for line in logs.output))
-    commands = [command for _, command, _ in self.sent(link)]
+    commands = [command for board, command, _ in self.sent(link) if board != 10]
     self.assertNotIn(30, commands)
     self.assertNotIn(68, commands)
 
@@ -765,7 +765,7 @@ class DiscoveryTests(ArmTestCase):
   async def test_board_11_selects_the_arm_implementation(self):
     for absent_boards, generation in (((), "v4"), ((11,), "v3")):
       with self.subTest(absent_boards=absent_boards):
-        self.default_read_timeout = 0.25 if absent_boards else 5.0  # an absent board never answers
+        self.absent_boards = absent_boards
         driver = await self.set_up_driver(
           link=FakeLink(answers=make_answers(absent_boards=absent_boards))
         )
@@ -1702,38 +1702,6 @@ class ApproachPathTests(ArmTestCase):
       await driver.arm.move_to_wash(position=3)
     self.assertEqual(self.sent(link), [])
 
-  async def test_leaving_the_waste_plays_its_path_backwards(self):
-    # From the waste's last line back to its start, line by line; a line naming nothing is skipped.
-    # A line moving the arms and raising Z is preceded by the arms alone at depth, Z held.
-    way_out = [
-      (-60.0, 10.0, 30.0),
-      (None, None, 30.0),
-      (-50.0, 20.0, None),
-      (-50.0, 20.0, -1.57),
-      (None, None, -1.57),
-      (15.0, 30.0, -1.57),
-      (None, None, -1.57),
-      (15.0, 30.0, None),
-    ]
-    first_item = 16 - len(way_out) + 1
-    expected = []
-    for item, (x, y, z) in enumerate(way_out, start=first_item):
-      targets = get_arm_positions(x=x, y=y) if x is not None and y is not None else {}
-      if z is not None:
-        targets[2] = compute_device_position(motor=2, position=z)
-      expected.append(get_queued_move(item=item, targets=targets))
-    link = RouteLink(
-      answers=make_answers(), events={(0, 68, expected[-1]): [bytes.fromhex(CLOSE_ITEM_PLAYED[16])]}
-    )
-    driver = await self.set_up_approach_paths(link=link)
-    driver._next_item = first_item
-    await driver.arm._leave_approach_path(
-      name="waste", index=len(SYNTHETIC_WASTE_ROUTE) - 1, until=0
-    )
-    self.assertEqual(
-      [payload for _, command, payload in self.sent(link) if command == 68], expected
-    )
-
   def test_the_head_is_placed_on_a_path_by_where_it_stands(self):
     arm = Arm(
       driver=mock.Mock(**{"configuration.generation": "v4"}),
@@ -1897,6 +1865,7 @@ CAPTURED_STATUS_RUNS = {
 # board, command, request payload, reply payload; "-" is an empty payload. Each following-error
 # configuration read (command 82) answers as captured: enabled, at most 4.0. Last, the captured
 # tare of the bottle and chip sensors; the stop's pump read and their calibration written back.
+# Three walk-to-idle moves (command 22) differ from ours in their last bits (`is_captured_move`).
 CAPTURED_EXCHANGES = """
 0:1:-:34002e00320030002e0036000000
 10:1:-:31002e0030002e0035000000
@@ -1962,13 +1931,13 @@ CAPTURED_EXCHANGES = """
 0:22:010000000000000000000000000000407f400000000000005940:0000
 0:28:01000000000000005e40:-
 0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
-0:22:000040877b10d60349c0e359d148c0c74b4025e09b5793b39540:0000
+0:22:000043877b10d60349c0e359d148c0c74b4025e09b5793b39540:0000
 0:22:0100545f88b1d4794940e359d148c0c74b4025e09b5793b39540:0000
 0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
 0:22:0000042e990e845733c0e359d148c0c74b4025e09b5793b39540:0000
-0:22:0100ff8a9491d13f4740e359d148c0c74b4025e09b5793b39540:0000
+0:22:0100fd8a9491d13f4740e359d148c0c74b4025e09b5793b39540:0000
 0:22:0200000000000000000036496c9706c2ae407d2ae7ab04c2ce40:0000
-0:22:0000aaaaea83a1a3063fe359d148c0c74b4025e09b5793b39540:0000
+0:22:00008ee3d883a1a3063fe359d148c0c74b4025e09b5793b39540:0000
 0:22:01008ee3d883a1a3063fe359d148c0c74b4025e09b5793b39540:0000
 0:27:0000:000000000000073f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
 0:27:0100:000000000000083f00000000000000000000000000000000000000000000073f00000040c0c74b400000006093b39540
@@ -2005,18 +1974,38 @@ CAPTURED_EXCHANGES = """
 """.split()
 
 
+# Not captured: no v3 capture homes Z before seating the arms. The status reads that first Z home
+# adds, each motor idle at its following-error check, then Z homed, as the captured homes read.
+Z_FIRST_STATUSES = {0: ["0000"], 1: ["0000"], 2: ["0000", "0400"]}
+# The motion commands it adds: the arms' faults cleared, Z's cleared, Z homed.
+Z_HOME_REQUEST = "0200000001000000d343867e1e874d4064ea130f737482407d2ae7ab04c2ce40"
+Z_FIRST_COMMANDS = [(17, "0000"), (17, "0100"), (17, "0200"), (21, Z_HOME_REQUEST)]
+
+
 def make_v3_answers():
-  """Play each captured reply list in order, repeating its final reply."""
+  """Play each captured reply list in order, repeating its final reply; each motor's status reads
+  with the first Z home's (`Z_FIRST_STATUSES`) after the opening idle check."""
   answers: Dict[Tuple[int, int, bytes], List[bytes]] = {}
   for exchange in CAPTURED_EXCHANGES:
     board, command, request, reply = exchange.split(":")
     key = int(board), int(command), bytes.fromhex(request.replace("-", ""))
     answers.setdefault(key, []).append(bytes.fromhex(reply.replace("-", "")))
   for motor, runs in CAPTURED_STATUS_RUNS.items():
-    answers[0, 20, struct.pack("<h", motor)] = [
-      bytes.fromhex(word) for word, count in runs for _ in range(count)
-    ]
+    words = [word for word, count in runs for _ in range(count)]
+    words[1:1] = Z_FIRST_STATUSES[motor]
+    answers[0, 20, struct.pack("<h", motor)] = [bytes.fromhex(word) for word in words]
   return answers
+
+
+def is_captured_move(*, sent: bytes, captured: bytes) -> bool:
+  """Whether a move's payload (command 22) is a captured one: the same motor, each value within
+  1e-12 device units, a chosen bound above the captures' largest last-bit difference (2.13e-14)."""
+  sent_motor, *sent_values = struct.unpack("<hddd", sent)
+  captured_motor, *captured_values = struct.unpack("<hddd", captured)
+  return sent_motor == captured_motor and all(
+    math.isclose(value, captured_value, rel_tol=0.0, abs_tol=1e-12)
+    for value, captured_value in zip(sent_values, captured_values)
+  )
 
 
 def get_motion_commands(*, link: FakeLink) -> List[Tuple[int, str]]:
@@ -2065,7 +2054,12 @@ class V3Link(FakeLink):
     )
 
   async def write(self, data: bytes) -> int:
-    packet_number, board, _, _ = parse_frame(frame=data)
+    packet_number, board, command, payload = parse_frame(frame=data)
+    if (board, command) == (0, 22) and (board, command, payload) not in self.answers:
+      for key in [key for key in self.answers if key[:2] == (0, 22)]:
+        if is_captured_move(sent=payload, captured=key[2]):
+          self.answers[board, command, payload] = self.answers[key]
+          break
     if board not in (11, 12):
       return await super().write(data)
     self.written.append(data)
@@ -2106,7 +2100,8 @@ class V3ArmTests(DriverTestCase):
     return driver, link
 
   async def test_setup_and_stop_follow_the_captured_v3_sequence(self):
-    """Seat twice, back off from live positions, home Z twice, then arms 1/0, and walk to idle."""
+    """Home Z, then seat twice, back off from live positions, home Z twice, then arms 1/0, and walk
+    to idle."""
     driver, link = await self.set_up_arm()
     self.assertTrue(driver.arm.is_initialized)
     joint_state = await driver.arm.request_joint_state()
@@ -2117,12 +2112,20 @@ class V3ArmTests(DriverTestCase):
     with self.assertRaisesRegex(MantisConfigurationError, "no absolute"):
       await driver.arm.request_absolute_joint_state()
     await driver.stop()
-    expected = []
+    expected = list(Z_FIRST_COMMANDS)
     for exchange in CAPTURED_EXCHANGES:
       board, command, request, _ = exchange.split(":")
       if int(board) == 0 and int(command) in (17, 21, 22, 24, 28):
         expected.append((int(command), request))
-    self.assertEqual(get_motion_commands(link=link), expected)
+    sent = get_motion_commands(link=link)
+    self.assertEqual(len(sent), len(expected))
+    for (sent_command, payload), (expected_command, request) in zip(sent, expected):
+      if sent_command == expected_command == 22:
+        self.assertTrue(
+          is_captured_move(sent=bytes.fromhex(payload), captured=bytes.fromhex(request)), payload
+        )
+      else:
+        self.assertEqual((sent_command, payload), (expected_command, request))
     self.assertFalse(driver.arm.is_initialized)
     # Each Z home follows a following-error check of every motor, as captured.
     homes = [
@@ -2132,8 +2135,24 @@ class V3ArmTests(DriverTestCase):
     ]
     precheck = [(82, "0000"), (82, "0100"), (82, "0200")]
     self.assertEqual(
-      homes, precheck + [(21, "0200")] + precheck + [(21, "0200"), (21, "0100"), (21, "0000")]
+      homes,
+      precheck
+      + [(21, "0200")]  # Z first, before the arms move
+      + precheck
+      + [(21, "0200")]
+      + precheck
+      + [(21, "0200"), (21, "0100"), (21, "0000")],
     )
+
+  async def test_an_arm_fault_before_the_bring_up_is_logged_before_it_is_cleared(self):
+    """The opening read finds motor 0 slipped, a status word captured after a seat."""
+    answers = make_v3_answers()
+    answers[0, 20, struct.pack("<h", 0)][0] = bytes.fromhex("0001")
+    driver, link = await self.make_arm(answers=answers)
+    with self.assertLogs(arm_module.logger, level="WARNING") as logs:
+      await driver.arm.initialize()
+    self.assertIn("motor 0 reports following error while moving (status 0x0100)", logs.output[0])
+    self.assertEqual(get_motion_commands(link=link)[:4], Z_FIRST_COMMANDS)
 
   async def test_stop_sends_three_stops_and_no_park(self):
     driver, link = await self.set_up_arm()
@@ -2167,16 +2186,21 @@ class V3ArmTests(DriverTestCase):
     self.assertEqual(get_motion_commands(link=link), [])
 
   async def test_failure_to_seat_stops_every_motor(self):
-    """A retract that never meets a stop must not go on to home Z."""
+    """A retract that never meets a stop must not go on: Z is homed once, before the arms move,
+    and not again."""
     answers = make_v3_answers()
-    for motor in range(3):
+    for motor in range(2):
       answers[0, 20, struct.pack("<h", motor)] = [bytes.fromhex("0000")]
+    # Idle, idle at the first Z home's check, homed after it, then idle.
+    answers[0, 20, struct.pack("<h", 2)] = [
+      bytes.fromhex(word) for word in ("0000", "0000", "0400", "0000")
+    ]
     driver, link = await self.make_arm(answers=answers)
     with mock.patch.object(arm_module, "SEAT_PASSES", 2):
       with self.assertRaisesRegex(MantisMotionError, "did not seat"):
         await driver.arm.initialize()
     commands = get_motion_commands(link=link)
-    self.assertNotIn(21, [command for command, _ in commands])
+    self.assertEqual([payload for command, payload in commands if command == 21], [Z_HOME_REQUEST])
     self.assertEqual(
       [payload[:4] for command, payload in commands if command == 24], ["0000", "0100", "0200"]
     )
@@ -2455,6 +2479,123 @@ def parse_captured_moves(*, captured: List[str]) -> List[Dict[int, float]]:
     {motor: float(value) for motor, value in enumerate(move.split(",")) if value != "-"}
     for move in captured
   ]
+
+
+# A unit's waste and wash approach paths, in the arm frame, as its sequence files give them.
+WASTE_PATH: List[List[Optional[float]]] = [
+  [None, None, None],
+  [15.0, 30.0, None],
+  [None, None, -1.57],
+  [15.0, 30.0, -1.57],
+  [None, None, -1.57],
+  [-32.284, 40.775, -1.57],
+  [-49.717, 19.808, -1.57],
+  [-62.821, 5.233, -1.57],
+  [-69.677, -20.8, -1.57],
+  [-78.522, -43.101, -1.57],
+  [-78.264, -46.479, -1.57],
+  [None, None, 32.032],
+  [-84.7, -44.797, 32.032],
+  [-84.7, -44.797, 37.032],
+]
+WASH_PATH_START: List[List[Optional[float]]] = [
+  [None, None, -1.57],
+  [None, None, -1.57],
+  [54.676, 41.632, -1.57],
+  [82.278, 31.695, -1.57],
+  [84.698, 3.782, -1.57],
+  [86.913, -22.157, -1.57],
+  [88.371, -42.402, -1.57],
+  [71.77, -56.117, -1.57],
+  [None, None, 36.978],
+]
+WASH_1_PATH = WASH_PATH_START + [
+  [None, None, 49.355],
+  [74.179, -50.948, 49.355],
+  [74.179, -50.948, 54.355],
+]
+WASH_2_PATH = WASH_PATH_START + [
+  [None, None, 49.763],
+  [90.181, -50.918, 49.763],
+  [90.181, -50.918, 54.763],
+]
+# The moves a Mantis v4 was sent leaving the waste after a prime, and wash 1 after a wash, each from
+# the path's last line to its start; and leaving wash 2 for wash 1, to wash 2's safe-Z line.
+CAPTURED_WASTE_EXIT = """
+-48.623750510575164,90.60297564169927,1457.9527559055118
+-48.623750510575164,90.60297564169927,1261.1023622047242
+-,-,1261.1023622047242
+-52.06422696457573,89.18090048846733,-61.811023622047244
+-51.54971403777015,87.83676970166538,-61.811023622047244
+-51.49355633418472,76.11624480382535,-61.811023622047244
+-43.772995879562316,64.29607679895277,-61.811023622047244
+-38.963765283785115,54.111835306886775,-61.811023622047244
+-23.154317512109415,40.336540148989464,-61.811023622047244
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-61.811023622047244
+-,-,-61.811023622047244
+-0.5891965243621929,-0.2509165576955263,-
+-,-,-
+""".split()
+CAPTURED_WASH_1_EXIT = """
+83.7483705378616,-71.40425655137432,2139.9606299212596
+83.7483705378616,-71.40425655137432,1943.1102362204722
+-,-,1943.1102362204722
+-,-,1455.8267716535433
+86.14833664284704,-72.7025263954954,-61.811023622047244
+81.96456120656154,-62.15362930864285,-61.811023622047244
+72.42144291456674,-58.796324530733784,-61.811023622047244
+61.14162609777459,-47.81667445795686,-61.811023622047244
+52.179786593815464,-29.60155803665411,-61.811023622047244
+35.35445745832783,-20.570740782776905,-61.811023622047244
+-,-,-61.811023622047244
+-,-,-61.811023622047244
+""".split()
+CAPTURED_WASH_2_TO_SAFE_Z = """
+86.28565064513707,-61.79819724116115,1959.1732283464567
+""".split()
+
+
+class ApproachPathExitTests(ArmTestCase):
+  async def assert_leaving_sends(self, *, name: str, index: int, until: int, captured: List[str]):
+    link = RouteLink(answers=make_answers())
+    driver = await self.set_up_arm(
+      link=link,
+      approach_paths={"waste": WASTE_PATH, "wash_1": WASH_1_PATH, "wash_2": WASH_2_PATH},
+    )
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver._next_item = 1
+    await driver.arm._leave_approach_path(name=name, index=index, until=until)
+    sent = [payload for _, command, payload in self.sent(link) if command == 68]
+    expected = parse_captured_moves(captured=captured)
+    self.assertEqual(len(sent), len(expected))
+    for move, (payload, targets) in enumerate(zip(sent, expected)):
+      with self.subTest(move=move):
+        expected_payload = get_queued_move(item=move + 1, targets=targets)
+        self.assertEqual(payload[:6], expected_payload[:6])
+        for offset in range(6, len(payload), 8):
+          (sent_value,) = struct.unpack_from("<d", payload, offset)
+          (expected_value,) = struct.unpack_from("<d", expected_payload, offset)
+          self.assertAlmostEqual(sent_value, expected_value, places=9)
+
+  async def test_leaving_the_waste_sends_the_captured_moves(self):
+    # The line the head stands at first, the arms and Z together on the line out of the waste.
+    await self.assert_leaving_sends(
+      name="waste", index=len(WASTE_PATH) - 1, until=0, captured=CAPTURED_WASTE_EXIT
+    )
+
+  async def test_leaving_a_wash_sends_the_captured_moves(self):
+    await self.assert_leaving_sends(
+      name="wash_1", index=len(WASH_1_PATH) - 1, until=0, captured=CAPTURED_WASH_1_EXIT
+    )
+
+  async def test_leaving_a_wash_for_the_other_goes_to_its_safe_z_line_only(self):
+    await self.assert_leaving_sends(
+      name="wash_2",
+      index=len(WASH_2_PATH) - 1,
+      until=len(WASH_2_PATH) - 2,
+      captured=CAPTURED_WASH_2_TO_SAFE_Z,
+    )
 
 
 # Slot 1's antenna switch (antenna 0): what a chip slot's tag read sends board 0.

@@ -103,6 +103,7 @@ class _Probing(unittest.IsolatedAsyncioTestCase):
     spots: List[TipSpot] = [rack.get_item(index) for index in range(len(channels))]
     await self.pipettes.pick_up_tips(spots, use_channels=channels)
     self.sent.clear()
+    self.wire.clear()
 
   def _moved(self) -> bool:
     # Anything but the tip-presence read
