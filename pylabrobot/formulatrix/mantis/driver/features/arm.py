@@ -161,6 +161,11 @@ CHIP_CHANGER_ROUTE: List[MantisArmCoordinate] = [
   MantisArmCoordinate(x=None, y=None, z=0.0 - SAFE_HEIGHT),
   MantisArmCoordinate(x=15.0, y=30.0, z=0.0 - SAFE_HEIGHT),
 ]
+# A v3's safe height is Z's flag, its MoveToSafeHeight.seq.txt's Z 0: a v3 leaves the waste after a
+# prime along CHIP_CHANGER_ROUTE at Z 0 (260601_homethenprime, 260528_primeall).
+V3_CHIP_CHANGER_ROUTE: List[MantisArmCoordinate] = [
+  line if line.z is None else dataclasses.replace(line, z=0.0) for line in CHIP_CHANGER_ROUTE
+]
 
 JointState = Dict[int, float]
 """Where each motor is, by motor: 0 and 1 in degrees, 2 (Z) in mm down from its flag."""
@@ -508,12 +513,15 @@ class Arm:
 
   async def _check_v3_at_idle(self) -> None:
     """On a v3, refuse a chip pick-up or placement away from idle: it would park first, and no v3
-    has run ``park``. Only the head's position is read.
+    has run ``park``. The end of ``V3_CHIP_CHANGER_ROUTE``, where a v3's prime leaves the head,
+    counts as idle: a v3 placed its chip from there (260528_primeall). Only the head is read.
 
     Raises:
       NotImplementedError: on a v3 not parked.
     """
-    if self._get_generation() == "v3" and not await self.request_is_parked():
+    if self._get_generation() != "v3" or await self.request_is_parked():
+      return
+    if not await self._request_is_at(location=V3_CHIP_CHANGER_ROUTE[-1], tolerance=0.5):
       raise NotImplementedError(
         f"{self._driver.name}: a v3 picks up and places a chip only from idle for now; nothing moves"
       )
@@ -1000,6 +1008,24 @@ class Arm:
       joints=joints,
     )
 
+  async def _request_is_at(self, *, location: MantisArmCoordinate, tolerance: float) -> bool:
+    """Whether the head stands at ``location``'s x and y, each arm motor within ``tolerance``
+    degrees of its target, with Z at most ``tolerance`` mm below its flag (command 84).
+
+    Raises:
+      MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
+      MantisMotionError: on a v3 before this connection's bring-up; nothing is sent.
+    """
+    self._check_calibrated()
+    targets = self._get_arm_targets(location=location)
+    absolute = await self._request_arm_joint_state()
+    z = await self._request_measured_position(motor=Z_MOTOR)
+    return z <= tolerance and all(
+      abs(absolute[motor] - compute_position(motor=motor, device_position=targets[motor]))
+      <= tolerance
+      for motor in ARM_MOTORS
+    )
+
   async def request_is_parked(self, *, tolerance: float = 0.5) -> bool:
     """Whether the head is at idle: each arm motor at its idle target by its absolute encoder, and
     Z at or above its home flag by its encoder (command 84).
@@ -1012,15 +1038,7 @@ class Arm:
       MantisConfigurationError: without the unit's ``arm`` block; nothing is sent.
       MantisMotionError: on a v3 before this connection's bring-up; nothing is sent.
     """
-    self._check_calibrated()
-    idle_targets = self._get_idle_targets()
-    absolute = await self._request_arm_joint_state()
-    z = await self._request_measured_position(motor=Z_MOTOR)
-    return z <= tolerance and all(
-      abs(absolute[motor] - compute_position(motor=motor, device_position=idle_targets[motor]))
-      <= tolerance
-      for motor in ARM_MOTORS
-    )
+    return await self._request_is_at(location=POST_HOMING_POSITION, tolerance=tolerance)
 
   # -- moves ------------------------------------------------------------------
 
@@ -2547,7 +2565,8 @@ class Arm:
       attached_chip: that chip; None for none.
       with_model_updates: as ``_play_queued_moves``.
     """
-    if not await self.request_is_parked():
+    # A v3 is at idle here (``_check_v3_at_idle``), else where its prime left the head.
+    if self._get_generation() == "v4" and not await self.request_is_parked():
       await self.park(with_model_updates=with_model_updates)
     idle = [FRONT_IDLE_ROUTE[0], FRONT_IDLE_ROUTE[-1]]
     route = [*idle, *CHIP_CHANGER_ROUTE, *path, *CHIP_CHANGER_ROUTE, *idle]
@@ -2558,6 +2577,8 @@ class Arm:
       if index == first_path_line + attach_line:
         slot = current_chip if current_chip is not None else self._current_chip
         self._current_chip, self._attached_chip = current_chip, attached_chip
+        if current_chip is None and self._driver.pump is not None:
+          self._driver.pump._primed_chip = None  # a chip placed back is no longer primed
         if slot is not None:
           self._notify_chip(slot=slot, on_head=current_chip is not None)
 

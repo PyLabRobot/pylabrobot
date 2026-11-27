@@ -27,6 +27,7 @@ from .features.arm import (
   Arm,
   MantisArmConfiguration,
 )
+from .features.drop_sensor import DropSensor
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
@@ -207,6 +208,19 @@ class MantisSimulationLedBar(LedBar):
     """Return at once: a simulated bar has nothing to show."""
 
 
+class MantisSimulationDropSensor(DropSensor):
+  """A drop sensor with no device behind it: enabling sends nothing, and each read of the count
+  finds one drop more, so a simulated drop-detection prime sees a drop every cycle."""
+
+  async def _unchecked_fw_enable_drop_detection(self) -> None:
+    """Send nothing."""
+
+  def _get_drop_count(self) -> int:
+    """One drop more than at the last read."""
+    self._drop_count += 1
+    return self._drop_count
+
+
 class MantisSimulationArm(Arm):
   """An arm with no device behind it: each command sets where its motors are, at once.
 
@@ -364,9 +378,10 @@ class MantisSimulationDriver(MantisDriver):
 
   Nothing reaches a wire. The configuration comes from ``declared_configuration_json``, and the
   reads answer from it; a board it leaves ``None`` does not answer. The plate clamp's state changes
-  at once, every RFID slot reads empty, and the LED bar takes every command and holds nothing. The
-  motors read idle at 0, as after power-on, and every awaited event comes at once. The device name and the motor reads the configuration
-  does not hold are not simulated.
+  at once, every RFID slot reads empty, the LED bar takes every command and holds nothing, and the
+  drop sensor sees a drop at every read. The motors read idle at 0, as after power-on, and every
+  awaited event comes at once. The device name and the motor reads the configuration does not hold
+  are not simulated.
 
   The sequencer holds ``SEQUENCER_QUEUE_SIZE`` items, stopped and empty after setup; started, it
   plays each item at once. Stop and abort keep what is queued, as on a v4; only a clear drops it.
@@ -622,6 +637,10 @@ class MantisSimulationDriver(MantisDriver):
         number_of_leds=self.led_bar.number_of_leds,
         show_actions=self.led_bar.show_actions,
       )
+    if self.drop_sensor is not None and not isinstance(
+      self.drop_sensor, MantisSimulationDropSensor
+    ):
+      self.drop_sensor = MantisSimulationDropSensor(driver=self)
     if self.arm is not None and not isinstance(self.arm, MantisSimulationArm):
       self.arm = MantisSimulationArm(driver=self, configuration=self.arm.configuration)
     if self.rfid is None:

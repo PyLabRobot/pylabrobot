@@ -1,9 +1,10 @@
 """The pump: the pressure board (board 10), its air pump and its three pressure controllers.
 
 Each controller regulates one line, bottle, chip or vacuum, from its feedback sensor. Public
-methods read, prime the chip on the head and recover its reagent; the pneumatic clamp can privately
-start and restore the air pump. Setup tares the bottle and chip sensors; stop releases the pressure
-if the pump runs and writes their calibration back.
+methods read, prime the chip on the head (a volume, or until the drop sensor sees drops) and
+recover its reagent, on a v4 and, the prime only, on a v3; the pneumatic clamp can privately
+start and restore the air pump. Setup tares the bottle and chip sensors; stop releases the
+pressure if the pump runs and writes their calibration back.
 """
 
 import asyncio
@@ -12,10 +13,26 @@ import logging
 import math
 import struct
 import time
-from typing import TYPE_CHECKING, Awaitable, Callable, Dict, List, Literal, Optional, Tuple
+from typing import (
+  TYPE_CHECKING,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Tuple,
+  get_args,
+)
+
+from pylabrobot.resources.formulatrix.mantis_chips import MantisChip, MantisChipInput
 
 from ...liquid_classes import MantisLiquidClass, mantis_mapping
-from ..errors import MantisConfigurationError, MantisMotionError, MantisPressureError
+from ..errors import (
+  MantisConfigurationError,
+  MantisPressureError,
+  MantisPrimeError,
+)
 from ..framing import PRESSURE_BOARD
 from ..oem_config import WASTE_APPROACH_PATH
 from ..valve_sequences import (
@@ -25,7 +42,7 @@ from ..valve_sequences import (
   VALVE_SEQUENCES,
   _queue_valve_sequence,
 )
-from .arm import ARM_MOTORS, CHIP_CHANGER_ROUTE, MOVE_TIMEOUT, Z_MOTOR
+from .arm import ARM_MOTORS, CHIP_CHANGER_ROUTE, MOVE_TIMEOUT, V3_CHIP_CHANGER_ROUTE, Z_MOTOR
 
 if TYPE_CHECKING:
   from ..master import MantisDriver
@@ -75,6 +92,23 @@ VALVES_CLOSED = 31
 VALVES_CLOSED_DURATION = 10
 # A count of drops or plays is rounded after adding this, as in every captured prime and recovery.
 PUMP_CYCLE_ROUNDING = 0.0005
+# A drop-detection prime plays the prime pump at most this often, by chip type: Dispense.config's
+# MaximumAutoPrimeCycleforLV. Only a low volume Hi-Fi chip's drop-detection prime is captured.
+MAXIMUM_AUTO_PRIME_CYCLES: Dict[str, int] = {"low_volume_hi_fi": 400}
+# The drops in a row a drop-detection prime ends on: Default.config's AutoPrime.Value, 5 for every
+# chip type; the drop-detection prime in 260811_startup_dispense_0.5_2.5uL_shutdown stopped after 5.
+AUTO_PRIME_CONSECUTIVE_DROPS = 5
+# The chip types each generation's captures prime: a v4's Hi-Fi chips (260724_prime_slot1_LVHF,
+# 270628_HVHF_prime_fixed_300uL), a v3's high volume chip (260601_homethenprime).
+PRIMED_CHIP_TYPES: Dict[str, Tuple[str, ...]] = {
+  "v4": ("low_volume_hi_fi", "high_volume_hi_fi"),
+  "v3": ("high_volume",),
+}
+# The chip types each generation's captures recover (260728_simple_recover_command,
+# 270628_HVHF_recovery); no v3 recovery is captured.
+RECOVERED_CHIP_TYPES: Dict[str, Tuple[str, ...]] = {
+  "v4": ("low_volume_hi_fi", "high_volume_hi_fi"),
+}
 
 
 def _round_half_away_from_zero(*, value: float) -> int:
@@ -114,6 +148,14 @@ def _get_pump_cycle(*, volume: float, large_volume: float, small_volume: float) 
   return large, small
 
 
+def _check_cycle_count(*, name: str, value: int) -> None:
+  """Raise ``ValueError`` unless ``value`` (the argument ``name``) is a whole number, at least 1."""
+  if isinstance(value, bool) or not isinstance(value, int):
+    raise ValueError(f"{name} must be a whole number, got {value!r}")
+  if value < 1:
+    raise ValueError(f"{name} must be at least 1, got {value}")
+
+
 def _get_reverse_pump_cycle(*, volume: float, reverse_pump_volume: float) -> int:
   """How often the reverse pump plays for ``volume``, as a v4 rounds it, at least once.
   Checked against every captured recovery.
@@ -143,6 +185,15 @@ class Pump:
     # Whether every valve was queued closed since setup, before the first pump start; the tare at
     # setup clears it and the targets.
     self._valves_closed = False
+    # The chip slot whose chip was primed last, while that chip stays on the head.
+    self._primed_chip: Optional[int] = None
+
+  @property
+  def is_primed(self) -> bool:
+    """Whether the chip on the head was primed since it was picked up."""
+    arm = self._driver.arm
+    current = None if arm is None else arm.current_chip
+    return current is not None and self._primed_chip == current
 
   def _get_controller_index(self, *, controller: PressureController) -> int:
     """The controller's number on the wire.
@@ -289,6 +340,7 @@ class Pump:
     # Each setup starts over: the valves close again before the next pump start, with no target.
     self._valves_closed = False
     self._target_pressures = {}
+    self._primed_chip = None
     for controller in TARED_CONTROLLERS:
       scale, offset = await self.request_feedback_sensor_parameters(controller=controller)
       enabled = await self.request_controller_enabled(controller=controller)
@@ -441,11 +493,11 @@ class Pump:
     }
 
   async def _start_pump(self) -> None:
-    """Start the pump for an operation, as a v4 does: every valve queued closed first, the first
-    time since setup; the pump on; each line enabled, with the target last set on it, if any; then
-    ``START_PUMP_DELAY``. The sequencer must run.
+    """Start the pump for an operation, as captured: on a v4 every valve queued closed first, the
+    first time since setup (a v3 never does); the pump on; each line enabled, with the target last
+    set on it, if any; then ``START_PUMP_DELAY``. The sequencer must run.
     """
-    if not self._valves_closed:
+    if not self._valves_closed and self._driver.configuration.generation == "v4":
       await self._driver._queue_ppi_write(
         duration=VALVES_CLOSED_DURATION,
         start_address=VALVE_BANK_PPI_ADDRESS,
@@ -504,36 +556,96 @@ class Pump:
     self._target_pressures["chip"] = chip_pressure
     await settle(controller="chip", target=chip_pressure)
 
-  def _check_attached_chip(self, *, volume: float) -> str:
-    """Check a prime or a recovery of ``volume`` can run, and return the type of the chip on the
-    arm's head.
+  def _check_chip_type(
+    self, *, chip: Optional[MantisChip], operation: Literal["prime", "recovery"]
+  ) -> MantisChip:
+    """Check this generation's captures show ``operation`` for ``chip``'s type, and return it.
 
     Raises:
-      NotImplementedError: on a v3, until a v3 has run them.
-      ValueError: if ``volume`` is not more than 0.
-      MantisConfigurationError: without an arm, or for a chip type with no captured prime and
-        recovery.
-      MantisMotionError: if the arm is not brought up, or holds no chip.
+      NotImplementedError: on a generation whose captures show no such operation (a v3 recovery).
+      MantisConfigurationError: for no chip, or a chip type with no captured operation.
     """
-    if self._driver.configuration.generation != "v4":
+    generation = self._driver.configuration.generation
+    chip_types = (PRIMED_CHIP_TYPES if operation == "prime" else RECOVERED_CHIP_TYPES).get(
+      str(generation)
+    )
+    if chip_types is None:
       raise NotImplementedError(
-        f"{self._driver.name}: priming and recovery have not run on a v3; nothing is sent"
+        f"{self._driver.name}: no {operation} has been captured on a {generation}; nothing is sent"
       )
-    if not volume > 0:
-      raise ValueError(f"volume must be more than 0 uL, got {volume}")
+    chip_type = None if chip is None else chip.chip_type
+    if chip is None or chip_type not in chip_types:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: the chip is a {chip_type} chip; a {generation}'s {operation} is "
+        f"captured for {list(chip_types)}; nothing is sent"
+      )
+    return chip
+
+  def _check_attached_chip(self, *, chip_number: int) -> MantisChip:
+    """Check a recovery of the chip from slot ``chip_number`` can run, and return it: a recovery
+    does not pick up, so that chip must be on the head.
+
+    Raises:
+      NotImplementedError, MantisConfigurationError: as ``_check_chip_type``; also without an arm,
+        or if the chip on the head is not from slot ``chip_number``.
+      MantisMotionError: if the arm is not brought up.
+    """
+    generation = self._driver.configuration.generation
+    if str(generation) not in RECOVERED_CHIP_TYPES:
+      self._check_chip_type(chip=None, operation="recovery")
     arm = self._driver.arm
     if arm is None:
       raise MantisConfigurationError(f"{self._driver.name}: no arm carries a chip")
-    arm._check_initialized()
-    if arm.current_chip is None:
-      raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
-    chip_type = None if arm.attached_chip is None else arm.attached_chip.chip_type
-    if chip_type is None or chip_type not in SEQUENCE_VOLUMES:
+    arm._check_initialized(run_on_v3=True)
+    if chip_number != arm.current_chip:
       raise MantisConfigurationError(
-        f"{self._driver.name}: the chip on the head is a {chip_type} chip; only "
-        f"{sorted(SEQUENCE_VOLUMES)} are primed and recovered"
+        f"{self._driver.name}: a recovery needs the chip from slot {chip_number} on the head; "
+        f"the head holds the chip from slot {arm.current_chip}; nothing is sent"
       )
-    return chip_type
+    return self._check_chip_type(chip=arm.attached_chip, operation="recovery")
+
+  def _get_default_volume(
+    self,
+    *,
+    chip: MantisChip,
+    chip_number: int,
+    input_source: MantisChipInput,
+    field: Literal["prime_volume", "reagent_recovery_volume"],
+  ) -> float:
+    """The default volume, uL: input slot ``chip_number``'s in the unit's ``inputs`` block, for
+    ``input_source`` and the chip's type; a prime's without it the chip's ``default_prime_volume``.
+
+    Raises:
+      MantisConfigurationError: without a default, or with one not more than 0; nothing is sent.
+    """
+    entry = (self._driver._unit_blocks.get("inputs") or {}).get(str(chip_number))
+    try:
+      volume = None if entry is None else entry[field].get(input_source, {}).get(chip.chip_type)
+    except (AttributeError, KeyError, TypeError) as error:
+      raise MantisConfigurationError(f"malformed inputs block: {error!r}") from error
+    origin = f"input slot {chip_number}"
+    if volume is None and field == "prime_volume":
+      volume = chip.default_prime_volume.get(input_source)
+      origin = f"the {chip.chip_type} chip"
+    if volume is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no default {field} for a {chip.chip_type} chip from a "
+        f"{input_source} in input slot {chip_number}; give a volume, or the unit's configuration "
+        "folder (oem_config_directory)"
+      )
+    if not volume > 0:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: {origin}'s default {field} is {volume} uL"
+      )
+    logger.info(
+      "[%s] %s's default %s from a %s: %s uL",
+      self._driver.name,
+      origin,
+      field,
+      input_source,
+      volume,
+    )
+    return float(volume)
 
   async def _play_queued_operation(
     self, *, arm: "Arm", queue: Callable[[], Awaitable[None]]
@@ -587,62 +699,211 @@ class Pump:
     milliseconds = sum(durations.get(index, step[1]) for index, step in enumerate(steps))
     return item, count * milliseconds / 1000
 
+  async def _prime_until_drops(
+    self,
+    *,
+    chip_type: str,
+    liquid_class: MantisLiquidClass,
+    consecutive_drops: int,
+    max_cycles: int,
+  ) -> Tuple[bool, int]:
+    """Play the prime pump one cycle at a time until ``consecutive_drops`` cycles in a row each
+    saw a drop, at most ``max_cycles``; return whether they did, and the cycles played.
+
+    The next cycle is queued once a dry cycle has played; after a cycle that dropped, the liquid
+    class's ``auto_prime_detect_liquid_delay`` and ``auto_prime_liquid_counted_delay`` first, as
+    captured. The sensor's ``consecutive_run`` follows the run; the head is in the waste.
+    """
+    sensor = self._driver.drop_sensor
+    assert sensor is not None
+    delays = LIQUID_CLASS_DELAYS[chip_type]["prime_pump"]
+    durations = {index: delay(liquid_class) for index, delay in delays.items()}
+    for cycle in range(1, max_cycles + 1):
+      drops_before = sensor._get_drop_count()
+      item, seconds = await self._queue_plays(
+        chip_type=chip_type, name="prime_pump", count=1, durations=durations
+      )
+      assert item is not None
+      # A chosen bound, not a device's: twice what the cycle takes, and a move's.
+      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT + 2 * seconds)
+      if sensor._get_drop_count() == drops_before:
+        sensor._consecutive_run = 0
+        continue
+      sensor._consecutive_run += 1
+      await self._sleep(seconds=liquid_class.auto_prime_detect_liquid_delay / 1000)
+      await self._sleep(seconds=liquid_class.auto_prime_liquid_counted_delay / 1000)
+      if sensor._consecutive_run >= consecutive_drops:
+        return True, cycle
+    return False, max_cycles
+
   async def prime_chip(
-    self, *, volume: float, liquid_class: Optional[MantisLiquidClass] = None
+    self,
+    chip_number: int,
+    *,
+    volume: Optional[float] = None,
+    liquid_class: Optional[MantisLiquidClass] = None,
+    input_source: MantisChipInput = "tube",
+    verify_sensor: bool = True,
+    drop_detection: Optional[bool] = None,
+    consecutive_drops: int = AUTO_PRIME_CONSECUTIVE_DROPS,
+    max_cycles: Optional[int] = None,
   ) -> None:
-    """Prime the chip on the head at the waste with ``volume``, as captured: the pump started, the
-    prime pressures set, the head into the waste, the small then the large drops, the safe state,
-    the head out of the waste to (15, 30) at the safe height, the pressure released. The chip stays
-    on the head.
+    """Pick up the chip in slot ``chip_number`` and prime it at the waste, as captured: the pump
+    started, the prime pressures set, the head into the waste, the drops, the safe state, the head
+    out of the waste to (15, 30) at the safe height, the pressure released. The chip stays on the
+    head. After a failure or a cancellation the head stays where it stopped, maybe in the waste;
+    ``Arm.recover_from_fault`` brings it back.
+
+    The drops are ``volume`` as small then large drops; with ``drop_detection`` (a v4 only), the
+    prime pump one cycle at a time until the drop sensor saw a drop in ``consecutive_drops``
+    cycles in a row. A v3 primes from idle only, whole large drops along a waste path at Z's flag,
+    as captured (``V3_CHIP_CHANGER_ROUTE`` back). Every check runs before anything moves.
 
     Args:
-      volume: uL, more than 0, as whole small and large drops (``_get_pump_cycle``).
-      liquid_class: its prime pressures and drop delays; None the chip type's 1 cP class.
+      chip_number: the chip slot; its chip is picked up first (``Arm.pick_up_chip``), a no-op when
+        it is on the head, a swap when another is.
+      volume: uL, more than 0, as whole small and large drops (``_get_pump_cycle``); None the
+        default (``_get_default_volume``). None with ``drop_detection``.
+      liquid_class: its prime pressures, drop delays and drop-detection waits; None the chip
+        type's 1 cP class.
+      input_source: "tube" or "pipette_tip"; selects the default volume. Not the slot's own
+        ``InputSourceType``: "tube" unless given.
+      verify_sensor: with a drop sensor, a fixed prime raises if it saw no drop.
+      drop_detection: prime until drops; None: with a drop sensor, no ``volume`` and a chip type
+        whose drop-detection prime is captured (``MAXIMUM_AUTO_PRIME_CYCLES``).
+      consecutive_drops: with ``drop_detection``, the drops in a row it ends on.
+      max_cycles: with ``drop_detection``, the cycle cap; None ``MAXIMUM_AUTO_PRIME_CYCLES``.
 
     Raises:
-      NotImplementedError: on a v3; nothing is sent.
-      ValueError: if ``volume`` is not more than 0; nothing is sent.
-      MantisConfigurationError: without the arm or the waste's path, or for a chip type with no
-        captured prime; nothing is sent.
-      MantisMotionError: if the arm is not brought up or holds no chip, nothing is sent; or if a
-        motor faults.
+      NotImplementedError: on a v3 away from idle, with a waste path that moves Z or a volume
+        that needs small drops; nothing moves.
+      ValueError: for a ``volume`` not more than 0 or given with ``drop_detection``, an
+        ``input_source`` not known, or a cycle count not 1 or more (``consecutive_drops`` at most
+        the cap); nothing moves.
+      MantisConfigurationError: without the arm, the waste's path or a default volume, for a chip
+        type with no captured prime, or with ``drop_detection`` without a drop sensor or for a
+        chip type with no captured drop-detection prime; as ``Arm.pick_up_chip``. Nothing moves.
+      MantisMotionError: if the arm is not brought up, as ``Arm.pick_up_chip``, or if a motor
+        faults.
       MantisPressureError: if a line does not settle. The pressure is released on every path.
+      MantisPrimeError: after the prime has ended as above, if the cycle cap is reached first, or
+        with ``verify_sensor`` if the drop sensor saw no drop.
     """
-    chip_type = self._check_attached_chip(volume=volume)
+    if input_source not in get_args(MantisChipInput):
+      raise ValueError(
+        f"input_source must be one of {get_args(MantisChipInput)}, got {input_source!r}"
+      )
+    if volume is not None and not volume > 0:
+      raise ValueError(f"volume must be more than 0 uL, got {volume}")
     arm = self._driver.arm
-    assert arm is not None
+    if arm is None:
+      raise MantisConfigurationError(f"{self._driver.name}: no arm carries a chip")
+    arm._check_initialized(run_on_v3=True)
+    sensor = self._driver.drop_sensor
+    if drop_detection and volume is not None:
+      raise ValueError("a drop-detection prime takes no volume; it primes until drops")
+    if drop_detection and sensor is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no drop sensor; a v4 whose board 12 answers has one"
+      )
+    is_v3 = self._driver.configuration.generation == "v3"
+    # Every check runs before anything moves: the chip from its slot's tag unless on the head.
+    if arm.current_chip == chip_number:
+      chip = self._check_chip_type(chip=arm.attached_chip, operation="prime")
+      if is_v3 and not await arm.request_is_parked():
+        raise NotImplementedError(
+          f"{self._driver.name}: a v3 primes only from idle, as captured; after a prime the head "
+          "stands at (15, 30): place the chip back first; nothing moves"
+        )
+    else:
+      arm._get_chip_slot_path(slot=chip_number)
+      tag = await arm._check_chip_slot_tag(slot=chip_number, action="pick_up_chip")
+      chip = self._check_chip_type(
+        chip=arm._get_chip(chip_number=chip_number, tag=tag), operation="prime"
+      )
+    chip_type = chip.chip_type
+    if drop_detection is None:
+      drop_detection = (
+        volume is None and sensor is not None and chip_type in MAXIMUM_AUTO_PRIME_CYCLES
+      )
+    cap = 0
+    if drop_detection:
+      if chip_type not in MAXIMUM_AUTO_PRIME_CYCLES:
+        raise MantisConfigurationError(
+          f"{self._driver.name}: the chip is a {chip_type} chip; only "
+          f"{sorted(MAXIMUM_AUTO_PRIME_CYCLES)} are primed until drops"
+        )
+      cap = MAXIMUM_AUTO_PRIME_CYCLES[chip_type] if max_cycles is None else max_cycles
+      _check_cycle_count(name="max_cycles", value=cap)
+      _check_cycle_count(name="consecutive_drops", value=consecutive_drops)
+      if consecutive_drops > cap:
+        raise ValueError(
+          f"consecutive_drops must be at most {cap}, the cycle cap, got {consecutive_drops}"
+        )
+    elif volume is None:
+      volume = self._get_default_volume(
+        chip=chip, chip_number=chip_number, input_source=input_source, field="prime_volume"
+      )
     if liquid_class is None:
       liquid_class = mantis_mapping[("1 cP", chip_type)]
     volumes = SEQUENCE_VOLUMES[chip_type]
     (small_volume, small), (large_volume, large) = sorted(
       (sequence_volume, name) for name, sequence_volume in volumes.items() if name != "reverse_pump"
     )
-    large_count, small_count = _get_pump_cycle(
-      volume=volume, large_volume=large_volume, small_volume=small_volume
-    )
+    large_count = small_count = 0
+    if volume is not None:
+      large_count, small_count = _get_pump_cycle(
+        volume=volume, large_volume=large_volume, small_volume=small_volume
+      )
+    waste_path = arm._get_approach_path(name=WASTE_APPROACH_PATH)
+    if is_v3 and any(line.z not in (None, 0.0) for line in waste_path):
+      raise NotImplementedError(
+        f"{self._driver.name}: a v3 primes only along a waste path at Z's flag, as the one a v3 "
+        "played (MoveToWasteStation.seq.txt); this unit's moves Z; nothing moves"
+      )
+    if is_v3 and small_count > 0:
+      raise NotImplementedError(
+        f"{self._driver.name}: {volume} uL needs {small_count} small drops, which no v3 prime "
+        f"has played; give whole large drops of {large_volume} uL; nothing moves"
+      )
     into_waste = arm._get_approach_path_moves(name=WASTE_APPROACH_PATH, reverse=False)
     out_of_waste = arm._get_approach_path_moves(name=WASTE_APPROACH_PATH, reverse=True)
-    to_idle = arm._get_route_moves(route=CHIP_CHANGER_ROUTE)
+    to_idle = arm._get_route_moves(route=V3_CHIP_CHANGER_ROUTE if is_v3 else CHIP_CHANGER_ROUTE)
     delays = LIQUID_CLASS_DELAYS[chip_type]
+    self._primed_chip = None
+    await arm.pick_up_chip(chip_number=chip_number)  # nothing moves when the chip is on the head
     if not await arm.request_is_parked():
       await arm.park()
+    if sensor is not None:
+      sensor.reset()
+    drops_seen, cycles = False, 0
 
     async def queue() -> None:
+      nonlocal drops_seen, cycles
       await self._set_pressures(
         chip_pressure=liquid_class.prime_pressure, vacuum=liquid_class.prime_vacuum
       )
       item = await arm._queue_moves(moves=into_waste)
       await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(into_waste))
-      seconds = 0.0
-      for name, count in ((small, small_count), (large, large_count)):
-        durations = {index: delay(liquid_class) for index, delay in delays[name].items()}
-        last, played = await self._queue_plays(
-          chip_type=chip_type, name=name, count=count, durations=durations
+      if drop_detection:
+        drops_seen, cycles = await self._prime_until_drops(
+          chip_type=chip_type,
+          liquid_class=liquid_class,
+          consecutive_drops=consecutive_drops,
+          max_cycles=cap,
         )
-        item, seconds = last or item, seconds + played
-      # A chosen bound, not a device's: twice what the drops take, and a move's.
-      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT + 2 * seconds)
-      # The safe state holds for the large drop's fill delay, as in every captured prime.
+      else:
+        seconds = 0.0
+        for name, count in ((small, small_count), (large, large_count)):
+          durations = {index: delay(liquid_class) for index, delay in delays[name].items()}
+          last, played = await self._queue_plays(
+            chip_type=chip_type, name=name, count=count, durations=durations
+          )
+          item, seconds = last or item, seconds + played
+        # A chosen bound, not a device's: twice what the drops take, and a move's.
+        await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT + 2 * seconds)
+      # The safe state holds for the large drop's fill delay, as in every captured fixed prime;
+      # no drop-detection prime's end is captured on its own, so it ends the same.
       await self._queue_plays(
         chip_type=chip_type,
         name="safe_state",
@@ -654,38 +915,83 @@ class Pump:
       await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * moves)
 
     await self._play_queued_operation(arm=arm, queue=queue)
-    logger.info(
-      "[%s] primed %s uL: %d small and %d large drops",
-      self._driver.name,
-      volume,
-      small_count,
-      large_count,
-    )
+    if drop_detection:
+      logger.info(
+        "[%s] primed chip %d until drops: %d prime pump cycles, %s",
+        self._driver.name,
+        chip_number,
+        cycles,
+        f"the last {consecutive_drops} each with a drop" if drops_seen else "the cap reached",
+      )
+    else:
+      logger.info(
+        "[%s] primed chip %d with %s uL: %d small and %d large drops",
+        self._driver.name,
+        chip_number,
+        volume,
+        small_count,
+        large_count,
+      )
     await arm._report_pose()
+    if drop_detection and not drops_seen:
+      raise MantisPrimeError(
+        f"{self._driver.name}: the drop sensor did not see a drop in {consecutive_drops} prime "
+        f"pump cycles in a row within {cycles} cycles"
+      )
+    if not drop_detection and verify_sensor and sensor is not None and not sensor.drop_detected:
+      raise MantisPrimeError(
+        f"{self._driver.name}: chip {chip_number} was primed with {small_count + large_count} "
+        "drops, but the drop sensor saw none"
+      )
+    self._primed_chip = chip_number
 
   async def recover_reagent(
-    self, *, volume: float, liquid_class: Optional[MantisLiquidClass] = None
+    self,
+    chip_number: int,
+    *,
+    volume: Optional[float] = None,
+    input_source: MantisChipInput = "tube",
+    liquid_class: Optional[MantisLiquidClass] = None,
   ) -> None:
     """Draw ``volume`` of the chip on the head's reagent back into its input, as captured: the
     pump started, the head to (15, 30) at the safe height, the recovery pressures set, the reverse
     pump played, the safe state, the pressure released. The chip stays on the head.
 
     Args:
-      volume: uL, more than 0, as whole plays of the reverse pump (``_get_reverse_pump_cycle``).
+      chip_number: the chip slot the chip on the head came from.
+      volume: uL, more than 0, as whole plays of the reverse pump (``_get_reverse_pump_cycle``);
+        None input slot ``chip_number``'s default (``_get_default_volume``).
+      input_source: "tube" or "pipette_tip"; selects the default volume.
       liquid_class: its recovery pressures and delays; None the chip type's 1 cP class.
 
     Raises:
-      NotImplementedError: on a v3; nothing is sent.
-      ValueError: if ``volume`` is not more than 0; nothing is sent.
-      MantisConfigurationError: without the arm, or for a chip type with no captured recovery;
-        nothing is sent.
-      MantisMotionError: if the arm is not brought up or holds no chip, nothing is sent; or if a
-        motor faults.
+      NotImplementedError: on a v3, whose recovery is not captured; nothing is sent.
+      ValueError: for a ``volume`` not more than 0 or an ``input_source`` not known; nothing is
+        sent.
+      MantisConfigurationError: without the arm or a default volume, if the chip on the head is not
+        from ``chip_number`` (a recovery does not pick up), or for a chip type with no captured
+        recovery; nothing is sent.
+      MantisMotionError: if the arm is not brought up, nothing is sent; or if a motor faults.
       MantisPressureError: if a line does not settle. The pressure is released on every path.
     """
-    chip_type = self._check_attached_chip(volume=volume)
+    if input_source not in get_args(MantisChipInput):
+      raise ValueError(
+        f"input_source must be one of {get_args(MantisChipInput)}, got {input_source!r}"
+      )
+    if volume is not None and not volume > 0:
+      raise ValueError(f"volume must be more than 0 uL, got {volume}")
+    chip = self._check_attached_chip(chip_number=chip_number)
+    chip_type = chip.chip_type
+    if volume is None:
+      volume = self._get_default_volume(
+        chip=chip,
+        chip_number=chip_number,
+        input_source=input_source,
+        field="reagent_recovery_volume",
+      )
     arm = self._driver.arm
     assert arm is not None
+    self._primed_chip = None
     if liquid_class is None:
       liquid_class = mantis_mapping[("1 cP", chip_type)]
     count = _get_reverse_pump_cycle(
@@ -719,5 +1025,11 @@ class Pump:
       await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(to_idle))
 
     await self._play_queued_operation(arm=arm, queue=queue)
-    logger.info("[%s] recovered %s uL: %d reverse pump plays", self._driver.name, volume, count)
+    logger.info(
+      "[%s] recovered %s uL from chip %d: %d reverse pump plays",
+      self._driver.name,
+      volume,
+      chip_number,
+      count,
+    )
     await arm._report_pose()

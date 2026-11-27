@@ -53,15 +53,18 @@ from .errors import (
 )
 from .events import (
   EVENT_PAYLOAD_FORMATS,
+  INPUT_CHANGED_EVENT,
   MOTION_EVENTS,
   MOTOR_ERROR_EVENT,
   SEQUENCE_PROGRESS_EVENT,
   SEQUENCE_STOPPED_EVENT,
+  decode_input_changed,
   decode_motor_error,
   decode_sequence_progress,
   describe_event,
 )
 from .features.arm import Arm, MantisArmConfiguration
+from .features.drop_sensor import DropSensor
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
 from .features.pump import Pump
@@ -201,6 +204,7 @@ class MantisDriver:
     self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
     self.led_bar: Optional[LedBar] = None
+    self.drop_sensor: Optional[DropSensor] = None
     self._show_actions = show_actions
     # The latest sequencer item the device reported played; the sequencer sets it.
     self._sequence_progress: Optional[int] = None
@@ -247,6 +251,7 @@ class MantisDriver:
     accepts it. A motor error fails every waiter for a motion event (``MOTION_EVENTS``) at once.
 
     A motor error, a sequencer stop and a code not decoded log a warning; the rest log at debug.
+    Board 0's input changes go to the drop sensor, which counts its drops.
 
     Raises:
       FrameError: if a known event's payload does not match its layout; no waiter sees it.
@@ -268,6 +273,9 @@ class MantisDriver:
       logger.debug("[%s] board %d: %s", self.name, board, description)
     else:
       logger.warning("[%s] board %d: %s", self.name, board, description)
+    if code == INPUT_CHANGED_EVENT and board == MOTION_BOARD and self.drop_sensor is not None:
+      input_number, on = decode_input_changed(payload=payload)
+      self.drop_sensor._count_input_changed(input_number=input_number, on=on)
     waiting, self._event_waiters = self._event_waiters, []
     for waiter in waiting:
       waiter_board, waiter_code, match, future = waiter
@@ -1063,6 +1071,13 @@ class MantisDriver:
       self.led_bar = LedBar(
         driver=self, number_of_leds=number_of_leds, show_actions=self._show_actions
       )
+    # The drop sensor is the v4's, enabled through board 12: a v3 has none.
+    if (
+      self.configuration.generation == "v4"
+      and self.configuration.firmware_versions.get(LC3_BOARD) is not None
+      and self.drop_sensor is None
+    ):
+      self.drop_sensor = DropSensor(driver=self)
     if self.arm is None and self.configuration.generation == "v4":
       self.arm = Arm(
         driver=self,
@@ -1399,7 +1414,8 @@ class MantisDriver:
 
   async def setup(self, *, skip_arm: bool = False) -> None:
     """Open the link if it is not open, read the device's configuration and check it, bring the
-    arm and Z up (``Arm.initialize``), then tare the pressure sensors. This moves the device.
+    arm and Z up (``Arm.initialize``), tare the pressure sensors, then enable a v4's drop sensor.
+    This moves the device.
 
     On a v4 the LED bar shows the setup, the arm's bring-up with it, then "setup_done" for
     ``SETUP_DONE_HOLD``, then idle.
@@ -1426,6 +1442,9 @@ class MantisDriver:
           await self.arm.initialize()
         if self.pump is not None:
           await self.pump._tare_pressure_sensors()
+        if self.drop_sensor is not None:
+          # After the tare, as in the captured v4 startup.
+          await self.drop_sensor._unchecked_fw_enable_drop_detection()
         if self.led_bar is not None and self.led_bar.show_actions:
           await self.led_bar._show_setup_done()
     except BaseException:

@@ -1,4 +1,5 @@
-"""Pump tests: the reads sent, against replies recorded from a Mantis v4."""
+"""Pump tests: the reads sent, against replies captured from a Mantis v4; the prime and the
+recovery against what a Mantis v4 and a Mantis v3 sent."""
 
 import asyncio
 import json
@@ -6,26 +7,32 @@ import os
 import struct
 import tempfile
 import unittest
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
 from pylabrobot.formulatrix.mantis.driver.errors import (
   MantisConfigurationError,
-  MantisMotionError,
   MantisPressureError,
+  MantisPrimeError,
 )
+from pylabrobot.formulatrix.mantis.driver.features import arm as arm_module
 from pylabrobot.formulatrix.mantis.driver.features.arm_tests import (
+  CAPTURED_CHIP_SLOT_1_PICK_UP,
+  CHIP_SLOT_1_PATH,
   CLOSE_QUEUED_MOVE_REPLY,
   HALT,
   IDLE_ENCODER_REPLIES,
   WASTE_PATH,
   ArmTestCase,
   RouteLink,
+  V3Link,
+  make_v3_answers,
+  parse_captured_moves,
 )
-from pylabrobot.formulatrix.mantis.driver.features.pump import (
-  PressureController,
-)
+from pylabrobot.formulatrix.mantis.driver.features.drop_sensor_tests import CAPTURED_DROP
+from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
+from pylabrobot.formulatrix.mantis.driver.features.rfid_tests import LOW_VOLUME_HI_FI_TAG_REPLY
 from pylabrobot.formulatrix.mantis.driver.framing import parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   CALIBRATION_WRITTEN_BACK,
@@ -36,6 +43,20 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import (
   DriverTestCase,
   FakeLink,
   make_answers,
+)
+from pylabrobot.formulatrix.mantis.driver.oem_config import (
+  COMMON_SEQUENCE_DIRECTORY,
+  WASTE_APPROACH_PATH_ADAPTER_FILE,
+  WASTE_APPROACH_PATH_FILE,
+  _load_unit_configuration,
+)
+from pylabrobot.formulatrix.mantis.driver.oem_config_tests import (
+  HEAD,
+  SYNTHETIC_V3_ARM_BLOCK,
+  TAIL,
+  V3_DEVICE_CONFIG,
+  get_route_text,
+  write_files,
 )
 from pylabrobot.resources.formulatrix.mantis_chips import get_chip_factory, mantis_chip_low_volume
 
@@ -500,12 +521,128 @@ CAPTURED_FIRST_PUMP_START = """
 10/13 01000100
 10/13 02000100
 """
+# A 10 uL prime of a high volume chip, as a Mantis v3 sent it (260601_homethenprime): its chip
+# pick-up left out; the pump stayed on after it, so no release follows.
+CAPTURED_V3_PRIME_HIGH_VOLUME = """
+61
+62
+10/15 0100
+10/13 00000100
+10/11 00000000000000002840
+10/13 01000100
+10/11 01000000000000003440
+10/13 02000100
+10/11 02000000000000002ec0
+10/13 02000100
+10/11 020000000000000029c0
+10/13 00000000
+10/32 00000000
+10/34 00001027
+10/34 00000000
+10/13 01000100
+10/11 01000000000000002840
+68 - - 0.0
+68 -0.0034940754157651733 -0.003494075415749384 -
+68 45.407299599195596 -45.697128856018324 -
+68 59.9187740698037 -47.36532362634318 -
+68 - - 0.0
+68 72.74453091934284 -33.26641700660934 0.0
+65 40 26 136 | 65 40 27 14 | 65 40 25 15 | 65 40 29 84 | 65 40 31 13 *2
+65 40 17 136
+68 72.74453091934284 -33.26641700660934 0.0
+68 - - 0.0
+68 59.9187740698037 -47.36532362634318 -
+68 45.407299599195596 -45.697128856018324 -
+68 -0.0034940754157651733 -0.003494075415749384 -
+68 - - 0.0
+68 - - -
+68 -0.6092570076955263 -0.6092570076955263 -
+68 - - 0.0
+68 -0.6092570076955263 -0.6092570076955263 0.0
+"""
+# The pump off a Mantis v3 sent at the end of each capture: every line disabled, then the pump.
+CAPTURED_V3_PUMP_OFF = """
+10/13 00000000
+10/13 01000000
+10/13 02000000
+10/15 0000
+"""
+# A v3 install's Dispense.config, as installed, naming the waste path no capture shows played, and
+# that path (its MoveToWasteStation_Adapter.seq.txt), in the arm frame.
+V3_DISPENSE_CONFIG = (
+  HEAD
+  + '    <add key="MoveToWasteStationSequenceFile" '
+  + 'value="MoveToWasteStation_Adapter.seq.txt" />\r\n'
+  + TAIL
+)
+V3_WASTE_ADAPTER_PATH: List[List[Optional[float]]] = [
+  [None, None, -1.5],
+  [15.0, 31.17, None],
+  [66.399, 12.492, None],
+  [97.432, -15.26, None],
+  [108.428, -44.472, None],
+  [None, None, -1.5],
+  [119.756, -52.279, 5.191],
+]
+# The waste path the captured v3 played, its targets each line's with offsets 0: a v3 install's
+# MoveToWasteStation.seq.txt, in the arm frame.
+V3_WASTE_PATH: List[List[Optional[float]]] = [
+  [None, None, 0.0],
+  [15.0, 31.17, None],
+  [62.353, 18.114, None],
+  [83.589, 5.884, None],
+  [None, None, 0.0],
+  [116.113, 9.428, 0.0],
+]
+# A low volume Hi-Fi chip primed until drops, as a Mantis v4 sent it: the prime pump one cycle at a
+# time, 115 times (260811_startup_dispense_0.5_2.5uL_shutdown, 244.8 s to 267.9 s; moves left out).
+CAPTURED_DROP_DETECTION_PRIME = """
+61
+62
+10/15 0100
+10/13 00000100
+10/11 00000000000000003440
+10/13 01000100
+10/11 01000000000000003440
+10/13 02000100
+10/11 02000000000000002ec0
+10/13 02000100
+10/11 02000000000000000000
+10/11 020000000000000029c0
+10/13 00000000
+10/32 00000000
+10/34 00001027
+10/34 00000000
+10/13 01000100
+10/11 01000000000000002840
+65 40 18 104 | 65 40 19 14 | 65 40 17 15 | 65 40 29 19 | 65 40 31 13 *115
+"""
+# In that prime the drop sensor saw a drop in each of the last 5 cycles, none before. After each
+# of the first 4 that dropped the next cycle was queued this long after it played, s.
+CAPTURED_DRY_CYCLES = 110
+CAPTURED_DROP_CYCLE_GAPS = (0.4126, 0.4207, 0.4061, 0.4069)
+# The link's time in that capture: a dry cycle's next was queued at most this long after it played.
+CAPTURED_DRY_CYCLE_GAP = 0.1258
 # The targets each line held before these captures, as their pump starts set them again.
 CAPTURED_TARGETS_BEFORE: Dict[str, Dict[PressureController, float]] = {
+  "drop_detection_prime_low_volume_hi_fi": {"bottle": 20.0, "chip": 20.0, "vacuum": -15.0},
   "prime_low_volume_hi_fi": {"bottle": 20.0, "chip": 20.0, "vacuum": -15.0},
   "prime_high_volume_hi_fi": {"bottle": 20.0, "chip": 12.0, "vacuum": -13.5},
   "recovery_low_volume_hi_fi": {"bottle": 20.0, "chip": 12.0, "vacuum": -12.5},
   "recovery_high_volume_hi_fi": {"bottle": 20.0, "chip": 12.0, "vacuum": -13.5},
+  "v3_prime_high_volume": {"bottle": 12.0, "chip": 20.0, "vacuum": -15.0},
+}
+# A v4 install's inputs block, as its Input1.config and Input4.config give it: tubes, a low volume
+# Hi-Fi default prime of 100.4 uL and a high volume Hi-Fi default recovery of 400 uL.
+INPUTS_BLOCK = {
+  "1": {
+    "prime_volume": {"tube": {"low_volume_hi_fi": 100.4}, "pipette_tip": {}},
+    "reagent_recovery_volume": {"tube": {"low_volume_hi_fi": 100.0}, "pipette_tip": {}},
+  },
+  "4": {
+    "prime_volume": {"tube": {"high_volume_hi_fi": 264.0}, "pipette_tip": {}},
+    "reagent_recovery_volume": {"tube": {"high_volume_hi_fi": 400.0}, "pipette_tip": {}},
+  },
 }
 # Every captured queued move's speed and acceleration, device units: the arms', then Z's.
 CAPTURED_ARM_PROFILE = (5555.560555555556, 833.3383333333333)
@@ -546,18 +683,70 @@ class PumpLink(RouteLink):
     return await super().write(data)
 
 
+class V3PumpLink(V3Link):
+  """As ``V3Link``, and answers what ``PumpLink`` does: the sequencer, each queued move and valve
+  state, each write to the pressure board; every line settled, the vacuum reading 0."""
+
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+    for command in (61, 62, 64):
+      self.answers[(0, command, b"")] = [bytes.fromhex("0000")]
+    for controller in ("0000", "0100", "0200"):
+      self.answers[(10, 16, bytes.fromhex(controller))] = [CHIP_CONTROLLER_SETTLED[3]]
+    self.answers[(10, 30, bytes.fromhex("0200"))] = [bytes(8)]
+
+  async def write(self, data: bytes) -> int:
+    _, board, command, payload = parse_frame(frame=data)
+    if board == 10 and command in (11, 13, 15, 32, 34):
+      self.answers.setdefault((board, command, payload), [b""])
+    if (board, command) in ((0, 65), (0, 68)):
+      self.answers.setdefault((board, command, payload), [bytes.fromhex(CLOSE_QUEUED_MOVE_REPLY)])
+    return await super().write(data)
+
+
 class PrimeAndRecoveryTests(ArmTestCase):
   async def set_up_chip(self, *, chip_type: str, targets: Dict[PressureController, float]):
     link = PumpLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
-    driver = await self.set_up_arm(link=link, approach_paths={"waste": WASTE_PATH})
+    driver = await self.set_up_arm(
+      link=link, approach_paths={"waste": WASTE_PATH, "chip_slot_1": CHIP_SLOT_1_PATH}
+    )
     driver.arm._initialized = True
     driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
-    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+
+    async def wait_and_see_a_drop(*, item: int, timeout: float) -> None:
+      for frame in CAPTURED_DROP:  # every captured fixed prime's sensor saw drops
+        driver._handle_frame(frame=bytes.fromhex(frame))
+
+    driver._wait_for_queue_item = mock.AsyncMock(  # type: ignore[method-assign]
+      side_effect=wait_and_see_a_drop
+    )
     driver.arm._current_chip = 1
     driver.arm._attached_chip = get_chip_factory(chip_type=chip_type)("chip")
     driver.pump._valves_closed = True
     driver.pump._target_pressures = dict(targets)
+    self.link: FakeLink = link
+    return driver
+
+  async def set_up_v3_chip(self, *, waste_path=V3_WASTE_PATH):
+    """A v3 brought up through the v3 link with the captured unit's waste path, a high volume chip
+    from slot 1 on the head, the lines' targets as before the capture."""
+    patcher = mock.patch.object(arm_module, "MOTOR_STATUS_POLL_INTERVAL", 0)
+    patcher.start()
+    self.addCleanup(patcher.stop)
+    path = os.path.join(self.directory, "v3.json")
+    with open(path, "w", encoding="utf-8") as file:
+      json.dump({"arm": SYNTHETIC_V3_ARM_BLOCK, "approach_paths": {"waste": waste_path}}, file)
+    link = V3PumpLink(answers=make_v3_answers())
+    driver = await self.set_up_driver(link=link, skip_arm=False, declared_configuration_json=path)
+    assert driver.arm is not None and driver.pump is not None
+    self.addCleanup(setattr, driver.arm, "_initialized", False)
+    driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
+    driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
+    driver.arm._current_chip = 1
+    driver.arm._attached_chip = get_chip_factory(chip_type="high_volume")("chip")
+    driver.pump._target_pressures = dict(CAPTURED_TARGETS_BEFORE["v3_prime_high_volume"])
     self.link = link
+    self.sent_before = len(link.written)
     return driver
 
   def sent_frames(self, *, link: FakeLink) -> List[Frame]:
@@ -608,11 +797,89 @@ class PrimeAndRecoveryTests(ArmTestCase):
         driver = await self.set_up_chip(
           chip_type=chip_type, targets=CAPTURED_TARGETS_BEFORE[f"prime_{chip_type}"]
         )
-        await driver.pump.prime_chip(volume=volume)
+        await driver.pump.prime_chip(chip_number=1, volume=volume)
         self.assert_frames(
           sent=self.sent_frames(link=self.link), captured=expand_captured(captured=captured)
         )
         self.assertEqual(driver.arm.current_chip, 1)
+        self.assertTrue(driver.pump.is_primed)
+
+  async def test_a_prime_picks_the_chip_up_first_as_captured(self):
+    # The captured pick-up of slot 1's chip (its idle Z at the flag, see arm_tests), then the prime.
+    driver = await self.set_up_chip(
+      chip_type="low_volume_hi_fi", targets=CAPTURED_TARGETS_BEFORE["prime_low_volume_hi_fi"]
+    )
+    driver.arm._current_chip, driver.arm._attached_chip = None, None
+    self.link.reader.tags = {0: LOW_VOLUME_HI_FI_TAG_REPLY}  # slot 1's antenna
+    await driver.pump.prime_chip(chip_number=1, volume=100.4)
+    pick_up: List[Frame] = ["61", "62"]
+    for index, targets in enumerate(parse_captured_moves(captured=CAPTURED_CHIP_SLOT_1_PICK_UP)):
+      if index in (1, len(CAPTURED_CHIP_SLOT_1_PICK_UP) - 1):
+        targets = {**targets, 2: 0.0}
+      pick_up.append(tuple(targets.get(motor) for motor in range(3)))
+    self.assert_frames(
+      sent=self.sent_frames(link=self.link),
+      captured=pick_up + expand_captured(captured=CAPTURED_PRIME_LOW_VOLUME_HI_FI),
+    )
+    self.assertEqual(driver.arm.current_chip, 1)
+    self.assertTrue(driver.pump.is_primed)
+
+  async def test_a_v3_prime_sends_the_captured_v3_frames(self):
+    driver = await self.set_up_v3_chip()
+    await driver.pump.prime_chip(chip_number=1, volume=10.0)
+    # The prime as captured; then it lets off the pump it started, as a v3 turns its pump off.
+    self.assert_frames(
+      sent=self.sent_frames(link=self.link),
+      captured=expand_captured(captured=CAPTURED_V3_PRIME_HIGH_VOLUME)
+      + expand_captured(captured=CAPTURED_V3_PUMP_OFF),
+    )
+    self.assertTrue(driver.pump.is_primed)
+
+  async def test_a_v3_prime_not_captured_moves_nothing(self):
+    # From where a prime left the head, with small drops, along the unit folder's waste path.
+    driver = await self.set_up_v3_chip()
+    driver.arm.request_is_parked.return_value = False
+    with self.assertRaisesRegex(NotImplementedError, "a v3 primes only from idle"):
+      await driver.pump.prime_chip(chip_number=1, volume=10.0)
+    driver.arm.request_is_parked.return_value = True
+    with self.assertRaisesRegex(NotImplementedError, "small drops, which no v3 prime"):
+      await driver.pump.prime_chip(chip_number=1, volume=12.0)
+    with tempfile.TemporaryDirectory() as directory:
+      data = os.path.join(directory, "Data")
+      configs = os.path.join(data, "Device", "Configs")
+      sequences = os.path.join(data, COMMON_SEQUENCE_DIRECTORY)
+      os.makedirs(configs)
+      os.makedirs(sequences)
+      write_files(
+        directory=configs,
+        files={"Device.config": V3_DEVICE_CONFIG, "Dispense.config": V3_DISPENSE_CONFIG},
+      )
+      write_files(
+        directory=sequences,
+        files={
+          WASTE_APPROACH_PATH_FILE: get_route_text(route=V3_WASTE_PATH),
+          WASTE_APPROACH_PATH_ADAPTER_FILE: get_route_text(route=V3_WASTE_ADAPTER_PATH),
+        },
+      )
+      waste = _load_unit_configuration(oem_config_directory=configs)["approach_paths"]["waste"]
+    self.assertEqual(waste, V3_WASTE_ADAPTER_PATH)
+    driver = await self.set_up_v3_chip(waste_path=waste)
+    with self.assertRaisesRegex(NotImplementedError, "waste path at Z's flag"):
+      await driver.pump.prime_chip(chip_number=1, volume=10.0)
+    self.assertEqual(self.sent_frames(link=self.link), [])
+
+  async def test_a_fixed_prime_the_sensor_saw_no_drop_in_ends_as_captured_then_raises(self):
+    driver = await self.set_up_chip(
+      chip_type="low_volume_hi_fi", targets=CAPTURED_TARGETS_BEFORE["prime_low_volume_hi_fi"]
+    )
+    driver._wait_for_queue_item.side_effect = None
+    with self.assertRaisesRegex(MantisPrimeError, "the drop sensor saw none"):
+      await driver.pump.prime_chip(chip_number=1, volume=100.4)
+    self.assert_frames(
+      sent=self.sent_frames(link=self.link),
+      captured=expand_captured(captured=CAPTURED_PRIME_LOW_VOLUME_HI_FI),
+    )
+    self.assertFalse(driver.pump.is_primed)
 
   async def test_a_recovery_sends_the_captured_frames(self):
     cases = (
@@ -624,7 +891,30 @@ class PrimeAndRecoveryTests(ArmTestCase):
         driver = await self.set_up_chip(
           chip_type=chip_type, targets=CAPTURED_TARGETS_BEFORE[f"recovery_{chip_type}"]
         )
-        await driver.pump.recover_reagent(volume=volume)
+        await driver.pump.recover_reagent(chip_number=1, volume=volume)
+        self.assert_frames(
+          sent=self.sent_frames(link=self.link), captured=expand_captured(captured=captured)
+        )
+
+  async def test_without_a_volume_the_default_sends_the_captured_frames(self):
+    # The input slot's default from the unit's inputs block; without it, the chip's for a prime.
+    cases = (
+      ("low_volume_hi_fi", 1, "prime", INPUTS_BLOCK, CAPTURED_PRIME_LOW_VOLUME_HI_FI),
+      ("low_volume_hi_fi", 1, "prime", None, CAPTURED_PRIME_LOW_VOLUME_HI_FI),
+      ("high_volume_hi_fi", 4, "recovery", INPUTS_BLOCK, CAPTURED_RECOVERY_HIGH_VOLUME_HI_FI),
+    )
+    for chip_type, slot, operation, inputs, captured in cases:
+      with self.subTest(operation=operation, inputs=inputs is not None):
+        driver = await self.set_up_chip(
+          chip_type=chip_type, targets=CAPTURED_TARGETS_BEFORE[f"{operation}_{chip_type}"]
+        )
+        if inputs is not None:
+          driver._unit_blocks["inputs"] = inputs
+        driver.arm._current_chip = slot
+        if operation == "prime":
+          await driver.pump.prime_chip(chip_number=slot, drop_detection=False)
+        else:
+          await driver.pump.recover_reagent(chip_number=slot)
         self.assert_frames(
           sent=self.sent_frames(link=self.link), captured=expand_captured(captured=captured)
         )
@@ -635,7 +925,7 @@ class PrimeAndRecoveryTests(ArmTestCase):
       chip_type="low_volume_hi_fi", targets=CAPTURED_TARGETS_BEFORE["recovery_low_volume_hi_fi"]
     )
     self.link.answers[(10, 14, b"")] = [PUMP_ON[3]]
-    await driver.pump.recover_reagent(volume=100.0)
+    await driver.pump.recover_reagent(chip_number=1, volume=100.0)
     sent = self.sent_frames(link=self.link)
     self.assertNotIn("10/15 0100", sent)
     self.assertNotIn("10/15 0000", sent)
@@ -657,17 +947,25 @@ class PrimeAndRecoveryTests(ArmTestCase):
 
   async def test_what_cannot_be_primed_sends_nothing(self):
     driver = await self.set_up_chip(chip_type="low_volume_hi_fi", targets={})
+    pump = driver.pump
     with self.assertRaisesRegex(ValueError, "volume must be more than 0"):
-      await driver.pump.prime_chip(volume=0.0)
+      await pump.prime_chip(chip_number=1, volume=0.0)
+    with self.assertRaisesRegex(ValueError, "input_source must be one of"):
+      await pump.recover_reagent(chip_number=1, input_source="bottle")  # type: ignore[arg-type]
+    # A recovery does not pick up: another slot's chip, or none, refuses.
+    with self.assertRaisesRegex(MantisConfigurationError, "from slot 2 on the head"):
+      await pump.recover_reagent(chip_number=2, volume=6.0)
+    with self.assertRaisesRegex(MantisConfigurationError, "no default reagent_recovery_volume"):
+      await pump.recover_reagent(chip_number=1)
     driver.arm._attached_chip = mantis_chip_low_volume(name="chip")
     with self.assertRaisesRegex(MantisConfigurationError, "low_volume chip"):
-      await driver.pump.recover_reagent(volume=6.0)
+      await pump.recover_reagent(chip_number=1, volume=6.0)
     driver.arm._current_chip, driver.arm._attached_chip = None, None
-    with self.assertRaisesRegex(MantisMotionError, "no chip is on the head"):
-      await driver.pump.prime_chip(volume=6.0)
+    with self.assertRaisesRegex(MantisConfigurationError, "holds the chip from slot None"):
+      await pump.recover_reagent(chip_number=1, volume=6.0)
     driver.configuration.generation = "v3"
-    with self.assertRaisesRegex(NotImplementedError, "have not run on a v3"):
-      await driver.pump.recover_reagent(volume=6.0)
+    with self.assertRaisesRegex(NotImplementedError, "no recovery has been captured on a v3"):
+      await pump.recover_reagent(chip_number=1, volume=6.0)
     self.assertEqual(self.sent(self.link), [])
 
   async def test_a_line_that_does_not_settle_stops_and_releases(self):
@@ -679,17 +977,115 @@ class PrimeAndRecoveryTests(ArmTestCase):
       mock.patch("pylabrobot.formulatrix.mantis.driver.features.pump.SETTLE_TIMEOUT", 0.0),
       self.assertRaisesRegex(MantisPressureError, "the vacuum line did not settle"),
     ):
-      await driver.pump.prime_chip(volume=100.4)
+      await driver.pump.prime_chip(chip_number=1, volume=100.4)
     self.assert_stopped_and_released()
 
   async def test_a_cancelled_prime_stops_and_releases(self):
+    # A chip primed before is not primed once a prime of it fails.
     driver = await self.set_up_chip(
       chip_type="low_volume_hi_fi", targets=CAPTURED_TARGETS_BEFORE["prime_low_volume_hi_fi"]
     )
+    await driver.pump.prime_chip(chip_number=1, volume=100.4)
+    self.assertTrue(driver.pump.is_primed)
+    self.sent_before = len(self.link.written)
     driver._wait_for_queue_item.side_effect = asyncio.CancelledError
     with self.assertRaises(asyncio.CancelledError):
-      await driver.pump.prime_chip(volume=100.4)
+      await driver.pump.prime_chip(chip_number=1, volume=100.4)
     self.assert_stopped_and_released()
+    self.assertFalse(driver.pump.is_primed)
+
+  async def test_a_refused_prime_of_a_chip_in_its_slot_reads_its_tag_only(self):
+    driver = await self.set_up_chip(chip_type="low_volume_hi_fi", targets={})
+    driver.arm._current_chip, driver.arm._attached_chip = None, None
+    self.link.reader.tags = {0: LOW_VOLUME_HI_FI_TAG_REPLY}  # slot 1's antenna
+    with self.assertRaisesRegex(ValueError, "consecutive_drops must be at most 400"):
+      await driver.pump.prime_chip(chip_number=1, drop_detection=True, consecutive_drops=500)
+    self.assertEqual(self.sent_frames(link=self.link), [])
+    self.assertIsNone(driver.arm.current_chip)
+
+  def drop_in_cycles(self, *, driver, cycles: Set[int]) -> None:
+    """Hand the driver the captured drop's events as each cycle in ``cycles`` (from 1) plays."""
+    waits = 0
+
+    async def wait_for_queue_item(*, item: int, timeout: float) -> None:
+      nonlocal waits
+      waits += 1  # the first is the move into the waste, then one per cycle
+      if waits - 1 in cycles:
+        for frame in CAPTURED_DROP:
+          driver._handle_frame(frame=bytes.fromhex(frame))
+
+    driver._wait_for_queue_item.side_effect = wait_for_queue_item
+
+  async def test_a_drop_detection_prime_sends_the_captured_cycles_and_waits(self):
+    # Without a volume, a v4 with a drop sensor primes a low volume Hi-Fi chip until drops.
+    driver = await self.set_up_chip(
+      chip_type="low_volume_hi_fi",
+      targets=CAPTURED_TARGETS_BEFORE["drop_detection_prime_low_volume_hi_fi"],
+    )
+    self.drop_in_cycles(driver=driver, cycles=set(range(CAPTURED_DRY_CYCLES + 1, 116)))
+    sleeps = self.pump_sleep.await_count
+    await driver.pump.prime_chip(chip_number=1)
+    # The moves into the waste come before the cycles; the capture's came before the pressures.
+    sent: List[Frame] = [
+      frame for frame in self.sent_frames(link=self.link) if not isinstance(frame, tuple)
+    ]
+    captured = expand_captured(captured=CAPTURED_DROP_DETECTION_PRIME)
+    self.assert_frames(sent=sent[: len(captured)], captured=captured)
+    # No wait after a dry cycle; after one that dropped, within the link's time of the capture's.
+    waits = [call.kwargs["seconds"] for call in self.pump_sleep.await_args_list[sleeps:]]
+    cycle_waits = waits[3:-1]  # after the pump's start, the vacuum and the bottle; before the end
+    self.assertEqual(len(cycle_waits), 2 * 5)
+    for drop, gap in enumerate(CAPTURED_DROP_CYCLE_GAPS):
+      with self.subTest(drop=drop):
+        waited = sum(cycle_waits[2 * drop : 2 * drop + 2])
+        self.assertLessEqual(gap - CAPTURED_DRY_CYCLE_GAP, waited)
+        self.assertLessEqual(waited, gap)
+    self.assertEqual(driver.drop_sensor.consecutive_run, 5)
+    self.assertTrue(driver.pump.is_primed)
+
+  async def test_a_drop_detection_prime_needs_its_drops_in_a_row_and_raises_at_the_cap(self):
+    prime_pump_cycle = "65 40 18 104"
+    cases = ((range(1, 7), True), ({1, 2, 4, 5, 6}, True), ({1, 2, 4, 5}, False))
+    for cycles, ends_on_drops in cases:
+      with self.subTest(cycles=cycles):
+        driver = await self.set_up_chip(chip_type="low_volume_hi_fi", targets={})
+        self.drop_in_cycles(driver=driver, cycles=set(cycles))
+        prime = driver.pump.prime_chip(
+          chip_number=1, drop_detection=True, consecutive_drops=3, max_cycles=6
+        )
+        if ends_on_drops:
+          await prime
+        else:
+          with self.assertRaisesRegex(MantisPrimeError, "in 3 prime pump cycles in a row"):
+            await prime
+        sent = self.sent_frames(link=self.link)
+        played = sent.count(prime_pump_cycle)
+        self.assertEqual(played, 3 if cycles == range(1, 7) else 6)
+        # The prime ends the same either way: the safe state, the way out, the pressure released.
+        self.assertEqual(sent[-1], "10/32 00000000")
+        self.assertIn("65 40 17 104", sent)
+        self.assertEqual(driver.pump.is_primed, ends_on_drops)
+
+  async def test_what_cannot_be_primed_until_drops_sends_nothing(self):
+    driver = await self.set_up_chip(chip_type="low_volume_hi_fi", targets={})
+    pump = driver.pump
+    with self.assertRaisesRegex(ValueError, "takes no volume"):
+      await pump.prime_chip(chip_number=1, volume=6.0, drop_detection=True)
+    for consecutive_drops, max_cycles in ((0, None), (401, None), (2.5, None), (5, 0)):
+      with self.assertRaisesRegex(ValueError, "must be"):
+        await pump.prime_chip(
+          chip_number=1,
+          drop_detection=True,
+          consecutive_drops=consecutive_drops,  # type: ignore[arg-type]
+          max_cycles=max_cycles,
+        )
+    driver.arm._attached_chip = get_chip_factory(chip_type="high_volume_hi_fi")("chip")
+    with self.assertRaisesRegex(MantisConfigurationError, "primed until drops"):
+      await pump.prime_chip(chip_number=1, drop_detection=True)
+    driver.drop_sensor = None
+    with self.assertRaisesRegex(MantisConfigurationError, "no drop sensor"):
+      await pump.prime_chip(chip_number=1, drop_detection=True)
+    self.assertEqual(self.sent(self.link), [])
 
   def assert_stopped_and_released(self) -> None:
     sent = self.sent(self.link)

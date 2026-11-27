@@ -116,6 +116,7 @@ class SimulationTests(unittest.IsolatedAsyncioTestCase):
       self.addAsyncCleanup(mantis.stop)
     self.assertEqual(mantis.driver.configuration.generation, "v3")
     self.assertIsNone(mantis.led_bar)
+    self.assertIsNone(mantis.drop_sensor)
     with self.assertRaises(MantisTimeoutError):
       await mantis.driver.request_firmware_version(board=11)
 
@@ -516,10 +517,15 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     self.addCleanup(remove_chip)
     for operation in (pump.prime_chip, pump.recover_reagent):
       with self.subTest(operation=operation.__name__):
-        await operation(volume=6.0)
+        await operation(chip_number=1, volume=6.0)
         await self.assert_head_at(x=15.0, y=30.0, z=1.57)
         self.assertFalse(await pump.request_pump_on())
         self.assertEqual(arm.current_chip, 1)
+    # Without a volume, the simulated drop sensor sees a drop every cycle: the prime ends after
+    # its drops in a row.
+    await pump.prime_chip(chip_number=1)
+    await self.assert_head_at(x=15.0, y=30.0, z=1.57)
+    self.assertTrue(pump.is_primed)
 
 
 class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):

@@ -2415,6 +2415,23 @@ class V3ArmTests(DriverTestCase):
     with self.assertRaisesRegex(NotImplementedError, "only in its bring-up"):
       await driver.arm.move_to_z_position(z=1.0)
 
+  async def test_a_v3_places_its_chip_from_where_its_prime_left_the_head(self):
+    """A v3 placed its chip back from the end of its prime's way out (260528_primeall), the head
+    at (15, 30) at Z's flag: the whole route queued from there, as from idle."""
+    driver, queued = await self.set_up_chip_slots(parked=False)
+    targets = driver.arm._get_arm_targets(location=arm_module.V3_CHIP_CHANGER_ROUTE[-1])
+    for motor in (0, 1):  # the position read's first field, the demand position, there
+      reply = self.link.answers[(0, 27, struct.pack("<h", motor))][-1]
+      self.link.answers[(0, 27, struct.pack("<h", motor))] = [
+        struct.pack("<d", targets[motor]) + reply[8:]
+      ]
+    driver.arm._current_chip = 1
+    self.link.reader.tags = {}  # the chip is on the head
+    await driver.arm.place_chip(chip_number=1)
+    route_length = 2 * (2 + len(arm_module.CHIP_CHANGER_ROUTE)) + len(CHIP_SLOT_1_PATH)
+    self.assertEqual(len(queued), route_length)
+    self.assertIsNone(driver.arm.current_chip)
+
 
 # A unit's path through chip slot 1, in the arm frame, as its chip changer routes give it.
 CHIP_SLOT_1_PATH: List[List[Optional[float]]] = [

@@ -137,7 +137,8 @@ class MantisCoordinateError(MantisError, ValueError):
 
 
 class MantisPrimeError(MantisError, RuntimeError):
-  """A prime ran its full volume, but the liquid sensor never confirmed flow."""
+  """A prime the drop sensor did not confirm: a fixed prime that saw no drop, or a drop-detection
+  prime at its cycle cap without the drops in a row it ends on."""
 
 
 # The motor error codes a motor command answers, or a motor-error event carries.

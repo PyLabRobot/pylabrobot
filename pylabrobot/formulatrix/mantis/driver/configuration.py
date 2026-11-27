@@ -34,7 +34,16 @@ class DeviceConfiguration:
 RECORDING_MANTIS_V3 = os.path.join(os.path.dirname(__file__), "recordings", "mantis_v3.json")
 RECORDING_MANTIS_V4 = os.path.join(os.path.dirname(__file__), "recordings", "mantis_v4.json")
 # The blocks a unit's own values fill: from its vendor folder, its declared file or a recording.
-UNIT_BLOCKS = ("plate_clamp", "rfid", "led_bar", "arm", "zones", "approach_paths", "stage")
+UNIT_BLOCKS = (
+  "plate_clamp",
+  "rfid",
+  "led_bar",
+  "arm",
+  "zones",
+  "approach_paths",
+  "stage",
+  "inputs",
+)
 # The blocks that calibrate motion: never taken from a recording; without them motion refuses.
 MOTION_CALIBRATION_BLOCKS = ("arm", "zones", "approach_paths", "stage")
 
