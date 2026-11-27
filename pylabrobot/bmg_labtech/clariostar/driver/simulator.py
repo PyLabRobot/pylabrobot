@@ -54,6 +54,7 @@ from .features.measurement import (
   _get_measured_identifiers,
   _get_readings_by_well,
 )
+from .features.pumps import Pumps
 from .features.temperature_controller import TemperatureController
 from .master import CLARIOstarDriver, CLARIOstarStatus
 
@@ -133,6 +134,38 @@ class CLARIOstarSimulationDrawer(Drawer):
     logger.debug("%s write: drawer close", SIMULATED_LINK)
     self._last_move_open = False
     self._update_location(False)
+
+
+class CLARIOstarSimulationPumps(Pumps):
+  """The pumps of a simulated reader: a prime or backflush checks its settings and is done at once."""
+
+  async def prime(
+    self,
+    pump: int,
+    volume: float,
+    flow_rate: float = 100,
+    timeout: Optional[float] = None,
+    start_timeout: Optional[float] = None,
+  ) -> None:
+    """Check the settings as a reader's prime does, and return without pumping."""
+    self._encode(pump, volume, flow_rate, backflush=False)
+    logger.debug(
+      "%s write: prime pump %d, %g uL at %g uL/s", SIMULATED_LINK, pump, volume, flow_rate
+    )
+
+  async def backflush(
+    self,
+    pump: int,
+    volume: float,
+    flow_rate: float = 100,
+    timeout: Optional[float] = None,
+    start_timeout: Optional[float] = None,
+  ) -> None:
+    """Check the settings as a reader's backflush does, and return without pumping."""
+    self._encode(pump, volume, flow_rate, backflush=True)
+    logger.debug(
+      "%s write: backflush pump %d, %g uL at %g uL/s", SIMULATED_LINK, pump, volume, flow_rate
+    )
 
 
 class CLARIOstarSimulationTemperatureController(TemperatureController):
@@ -721,6 +754,7 @@ class CLARIOstarSimulationDriver(CLARIOstarDriver):
       plate_detected=self._simulation_drawer._get_plate_present(),
       drawer_open=self._simulation_drawer._get_open(),
       motors_enabled=self.initialized,
+      reagent_door_open=True,
       temperature_bottom=temperature,
       temperature_top=temperature,
     )
@@ -811,6 +845,8 @@ class CLARIOstarSimulationDriver(CLARIOstarDriver):
       self.fluorescence = CLARIOstarSimulationFluorescence(self)
     if self.configuration.luminescence_channels and self.luminescence is None:
       self.luminescence = CLARIOstarSimulationLuminescence(self)
+    if any(self.configuration.pumps or ()) and self.pumps is None:
+      self.pumps = CLARIOstarSimulationPumps(self)
 
   def _describe_link(self) -> str:
     """The simulated link, and the configuration it answers from."""

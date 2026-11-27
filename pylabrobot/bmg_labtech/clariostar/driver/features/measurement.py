@@ -86,7 +86,9 @@ def _enforce_one_measurement_at_a_time(run: _Run) -> _Run:
   @functools.wraps(run)
   async def guarded(self: "Measurement", *args: Any, **kwargs: Any) -> Any:
     if self._driver._measuring:
-      raise RuntimeError("a measurement is already running on this reader; wait for it to end")
+      raise RuntimeError(
+        "a measurement or pump command is already running on this reader; wait for it to end"
+      )
     self._driver._measuring = True
     try:
       return await run(self, *args, **kwargs)

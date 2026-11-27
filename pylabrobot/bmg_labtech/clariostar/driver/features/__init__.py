@@ -18,4 +18,5 @@ from .luminescence import (
   LuminescenceConfiguration,
 )
 from .measurement import MeasurementSettings, ShakeSettings
+from .pumps import Pumps
 from .temperature_controller import TemperatureController
