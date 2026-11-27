@@ -603,11 +603,12 @@ holds a chip.</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – without the slot’s path or an RFID reader; nothing is sent.</p></li>
+<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – without the slot’s path or an RFID reader; nothing moves (on a v3
+    the head’s position is read first).</p></li>
 <li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError"><strong>MantisMotionError</strong></a> – if the arm is not brought up, no chip is on the head, the chip is from
     another slot (nothing moves), or a motor faults; or if the slot’s tag reads a chip, after
     the tag read only.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#NotImplementedError" title="(in Python v3.15)"><strong>NotImplementedError</strong></a> – on a v3, until a v3 has run it; nothing is sent.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#NotImplementedError" title="(in Python v3.15)"><strong>NotImplementedError</strong></a> – on a v3 not parked, as for <code class="docutils literal notranslate"><span class="pre">pick_up_chip</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
