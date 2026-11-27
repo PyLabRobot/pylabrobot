@@ -6,8 +6,9 @@ import math
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
+from .arm_kinematics import MantisArmCoordinate
 from .errors import MantisConfigurationError
 
 
@@ -18,7 +19,9 @@ class CarouselConfiguration:
   Accelerations are degrees/s². ``steps_per_revolution`` is the conversion to the controller's
   native position units. ``slot_one_position`` is the calibrated angle for the first chip slot.
   ``rfid_slot_one_position`` brings the first slot's chip over the LC3's RFID reader; None when it
-  is not known, and then no tag is read.
+  is not known, and then no tag is read. ``pick_up_path`` is the head's path from the chip
+  changer route's end to the slot at the head and back out, measured on the unit, in the arm frame
+  as ``approach_paths``; None when not measured, and then no chip is picked up there.
   """
 
   device_id: str
@@ -33,6 +36,7 @@ class CarouselConfiguration:
   default_speed: float
   default_acceleration: float
   rfid_slot_one_position: Optional[float] = None
+  pick_up_path: Optional[List[MantisArmCoordinate]] = None
 
   def __post_init__(self) -> None:
     """Reject incomplete geometry and non-finite or nonpositive motion rates."""
@@ -54,6 +58,8 @@ class CarouselConfiguration:
       raise MantisConfigurationError("carousel positions must be finite")
     if self.rfid_slot_one_position is not None and not math.isfinite(self.rfid_slot_one_position):
       raise MantisConfigurationError("carousel RFID position must be finite")
+    if self.pick_up_path is not None and not self.pick_up_path:
+      raise MantisConfigurationError("carousel pick-up path is empty")
     if not math.isfinite(self.preposition) or not 0 <= self.preposition < 180:
       raise MantisConfigurationError("carousel preposition must be in [0, 180) degrees")
     if self.homing_slow_speed > self.homing_fast_speed:
@@ -117,7 +123,8 @@ class CarouselConfiguration:
     """A declared ``left_carousel`` or ``right_carousel`` block, checked before anything is sent.
 
     Args:
-      block: this class's fields, as ``dataclasses.asdict`` gives them.
+      block: this class's fields, as ``dataclasses.asdict`` gives them; ``pick_up_path`` a list
+        of [x, y, z], None to hold an axis.
 
     Raises:
       MantisConfigurationError: for a field missing, unknown or out of range.
@@ -130,7 +137,13 @@ class CarouselConfiguration:
         raise ValueError(f"unknown fields {sorted(unknown)}")
       if any(isinstance(value, bool) for value in fields.values()):
         raise ValueError("a carousel value is not a boolean")
-      for name in names - {"device_id", "capacity"}:
+      if fields.get("pick_up_path") is not None:
+        path = []
+        for line in fields["pick_up_path"]:
+          x, y, z = (None if value is None else float(value) for value in line)
+          path.append(MantisArmCoordinate(x=x, y=y, z=z))
+        fields["pick_up_path"] = path
+      for name in names - {"device_id", "capacity", "pick_up_path"}:
         if fields.get(name) is not None:
           fields[name] = float(fields[name])
       return cls(**fields)

@@ -64,7 +64,8 @@ chip slots'), then, holding the carousel's lock, reads back that it stands there
 (`_check_at_position`) and reads its tag as `Rfid.request_tag` does (`describe_tag`). Only a read
 that ends in a whole tag or an empty field counts: one that times out or is malformed raises, so a
 slot is never taken as empty from it. The Mantis's `stop` stops each carousel in place and closes
-its links.
+its links. The arm picks a chip up from a carousel and places it back through the chip
+calls (below).
 
 **M1. One driver. Features hang off it.** (STAR P1.) A feature is a plain class holding `_driver`
 and sending through it. No per-feature backend or frontend.
@@ -127,7 +128,8 @@ idle; `zones` where the unit declares its zones (a v4), with each zone's routes,
 declares its stage transform, with its tilt and arm type and the plate holder's origin from the
 `Data` folder. `left_carousel` and `right_carousel` come from the declared file only:
 `CarouselConfiguration`'s fields (`CarouselConfiguration.from_oem_database` reads them from the
-vendor's `data.db`).
+vendor's `data.db`), with `pick_up_path`, the head's path into the slot at the head, measured on
+the unit, as the vendor's LC3 route missed the chip on one.
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
 (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `approach_paths`, `stage`, `left_carousel`,
@@ -322,6 +324,23 @@ that slot's tag shows a chip, it places the head's chip back first. A v3 picks u
 idle only. `place_chip` without a chip on the head logs a warning and sends nothing.
 `place_chip(..., recover_liquid=True)` is refused: no capture shows a placement that recovers the
 liquid (open point 54). `Mantis.pick_up_chip` and `Mantis.place_chip` pass to the arm's.
+
+A chip number after the chip slots (`CHIP_SLOT_RACKS`) names a carousel's slot by the declared
+blocks, whether or not each carousel answered at setup: the `left_carousel` block's capacity from
+7, then the `right_carousel` block's (`Arm._get_carousel_slot`; open point 60). A declared
+carousel that did not answer leaves its numbers refused (`MantisConfigurationError`, nothing
+moves), never shifted to the other's. The chip on the head is taken for its chip number too. A
+carousel's chip is picked up and placed as a chip slot's, along the carousel's `pick_up_path` (its
+attach line found the same way), with these checks, in order: the path exists and every line is
+within the motor limits; a v4 is refused (none has run it); a v3 must stand at idle
+(`_check_v3_at_idle`); the carousel is homed and the slot turned over the LC3's reader, each only
+with the head read at idle, and the tag, read whole, must show a chip for a pick-up, none for a
+placement; then the slot is turned to the head (`_hold_at_slot`) and the carousel must read homed,
+still, without faults and at the slot's calibrated angle (`_check_at_position`), or nothing moves
+into it. The carousel's lock is held from that read until the head is back at idle, so no turn
+starts while the head is in or below the slot; a turn asked for meanwhile waits for it, then
+checks the head as above. The chip is built from the tag's type: a carousel's chip has no spot in
+the resource model.
 
 `park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (False by default). True: each queued
 item is played on its own (61, 62, 68) and each route step moved, then the pose read (84) and
@@ -667,3 +686,13 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     one for the declared file, but setup does not read `data.db` itself.
 58. **A Mantis input slot's tag not read whole counts as empty.** `Rfid.request_tag` returns None
     for it, so a chip slot placement can go ahead on an incomplete read; an LC3's read refuses it.
+59. **The carousel pick-up and placement have run on one v3 and its LC3, not captured here.** The
+    path in the tests is the one measured on that unit; the LC3's turns the tests pin are captured
+    moves, the arm's queued moves are those a chip slot's path queues. A v4 refuses them.
+60. **The chip numbers of carousel slots are ours.** Every install's `ChipChanger.config` numbers
+    the six chip slots 1 to 6 (`Type` 0) and then one position per LC3 location, 7 to 10
+    (`LC3_LB`, `LC3_LF`, `LC3_RB`, `LC3_RF`, `Type` 1), not per carousel slot; the vendor's
+    software names a carousel slot `L1` to `L24` or `R1` to `R24`. Counting the slots from 7, left
+    carousel first, is this driver's.
+61. **The carousel and the arm are taken to be driven from one task.** A turn checks the head at
+    idle, then turns; another task moving the arm in between is not locked out.

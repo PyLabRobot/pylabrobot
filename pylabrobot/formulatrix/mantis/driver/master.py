@@ -1226,12 +1226,18 @@ class MantisDriver:
       name: the block, and the driver attribute the carousel becomes.
 
     Raises:
-      MantisConfigurationError: if the block is malformed.
+      MantisConfigurationError: if the block is malformed, or its pick-up path never moves
+        sideways below the safe height.
     """
     block = self._unit_blocks.get(name)
     if block is None:
       return None
     configuration = CarouselConfiguration.from_block(block=block)
+    if configuration.pick_up_path is not None:
+      try:
+        Arm._get_attach_line(path=configuration.pick_up_path)
+      except MantisConfigurationError as error:
+        raise MantisConfigurationError(f"{name} block: {error}") from error
     rfid_io = None
     if configuration.rfid_slot_one_position is not None:
       rfid_io = self._build_carousel_rfid_io(

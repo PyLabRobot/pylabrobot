@@ -5,10 +5,11 @@ Mantis.
 """
 
 import asyncio
+import contextlib
 import logging
 import math
 import struct
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
@@ -339,6 +340,24 @@ class MantisCarousel:
       slot=slot, slot_one_position=self.configuration.slot_one_position
     )
     await self.move_to(position=position, speed=speed, acceleration=acceleration)
+
+  @contextlib.asynccontextmanager
+  async def _hold_at_slot(self, *, slot: int) -> AsyncIterator[None]:
+    """Turn a slot to the head (``move_to_slot``) and hold the carousel there while the block
+    runs: no turn starts until it ends. Before it runs, the carousel must read homed, still and
+    without faults, at the slot's calibrated angle (``_check_at_position``).
+
+    Raises:
+      MantisMotionError: if the carousel does not read so; the block does not run.
+      ValueError: if ``slot`` is not one of this carousel's; nothing is sent.
+    """
+    position = self._get_slot_position(
+      slot=slot, slot_one_position=self.configuration.slot_one_position
+    )
+    await self.move_to(position=position)
+    async with self._operation_lock:
+      await self._check_at_position(position=position)
+      yield
 
   async def request_tag(self, *, slot: int) -> Optional[Dict[str, Any]]:
     """Turn a slot's chip over the LC3's RFID reader and read its tag, with the carousel read at the

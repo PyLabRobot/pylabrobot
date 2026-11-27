@@ -141,6 +141,8 @@ class MantisDevice(Resource):
       slot: the chip slot picked up from or placed into.
       on_head: True after a pick-up's attach line, False after a placement's.
     """
+    if slot not in self.chip_spots:
+      return  # a carousel's chip is not modelled
     spot, long = self.chip_spots[slot], self.arm_links["right_long_arm"]
     joint, angle = self._get_right_long_arm_pose_at_attach_line(slot=slot)
     turned = math.radians(angle)

@@ -6,6 +6,8 @@ offsets declared are the ones the recorded idle targets imply, so the moves are 
 """
 
 import asyncio
+import contextlib
+import dataclasses
 import json
 import math
 import os
@@ -37,6 +39,11 @@ from pylabrobot.formulatrix.mantis.driver.features.arm import (
   Arm,
   MantisArmConfiguration,
 )
+from pylabrobot.formulatrix.mantis.driver.features.carousel import MantisCarousel
+from pylabrobot.formulatrix.mantis.driver.features.carousel_tests import (
+  CAROUSEL_PICK_UP_PATH,
+  RFID_CONFIGURATION,
+)
 from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   BLUE,
   CYAN,
@@ -51,7 +58,11 @@ from pylabrobot.formulatrix.mantis.driver.features.led_bar_tests import (
   led_bar_frames,
   make_led_bar_answers,
 )
-from pylabrobot.formulatrix.mantis.driver.features.rfid_tests import LOW_VOLUME_HI_FI_TAG_REPLY
+from pylabrobot.formulatrix.mantis.driver.features.rfid import describe_tag
+from pylabrobot.formulatrix.mantis.driver.features.rfid_tests import (
+  LOW_VOLUME_HI_FI_TAG_REPLY,
+  compute_tag,
+)
 from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   RECORDED_MOTOR_ERROR_EVENTS,
@@ -2414,6 +2425,109 @@ class V3ArmTests(DriverTestCase):
     self.assertEqual(self.tag_reads(), 0)
     with self.assertRaisesRegex(NotImplementedError, "only in its bring-up"):
       await driver.arm.move_to_z_position(z=1.0)
+
+  def set_up_carousel(self, *, driver, name: str = "left_carousel"):
+    """Declare a carousel and fit a stand-in for it, the arm's calls to it noted in order: its
+    home, its tag reads (the Mantis reader's captured low-volume Hi-Fi tag) and its hold."""
+    calls: List[object] = []
+    carousel = mock.Mock(spec=MantisCarousel)
+    path = [MantisArmCoordinate(x=x, y=y, z=z) for x, y, z in CAROUSEL_PICK_UP_PATH]
+    carousel.configuration = dataclasses.replace(RFID_CONFIGURATION, pick_up_path=path)
+    carousel.home = mock.AsyncMock(side_effect=lambda: calls.append("home"))
+    carousel.tag = describe_tag(tag=compute_tag(reply=LOW_VOLUME_HI_FI_TAG_REPLY))
+
+    async def request_tag(*, slot: int):
+      calls.append(("tag", slot))
+      return carousel.tag
+
+    @contextlib.asynccontextmanager
+    async def hold_at_slot(*, slot: int):
+      calls.append(("hold", slot))
+      yield
+      calls.append("released")
+
+    carousel.request_tag = mock.AsyncMock(side_effect=request_tag)
+    carousel._hold_at_slot = hold_at_slot
+    block = {**dataclasses.asdict(RFID_CONFIGURATION), "pick_up_path": CAROUSEL_PICK_UP_PATH}
+    driver._unit_blocks[name] = block
+    if name == "left_carousel":
+      driver.left_carousel = carousel
+    else:
+      driver.right_carousel = carousel
+    driver._wait_for_queue_item.side_effect = lambda **_: calls.append("played")
+    return carousel, calls
+
+  async def test_a_v3_picks_up_and_places_a_carousel_chip(self):
+    """The carousel homed, the slot's tag read, then the slot held at the head while the measured
+    path plays, in to its attach line and out; placed back along it reversed."""
+    driver, queued = await self.set_up_chip_slots()
+    carousel, calls = self.set_up_carousel(driver=driver)
+    route_length = 2 * (2 + len(arm_module.CHIP_CHANGER_ROUTE)) + len(CAROUSEL_PICK_UP_PATH)
+    first_path_line = 2 + len(arm_module.CHIP_CHANGER_ROUTE)
+    await driver.arm.pick_up_chip(chip_number=7)  # the left carousel's slot 1
+    played = len(driver._wait_for_queue_item.await_args_list)
+    self.assertEqual(calls, ["home", ("tag", 1), ("hold", 1), *["played"] * played, "released"])
+    self.assertEqual(len(queued), route_length)
+    waited = [call.kwargs["item"] for call in driver._wait_for_queue_item.await_args_list]
+    self.assertEqual(waited[0] - 1, first_path_line + 6)
+    self.assertEqual(driver.arm.current_chip, 7)
+    assert driver.arm.attached_chip is not None
+    self.assertEqual(driver.arm.attached_chip.chip_type, "low_volume_hi_fi")
+    self.assertEqual(self.tag_reads(), 0)
+    calls.clear()
+    await driver.arm.pick_up_chip(chip_number=driver.arm.attached_chip)  # the chip on the head
+    self.assertEqual(calls, [])
+    carousel.tag = None  # the chip is on the head
+    queued.clear()
+    driver._wait_for_queue_item.reset_mock()
+    await driver.arm.place_chip(chip_number=7)
+    played = len(driver._wait_for_queue_item.await_args_list)
+    self.assertEqual(calls, ["home", ("tag", 1), ("hold", 1), *["played"] * played, "released"])
+    self.assertEqual(len(queued), route_length)
+    waited = [call.kwargs["item"] for call in driver._wait_for_queue_item.await_args_list]
+    self.assertEqual(waited[0] - 1, first_path_line + len(CAROUSEL_PICK_UP_PATH) - 1 - 6)
+    self.assertIsNone(driver.arm.current_chip)
+
+  async def test_a_carousel_slot_whose_tag_rules_the_move_out_is_not_entered(self):
+    """An empty slot is not picked up from; a slot read with a chip, or not read whole, is not
+    placed into."""
+    driver, queued = await self.set_up_chip_slots()
+    carousel, calls = self.set_up_carousel(driver=driver)
+    tag = carousel.tag
+    carousel.tag = None
+    with self.assertRaisesRegex(MantisMotionError, "left carousel slot 1 holds no chip"):
+      await driver.arm.pick_up_chip(chip_number=7)
+    driver.arm._current_chip = 7
+    carousel.tag = tag
+    with self.assertRaisesRegex(MantisMotionError, "already holds a low_volume_hi_fi chip"):
+      await driver.arm.place_chip(chip_number=7)
+    carousel.request_tag.side_effect = MantisTimeoutError("the RFID reader did not answer in time")
+    with self.assertRaises(MantisTimeoutError):
+      await driver.arm.place_chip(chip_number=7)
+    self.assertEqual(queued, [])
+    self.assertNotIn(("hold", 1), calls)
+
+  async def test_chip_numbers_follow_the_declared_carousels(self):
+    """The right carousel's slots follow the declared left one's, which did not answer: its
+    numbers refuse, nothing sent, and are never the right carousel's."""
+    driver, queued = await self.set_up_chip_slots()
+    right, calls = self.set_up_carousel(driver=driver, name="right_carousel")
+    driver._unit_blocks["left_carousel"] = dataclasses.asdict(RFID_CONFIGURATION)
+    with self.assertRaisesRegex(MantisConfigurationError, "declared left_carousel's slot 1"):
+      await driver.arm.pick_up_chip(chip_number=7)
+    self.assertEqual((queued, calls), ([], []))
+    capacity = RFID_CONFIGURATION.capacity
+    self.assertEqual(driver.arm._get_carousel_slot(chip_number=7 + capacity), (right, 1))
+    self.assertIsNone(driver.arm._get_carousel_slot(chip_number=7 + 2 * capacity))
+
+  async def test_a_v4_refuses_a_carousel_chip(self):
+    """No v4 has run a carousel pick-up: nothing is sent, not even the tag read."""
+    driver, queued = await self.set_up_chip_slots()
+    _, calls = self.set_up_carousel(driver=driver)
+    with mock.patch.object(driver.arm, "_get_generation", return_value="v4"):
+      with self.assertRaisesRegex(NotImplementedError, "a v4 has not picked up"):
+        await driver.arm.pick_up_chip(chip_number=7)
+    self.assertEqual((queued, calls), ([], []))
 
 
 # A unit's path through chip slot 1, in the arm frame, as its chip changer routes give it.

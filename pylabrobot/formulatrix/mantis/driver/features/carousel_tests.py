@@ -8,7 +8,7 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 from unittest import mock
 
 from pylabrobot.formulatrix.mantis.device import RECORDING_MANTIS_V4
@@ -53,8 +53,30 @@ CONFIGURATION = CarouselConfiguration(
 # An LC3's RFID reader angle as its data.db holds it (RfidCarousel24Offset); no turn to it is
 # captured, so no test sends one.
 RFID_CONFIGURATION = dataclasses.replace(CONFIGURATION, rfid_slot_one_position=225.029)
-# The captured turn to 15 degrees, at the 30 degrees/s it was captured at.
+# The captured turns at 30 degrees/s: to 15 degrees, its backlash approach from above, and to
+# slot 1's calibrated angle.
 TURN_TO_15_DEGREES = bytes.fromhex("00008ee3388ee33851408ee3388ee3386140000000000070a740")
+TURN_BELOW_15_DEGREES = bytes.fromhex("0000a1bd84f612da4d408ee3388ee3386140000000000070a740")
+TURN_TO_SLOT_1 = bytes.fromhex("0000ebffffff33757d408ee3388ee3386140000000000070a740")
+# A v3's path into its carousel's slot at the head, measured on the unit, from the chip changer
+# route's end: down onto the chip at line 6, the vendor's pull-back, up, and out the same way.
+CAROUSEL_PICK_UP_PATH: List[List[Optional[float]]] = [
+  [25.0, 41.177, -1.5],
+  [90.0, 18.0, -1.5],
+  [121.692, 13.813, -1.5],
+  [126.766, 18.139, -1.5],
+  [126.766, 20.139, -1.5],
+  [126.766, 20.139, 3.5],
+  [126.766, 20.139, 8.5],
+  [124.092, 20.139, 8.5],
+  [124.092, 20.686, 8.5],
+  [124.092, 20.686, 3.5],
+  [124.092, 20.686, -1.5],
+  [126.766, 18.139, -1.5],
+  [121.692, 13.813, -1.5],
+  [90.0, 18.0, -1.5],
+  [25.0, 41.177, -1.5],
+]
 HOME_PAYLOAD = bytes.fromhex("000000000100000000000000000089400000000000408f40000000000070a740")
 STOP_PAYLOAD = bytes.fromhex("0000000000000070a740")
 
@@ -252,6 +274,41 @@ class CarouselTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(MantisMotionError, message):
           await self.carousel._check_at_position(position=15)
 
+  async def test_a_hold_at_the_slot_runs_its_block_only_there_and_turns_nothing_meanwhile(self):
+    """At slot 1, by its captured turn, the block runs and a turn asked for waits for its end;
+    turns follow with their captured frames."""
+    await self.carousel.home()
+    await self.carousel.move_to_slot(slot=1, speed=30)
+    async with self.carousel._hold_at_slot(slot=1):
+      turn = asyncio.create_task(self.carousel.move_to(position=15, speed=30))
+      for _ in range(20):
+        await asyncio.sleep(0)
+      self.assertFalse(turn.done())
+      turns = [payload for _, command, payload in self.link.commands() if command == 22]
+      self.assertEqual(turns, [TURN_TO_SLOT_1])
+    await turn
+    turns = [payload for _, command, payload in self.link.commands() if command == 22]
+    self.assertEqual(turns, [TURN_TO_SLOT_1, TURN_BELOW_15_DEGREES, TURN_TO_15_DEGREES])
+
+  async def test_a_hold_refuses_a_carousel_not_read_at_the_slot(self):
+    """Off the slot (at 15 degrees, by its captured turn), still moving, or with a fault (a Mantis
+    motor's following error): the block does not run."""
+    await self.carousel.home()
+    await self.carousel.move_to(position=15, speed=30)
+    ran = []
+    with mock.patch.object(self.carousel, "move_to", new=mock.AsyncMock()):
+      for status, message in (
+        ("0400", "not at 102.63 degrees"),
+        ("0500", "is moving"),
+        (RECORDED_REPLIES[0, 20, "0100"], "following"),
+      ):
+        with self.subTest(status=status):
+          self.link.answers[0, 20, b"\0\0"] = [bytes.fromhex(status)]
+          with self.assertRaisesRegex(MantisMotionError, message):
+            async with self.carousel._hold_at_slot(slot=1):
+              ran.append(status)
+    self.assertEqual(ran, [])
+
   def test_backlash_path_respects_both_travel_limits(self):
     """When the nearest negative approach crosses the limit, use the positive equivalent."""
     self.carousel._limits = (0, 2000)
@@ -382,7 +439,10 @@ class CarouselDiscoveryTests(DriverTestCase):
     return path
 
   async def test_a_declared_carousel_is_set_up_with_its_reader(self):
-    block = dataclasses.asdict(RFID_CONFIGURATION)
+    block = {
+      **dataclasses.asdict(RFID_CONFIGURATION),
+      "pick_up_path": CAROUSEL_PICK_UP_PATH,
+    }
     driver = await self.set_up_driver(
       link=FakeLink(answers=make_answers()),
       declared_configuration_json=self.declare(left_carousel=block),
@@ -390,7 +450,12 @@ class CarouselDiscoveryTests(DriverTestCase):
     assert driver.left_carousel is not None
     self.assertIsNone(driver.right_carousel)
     self.assertEqual(driver.left_carousel.firmware_version, "4.20.6")
-    self.assertEqual(driver.left_carousel.configuration, RFID_CONFIGURATION)
+    configuration = driver.left_carousel.configuration
+    assert configuration.pick_up_path is not None
+    self.assertEqual(
+      [[line.x, line.y, line.z] for line in configuration.pick_up_path], CAROUSEL_PICK_UP_PATH
+    )
+    self.assertEqual(dataclasses.replace(configuration, pick_up_path=None), RFID_CONFIGURATION)
     self.assertEqual(self.lc3_link.commands(), [(0, 1, b""), (0, 10, b"\0\0")])
     self.assertEqual(self.lc3_reader.written[0], rfid.RFID_PING_DEVICE_COMMAND)
     saved = os.path.join(self.directory.name, "saved.json")
@@ -412,12 +477,19 @@ class CarouselDiscoveryTests(DriverTestCase):
     self.assertIsNotNone(driver.arm)
 
   async def test_a_malformed_block_refuses_setup(self):
-    block = {**dataclasses.asdict(CONFIGURATION), "capacity": "24"}
-    with self.assertRaisesRegex(MantisConfigurationError, "malformed carousel block"):
-      await self.set_up_driver(
-        link=FakeLink(answers=make_answers()),
-        declared_configuration_json=self.declare(right_carousel=block),
-      )
+    block = dataclasses.asdict(CONFIGURATION)
+    for changed, message in (
+      ({"capacity": "24"}, "malformed carousel block"),
+      ({"pick_up_path": [[1.0, 2.0]]}, "malformed carousel block"),
+      ({"pick_up_path": []}, "pick-up path is empty"),
+      ({"pick_up_path": [[126.766, 20.139, -1.5], [126.766, 20.139, 8.5]]}, "never moves"),
+    ):
+      with self.subTest(changed=changed):
+        with self.assertRaisesRegex(MantisConfigurationError, message):
+          await self.set_up_driver(
+            link=FakeLink(answers=make_answers()),
+            declared_configuration_json=self.declare(right_carousel={**block, **changed}),
+          )
     self.lc3_link.io.setup.assert_not_awaited()
 
 

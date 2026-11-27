@@ -239,12 +239,17 @@ class MantisSimulationArm(Arm):
     """Pass: a simulated arm needs only its offsets, which it always has."""
 
   async def _check_chip_slot_tag(
-    self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
+    self,
+    *,
+    slot: int,
+    action: Literal["pick_up_chip", "place_chip"],
+    carousel: Optional[MantisCarousel] = None,
   ) -> None:
     """Check a chip slot against the device's chip spots instead of its tag: a pick-up needs a
     ``MantisChip`` there, a placement none. The chip on the head counts as out of its spot.
 
-    Without chip spots (a driver used without its device), nothing is checked.
+    Without chip spots (a driver used without its device), nothing is checked. An LC3 is not
+    simulated, so ``carousel`` is always None.
     """
     if self._chip_spots is None:
       logger.info(
