@@ -593,7 +593,8 @@
 and encoder correction; on a v3 its homing settings, home frame and route to idle. Without it
 nothing is sent and <code class="docutils literal notranslate"><span class="pre">initialize</span></code> refuses; it never falls back to another unit’s values. A v3
 has no absolute encoders: what needs them raises <code class="docutils literal notranslate"><span class="pre">MantisConfigurationError</span></code>, and its moves
-after the bring-up raise <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code> until one has run on a v3.
+after the bring-up raise <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code> until one has run on a v3; the chip pick-up and
+placement from idle have.
 The <code class="docutils literal notranslate"><span class="pre">zones</span></code> and <code class="docutils literal notranslate"><span class="pre">approach_paths</span></code> blocks give the routes; without them
 the head is moved to idle only from near it, and the waste and the washes refuse. Without the <code class="docutils literal notranslate"><span class="pre">stage</span></code> block the
 deck-frame moves and <code class="docutils literal notranslate"><span class="pre">request_pose</span></code> refuse. Routes (bring-up, park, the approach paths, stop) move at the

@@ -603,10 +603,13 @@ model and the simulator follow the whole path; on a device up to 36% slower (des
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – without the slot’s path or an RFID reader; nothing is sent.</p></li>
+<li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisConfigurationError"><strong>MantisConfigurationError</strong></a> – without the slot’s path or an RFID reader; nothing moves (on a v3
+    the head’s position is read first).</p></li>
 <li><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError.html#pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError" title="pylabrobot.formulatrix.mantis.driver.errors.MantisMotionError"><strong>MantisMotionError</strong></a> – if the arm is not brought up, a chip is already on the head, or a motor
     faults; or if the tag rules the pick-up out, after the tag read only.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#NotImplementedError" title="(in Python v3.15)"><strong>NotImplementedError</strong></a> – on a v3, until a v3 has run it; nothing is sent.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#NotImplementedError" title="(in Python v3.15)"><strong>NotImplementedError</strong></a> – on a v3 not parked: it would park first, which no v3 has run; nothing
+    moves, only the head’s position is read. A v3 picks up from idle (run on two v3 units,
+    every chip slot).</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
