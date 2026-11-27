@@ -18,6 +18,7 @@ pylabrobot.resources.formulatrix.mantis\_chips
    .. autosummary::
       :toctree:
    
+      get_chip_factory
       mantis_chip_high_volume
       mantis_chip_high_volume_hi_fi
       mantis_chip_low_volume

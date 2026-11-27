@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.pick\_up\_chip
+=========================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. automethod:: MantisDevice.pick_up_chip

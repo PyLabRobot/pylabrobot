@@ -1,0 +1,6 @@
+pylabrobot.formulatrix.mantis.MantisDevice.current\_chip
+========================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis
+
+.. autoproperty:: MantisDevice.current_chip
