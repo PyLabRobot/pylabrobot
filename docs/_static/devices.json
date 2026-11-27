@@ -1971,6 +1971,19 @@
     "oem": "https://lifesciences.tecan.com/plate_readers/infinite_200_pro"
   },
   {
+    "id": "tecan-infinite-m1000-pro",
+    "vendor": "Tecan",
+    "name": "Infinite M1000 Pro",
+    "kind": "plate reader",
+    "status": "wip",
+    "needs_hardware_testing": true,
+    "api": "pylabrobot.tecan.InfiniteM1000Pro",
+    "api_version": "v1",
+    "code_slug": "tecan/infinite_m1000_pro",
+    "doc_slug": "tecan/infinite_m1000_pro/hello-world",
+    "notes": "Experimental tray movement only; measurement not yet supported."
+  },
+  {
     "id": "tecan-spark-20m",
     "vendor": "Tecan",
     "name": "Spark 20M",

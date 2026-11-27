@@ -1,0 +1,669 @@
+[
+  {
+    "command": "QQ",
+    "text": [
+      "ST"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "INIT FORCE",
+    "text": [
+      "BY#T85000",
+      "MSG4:steploss-test on EX-monochromator",
+      "MSG5:steploss-test on EM-monochromator",
+      "MSG6:grid-test on EX-monochromator",
+      "MSG7:grid-test on EM-monochromator",
+      "MSG9:initializing z-axis",
+      "MSG10:initializing y-axis",
+      "MSG11:initializing x-axis",
+      "MSG12:initializing TCAN-modul",
+      "ST"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?CONFIG TEMPERATURE,INTERVAL",
+    "text": [
+      "5"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#FUNCTIONS",
+    "text": [
+      "FI(TOP|EXSCAN|EMSCAN)|LCE|PRO|ABS(FIXED|SCAN)|SHK|HEA(PLATE)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#MODULE ADDRESS",
+    "text": [
+      "81:MAI:CPU MainModule|1:MEX:Excitation Mono|2:MEM:Emission Mono|5:ABS:Absorbance|34:TCAN:Can Module"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION MAI",
+    "text": [
+      "V_1.05_11/2011_S3LCE_ALPHA (Nov  3 2011/09.27.24)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION MEX",
+    "text": [
+      "V 1.20 Safire2 MCR  (V 1.20 Safire2 MCR )"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION MEM",
+    "text": [
+      "V 1.20 Safire2 MCR  (V 1.20 Safire2 MCR )"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION ABS",
+    "text": [
+      "V 1.00 MCR Abs 4 Channel (V 1.00 MCR Abs 4 Channel)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION TCAN",
+    "text": [
+      "V_1.00_02/2008_S3FTCAN (Feb 21 2008/17.19.16)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "MODE FI.TOP",
+    "text": [
+      "BY#T5000",
+      "ST"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?CONFIG CHECK,FLASHCOUNT",
+    "text": [
+      "66602"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EMISSION WAVELENGTH",
+    "text": [
+      "2800~8500:10"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EMISSION USAGE",
+    "text": [
+      "FI|FI"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EMISSION NAME",
+    "text": [
+      "MEM"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EMISSION BANDWIDTH",
+    "text": [
+      "50~200:10"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EMISSION ATTENUATION",
+    "text": [
+      "0|0"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EMISSION DESCRIPTION",
+    "text": [
+      "MEM"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION WAVELENGTH",
+    "text": [
+      "2300~3000:10|3010~8500:10"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION USAGE",
+    "text": [
+      "FI|FI"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION NAME",
+    "text": [
+      "MEX"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION BANDWIDTH",
+    "text": [
+      "25~100:5|50~200:10"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION ATTENUATION",
+    "text": [
+      "0|0"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION DESCRIPTION",
+    "text": [
+      "MEM"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#TIME INTEGRATION",
+    "text": [
+      "20~2000:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#TIME LAG",
+    "text": [
+      "0~2000:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#TIME READDELAY",
+    "text": [
+      "0~1000000:1000"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#GAIN VALUE",
+    "text": [
+      "0~255:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#BEAM DIAMETER",
+    "text": [
+      "1500|2500"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#READS SPEED",
+    "text": [
+      "2500|10000"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#READS NUMBER",
+    "text": [
+      "1~200:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#POSITION FIL,Z",
+    "text": [
+      "6260~26260:42"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "MODE ABS",
+    "text": [
+      "BY#T5000",
+      "ST"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?CONFIG CHECK,FLASHCOUNT",
+    "text": [
+      "66602"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION WAVELENGTH",
+    "text": [
+      "2300~3000:10|3010~10000:10"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION USAGE",
+    "text": [
+      "ABS|ABS"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION NAME",
+    "text": [
+      "MEX"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION BANDWIDTH",
+    "text": [
+      "25|50"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION ATTENUATION",
+    "text": [
+      "0|0"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#EXCITATION DESCRIPTION",
+    "text": [
+      "MEM"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#TIME READDELAY",
+    "text": [
+      "0~1000000:1000"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#READS SPEED",
+    "text": [
+      "2500|10000"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#READS NUMBER",
+    "text": [
+      "1~100:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#BEAM DIAMETER",
+    "text": [
+      "800"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING MODE",
+    "text": [
+      "ORBITAL|LINEAR|DOUBLE"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SHAKING MODE=ORBITAL",
+    "text": [
+      "+"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING AMPLITUDE",
+    "text": [
+      "1000|1500|2000|2500|3000|3500|4000|4500|5000|5500|6000"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING FREQUENCY",
+    "text": [
+      "97|68|51|43|36|31|28|25|23|21|20"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING TIME",
+    "text": [
+      "1~999:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SHAKING MODE=LINEAR",
+    "text": [
+      "+"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING AMPLITUDE",
+    "text": [
+      "2000|2500|3000|3500|4000|4500|5000|5500|6000"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING FREQUENCY",
+    "text": [
+      "109|93|79|69|62|56|52|48|45"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING TIME",
+    "text": [
+      "1~999:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SHAKING MODE=DOUBLE",
+    "text": [
+      "+"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING AMPLITUDE",
+    "text": [
+      "1000|1500|2000|2500|3000|3500"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING FREQUENCY",
+    "text": [
+      "51|36|28|24|20|18"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#SHAKING TIME",
+    "text": [
+      "1~999:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#TEMPERATURE PLATE",
+    "text": [
+      "0~420:1"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?CONFIG CHECK,HOURCOUNTER",
+    "text": [
+      "35501"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?CONFIG CHECK,FLASHCOUNT",
+    "text": [
+      "66602"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION MAI",
+    "text": [
+      "V_1.05_11/2011_S3LCE_ALPHA (Nov  3 2011/09.27.24)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "QQ",
+    "text": [
+      "ST"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#FUNCTIONS",
+    "text": [
+      "FI(TOP|EXSCAN|EMSCAN)|LCE|PRO|ABS(FIXED|SCAN)|SHK|HEA(PLATE)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?VERSION",
+    "text": [
+      "V_1.05_11/2011_S3LCE_ALPHA (Nov  3 2011/09.27.24)"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "#MEMORY MAI",
+    "text": [
+      "256,128"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?MEMORY MAI,0,8",
+    "text": [
+      "8,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      8
+    ]
+  },
+  {
+    "command": "#MEMORY MAI",
+    "text": [
+      "256,128"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "?MEMORY MAI,8,128",
+    "text": [
+      "128,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      128
+    ]
+  },
+  {
+    "command": "?MEMORY MAI,136,31",
+    "text": [
+      "31,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      31
+    ]
+  },
+  {
+    "command": "?CONFIG EXCORR 0 1000",
+    "text": [
+      "1000,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      1000
+    ]
+  },
+  {
+    "command": "?CONFIG EXCORR 1000 1000",
+    "text": [
+      "1000,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      1000
+    ]
+  },
+  {
+    "command": "?CONFIG EXCORR 2000 1000",
+    "text": [
+      "1000,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      1000
+    ]
+  },
+  {
+    "command": "?CONFIG EXCORR 3000 204",
+    "text": [
+      "204,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      204
+    ]
+  },
+  {
+    "command": "?CONFIG EMCORR 0 1000",
+    "text": [
+      "1000,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      1000
+    ]
+  },
+  {
+    "command": "?CONFIG EMCORR 1000 1000",
+    "text": [
+      "1000,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      1000
+    ]
+  },
+  {
+    "command": "?CONFIG EMCORR 2000 1000",
+    "text": [
+      "1000,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      1000
+    ]
+  },
+  {
+    "command": "?CONFIG EMCORR 3000 204",
+    "text": [
+      "204,BIN:",
+      "ST"
+    ],
+    "binary_lengths": [
+      204
+    ]
+  },
+  {
+    "command": "SIBUS MEX GSE 4 0",
+    "text": [
+      "12595"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEX GSE 4 1",
+    "text": [
+      "12594"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEX GSE 4 2",
+    "text": [
+      "12336"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEX GSE 4 3",
+    "text": [
+      "12595"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEX GSE 4 4",
+    "text": [
+      "13619"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEX GSE 4 5",
+    "text": [
+      "0"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEM GSE 4 0",
+    "text": [
+      "12596"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEM GSE 4 1",
+    "text": [
+      "12344"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEM GSE 4 2",
+    "text": [
+      "12336"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEM GSE 4 3",
+    "text": [
+      "12592"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEM GSE 4 4",
+    "text": [
+      "13625"
+    ],
+    "binary_lengths": []
+  },
+  {
+    "command": "SIBUS MEM GSE 4 5",
+    "text": [
+      "0"
+    ],
+    "binary_lengths": []
+  }
+]
