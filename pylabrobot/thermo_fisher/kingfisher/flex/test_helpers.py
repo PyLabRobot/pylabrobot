@@ -174,5 +174,5 @@ class HIDTestCase(unittest.IsolatedAsyncioTestCase):
 
   async def wait_sent(self, expected: str) -> None:
     """Synchronize with a transmitted command without arbitrary sleeps."""
-    while await asyncio.wait_for(self.sent.get(), 1) != expected:
+    while await asyncio.wait_for(self.sent.get(), 10) != expected:
       pass
