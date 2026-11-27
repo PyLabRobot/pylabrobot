@@ -1,16 +1,21 @@
 """PreciseFlex software stacks confirmed with this driver.
 
-This tracks the digital setup only - the GPL firmware, the TCS app, and the loaded
-TCS modules - not the physical configuration (links, rail, gripper), which is
-discovered into ``PreciseFlexConfiguration``. At setup the driver checks the
-discovered stack here:
+This tracks the digital setup only - the GPL firmware, the TCS app, the loaded TCS
+modules, and the PreciseVision version - not the physical configuration (links, rail,
+gripper), which is discovered into ``PreciseFlexConfiguration``. At setup the driver
+checks the discovered versions here:
 
 - ``SUPPORTED_ROBOT_TYPES`` gates the client-side kinematics. This driver's FK/IK
   is the PreciseFlex 400 two-link SCARA geometry, so other models would get
   silently-wrong joint targets and are flagged.
-- ``CONFIRMED_FIRMWARE_VERSIONS`` is the set of full (model, GPL, TCS, module-set)
-  software stacks validated against this driver; an unlisted one logs a warning
-  asking for a report so it can be added.
+- ``CONFIRMED_FIRMWARE_VERSIONS`` is the set of full (model, GPL, TCS, module-set,
+  vision) stacks validated against this driver. Each entry is one configuration that was
+  actually run end to end, so the same controller stack appears once per validated vision
+  version - including ``vision_version=None`` for the controller validated on its own
+  (no vision server). ``is_confirmed`` ignores the vision field
+  (the controller stack stands alone); ``is_confirmed_vision_version`` scans it.
+
+An unlisted version logs a warning asking for a report so it can be added.
 
 (Which modules the driver *requires* lives in ``tcs_modules.py``, a separate concern.)
 
@@ -20,6 +25,7 @@ varies by build without changing behaviour.
 
 import re
 from dataclasses import dataclass
+from typing import Optional
 
 # -- supported models & confirmed stacks -----------------------------------
 
@@ -37,10 +43,12 @@ class ConfirmedFirmware:
   gpl_version: str  # e.g. "GPL 5.1D4"
   tcs_version: str  # e.g. "TCP Command Server 3.0D4"
   modules: tuple  # one "name version" per loaded TCS module
+  vision_version: Optional[str] = None  # PreciseVision version; None = no vision run
 
 
 CONFIRMED_FIRMWARE_VERSIONS = frozenset(
   [
+    # The PF400 controller stack, validated on its own, with no vision server.
     ConfirmedFirmware(
       robot_type=12,
       gpl_version="GPL 5.1D4",
@@ -52,6 +60,21 @@ CONFIRMED_FIRMWARE_VERSIONS = frozenset(
         "PARobot Module 3.0D4",
         "SSGrip Module 3.0D4",
       ),
+      vision_version=None,
+    ),
+    # The same controller stack, validated end to end with PreciseVision 5.3.3.0.
+    ConfirmedFirmware(
+      robot_type=12,
+      gpl_version="GPL 5.1D4",
+      tcs_version="TCP Command Server 3.0D4",
+      modules=(
+        "IntelliGuide 1.0",
+        "Load-Save Module 3.0B2",
+        "PARobot Auto Center Module 3.0D3",
+        "PARobot Module 3.0D4",
+        "SSGrip Module 3.0D4",
+      ),
+      vision_version="5.3.3.0",
     ),
   ]
 )
@@ -88,6 +111,17 @@ def is_confirmed(robot_type: int, gpl_version: str, tcs_version: str, modules: t
       tuple(sorted(strip_build_date(m) for m in c.modules)),
     )
     == target
+    for c in CONFIRMED_FIRMWARE_VERSIONS
+  )
+
+
+def is_confirmed_vision_version(vision_version: object) -> bool:
+  """Whether a PreciseVision version appears in any validated stack (build dates stripped)."""
+  if vision_version is None:
+    return False
+  target = strip_build_date(str(vision_version))
+  return any(
+    c.vision_version is not None and strip_build_date(c.vision_version) == target
     for c in CONFIRMED_FIRMWARE_VERSIONS
   )
 

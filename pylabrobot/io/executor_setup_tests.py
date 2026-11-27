@@ -59,8 +59,10 @@ class ExecutorSetupTests(unittest.IsolatedAsyncioTestCase):
   async def test_cancelled_ftdi_setup_closes_device_before_executor_shutdown(self) -> None:
     io = ftdi_module.FTDI.__new__(ftdi_module.FTDI)
     io.human_readable_device_name = "mock FTDI"
+    io.ftdi_library = "libftdi"
     io._device_id = "mock"
     io._dev = None
+    io._d2xx_dev = None
     io._executor = None
     device = _ClosableDevice()
     started = threading.Event()

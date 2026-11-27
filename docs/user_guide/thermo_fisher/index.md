@@ -5,5 +5,6 @@
 
 alps/index
 btx/index
+kingfisher/index
 nanodrop_1000/index
 ```

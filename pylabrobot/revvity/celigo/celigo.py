@@ -63,6 +63,7 @@ from pylabrobot.revvity.celigo.protocol import (
   validate_payload_length,
 )
 from pylabrobot.revvity.celigo.scan import (
+  AcquisitionTiming,
   AutofocusMethod,
   BlockShape,
   FrameResult,
@@ -1698,7 +1699,7 @@ class Celigo:
     await complete_cleanup(self.turn_off_illumination())
     return result
 
-  async def _acquire_scan_position(
+  async def acquire_scan_position(
     self,
     position: ScanPosition,
     label: str,
@@ -1710,7 +1711,28 @@ class Celigo:
     settled_stage_position_mm: Tuple[float, float],
     machine_auto_exposure: bool = False,
   ) -> AcquisitionResult:
-    """Acquire one compiled scan position and extinguish illumination afterward."""
+    """Acquire one compiled scan position and extinguish illumination afterward.
+
+    The caller must first position the stage with :meth:`move_to_scan_block` for
+    this position's block. This method moves focus, optics, and galvos, but does
+    not move or verify the XY stage. Use a plan compiled for the current configuration.
+    Illumination cleanup is attempted on success, failure, and cancellation.
+
+    Args:
+      position: Frame position from the compiled plan.
+      label: Label recorded in the acquisition result, such as a well name.
+      channel: Configured illumination channel.
+      exposure_ms: Camera exposure in milliseconds, or None to keep the current value.
+      gain: Camera gain, or None to keep the current value.
+      autofocus: Image autofocus, or None to acquire without autofocus.
+      z_mm: Focus position in millimeters, or None to use the calibrated channel focus.
+      settled_stage_position_mm: Actual XY position returned by move_to_scan_block,
+        in millimeters. Recorded as acquisition metadata.
+      machine_auto_exposure: Run auto-exposure before autofocus or capture.
+
+    Returns:
+      The captured frame and actual acquisition settings and positions.
+    """
     try:
       result = await self._acquire_field(
         well=label,
@@ -1733,8 +1755,15 @@ class Celigo:
     await complete_cleanup(self.turn_off_illumination())
     return result
 
-  async def _move_to_scan_block(self, block: ScanBlock) -> Tuple[float, float]:
-    """Move safely to one compiled coarse stage position."""
+  async def move_to_scan_block(self, block: ScanBlock) -> Tuple[float, float]:
+    """Extinguish illumination, retract focus, and move XY to a compiled block.
+
+    Args:
+      block: Block from a plan compiled for the current instrument configuration.
+
+    Returns:
+      The settled XY stage position in millimeters, for acquire_scan_position.
+    """
     await self.turn_off_illumination()
     await self.z_axis.move_to(self.z_axis.config.min_position)
     settled_x_mm = await self.x_axis.move_to(block.stage_x_mm)
@@ -1754,23 +1783,48 @@ class Celigo:
       estimate_model=estimate_model,
     )
 
-  async def execute(self, plan: ScanPlan) -> ScanResult:
-    """Execute the exact frame operations in a compiled scan plan."""
-    return await self._execute_scan_plan(plan)
-
-  async def _execute_scan_plan(
+  async def execute(
     self,
     plan: ScanPlan,
+    *,
     on_frame: Optional[Callable[[FrameResult], Awaitable[None]]] = None,
     initial_brightfield_z_mm: Optional[float] = None,
+    retain_frames: bool = True,
+    before_frame: Optional[Callable[[PlannedFrame], Awaitable[None]]] = None,
   ) -> ScanResult:
-    """Execute a plan, optionally reporting each completed frame to an internal consumer."""
+    """Execute a compiled scan plan, optionally reporting each completed frame.
+
+    Args:
+      plan: Plan compiled for the current instrument configuration.
+      on_frame: Async callback awaited after each acquisition and illumination
+        cleanup, before the next frame or stage move. Exceptions and cancellation
+        propagate to the caller and stop execution of the remaining plan.
+      initial_brightfield_z_mm: Brightfield focus seed in millimeters for each block,
+        with channel offsets applied. None uses the plan's seed or calibrated focus. When autofocus
+        is requested, its result sets the focus for subsequent frames in that block.
+      retain_frames: Keep images in the returned ScanResult. False requires on_frame
+        and releases each image after the callback, keeping image memory bounded.
+      before_frame: Async callback after stage positioning and before each acquisition.
+        It can check instrument state or stop execution by raising an exception.
+
+    Returns:
+      Acquired frames when retain_frames is true, and elapsed time including callbacks.
+
+    Raises:
+      TypeError: plan is not a ScanPlan.
+      ValueError: The plan does not match the configuration or references an unknown block.
+    """
     if not isinstance(plan, ScanPlan):
       raise TypeError("plan must be a ScanPlan")
+    if not retain_frames and on_frame is None:
+      raise ValueError("on_frame is required when retain_frames is False")
     if not plan.matches_configuration(self.config):
       raise ValueError(
         "ScanPlan configuration does not match this Celigo; rebuild it with celigo.plan(...)"
       )
+
+    if initial_brightfield_z_mm is None:
+      initial_brightfield_z_mm = plan.spec.initial_brightfield_z_mm
 
     started_at = time.monotonic()
     frame_results: List[FrameResult] = []
@@ -1785,10 +1839,14 @@ class Celigo:
       block_frames.append(planned_frame)
 
     for block in plan.blocks:
-      settled_stage_position_mm = await self._move_to_scan_block(block)
+      stage_move_started = time.monotonic()
+      settled_stage_position_mm = await self.move_to_scan_block(block)
+      stage_move_elapsed = timedelta(seconds=time.monotonic() - stage_move_started)
       focused_brightfield_z_mm = initial_brightfield_z_mm
       label = block.label if block.label is not None else f"block-{block.index}"
       for frame_index, planned_frame in enumerate(frames_by_block[block.index]):
+        if before_frame is not None:
+          await before_frame(planned_frame)
         capture = planned_frame.capture
         channel_config = self._require_channel_config(capture.channel)
         channel_z_mm = (
@@ -1796,7 +1854,9 @@ class Celigo:
           if focused_brightfield_z_mm is None
           else focused_brightfield_z_mm + channel_config.z_offset_to_brightfield_mm
         )
-        acquisition = await self._acquire_scan_position(
+        acquisition_started_at = time.time()
+        acquisition_started = time.monotonic()
+        acquisition = await self.acquire_scan_position(
           position=planned_frame.position,
           label=label,
           channel=capture.channel,
@@ -1805,6 +1865,13 @@ class Celigo:
           autofocus=plan.spec.autofocus if frame_index == 0 else None,
           z_mm=channel_z_mm,
           settled_stage_position_mm=settled_stage_position_mm,
+          machine_auto_exposure=capture.machine_auto_exposure,
+        )
+        timing = AcquisitionTiming(
+          started_at=acquisition_started_at,
+          finished_at=time.time(),
+          elapsed=timedelta(seconds=time.monotonic() - acquisition_started),
+          stage_move_elapsed=stage_move_elapsed if frame_index == 0 else None,
         )
         if acquisition.focus is not None:
           focused_brightfield_z_mm = acquisition.z_mm - channel_config.z_offset_to_brightfield_mm
@@ -1815,8 +1882,10 @@ class Celigo:
           actual_z_mm=acquisition.z_mm,
           galvo_hardware_voltages=acquisition.galvo_hardware_voltages,
           focus=acquisition.focus,
+          timing=timing,
         )
-        frame_results.append(frame_result)
+        if retain_frames:
+          frame_results.append(frame_result)
         if on_frame is not None:
           await on_frame(frame_result)
 

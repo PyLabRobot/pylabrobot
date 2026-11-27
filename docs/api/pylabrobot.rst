@@ -11,6 +11,7 @@ Subpackages
 
     pylabrobot.config
     pylabrobot.generic
+    pylabrobot.lib.liquid_handling
     pylabrobot.resources
     pylabrobot.utils
 
@@ -23,19 +24,24 @@ Manufacturers
     pylabrobot.agilent
     pylabrobot.azenta
     pylabrobot.big_bear
+    pylabrobot.bmg_labtech
     pylabrobot.brooks
     pylabrobot.byonoy
     pylabrobot.cole_parmer
     pylabrobot.curiox
+    pylabrobot.formulatrix
+    pylabrobot.gyger
     pylabrobot.hamilton
     pylabrobot.high_res
     pylabrobot.inheco
     pylabrobot.kbioscience
     pylabrobot.kbiosystems
+    pylabrobot.li_cor
     pylabrobot.mettler_toledo
     pylabrobot.micronic
     pylabrobot.molecular_devices
     pylabrobot.opentrons
+    pylabrobot.paa
     pylabrobot.qinstruments
     pylabrobot.revvity
     pylabrobot.sartorius

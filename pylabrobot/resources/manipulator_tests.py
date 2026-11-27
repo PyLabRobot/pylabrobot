@@ -153,7 +153,9 @@ class TestAnAssembledArm(unittest.TestCase):
     from_member, from_tool = self.wrist(forearm, hand)
     self.assertEqual(from_member, Coordinate(310, 120, 10))
     self.assertEqual(from_member, from_tool)
-    self.assertEqual(absolute(hand, hand.tool_center_point), Coordinate(447.7, 120, 10))
+    self.assertEqual(
+      absolute(hand, hand.proximal_joint + hand.tool_center_point), Coordinate(447.7, 120, 10)
+    )
 
   def test_the_tool_rides_the_member_it_is_mounted_on(self):
     forearm, hand = self.arm()
@@ -163,7 +165,9 @@ class TestAnAssembledArm(unittest.TestCase):
     self.assertEqual(from_member, Coordinate(110, 320, 10))
     self.assertEqual(from_member, from_tool)
     # The tool did not turn on its own joint, so it swung round with the member carrying it.
-    self.assertEqual(absolute(hand, hand.tool_center_point), Coordinate(110, 457.7, 10))
+    self.assertEqual(
+      absolute(hand, hand.proximal_joint + hand.tool_center_point), Coordinate(110, 457.7, 10)
+    )
 
   def test_the_tool_also_turns_on_its_own_joint(self):
     forearm, hand = self.arm()
@@ -175,7 +179,9 @@ class TestAnAssembledArm(unittest.TestCase):
     self.assertEqual(from_member, Coordinate(110, 320, 10))
     self.assertEqual(from_member, from_tool)
     # Two right angles, so the grip centre now points back the way the member came.
-    self.assertEqual(absolute(hand, hand.tool_center_point), Coordinate(-27.7, 320, 10))
+    self.assertEqual(
+      absolute(hand, hand.proximal_joint + hand.tool_center_point), Coordinate(-27.7, 320, 10)
+    )
 
   def test_the_fingers_travel_with_the_tool(self):
     forearm, hand = self.arm()

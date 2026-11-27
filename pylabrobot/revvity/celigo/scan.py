@@ -138,11 +138,12 @@ class ScanEstimateModel:
 
 @dataclass(frozen=True)
 class Capture:
-  """One channel and its camera settings."""
+  """One channel and its camera settings, optionally selecting exposure for each frame."""
 
   channel: str
   exposure_ms: Optional[float] = None
   gain: Optional[float] = None
+  machine_auto_exposure: bool = False
 
   def __post_init__(self) -> None:
     if not isinstance(self.channel, str) or not self.channel.strip():
@@ -159,14 +160,18 @@ class Capture:
 
 
 @dataclass(frozen=True)
-class _PointGeometry:
+class PointGeometry:
+  """Labeled sample centers and the frame grid acquired around each center."""
+
   centers_mm: Tuple[CoordinateMM, ...]
   labels: Tuple[Optional[str], ...]
   block_shape: BlockShape
 
 
 @dataclass(frozen=True)
-class _RandomGeometry:
+class RandomGeometry:
+  """Seeded block sampling within physical bounds."""
+
   bounds: ScanRegion
   count: int
   block_shape: BlockShape
@@ -175,30 +180,35 @@ class _RandomGeometry:
 
 
 @dataclass(frozen=True)
-class _FullCoverageGeometry:
+class FullCoverageGeometry:
+  """Physical bounds to cover with calibrated frame grids."""
+
   bounds: ScanRegion
 
 
-_SpecGeometry = Union[_PointGeometry, _RandomGeometry, _FullCoverageGeometry]
+ScanGeometry = Union[PointGeometry, RandomGeometry, FullCoverageGeometry]
 
 
 @dataclass(frozen=True)
 class ScanSpec:
   """A complete, reusable description of scan geometry and acquisition settings."""
 
-  geometry: _SpecGeometry
+  geometry: ScanGeometry
   captures: Tuple[Capture, ...]
   autofocus: Optional[AutofocusMethod]
+  initial_brightfield_z_mm: Optional[float] = None
 
   def __post_init__(self) -> None:
     if not isinstance(
       self.geometry,
-      (_PointGeometry, _RandomGeometry, _FullCoverageGeometry),
+      (PointGeometry, RandomGeometry, FullCoverageGeometry),
     ):
       raise TypeError("geometry must be created by a ScanSpec constructor")
     if not self.captures or any(not isinstance(capture, Capture) for capture in self.captures):
       raise ValueError("captures must contain at least one Capture")
     _validate_autofocus(self.autofocus)
+    if self.initial_brightfield_z_mm is not None:
+      _validate_finite(self.initial_brightfield_z_mm, "initial_brightfield_z_mm")
 
   @classmethod
   def wells(
@@ -210,8 +220,10 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a scan at named well centers without retaining the plate."""
     if not isinstance(plate, Plate):
@@ -226,8 +238,9 @@ class ScanSpec:
     centers = tuple(well_to_sample_mm(plate, well) for well in normalized_wells)
     return cls(
       geometry=_point_geometry(centers, block_shape, normalized_wells),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -239,15 +252,18 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create an anonymous scan centered at explicit sample-relative points."""
     normalized_centers = _normalize_centers(centers_mm)
     return cls(
       geometry=_point_geometry(normalized_centers, block_shape),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -262,8 +278,10 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a reproducible random sample of blocks within physical bounds."""
     _validate_scan_region(bounds)
@@ -274,15 +292,16 @@ class ScanSpec:
     if not isinstance(non_overlapping, bool):
       raise ValueError("non_overlapping must be a boolean")
     return cls(
-      geometry=_RandomGeometry(
+      geometry=RandomGeometry(
         bounds=bounds,
         count=count,
         block_shape=validated_shape,
         seed=seed,
         non_overlapping=non_overlapping,
       ),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
   @classmethod
@@ -293,15 +312,18 @@ class ScanSpec:
     channel: Optional[str] = None,
     exposure_ms: Optional[float] = None,
     gain: Optional[float] = None,
+    machine_auto_exposure: bool = False,
     captures: Optional[Sequence[Capture]] = None,
     autofocus: Optional[AutofocusMethod] = None,
+    initial_brightfield_z_mm: Optional[float] = None,
   ) -> "ScanSpec":
     """Create a scan that covers all physical bounds."""
     _validate_scan_region(bounds)
     return cls(
-      geometry=_FullCoverageGeometry(bounds=bounds),
-      captures=_normalize_captures(channel, exposure_ms, gain, captures),
+      geometry=FullCoverageGeometry(bounds=bounds),
+      captures=_normalize_captures(channel, exposure_ms, gain, captures, machine_auto_exposure),
       autofocus=autofocus,
+      initial_brightfield_z_mm=initial_brightfield_z_mm,
     )
 
 
@@ -396,6 +418,20 @@ class ScanPlan:
 
 
 @dataclass(frozen=True)
+class AcquisitionTiming:
+  """Host Unix timestamps and monotonic durations, excluding image persistence.
+
+  elapsed includes acquisition and illumination cleanup. stage_move_elapsed is
+  present only on the first image after a coarse-stage move and is separate from elapsed.
+  """
+
+  started_at: float
+  finished_at: float
+  elapsed: timedelta
+  stage_move_elapsed: Optional[timedelta] = None
+
+
+@dataclass(frozen=True)
 class FrameResult:
   """A captured frame linked to the exact operation that produced it."""
 
@@ -405,6 +441,7 @@ class FrameResult:
   actual_z_mm: float
   galvo_hardware_voltages: Tuple[float, float]
   focus: Optional["FocusResult"]
+  timing: Optional[AcquisitionTiming] = None
 
 
 @dataclass(frozen=True)
@@ -462,6 +499,16 @@ def build_scan_plan(
     raise TypeError("estimate_model must be a ScanEstimateModel")
 
   capture_geometries = tuple(_capture_geometry(config, capture) for capture in spec.captures)
+  if spec.initial_brightfield_z_mm is not None:
+    z_axis = config.hardware.z_axis
+    if z_axis is None:
+      raise ValueError("Z travel must be configured for an explicit focus seed")
+    for capture in spec.captures:
+      z = (
+        spec.initial_brightfield_z_mm + config.channels[capture.channel].z_offset_to_brightfield_mm
+      )
+      if not z_axis.min_position <= z <= z_axis.max_position:
+        raise ValueError("initial channel focus is outside Z travel")
   layouts = _build_layouts(spec.geometry, capture_geometries)
   coordinate_systems = CoordinateSystems.from_config(
     config.calibration,
@@ -534,17 +581,27 @@ def _normalize_captures(
   exposure_ms: Optional[float],
   gain: Optional[float],
   captures: Optional[Sequence[Capture]],
+  machine_auto_exposure: bool = False,
 ) -> Tuple[Capture, ...]:
   if captures is not None:
-    if channel is not None or exposure_ms is not None or gain is not None:
-      raise ValueError("captures cannot be combined with channel, exposure_ms, or gain")
+    if channel is not None or exposure_ms is not None or gain is not None or machine_auto_exposure:
+      raise ValueError(
+        "captures cannot be combined with channel, exposure_ms, gain, or machine_auto_exposure"
+      )
     normalized = tuple(captures)
     if not normalized or any(not isinstance(capture, Capture) for capture in normalized):
       raise ValueError("captures must contain at least one Capture")
     return normalized
   if channel is None:
     raise ValueError("provide channel or captures")
-  return (Capture(channel=channel, exposure_ms=exposure_ms, gain=gain),)
+  return (
+    Capture(
+      channel=channel,
+      exposure_ms=exposure_ms,
+      gain=gain,
+      machine_auto_exposure=machine_auto_exposure,
+    ),
+  )
 
 
 def _normalize_centers(centers_mm: Sequence[CoordinateMM]) -> Tuple[CoordinateMM, ...]:
@@ -566,7 +623,7 @@ def _point_geometry(
   centers_mm: Sequence[CoordinateMM],
   block_shape: BlockShape,
   labels: Optional[Sequence[str]] = None,
-) -> _PointGeometry:
+) -> PointGeometry:
   centers = _normalize_centers(centers_mm)
   shape = _validate_block_shape(block_shape)
   if labels is None:
@@ -578,7 +635,7 @@ def _point_geometry(
     if any(not isinstance(label, str) or not label for label in values):
       raise ValueError("labels must contain non-empty strings")
     normalized_labels = tuple(values)
-  return _PointGeometry(
+  return PointGeometry(
     centers_mm=centers,
     labels=normalized_labels,
     block_shape=shape,
@@ -647,18 +704,18 @@ def _capture_geometry(config: CeligoConfig, capture: Capture) -> _CaptureGeometr
 
 
 def _build_layouts(
-  spec_geometry: _SpecGeometry,
+  spec_geometry: ScanGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
-  if isinstance(spec_geometry, _PointGeometry):
+  if isinstance(spec_geometry, PointGeometry):
     return _point_layouts(spec_geometry, capture_geometries)
-  if isinstance(spec_geometry, _RandomGeometry):
+  if isinstance(spec_geometry, RandomGeometry):
     return _random_layouts(spec_geometry, capture_geometries)
   return _full_coverage_layouts(spec_geometry, capture_geometries)
 
 
 def _point_layouts(
-  geometry: _PointGeometry,
+  geometry: PointGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
@@ -676,7 +733,7 @@ def _point_layouts(
 
 
 def _random_layouts(
-  geometry: _RandomGeometry,
+  geometry: RandomGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   _validate_shape_for_captures(geometry.block_shape, capture_geometries)
@@ -842,7 +899,7 @@ def _path_length(
 
 
 def _full_coverage_layouts(
-  geometry: _FullCoverageGeometry,
+  geometry: FullCoverageGeometry,
   capture_geometries: Tuple[_CaptureGeometry, ...],
 ) -> List[_BlockLayout]:
   x_counts = [
@@ -1199,12 +1256,12 @@ def _union_area(regions: Sequence[ScanRegion]) -> float:
   return area
 
 
-def _describe_geometry(geometry: _SpecGeometry) -> str:
-  if isinstance(geometry, _PointGeometry):
+def _describe_geometry(geometry: ScanGeometry) -> str:
+  if isinstance(geometry, PointGeometry):
     columns, rows = geometry.block_shape
     kind = "wells" if any(label is not None for label in geometry.labels) else "points"
     return f"{kind}(count={len(geometry.centers_mm)}, block_shape={columns}x{rows})"
-  if isinstance(geometry, _RandomGeometry):
+  if isinstance(geometry, RandomGeometry):
     columns, rows = geometry.block_shape
     return (
       f"random(count={geometry.count}, block_shape={columns}x{rows}, "

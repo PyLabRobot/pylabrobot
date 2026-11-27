@@ -18,7 +18,7 @@ class ByonoyResourceTests(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(deck=self.deck, backend=unittest.mock.Mock(spec=LiquidHandlerBackend))
     self.plate_carrier = PLT_CAR_L5_DWP(name="plate_carrier")
     self.plate_carrier[1] = self.adapter
-    self.deck.assign_child_resource(self.plate_carrier, rails=28)
+    self.deck.assign_child_resource(self.plate_carrier, track=28)
     self.adapter.assign_child_resource(self.reader)
     self.plate_carrier[2] = self.plate = cellvis_96_wellplate_350uL_Fb(name="plate")
 

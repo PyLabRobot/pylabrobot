@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -179,10 +180,12 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     event_bus = EventBus()
     event_bus.subscribe(events.append)
 
+    # Keep background workers on the real asyncio.sleep.
     with patch(
-      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio.sleep",
-      new_callable=AsyncMock,
-    ) as sleep:
+      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio",
+      wraps=asyncio,
+      sleep=AsyncMock(),
+    ) as mock_asyncio:
       with use_event_bus(event_bus):
         await temperature_controller.hold_temperature(duration=120.0)
 
@@ -199,7 +202,7 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(events[0].context["duration"], 120.0)
     self.assertEqual(events[0].context["target_temperature"], 37.0)
     self.assertNotIn("duration_s", events[0].context)
-    sleep.assert_awaited_once_with(120.0)
+    mock_asyncio.sleep.assert_awaited_once_with(120.0)
     backend.set_temperature.assert_not_awaited()
 
   async def test_hold_temperature_failure_emits_invocation_context(self):
@@ -246,15 +249,16 @@ class TemperatureControllerEventTests(unittest.IsolatedAsyncioTestCase):
     event_bus.subscribe(events.append)
 
     with patch(
-      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio.sleep",
-      new_callable=AsyncMock,
-    ) as sleep:
+      "pylabrobot.legacy.temperature_controlling.temperature_controller.asyncio",
+      wraps=asyncio,
+      sleep=AsyncMock(),
+    ) as mock_asyncio:
       with use_event_bus(event_bus):
         await temperature_controller.hold_temperature(120.0)
 
     self.assertEqual(events[0].context["target_temperature"], 37.0)
     self.assertEqual(events[0].context["duration"], 120.0)
-    sleep.assert_awaited_once_with(120.0)
+    mock_asyncio.sleep.assert_awaited_once_with(120.0)
 
 
 class _FakeBackend(TemperatureControllerBackend):

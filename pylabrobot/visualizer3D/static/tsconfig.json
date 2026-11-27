@@ -1,0 +1,30 @@
+{
+  // Type-checking for the viewer's JavaScript, without converting it to TypeScript.
+  //
+  // Nothing is compiled: `noEmit` means the only output is diagnostics. VS Code picks this file up
+  // automatically and checks the JS in the editor; on the command line it is
+  //
+  //     npx tsc --noEmit -p pylabrobot/visualizer3D/static
+  //
+  // `strict` is deliberately off. Turning it on against untyped JS reports far more than anyone
+  // will act on, and buries the findings that matter. What is enabled here catches the class of
+  // mistake this code has actually hit: a misspelled property, a call with the wrong number of
+  // arguments, a variable used before it is assigned.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.js", "types/*.d.ts"],
+  "exclude": ["vendor"]
+}

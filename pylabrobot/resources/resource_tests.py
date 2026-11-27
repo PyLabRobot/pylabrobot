@@ -20,8 +20,11 @@ from pylabrobot.resources.barcode import Barcode
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError, ResourceNotFoundError
+from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
 from pylabrobot.utils.linalg import matrix_multiply_3x3, matrix_vector_multiply_3x3
@@ -598,6 +601,21 @@ class TestResource(unittest.TestCase):
           for anchors in (("l", "f", "b"), ("c", "c", "c"), ("r", "b", "t")):
             self.assertEqual(node.get_absolute_location(*anchors), level_by_level(node, *anchors))
 
+  def test_location_wrt_a_turned_resource_is_along_its_axes(self):
+    """A location with respect to a turned resource is along that resource's axes."""
+    for angle in (0, 90, 180, -90, 37.5):
+      with self.subTest(angle=angle):
+        world = Resource("world", size_x=5000, size_y=5000, size_z=1000)
+        world.location = Coordinate.zero()
+        body = Resource("body", size_x=600, size_y=400, size_z=300, rotation=Rotation(z=angle))
+        world.assign_child_resource(body, location=Coordinate(2000, 2000, 0))
+        part = Resource("part", size_x=10, size_y=10, size_z=10)
+        body.assign_child_resource(part, location=Coordinate(10, 20, 30))
+        for anchors, expected in ((("l", "f", "b"), (10, 20, 30)), (("c", "c", "c"), (15, 25, 35))):
+          got = part.get_location_wrt(body, *anchors)
+          for axis, value in zip("xyz", expected):
+            self.assertAlmostEqual(getattr(got, axis), value, places=3)
+
   def test_rotate_composes_around_fixed_axes(self):
     resource = Resource("resource", size_x=10, size_y=10, size_z=10, rotation=Rotation(z=90))
     expected = matrix_multiply_3x3(
@@ -1097,7 +1115,12 @@ class TestResourceMetadata(unittest.TestCase):
         size_x=10,
         size_y=10,
         make_tip=lambda name: Tip(
-          name=name, has_filter=False, maximal_volume=10, fitting_depth=1, total_tip_length=10
+          name=name,
+          has_filter=False,
+          maximal_volume=10,
+          fitting_depth=1,
+          diameter=TIP_DIAMETER[TipSize.STANDARD_VOLUME],
+          size_z=10,
         ),
         metadata=meta,
       ),
@@ -1281,16 +1304,10 @@ class TestResourceMetadata(unittest.TestCase):
           self.assertEqual(r.serialize()["resource"]["metadata"], meta)
         else:
           self.assertEqual(r.serialize()["metadata"], meta)
-        if name == "ResourceStack":
-          with self.assertRaises(
-            TypeError
-          ):  # unrelated to metadata: ResourceStack.copy() is broken
-            r.copy()
-        else:
-          r_copy = r.copy()
-          self.assertEqual(r_copy.metadata, meta)
-          self.assertEqual(r_copy.name, r.name)
-          self.assertEqual(r_copy, r)
+        r_copy = r.copy()
+        self.assertEqual(r_copy.metadata, meta)
+        self.assertEqual(r_copy.name, r.name)
+        self.assertEqual(r_copy, r)
 
   def test_deserialize_same_named_class_via_module_alias(self):
     # Simulate a class imported under two module paths: find_subclass returns a
@@ -1500,25 +1517,80 @@ class TestNameIndex(unittest.TestCase):
     with self.assertRaises(ValueError):
       second.assign_child_resource(holder, location=Coordinate.zero())
 
-  def test_moving_between_parents_goes_through_the_old_one(self):
-    """A resource is moved by taking it off one parent and putting it on another, in that order.
-
-    Handing it straight to the new parent is refused, because the name is checked while the old
-    parent still holds it. Long-standing behaviour, unrelated to the index, and worth pinning: it is
-    why a plate changing carriers reaches a subscriber as an unassignment and an assignment.
-    """
+  def test_moving_within_the_tree_keeps_the_name(self):
+    """A resource can go straight to another parent in the same tree; its name is still its own."""
     root = self.block("root")
     left, right = self.block("left"), self.block("right")
     root.assign_child_resource(left, location=Coordinate.zero())
     root.assign_child_resource(right, location=Coordinate.zero())
 
     plate = self.block("plate")
+    plate.assign_child_resource(self.block("well"), location=Coordinate.zero())
     left.assign_child_resource(plate, location=Coordinate.zero())
 
-    with self.assertRaises(ValueError):
-      right.assign_child_resource(plate, location=Coordinate.zero())
-
-    left.unassign_child_resource(plate)
     right.assign_child_resource(plate, location=Coordinate.zero())
     self.assertIs(plate.parent, right)
-    self.assertEqual(root.get_resource("plate"), plate)
+    self.assertEqual(left.children, [])
+    with self.assertRaises(ResourceNotFoundError):
+      left.get_resource("plate")
+    self.assertIs(root.get_resource("plate"), plate)
+    self.assertIs(root.get_resource("well"), plate.children[0])
+
+  def test_moving_within_the_tree_unassigns_then_assigns(self):
+    """A move inside one tree reaches subscribers as an unassignment and then an assignment, and
+    leaves the tree's map of names the same as a fresh walk of the tree."""
+    root = self.block("root")
+    left, right = self.block("left"), self.block("right")
+    root.assign_child_resource(left, location=Coordinate.zero())
+    root.assign_child_resource(right, location=Coordinate.zero())
+    plate = self.block("plate")
+    well = self.block("well")
+    plate.assign_child_resource(well, location=Coordinate.zero())
+    well.assign_child_resource(self.block("liquid"), location=Coordinate.zero())
+    left.assign_child_resource(plate, location=Coordinate.zero())
+
+    calls = []
+    root.register_will_assign_resource_callback(lambda r: calls.append(("will_assign", r.name)))
+    root.register_will_unassign_resource_callback(lambda r: calls.append(("will_unassign", r.name)))
+    root.register_did_unassign_resource_callback(lambda r: calls.append(("did_unassign", r.name)))
+    root.register_did_assign_resource_callback(lambda r: calls.append(("did_assign", r.name)))
+
+    right.assign_child_resource(plate, location=Coordinate.zero())
+    self.assertEqual(
+      calls,
+      [
+        ("will_assign", "plate"),
+        ("will_unassign", "plate"),
+        ("did_unassign", "plate"),
+        ("did_assign", "plate"),
+      ],
+    )
+    self.assertEqual(root._resources(), {r.name: r for r in [root] + root.get_all_children()})
+
+  def test_moving_within_the_tree_into_a_stack(self):
+    """A plate goes from a holder onto a stack in the same tree, and lands on the stack's top."""
+    root = self.block("root")
+    holder = ResourceHolder("holder", size_x=10, size_y=10, size_z=10)
+    stack = ResourceStack("stack", direction="z")
+    root.assign_child_resource(holder, location=Coordinate.zero())
+    root.assign_child_resource(stack, location=Coordinate(20, 0, 0))
+    stack.assign_child_resource(self.block("bottom"))
+
+    plate = self.block("plate")
+    holder.assign_child_resource(plate)
+    stack.assign_child_resource(plate)
+    self.assertIsNone(holder.resource)
+    self.assertIs(stack.get_top_item(), plate)
+    self.assertEqual(plate.location, Coordinate(0, 0, 10))
+    self.assertIs(root.get_resource("plate"), plate)
+
+  def test_a_resource_on_the_same_parent_is_still_refused(self):
+    """Assigning a resource again to its own parent is refused: a parent such as a stack places a
+    new child from its current children, which still include that resource."""
+    root = self.block("root")
+    plate = self.block("plate")
+    root.assign_child_resource(plate, location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(plate, location=Coordinate(1, 2, 3))
+    self.assertEqual(root.children, [plate])
+    self.assertEqual(plate.location, Coordinate.zero())

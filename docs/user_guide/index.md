@@ -18,6 +18,7 @@ getting-started/units
 :hidden:
 
 machines
+needs-testing
 definitions
 generic/index
 00_liquid-handling/_liquid-handling
@@ -31,19 +32,24 @@ generic/index
 agilent/index
 azenta/index
 big_bear/index
+bmg_labtech/index
 brooks/index
 byonoy/index
 cole_parmer/index
 curiox/index
+formulatrix/index
+gyger/index
 hamilton/index
 high_res/index
 inheco/index
 kbioscience/index
 kbiosystems/index
+li_cor/index
 mettler_toledo/index
 micronic/index
 molecular_devices/index
 opentrons/index
+paa/index
 qinstruments/index
 revvity/index
 sartorius/index

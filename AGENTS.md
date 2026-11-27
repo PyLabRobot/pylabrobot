@@ -12,6 +12,10 @@ configuration side projects.
 **Never drive real hardware without explicit, per-run approval.** Approval from a previous run does
 not carry over.
 
+## Testing judgment
+
+Add tests when they meaningfully cover behavior that could regress; do not test every request by default.
+
 ## Required reading
 
 Before making any change, read the
@@ -21,6 +25,8 @@ Read the additional guide when the task involves:
 
 - **New device drivers or hello-world notebooks:**
   [`docs/contributor_guide/device-driver-guide.md`](docs/contributor_guide/device-driver-guide.md)
+- **Resource definitions:**
+  [`docs/contributor_guide/contributing-new-resources.md`](docs/contributor_guide/contributing-new-resources.md)
 - **Device registry, tables, and cards:**
   [`docs/contributor_guide/device-registry.md`](docs/contributor_guide/device-registry.md)
 

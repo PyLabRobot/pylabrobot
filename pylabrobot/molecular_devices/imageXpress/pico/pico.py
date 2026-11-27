@@ -322,9 +322,9 @@ class Pico:
       raise RuntimeError("Backend not set up. Call setup() first.")
     return self._channel
 
-  def _lock_metadata(self) -> List[Tuple[str, bytes]]:
+  def _lock_metadata(self) -> Tuple[Tuple[str, bytes], ...]:
     assert self._lock_id is not None
-    return [(_LOCK_META_KEY, metadata_lock_identifier(self._lock_id))]
+    return ((_LOCK_META_KEY, metadata_lock_identifier(self._lock_id)),)
 
   async def _relock(self) -> None:
     try:

@@ -83,3 +83,71 @@ BTX Gemini X2
   :recursive:
 
     BTXHT200
+
+KingFisher Presto
+-----------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.presto
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    KingFisherPresto
+    PrestoError
+    PrestoEvent
+    PrestoStatus
+    ProtocolDuration
+    ProtocolStep
+    ProtocolTimeLeft
+
+KingFisher Flex
+---------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    KingFisherFlex
+    FlexError
+    FlexEvent
+    FlexRunResult
+    FlexTranscriptEntry
+    FlexProtocol
+    FlexBoundProtocol
+    FlexAction
+    FlexManualHandler
+    FlexStartAcknowledgement
+    FlexProtocolError
+    FlexProtocolIssue
+    FlexCommand
+    FlexPlate
+    FlexPlateHolder
+    FlexDispense
+    FlexTip
+    FlexPrompt
+    read_flex_bdz
+
+BindIt protocol files
+---------------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.bdz
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    BdzProtocol
+    ProtocolTip
+    MixStep
+    SamplePlate
+    Reagent
+    WellGroup
+    read_bdz
+    write_bdz
+    bdz_variant

@@ -1,6 +1,7 @@
+import math
 import re
 from itertools import groupby
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -210,6 +211,49 @@ def create_equally_spaced_y(
     **kwargs,
   )
   return items[0]
+
+
+def compute_circle_child_poses(
+  n: int,
+  radius: float,
+  z: float = 0,
+  orientation: Optional[Literal["outwards", "inwards"]] = "outwards",
+) -> List[Tuple[Coordinate, float]]:
+  """Compute n poses evenly spaced on a circle, relative to the circle's front left bottom.
+
+  The circle's center is at (radius, radius, z); the first point is at +x, then counterclockwise.
+
+  Args:
+    n: number of poses.
+    radius: circle radius in mm.
+    z: height of all poses in mm.
+    orientation: which way rotation_z turns a resource's front, away from or towards the center.
+      None leaves every front facing -y (rotation_z 0).
+
+  Returns:
+    (position, rotation_z) per pose: rotation_z in degrees turns a resource's front to face
+    `orientation`.
+  """
+  if n < 1:
+    raise ValueError(f"n must be at least 1, got {n}")
+  if radius < 0:
+    raise ValueError(f"radius must be non-negative, got {radius}")
+  if orientation not in ("outwards", "inwards", None):
+    raise ValueError(f"orientation must be 'outwards', 'inwards' or None, got {orientation!r}")
+  poses = []
+  for i in range(n):
+    angle = 360 * i / n
+    position = Coordinate(
+      x=radius + radius * math.cos(math.radians(angle)),
+      y=radius + radius * math.sin(math.radians(angle)),
+      z=float(z),
+    )
+    if orientation is None:
+      rotation_z = 0.0
+    else:
+      rotation_z = (angle + (90 if orientation == "outwards" else 270)) % 360
+    poses.append((position, rotation_z))
+  return poses
 
 
 def create_ordered_items_2d(

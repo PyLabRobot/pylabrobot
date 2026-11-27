@@ -20,9 +20,21 @@ Keep it small and idiomatic to PyLabRobot.
 - **Stay OS-agnostic:** no OS-specific libraries or DLLs. Running on Windows, Mac, and Linux is what keeps experiments portable and reproducible.
 - **Use `pylabrobot.io` for all device communication.** Use the appropriate PyLabRobot transport (`USB`, `Serial`, `FTDI`, `HID`, `Socket`, etc.) instead of calling PyUSB, pyserial, hidapi, raw sockets, vendor DLLs, or OS APIs directly from a device driver. If a required transport capability is missing, add it to `pylabrobot.io` rather than bypassing the abstraction.
 - **Async `setup()` / `stop()`** plus public operation methods over those `pylabrobot.io` transport primitives.
+- **Leave the device in the state you found it at each lifecycle boundary.** Restore changes made for a `setup()` / `stop()` lifecycle in `stop()`, and restore per-command changes before the command finishes. If the driver needs to modify device memory, registers, or configuration, read and save the original values first and restore those exact values at the end of the relevant scope, not assumed defaults. Ensure cleanup also runs on errors and cancellation, including partial setup failures.
 - **Log important device events.** Define a module logger with `logger = logging.getLogger(__name__)` and use it for meaningful lifecycle events, operations, state changes, recoveries, and faults. Use the appropriate log level and structured `%`-style arguments; don't use `print()` for runtime status.
 - **Prefer string `Literal[...]` over enums**, especially anything user-facing. A `Literal["standard", "head", "pump"]` argument plus an internal dict mapping to wire codes reads better at the call site than an enum import. `IntEnum` is fine in narrow internal cases (e.g. a fixed set of wire/register codes never exposed to callers).
 - **API docs:** add `docs/api/pylabrobot.<vendor>.rst` plus a line in `docs/api/pylabrobot.rst`.
+
+### Share nothing between device drivers
+
+Each driver stands alone: one device's package never imports another's. What more than one device needs goes in
+`pylabrobot.lib`, which imports no device and nothing from `pylabrobot.legacy`:
+
+- **`pylabrobot.lib.liquid_handling`** plans pipetting for any multi-channel pipette device: where channels go
+  inside a container (`channel_positioning.compute_channel_offsets`) and which channels can reach their targets in
+  one X/Y move (`pipette_batch_scheduling.plan_batches`). It is pure and synchronous. The device supplies its
+  per-channel minimum spacing and executes the plan with its own moves; `hamilton/prep/driver/features/pipettes_tests.py` and
+  `hamilton/star/driver/features/pipettes_tests.py` show the pattern.
 
 ### Idempotent public API
 

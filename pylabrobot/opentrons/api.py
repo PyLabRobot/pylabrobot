@@ -6,6 +6,9 @@ from pylabrobot.io.http import HTTP, HTTPError
 from pylabrobot.opentrons.errors import OpentronsError, OpentronsProtocolError
 from pylabrobot.opentrons.types import (
   CommandInfo,
+  DeckFixture,
+  DoorStatus,
+  InstrumentInfo,
   LabwareIdentity,
   ModuleInfo,
   Mount,
@@ -39,6 +42,23 @@ class OpentronsAPI:
 
   async def get_health(self) -> RobotInfo:
     return RobotInfo.from_response(await self._io.request("GET", "/health"))
+
+  async def get_instruments(self) -> Tuple[InstrumentInfo, ...]:
+    """Read Flex instrument identities before binding them to a run.
+
+    This endpoint can refresh robot-side instrument state; do not use it to
+    poll tip presence during pipetting. Use getTipPresence commands instead.
+    """
+    response = await self._io.request("GET", "/instruments")
+    return tuple(InstrumentInfo.from_response(data) for data in _data_list(response))
+
+  async def get_deck_configuration(self) -> Tuple[DeckFixture, ...]:
+    """Read the Flex's installed deck fixtures."""
+    response = await self._io.request("GET", "/deck_configuration")
+    fixtures = _object(response.get("data")).get("cutoutFixtures")
+    if not isinstance(fixtures, list):
+      raise OpentronsProtocolError("Expected a list of deck cutout fixtures")
+    return tuple(DeckFixture.from_response(_object(fixture)) for fixture in fixtures)
 
   async def get_mounted_pipettes(self) -> Tuple[MountedPipette, ...]:
     """Read the OT-2 mount endpoint without loading instruments into a run."""
@@ -122,6 +142,30 @@ class OpentronsAPI:
   async def home(self) -> None:
     """Home the OT-2 gantry and pipette axes through the robot endpoint."""
     await self._io.request("POST", "/robot/home", {"target": "robot"})
+
+  async def get_rail_lights(self) -> bool:
+    """Read whether the OT-2's rail lights are on.
+
+    Raises:
+      OpentronsProtocolError: If the response holds no boolean ``on``.
+    """
+    on = _object(await self._io.request("GET", "/robot/lights")).get("on")
+    if not isinstance(on, bool):
+      raise OpentronsProtocolError(f"Expected a boolean for 'on', got {on!r}")
+    return on
+
+  async def set_rail_lights(self, on: bool) -> None:
+    """Turn the OT-2's rail lights on or off through the robot endpoint.
+
+    Args:
+      on: True for on, False for off.
+    """
+    await self._io.request("POST", "/robot/lights", {"on": on})
+
+  async def get_door_status(self) -> DoorStatus:
+    """Read the OT-2's door switch."""
+    response = await self._io.request("GET", "/robot/door/status")
+    return DoorStatus.from_response(_object(response.get("data")))
 
   async def submit_command(
     self,

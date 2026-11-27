@@ -23,7 +23,7 @@ from typing import Awaitable, Callable, Optional
 
 from pylabrobot.io.socket import Socket
 
-from .errors import OperationInterrupted
+from .driver.errors import OperationInterrupted
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +74,8 @@ async def halt_on_interrupt(stop_action: Callable[[], Awaitable[None]]):
 
   On ``KeyboardInterrupt`` or ``asyncio.CancelledError``, runs ``stop_action`` to completion
   (protected against a second interrupt), then re-raises ``CancelledError`` or converts a
-  ``KeyboardInterrupt`` to ``OperationInterrupted``. Any other exception (e.g. a ``PreciseFlexError``
-  from an error reply, as an E-stop produces) propagates unchanged.
+  ``KeyboardInterrupt`` to ``OperationInterrupted``. Any other exception (e.g. a
+  ``PreciseFlexError`` from an error reply, as an E-stop produces) propagates unchanged.
   """
   try:
     yield

@@ -124,9 +124,11 @@ class PlateAdapter(Resource):
     align the `Plate` well-grid with the adapter's hole grid."""
 
     # Calculate Plate information (which is not directly accessible from the Plate class)
+    # Wells only: a plate's lid is among its children too.
     # Child locations are never None, so we can safely ignore the type error
-    x_locations = sorted(set(well_n.location.x for well_n in resource.children))  # type: ignore
-    y_locations = sorted(set(well_n.location.y for well_n in resource.children))  # type: ignore
+    wells = resource.get_wells()
+    x_locations = sorted(set(well_n.location.x for well_n in wells))  # type: ignore
+    y_locations = sorted(set(well_n.location.y for well_n in wells))  # type: ignore
 
     def calculate_well_spacing(float_list: List[float]):
       """Calculate the difference between every x and x+1 element in the list of floats."""
@@ -142,8 +144,8 @@ class PlateAdapter(Resource):
     plate_dx, plate_dy = float(x_locations[0]), float(y_locations[0])
     plate_item_dx = abs(calculate_well_spacing(x_locations))
     plate_item_dy = abs(calculate_well_spacing(y_locations))
-    well_size_x = resource.children[0].get_absolute_size_x()
-    well_size_y = resource.children[0].get_absolute_size_y()
+    well_size_x = wells[0].get_absolute_size_x()
+    well_size_y = wells[0].get_absolute_size_y()
     # true_dz = resource.get_size_z() - resource.children[0].get_size_z()
 
     # Well-grid to hole-grid compatibility check

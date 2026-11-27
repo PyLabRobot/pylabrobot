@@ -152,7 +152,7 @@ class Container(Liddable, Resource):
       if self.height_volume_data is not None
       else serialize(self._compute_height_from_volume),
       "height_volume_data": self.height_volume_data,
-      "no_go_zones": [(flb.serialize(), brt.serialize()) for flb, brt in self.no_go_zones],
+      "no_go_zones": serialize(self.no_go_zones),
     }
 
   def serialize_state(self) -> Dict[str, Any]:

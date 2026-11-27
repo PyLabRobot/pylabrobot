@@ -1,0 +1,249 @@
+{
+  "note": "Modular. Every file is authored in ITS OWN resource's frame, so declaring it on that resource needs no offset. `measured_at` records where the part actually sits in the instrument, in millimetres, for checking - it is not an offset to apply.",
+  "units": "m",
+  "up": "Z",
+  "frames": {
+    "STARlet": {
+      "base": "starlet_base.glb",
+      "size": [
+        1130.0,
+        792.6,
+        903.0
+      ],
+      "modules": {
+        "front_top_cover": {
+          "file": "starlet_deck_front_top_cover.glb",
+          "measured_at": [
+            13.0,
+            41.3,
+            176.5
+          ],
+          "size": [
+            1102.0,
+            140.0,
+            4.0
+          ]
+        },
+        "side_panel_left": {
+          "file": "left_side_panel.glb",
+          "measured_at": [
+            5.0,
+            52.8,
+            180.5
+          ],
+          "size": [
+            4.0,
+            726.0,
+            682.0
+          ]
+        },
+        "tray": {
+          "file": "starlet_autoload_tray.glb",
+          "measured_at": [
+            97.5,
+            -221.2,
+            84.5
+          ],
+          "size": [
+            935.0,
+            250.0,
+            102.2
+          ]
+        },
+        "belt_frame": {
+          "file": "starlet_autoload_tray_belt_frame.glb",
+          "measured_at": [
+            7.0,
+            35.8,
+            43.0
+          ],
+          "size": [
+            1116.0,
+            191.5,
+            142.6
+          ]
+        },
+        "sled": {
+          "file": "autoload_sled.glb",
+          "measured_at": [
+            802.9,
+            68.1,
+            81.0
+          ],
+          "size": [
+            280.9,
+            109.5,
+            215.3
+          ],
+          "trimmed_from_vendor_left": 35.343
+        }
+      }
+    },
+    "STAR": {
+      "base": "star_base.glb",
+      "size": [
+        1667.0,
+        792.6,
+        903.0
+      ],
+      "modules": {
+        "front_top_cover": {
+          "file": "star_deck_front_top_cover.glb",
+          "measured_at": [
+            11.5,
+            41.3,
+            176.5
+          ],
+          "size": [
+            1642.0,
+            140.0,
+            4.0
+          ]
+        },
+        "side_panel_left": {
+          "file": "left_side_panel.glb",
+          "measured_at": [
+            5.0,
+            52.8,
+            180.5
+          ],
+          "size": [
+            4.0,
+            726.0,
+            682.0
+          ]
+        },
+        "tray": {
+          "file": "star_autoload_tray.glb",
+          "measured_at": [
+            111.0,
+            -221.2,
+            84.5
+          ],
+          "size": [
+            1445.0,
+            250.0,
+            102.2
+          ]
+        },
+        "belt_frame": {
+          "file": "star_autoload_tray_belt_frame.glb",
+          "measured_at": [
+            5.5,
+            35.8,
+            43.0
+          ],
+          "size": [
+            1656.0,
+            191.5,
+            142.7
+          ]
+        },
+        "sled": {
+          "file": "autoload_sled.glb",
+          "measured_at": [
+            1343.4,
+            68.1,
+            81.0
+          ],
+          "size": [
+            280.9,
+            109.5,
+            215.3
+          ],
+          "trimmed_from_vendor_left": 35.343
+        }
+      }
+    },
+    "STARplus": {
+      "base": "starplus_base.glb",
+      "size": [
+        2163.5,
+        792.6,
+        903.0
+      ],
+      "modules": {
+        "front_top_cover": {
+          "file": "starplus_deck_front_top_cover.glb",
+          "measured_at": [
+            4.0,
+            40.8,
+            176.5
+          ],
+          "size": [
+            2146.2,
+            140.5,
+            4.0
+          ]
+        },
+        "side_panel_left": {
+          "file": "left_side_panel.glb",
+          "measured_at": [
+            5.0,
+            52.8,
+            180.5
+          ],
+          "size": [
+            4.0,
+            726.0,
+            682.0
+          ]
+        },
+        "tray": {
+          "file": "starplus_autoload_tray.glb",
+          "measured_at": [
+            98.5,
+            -221.2,
+            84.5
+          ],
+          "size": [
+            935.0,
+            250.0,
+            102.2
+          ]
+        },
+        "belt_frame": {
+          "file": "starplus_autoload_tray_belt_frame.glb",
+          "measured_at": [
+            8.0,
+            35.8,
+            43.0
+          ],
+          "size": [
+            1116.0,
+            191.5,
+            142.6
+          ]
+        },
+        "sled": {
+          "file": "autoload_sled.glb",
+          "measured_at": [
+            803.0,
+            68.1,
+            81.0
+          ],
+          "size": [
+            280.9,
+            109.5,
+            215.3
+          ],
+          "trimmed_from_vendor_left": 35.343
+        }
+      }
+    }
+  },
+  "left_extension_housing": {
+    "file": "left_extension_housing.glb",
+    "size": [
+      265.0,
+      779.0,
+      855.0
+    ],
+    "frames": [
+      "STARlet",
+      "STAR",
+      "STARplus"
+    ],
+    "note": "From the CAD master; no vendor geometry exists for one. Fits every frame - it bolts to the left side, in place of the side panel."
+  }
+}

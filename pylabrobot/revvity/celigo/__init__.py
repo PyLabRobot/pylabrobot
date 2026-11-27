@@ -63,14 +63,19 @@ from pylabrobot.revvity.celigo.motion import (
 )
 from pylabrobot.revvity.celigo.navigation import well_to_sample_mm, well_to_stage_mm
 from pylabrobot.revvity.celigo.scan import (
+  AcquisitionTiming,
   AutofocusMethod,
   BlockShape,
   Capture,
   CoordinateMM,
   FrameResult,
+  FullCoverageGeometry,
   PlannedFrame,
+  PointGeometry,
+  RandomGeometry,
   ScanBlock,
   ScanEstimateModel,
+  ScanGeometry,
   ScanPlan,
   ScanPosition,
   ScanRegion,
@@ -80,6 +85,7 @@ from pylabrobot.revvity.celigo.scan import (
 
 __all__ = [
   "AcquisitionResult",
+  "AcquisitionTiming",
   "AnalogInputConfig",
   "AutofocusMethod",
   "Axis",
@@ -108,6 +114,7 @@ __all__ = [
   "FilterWheelConfig",
   "FocusResult",
   "FrameResult",
+  "FullCoverageGeometry",
   "Galvo",
   "GalvoAxisOpticalCalibration",
   "GalvoConfig",
@@ -125,8 +132,11 @@ __all__ = [
   "MotorController",
   "NavigationConfig",
   "PlannedFrame",
+  "PointGeometry",
+  "RandomGeometry",
   "ScanBlock",
   "ScanEstimateModel",
+  "ScanGeometry",
   "ScanPlan",
   "ScanPosition",
   "ScanRegion",

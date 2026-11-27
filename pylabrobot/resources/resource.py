@@ -253,6 +253,10 @@ class Resource(SerializableMixin):
       "when it is created. Create the resource with the name you want instead."
     )
 
+  def _comparable_children(self) -> List["Resource"]:
+    """The children compared in equality: all of them, unless a subclass holds some as state."""
+    return self.children
+
   def __eq__(self, other):
     return (
       isinstance(other, Resource)
@@ -262,7 +266,7 @@ class Resource(SerializableMixin):
       and self.get_absolute_size_z() == other.get_absolute_size_z()
       and self.location == other.location
       and self.category == other.category
-      and self.children == other.children
+      and self._comparable_children() == other._comparable_children()
       and self.metadata == other.metadata
     )
 
@@ -391,7 +395,7 @@ class Resource(SerializableMixin):
   def get_location_wrt(
     self, other: Resource, x: str = "l", y: str = "f", z: str = "b"
   ) -> Coordinate:
-    """Get the location of this resource with respect to another resource.
+    """Get the location of this resource with respect to another, along the other's axes.
 
     Args:
       other: The resource to get the location with respect to.
@@ -411,7 +415,13 @@ class Resource(SerializableMixin):
       if other.location is not None
       else Coordinate(0, 0, 0)
     )
-    return self.get_absolute_location(x=x, y=y, z=z) - other_absolute_lfb
+    offset = self.get_absolute_location(x=x, y=y, z=z) - other_absolute_lfb
+    rotation = other.get_absolute_rotation()
+    if rotation._quaternion == (1.0, 0.0, 0.0, 0.0):
+      return offset
+    # Along `other`'s axes: its rotation matrix is orthonormal, so the transpose undoes it.
+    inverse = list(zip(*rotation.get_rotation_matrix()))
+    return Coordinate(*matrix_vector_multiply_3x3(inverse, offset.vector()))
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
@@ -470,7 +480,8 @@ class Resource(SerializableMixin):
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
     root = self.get_root()
-    arriving = root._check_naming_conflicts(resource=resource)
+    # A resource that comes from another parent in this tree already holds its names here.
+    arriving = root._check_naming_conflicts(resource=resource, moving=resource.parent is not self)
 
     # Call "will assign" callbacks
     for callback in self._will_assign_resource_callbacks:
@@ -645,7 +656,9 @@ class Resource(SerializableMixin):
       raise RuntimeError(f"root '{root.name}' is not holding a map of names")
     return root._subtree_resources
 
-  def _check_naming_conflicts(self, resource: Resource) -> Dict[str, Resource]:
+  def _check_naming_conflicts(
+    self, resource: Resource, moving: bool = False
+  ) -> Dict[str, Resource]:
     """Raise if anything in `resource`'s subtree is already named in this one.
 
     Names identify a resource across the whole tree - `get_resource` finds one by name, and
@@ -653,6 +666,8 @@ class Resource(SerializableMixin):
 
     Args:
       resource: The resource arriving, with everything beneath it.
+      moving: `resource` goes to a parent other than its own. A name that this tree holds for the
+        same object is then not a conflict: that resource moves from another spot in this tree.
 
     Returns:
       What arrived, by name, so the caller does not walk the same subtree again to record it.
@@ -663,7 +678,7 @@ class Resource(SerializableMixin):
     held = self._resources()
     arriving: Dict[str, Resource] = {}
     for res in [resource] + resource.get_all_children():
-      if res.name in held:
+      if res.name in held and not (moving and held[res.name] is res):
         raise ValueError(f"Resource with name '{res.name}' already exists in the tree.")
       arriving[res.name] = res
     return arriving

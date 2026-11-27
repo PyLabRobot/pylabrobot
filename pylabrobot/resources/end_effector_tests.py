@@ -19,8 +19,8 @@ JAW_RANGE = (70.844, 133.706)
 
 
 def tcp(z: float = 0.0, y: float = 0.0) -> Coordinate:
-  """The grip centre `LENGTH` along the span from the joint, and `y`/`z` off it."""
-  return Coordinate(PROXIMAL_JOINT.x + LENGTH, PROXIMAL_JOINT.y + y, PROXIMAL_JOINT.z + z)
+  """The grip centre `LENGTH` along the span from the joint, and `y`/`z` off it, from the joint."""
+  return Coordinate(LENGTH, y, z)
 
 
 def gripper(**overrides) -> MechanicalGripper:
@@ -74,6 +74,14 @@ class TestTheSpan(unittest.TestCase):
     # The span now runs diagonally, so the link is longer than its reach along X.
     self.assertAlmostEqual(g.length, math.dist((LENGTH, -13.0), (0.0, 0.0)))
 
+  def test_the_grip_centre_is_stated_from_where_the_tool_is_mounted(self):
+    """Moving the joint inside the member moves where the tool is mounted, not how far it reaches:
+    the grip centre is an offset from the flange, so it and the reach stay what they were."""
+    moved = PROXIMAL_JOINT + Coordinate(7.0, 0.0, 0.0)
+    g = gripper(proximal_joint=moved)
+    self.assertEqual(g.tool_center_point, tcp())
+    self.assertAlmostEqual(g.length, LENGTH)
+
   def test_nothing_attaches_past_a_tool(self):
     self.assertIsNone(gripper().distal_joint)
 
@@ -104,8 +112,8 @@ class TestJaws(unittest.TestCase):
       ]
       self.assertAlmostEqual(faces[0] - faces[1], width)
       # They straddle the grip centre, which is neither the member's middle nor its origin.
-      self.assertAlmostEqual(faces[0] + faces[1], 2 * tcp().y)
-      self.assertNotAlmostEqual(tcp().y, g.get_size_y() / 2.0)
+      self.assertAlmostEqual(faces[0] + faces[1], 2 * (PROXIMAL_JOINT.y + tcp().y))
+      self.assertNotAlmostEqual(PROXIMAL_JOINT.y + tcp().y, g.get_size_y() / 2.0)
 
   def test_the_jaws_refuse_a_width_they_do_not_reach(self):
     with self.assertRaises(ValueError):
@@ -242,6 +250,95 @@ class TestRoundTrip(unittest.TestCase):
     finger["children"] = []
     with self.assertRaises(ValueError):
       MechanicalGripper.deserialize(data)
+
+
+JAW_LOCATION = Coordinate(40.0, 0.0, 5.0)
+# Where the first finger is bolted on its jaw: 4 mm in from the jaw's own low-y side.
+ON_THE_JAW = Coordinate(2.0, 4.0, -9.0)
+
+
+def gripper_with_jaws(**overrides) -> MechanicalGripper:
+  jaws = [
+    Resource(name=f"demo_jaw_{side}", size_x=20.0, size_y=40.0, size_z=30.0, category="jaw")
+    for side in ("left", "right")
+  ]
+  arguments = dict(
+    jaws=jaws, jaw_location=JAW_LOCATION, finger_location=ON_THE_JAW, pads=None, pad_location=None
+  )
+  return gripper(**{**arguments, **overrides})
+
+
+def across(g: MechanicalGripper, finger: Resource) -> float:
+  """Where a finger's low-y corner stands across the gripper, whatever carries it."""
+  return cast(Coordinate, finger.get_location_wrt(g)).y
+
+
+class TestJawsThatCarryTheFingers(unittest.TestCase):
+  def test_each_finger_is_bolted_to_its_own_jaw(self):
+    g = gripper_with_jaws()
+    self.assertEqual([jaw.parent for jaw in g.jaws], [g, g])
+    self.assertEqual([finger.parent for finger in g.fingers], g.jaws)
+
+  def test_a_width_is_still_the_gap_the_fingers_leave_between_them(self):
+    g = gripper_with_jaws()
+    for width in (133.706, 100.0, 70.844):
+      g.jaw_width = width
+      left, right = g.fingers
+      faces = [across(g, left), across(g, right) + right.get_size_y()]
+      self.assertAlmostEqual(faces[0] - faces[1], width)
+      self.assertAlmostEqual(faces[0] + faces[1], 2 * (PROXIMAL_JOINT.y + tcp().y))
+
+  def test_a_width_moves_the_jaws_and_leaves_each_finger_where_it_is_bolted(self):
+    g = gripper_with_jaws()
+    bolted = [finger.location for finger in g.fingers]
+    stood = [cast(Coordinate, jaw.location).y for jaw in g.jaws]
+    g.jaw_width = 80.0
+    self.assertEqual([finger.location for finger in g.fingers], bolted)
+    self.assertNotEqual([cast(Coordinate, jaw.location).y for jaw in g.jaws], stood)
+    for jaw in g.jaws:
+      here = cast(Coordinate, jaw.location)
+      self.assertEqual((here.x, here.z), (JAW_LOCATION.x, JAW_LOCATION.z))
+
+  def test_the_second_finger_is_bolted_mirrored_on_its_jaw(self):
+    g = gripper_with_jaws()
+    first, second = (cast(Coordinate, finger.location) for finger in g.fingers)
+    self.assertEqual(first, ON_THE_JAW)
+    # As far from its jaw's high-y side as the first is from its jaw's low-y side.
+    self.assertAlmostEqual(second.y, 40.0 - 7.0 - 4.0)
+    self.assertEqual((second.x, second.z), (ON_THE_JAW.x, ON_THE_JAW.z))
+
+  def test_jaws_and_their_location_go_together_and_there_is_one_for_each_finger(self):
+    with self.assertRaises(ValueError):
+      gripper_with_jaws(jaw_location=None)
+    with self.assertRaises(ValueError):
+      gripper_with_jaws(jaws=gripper_with_jaws().jaws[:1])
+
+  def test_a_gripper_with_jaws_comes_back_with_them_and_its_width(self):
+    g = gripper_with_jaws(jaw_width=100.0)
+    on_a_jaw = Resource(name="cable_clip", size_x=1.0, size_y=1.0, size_z=1.0)
+    g.jaws[1].assign_child_resource(on_a_jaw, location=Coordinate(1.0, 2.0, 3.0))
+    back = MechanicalGripper.deserialize(g.serialize())
+    back.load_all_state(g.serialize_all_state())
+
+    self.assertEqual([jaw.name for jaw in back.jaws], [jaw.name for jaw in g.jaws])
+    self.assertEqual([finger.parent for finger in back.fingers], back.jaws)
+    self.assertEqual(back.jaw_width, 100.0)
+    self.assertEqual([jaw.location for jaw in back.jaws], [jaw.location for jaw in g.jaws])
+    self.assertEqual([f.location for f in back.fingers], [f.location for f in g.fingers])
+    self.assertEqual(back.get_resource("cable_clip").parent, back.jaws[1])
+    self.assertEqual(back, g)
+
+  def test_a_jaw_missing_its_finger_is_refused(self):
+    data = gripper_with_jaws().serialize()
+    for child in data["children"]:
+      if child["name"] == "demo_jaw_left":
+        child["children"] = []
+    with self.assertRaises(ValueError):
+      MechanicalGripper.deserialize(data)
+
+  def test_a_gripper_without_jaws_says_so(self):
+    self.assertEqual(gripper().jaws, [])
+    self.assertEqual(gripper().serialize()["jaws"], [])
 
 
 if __name__ == "__main__":

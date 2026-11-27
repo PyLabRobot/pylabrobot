@@ -198,13 +198,18 @@
     "kind": "plate reader",
     "capabilities": [
       "absorbance",
-      "fluorescence",
-      "luminescence"
+      "heating",
+      "shaking"
     ],
-    "status": "full",
-    "api_version": "v0",
+    "status": "mostly",
+    "api_version": "v1",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194"
+    "oem": "https://www.agilent.com/en/product/microplate-instrumentation/microplate-readers/multimode-microplate-readers/biotek-synergy-ht-multi-mode-reader-1623194",
+    "needs_hardware_testing": false,
+    "api": "pylabrobot.agilent.biotek.synergy_ht.SynergyHT",
+    "code_slug": "agilent/biotek/synergy_ht",
+    "doc_slug": "agilent/synergy_ht/hello-world",
+    "notes": "Endpoint absorbance with optional shaking before reads on built-in 24- and 96-well plates."
   },
   {
     "id": "agrowtek-pump-array",
@@ -281,13 +286,14 @@
   },
   {
     "id": "big-bear-orbital-shaker",
+    "needs_hardware_testing": true,
     "vendor": "BigBear",
     "name": "Orbital Shaker",
     "kind": "shaker",
     "capabilities": [
       "shaking"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.big_bear.BigBearOrbitalShaker",
     "api_version": "v1",
     "code_slug": "big_bear",
@@ -308,6 +314,26 @@
     "api_version": "v0",
     "manager": "https://discuss.pylabrobot.org/u/camillomoschner",
     "oem": "https://www.bmglabtech.com/en/clariostar-plus/"
+  },
+  {
+    "id": "bmg-vantastar",
+    "needs_hardware_testing": true,
+    "vendor": "BMG Labtech",
+    "name": "VANTAstar",
+    "kind": "plate reader",
+    "capabilities": [
+      "absorbance",
+      "fluorescence",
+      "luminescence",
+      "heating",
+      "shaking"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.bmg_labtech.VANTAstar",
+    "api_version": "v1",
+    "code_slug": "bmg_labtech/vantastar",
+    "doc_slug": "bmg_labtech/vantastar/hello-world",
+    "oem": "https://www.bmglabtech.com/en/vantastar/"
   },
   {
     "id": "brooks-preciseflex",
@@ -394,6 +420,7 @@
   },
   {
     "id": "cole-parmer-genogrinder",
+    "needs_hardware_testing": true,
     "vendor": "Cole Parmer",
     "name": "GenoGrinder",
     "kind": "shaker",
@@ -401,7 +428,7 @@
       "shaking",
       "grinding"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.cole_parmer.GenoGrinder",
     "api_version": "v1",
     "code_slug": "cole_parmer",
@@ -434,13 +461,14 @@
   },
   {
     "id": "curiox-ht2000",
+    "needs_hardware_testing": true,
     "vendor": "Curiox",
     "name": "HT2000",
     "kind": "plate washer",
     "capabilities": [
       "plate washing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.curiox.CurioxHT2000",
     "api_version": "v1",
     "code_slug": "curiox",
@@ -450,15 +478,30 @@
   },
   {
     "id": "formulatrix-mantis",
+    "needs_hardware_testing": true,
     "vendor": "Formulatrix",
     "name": "Mantis",
+    "models": [
+      {
+        "name": "v3",
+        "needs_hardware_testing": false
+      },
+      {
+        "name": "v4"
+      }
+    ],
     "kind": "bulk dispenser",
     "capabilities": [
       "dispensing"
     ],
     "status": "wip",
+    "api": "pylabrobot.formulatrix.Mantis",
+    "api_version": "v1",
+    "code_slug": "formulatrix/mantis",
+    "doc_slug": "formulatrix/mantis/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/"
+    "oem": "https://formulatrix.com/liquid-handling-systems/mantis-liquid-handler/",
+    "notes": "V3 arm initialization, pneumatic plate clamping and LC3 carousel positioning; dispensing is not supported."
   },
   {
     "id": "hamilton-heater-shaker",
@@ -525,6 +568,7 @@
       "liquid handling"
     ],
     "status": "wip",
+    "doc_slug": "hamilton/prep/index",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.hamiltoncompany.com/microlab-prep"
   },
@@ -603,6 +647,7 @@
   },
   {
     "id": "highres-ambistore",
+    "needs_hardware_testing": true,
     "vendor": "HighRes Biosolutions",
     "name": "AmbiStore",
     "kind": "storage",
@@ -668,6 +713,7 @@
   },
   {
     "id": "highres-tundrastore",
+    "needs_hardware_testing": true,
     "vendor": "HighRes Biosolutions",
     "name": "TundraStore",
     "kind": "storage",
@@ -726,11 +772,26 @@
       "heating",
       "active cooling"
     ],
-    "status": "mostly",
-    "api_version": "v0",
+    "status": "wip",
+    "api_version": "v1",
     "doc_slug": "inheco/odtc/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
-    "oem": "https://www.inheco.com/odtc.html"
+    "oem": "https://www.inheco.com/odtc.html",
+    "api": "pylabrobot.inheco.ODTC",
+    "code_slug": "inheco/odtc",
+    "needs_hardware_testing": true,
+    "models": [
+      {
+        "name": "96-well",
+        "status": "wip",
+        "needs_hardware_testing": true
+      },
+      {
+        "name": "384-well",
+        "status": "wip",
+        "needs_hardware_testing": true
+      }
+    ]
   },
   {
     "id": "inheco-scila",
@@ -755,9 +816,9 @@
     "vendor": "Inheco",
     "name": "Thermoshake",
     "models": [
-      {"name": "Thermoshake", "status": "full"},
-      {"name": "Thermoshake AC", "status": "wip"},
-      {"name": "Thermoshake RM", "status": "wip"}
+      {"name": "Thermoshake", "status": "wip", "needs_hardware_testing": true},
+      {"name": "Thermoshake AC", "status": "wip", "needs_hardware_testing": true},
+      {"name": "Thermoshake RM", "status": "wip", "needs_hardware_testing": false}
     ],
     "kind": "heater shaker",
     "capabilities": [
@@ -765,7 +826,7 @@
       "active cooling",
       "shaking"
     ],
-    "status": "full",
+    "status": "wip",
     "api": "pylabrobot.inheco.inheco_thermoshake",
     "api_version": "v1",
     "code_slug": "inheco",
@@ -776,13 +837,14 @@
   },
   {
     "id": "kbioscience-kube",
+    "needs_hardware_testing": true,
     "vendor": "KBioscience",
     "name": "KUBE",
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.kbioscience.KBioscienceKUBE",
     "api_version": "v1",
     "code_slug": "kbioscience",
@@ -795,9 +857,9 @@
     "vendor": "KBiosystems",
     "name": "Ultraseal",
     "models": [
-      {"name": "Ultraseal ePRO", "status": "mostly"},
-      {"name": "Ultraseal PRO", "status": "mostly"},
-      {"name": "Ultraseal XT PRO", "status": "mostly"}
+      {"name": "Ultraseal ePRO", "status": "wip", "needs_hardware_testing": true},
+      {"name": "Ultraseal PRO", "status": "mostly", "needs_hardware_testing": false},
+      {"name": "Ultraseal XT PRO", "status": "wip", "needs_hardware_testing": true}
     ],
     "kind": "sealer",
     "capabilities": [
@@ -844,6 +906,7 @@
   },
   {
     "id": "mettler-toledo-mt-sics",
+    "needs_hardware_testing": true,
     "vendor": "Mettler Toledo",
     "name": "MT-SICS scales and weigh modules",
     "models": [
@@ -1342,7 +1405,7 @@
       {"name": "WXS205", "status": "wip"},
       {"name": "WXS205DU", "status": "wip"},
       {"name": "WXS205S/15", "status": "wip"},
-      {"name": "WXS205SDU/15", "status": "full"},
+      {"name": "WXS205SDU/15", "status": "full", "needs_hardware_testing": false},
       {"name": "WXS205SDUV/15", "status": "wip"},
       {"name": "WXS205SV/15", "status": "wip"},
       {"name": "WXS26", "status": "wip"},
@@ -1742,6 +1805,21 @@
     "oem": "https://www.moleculardevices.com/products/microplate-readers/multi-mode-readers/spectramax-m-series-readers"
   },
   {
+    "id": "opentrons-flex",
+    "vendor": "Opentrons",
+    "name": "Flex",
+    "kind": "liquid handler",
+    "capabilities": [
+      "liquid handling"
+    ],
+    "status": "basic",
+    "api": "pylabrobot.opentrons.Flex",
+    "api_version": "v1",
+    "code_slug": "opentrons/flex",
+    "doc_slug": "opentrons/flex/hello-world",
+    "notes": "Hardware verification is operation-specific; 1-channel and 96-channel heads remain unverified."
+  },
+  {
     "id": "opentrons-heater-shaker",
     "vendor": "Opentrons",
     "name": "Heater-Shaker Module",
@@ -1809,7 +1887,11 @@
       "arm"
     ],
     "status": "mostly",
-    "api_version": "v0",
+    "api_version": "v1",
+    "api": "pylabrobot.paa.KX2",
+    "code_slug": "paa/kx2",
+    "doc_slug": "paa/kx2/hello-world",
+    "needs_hardware_testing": false,
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga"
   },
   {
@@ -1894,13 +1976,14 @@
   },
   {
     "id": "sartorius-entris2",
+    "needs_hardware_testing": true,
     "vendor": "Sartorius",
     "name": "Entris II",
     "kind": "scale",
     "capabilities": [
       "weighing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.sartorius.SartoriusEntris2",
     "api_version": "v1",
     "code_slug": "sartorius",
@@ -1953,18 +2036,19 @@
   },
   {
     "id": "thermo-fisher-alps",
+    "needs_hardware_testing": true,
     "vendor": "Thermo Fisher",
     "name": "ALPS",
     "models": [
-      {"name": "ALPS 300", "status": "mostly"},
-      {"name": "ALPS 3000", "status": "mostly"},
-      {"name": "ALPS 5000", "status": "mostly"}
+      {"name": "ALPS 300", "status": "wip"},
+      {"name": "ALPS 3000", "status": "wip"},
+      {"name": "ALPS 5000", "status": "wip"}
     ],
     "kind": "sealer",
     "capabilities": [
       "sealing"
     ],
-    "status": "mostly",
+    "status": "wip",
     "api": "pylabrobot.thermo_fisher.alps",
     "api_version": "v1",
     "code_slug": "thermo_fisher/alps",
@@ -2055,6 +2139,7 @@
     "status": "basic",
     "api": "pylabrobot.thermo_fisher.nanodrop_1000.ThermoFisherNanoDrop1000",
     "api_version": "v1",
+    "manager": "https://discuss.pylabrobot.org/u/vcjdeboer",
     "code_slug": "thermo_fisher/nanodrop_1000",
     "doc_slug": "thermo_fisher/nanodrop_1000/index"
   },
@@ -2101,5 +2186,74 @@
     "doc_slug": "ufactory/xarm6/hello-world",
     "manager": "https://discuss.pylabrobot.org/u/rickwierenga",
     "oem": "https://www.ufactory.cc/xarm-collaborative-robot/"
+  },
+  {
+    "id": "li-cor-odyssey-classic",
+    "vendor": "LI-COR",
+    "name": "Odyssey Classic",
+    "models": [
+      {
+        "name": "9120",
+        "status": "wip"
+      }
+    ],
+    "kind": "imager",
+    "capabilities": [
+      "fluorescence"
+    ],
+    "status": "wip",
+    "api": "pylabrobot.li_cor.OdysseyClassic",
+    "api_version": "v1",
+    "manager": "https://discuss.pylabrobot.org/u/vcjdeboer",
+    "code_slug": "li_cor/odyssey",
+    "doc_slug": "li_cor/odyssey/hello-world",
+    "notes": "HTTP scan control and TIFF retrieval; port pending hardware verification."
+  },
+  {
+    "id": "thermo-fisher-kingfisher-flex",
+    "vendor": "Thermo Fisher",
+    "name": "KingFisher Flex",
+    "kind": "magnetic particle processor",
+    "capabilities": ["magnetic bead processing"],
+    "status": "basic",
+    "needs_hardware_testing": false,
+    "api": "pylabrobot.thermo_fisher.kingfisher.flex.KingFisherFlex",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/kingfisher/flex",
+    "doc_slug": "thermo_fisher/kingfisher/flex/hello-world",
+    "notes": "Tested on actual KingFisher Flex hardware with the 96-well head and 96DW plates only, on macOS/firmware 1.01.0. Other heads, including the 24-well head, have not been tested. Local BDZ execution checks include 37 C heating, beads, drying and PLR confirmations. Requires plate bindings and reconciled inventory. Resource-aware ManualOperator host and physical-Start transfers tested in two-plate runs, plus a host-confirmed reagent-addition intervention. Robotic transfers are application-owned. Partial tip pickup remains unresolved; other formats, onboard protocol management and general protocol authoring remain unsupported."
+  },
+  {
+    "id": "thermo-fisher-kingfisher-presto",
+    "vendor": "Thermo Fisher",
+    "name": "KingFisher Presto",
+    "kind": "magnetic particle processor",
+    "capabilities": [
+      "magnetic bead processing",
+      "heating"
+    ],
+    "status": "wip",
+    "needs_hardware_testing": true,
+    "api": "pylabrobot.thermo_fisher.kingfisher.presto.KingFisherPresto",
+    "api_version": "v1",
+    "code_slug": "thermo_fisher/kingfisher/presto",
+    "doc_slug": "thermo_fisher/kingfisher/presto/hello-world",
+    "notes": "USB HID protocol control; pending hardware and manufacturer-file verification."
+  },
+  {
+    "id": "gyger-certus-flex",
+    "vendor": "Fritz Gyger",
+    "name": "CERTUS FLEX",
+    "kind": "bulk dispenser",
+    "capabilities": [
+      "dispensing"
+    ],
+    "status": "mostly",
+    "needs_hardware_testing": false,
+    "api": "pylabrobot.gyger.CertusFlex",
+    "api_version": "v1",
+    "code_slug": "gyger/certus_flex",
+    "doc_slug": "gyger/certus_flex/hello-world",
+    "notes": "Plate plans, coordinated channels, calibration reuse, run controls, and maintenance. Angled FLEX8 tested over direct Ethernet; INCO server and other heads use offline fixtures."
   }
 ]
