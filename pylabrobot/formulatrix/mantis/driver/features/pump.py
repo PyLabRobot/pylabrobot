@@ -1,9 +1,9 @@
 """The pump: the pressure board (board 10), its air pump and its three pressure controllers.
 
 Each controller regulates one line, bottle, chip or vacuum, from its feedback sensor. Public
-methods read, prime the chip on the head and recover its reagent; the pneumatic clamp can privately
-start and restore the air pump. Setup tares the bottle and chip sensors; stop releases the pressure
-if the pump runs and writes their calibration back.
+methods read, prime the chip on the head, dispense from it into wells and recover its reagent; the
+pneumatic clamp can privately start and restore the air pump. Setup tares the bottle and chip
+sensors; stop releases the pressure if the pump runs and writes their calibration back.
 """
 
 import asyncio
@@ -12,7 +12,19 @@ import logging
 import math
 import struct
 import time
-from typing import TYPE_CHECKING, Awaitable, Callable, Dict, List, Literal, Optional, Tuple
+from typing import (
+  TYPE_CHECKING,
+  Awaitable,
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Tuple,
+)
+
+from pylabrobot.resources import Coordinate, Well
 
 from ...liquid_classes import MantisLiquidClass, mantis_mapping
 from ..errors import MantisConfigurationError, MantisMotionError, MantisPressureError
@@ -30,6 +42,7 @@ from .arm import ARM_MOTORS, CHIP_CHANGER_ROUTE, MOVE_TIMEOUT, Z_MOTOR
 if TYPE_CHECKING:
   from ..master import MantisDriver
   from .arm import Arm
+  from .plate_clamp import PlateClamp
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +88,9 @@ VALVES_CLOSED = 31
 VALVES_CLOSED_DURATION = 10
 # A count of drops or plays is rounded after adding this, as in every captured prime and recovery.
 PUMP_CYCLE_ROUNDING = 0.0005
+# What a dispense plays at the waste before the first well, uL, by chip type: the chips'
+# Chip.config "PreDispense.Volume", the same from a tube or a pipette tip; as captured.
+PRE_DISPENSE_VOLUMES: Dict[str, float] = {"low_volume_hi_fi": 0.6, "high_volume_hi_fi": 6.0}
 
 
 def _round_half_away_from_zero(*, value: float) -> int:
@@ -112,6 +128,41 @@ def _get_pump_cycle(*, volume: float, large_volume: float, small_volume: float) 
   if large + small == 0:
     small = 1
   return large, small
+
+
+def _get_dispense_pump_cycle(
+  *, volume: float, large_volume: float, small_volume: float, minimum_small_drops: int
+) -> Tuple[int, int]:
+  """The large and small drops for a well's ``volume``, as a v4 splits it: up to
+  ``minimum_small_drops`` small drops first, the whole ones the volume holds, then the rest as
+  ``_get_pump_cycle``; none for a rest under half a small drop. Checked against every captured
+  dispense.
+
+  Args:
+    volume: uL.
+    large_volume: one large drop's volume, uL.
+    small_volume: one small drop's volume, uL.
+    minimum_small_drops: the small drops taken first, at most.
+  """
+  first_small = min(minimum_small_drops, math.floor(volume / small_volume))
+  rest = volume - first_small * small_volume
+  if rest < small_volume / 2:
+    return 0, first_small
+  large, small = _get_pump_cycle(volume=rest, large_volume=large_volume, small_volume=small_volume)
+  return large, first_small + small
+
+
+def _get_drop_sequences(*, chip_type: str) -> Tuple[Tuple[float, str], Tuple[float, str]]:
+  """A chip type's small and large drop sequences, each as (volume, name), from
+  ``SEQUENCE_VOLUMES``.
+
+  Args:
+    chip_type: a key of ``SEQUENCE_VOLUMES``.
+  """
+  (small_volume, small), (large_volume, large) = sorted(
+    (volume, name) for name, volume in SEQUENCE_VOLUMES[chip_type].items() if name != "reverse_pump"
+  )
+  return (small_volume, small), (large_volume, large)
 
 
 def _get_reverse_pump_cycle(*, volume: float, reverse_pump_volume: float) -> int:
@@ -505,19 +556,20 @@ class Pump:
     await settle(controller="chip", target=chip_pressure)
 
   def _check_attached_chip(self, *, volume: float) -> str:
-    """Check a prime or a recovery of ``volume`` can run, and return the type of the chip on the
-    arm's head.
+    """Check a prime, a recovery or a dispense of ``volume`` can run, and return the type of the
+    chip on the arm's head.
 
     Raises:
       NotImplementedError: on a v3, until a v3 has run them.
       ValueError: if ``volume`` is not more than 0.
-      MantisConfigurationError: without an arm, or for a chip type with no captured prime and
-        recovery.
+      MantisConfigurationError: without an arm, or for a chip type with no captured prime,
+        recovery and dispense.
       MantisMotionError: if the arm is not brought up, or holds no chip.
     """
     if self._driver.configuration.generation != "v4":
       raise NotImplementedError(
-        f"{self._driver.name}: priming and recovery have not run on a v3; nothing is sent"
+        f"{self._driver.name}: priming, recovery and dispensing have not run on a v3; nothing is "
+        "sent"
       )
     if not volume > 0:
       raise ValueError(f"volume must be more than 0 uL, got {volume}")
@@ -531,31 +583,59 @@ class Pump:
     if chip_type is None or chip_type not in SEQUENCE_VOLUMES:
       raise MantisConfigurationError(
         f"{self._driver.name}: the chip on the head is a {chip_type} chip; only "
-        f"{sorted(SEQUENCE_VOLUMES)} are primed and recovered"
+        f"{sorted(SEQUENCE_VOLUMES)} are primed, recovered and dispensed from"
       )
     return chip_type
 
   async def _play_queued_operation(
-    self, *, arm: "Arm", queue: Callable[[], Awaitable[None]]
+    self,
+    *,
+    arm: "Arm",
+    queue: Callable[[], Awaitable[None]],
+    plate_clamp: Optional["PlateClamp"] = None,
   ) -> None:
-    """Clear and start the sequencer, start the pump if it is off and run ``queue``, then release
-    what the operation took: the whole pressure if the pump was off, also after a failed start,
-    else only the chip and vacuum lines, so a pump already running for the clamp stays on. If
+    """Clear and start the sequencer, lock ``plate_clamp`` if given, start the pump if it is off
+    and run ``queue``, then release what the operation took: the clamp, then the whole pressure if
+    the pump was off, also after a failed start, else only the chip and vacuum lines, so a pump
+    already running for the clamp stays on. Each release is tried; the first failure is raised. If
     ``queue`` fails or is cancelled, the sequencer is aborted and every motor stopped first, as
     ``Arm._play_queued_moves`` does, and a failed release is only logged.
+
+    Args:
+      arm: the arm whose motors are stopped on a failure.
+      queue: queues the operation and waits for it.
+      plate_clamp: locked at its ``default_lock_level`` after the sequencer starts, as a v4's
+        dispense does; None for none.
     """
     pump_was_on = True  # until read: a pump that may run for the clamp is not turned off
+    locked = False
 
     async def release() -> None:
-      if not pump_was_on:
-        await self._release_pressure()
-        return
-      for controller in ("chip", "vacuum"):
-        await self._unchecked_fw_set_controller_enabled(controller=controller, enabled=False)
+      failure: Optional[BaseException] = None
+      if locked:
+        assert plate_clamp is not None
+        try:
+          await plate_clamp.unlock()
+        except BaseException as error:  # a cancel too: the pressure is released all the same
+          logger.warning("[%s] the clamp was not released", self._driver.name, exc_info=True)
+          failure = error
+      try:
+        if not pump_was_on:
+          await self._release_pressure()
+        else:
+          for controller in ("chip", "vacuum"):
+            await self._unchecked_fw_set_controller_enabled(controller=controller, enabled=False)
+      except Exception as error:
+        failure = failure or error
+      if failure is not None:
+        raise failure
 
     try:
       await self._driver._unchecked_fw_clear_sequencer()
       await self._driver._unchecked_fw_start_sequencer()
+      if plate_clamp is not None:
+        await plate_clamp.lock()
+        locked = True
       pump_was_on = await self.request_pump_on()
       if not pump_was_on:
         await self._start_pump()
@@ -613,10 +693,7 @@ class Pump:
     assert arm is not None
     if liquid_class is None:
       liquid_class = mantis_mapping[("1 cP", chip_type)]
-    volumes = SEQUENCE_VOLUMES[chip_type]
-    (small_volume, small), (large_volume, large) = sorted(
-      (sequence_volume, name) for name, sequence_volume in volumes.items() if name != "reverse_pump"
-    )
+    (small_volume, small), (large_volume, large) = _get_drop_sequences(chip_type=chip_type)
     large_count, small_count = _get_pump_cycle(
       volume=volume, large_volume=large_volume, small_volume=small_volume
     )
@@ -661,6 +738,172 @@ class Pump:
       small_count,
       large_count,
     )
+    await arm._report_pose()
+
+  async def dispense(
+    self,
+    *,
+    wells: Sequence[Well],
+    volumes: Sequence[float],
+    offset: Coordinate = Coordinate.zero(),
+    liquid_class: Optional[MantisLiquidClass] = None,
+    pre_dispense_volume: Optional[float] = None,
+    minimum_small_drops: int = 0,
+  ) -> None:
+    """Dispense each volume into its well from the chip on the head, as captured: the clamp locked,
+    the pump started, the dispense pressures set; at the waste the pre-dispense, large drops first,
+    and back to (15, 30) at the safe height; onto the first well as ``Arm.move_to_well`` enters,
+    then well to well, the small then the large drops in each; the safe state, the head back to
+    (15, 30) at the safe height, the clamp and the pressure released. The chip stays on the head.
+
+    Below the safe height the head moves unguarded, as ``Arm.move_to_well`` does.
+
+    Args:
+      wells: wells of the wellplate on the plate holder, in the order dispensed.
+      volumes: uL per well: 0 skips it, else at least half a small drop, as whole small and large
+        drops (``_get_dispense_pump_cycle``).
+      offset: added to each nozzle location, mm, as ``Arm.move_to_well``.
+      liquid_class: its dispense pressures and drop delays; None the chip type's 1 cP class.
+      pre_dispense_volume: uL played at the waste before the first well; None the chip type's
+        ``PRE_DISPENSE_VOLUMES``; 0 skips the waste.
+      minimum_small_drops: small drops each well takes first, as far as its volume holds them;
+        the unit's wellplate definitions name it ``minsd``.
+
+    Raises:
+      NotImplementedError: on a v3, or with a pneumatic clamp; nothing is sent.
+      ValueError: if no volume is more than 0, the wells and volumes differ in number, a volume or
+        ``pre_dispense_volume`` is negative, a volume is under half a small drop,
+        ``minimum_small_drops`` is negative, a well cannot be reached as ``Arm.move_to_well``
+        refuses it, or the clamp's ``default_lock_level`` is not one of its levels; nothing is
+        sent.
+      MantisConfigurationError: without the arm, the stage, the waste's path for a pre-dispense,
+        or the clamp's levels, or for a chip type with no captured dispense; nothing is sent.
+      MantisMotionError: if the arm is not brought up or holds no chip, nothing is sent; or if a
+        motor faults.
+      MantisPressureError: if a line does not settle. The clamp and the pressure are released on
+        every path.
+    """
+    chip_type = self._check_attached_chip(volume=max(volumes, default=0.0))
+    arm = self._driver.arm
+    assert arm is not None
+    arm._check_stage()
+    if len(wells) != len(volumes):
+      raise ValueError(f"{len(wells)} wells but {len(volumes)} volumes; nothing is sent")
+    if type(minimum_small_drops) is not int or minimum_small_drops < 0:
+      raise ValueError(
+        f"minimum_small_drops must be an int of 0 or more, got {minimum_small_drops}"
+      )
+    (small_volume, small), (large_volume, large) = _get_drop_sequences(chip_type=chip_type)
+    for well, volume in zip(wells, volumes):
+      if volume < 0 or 0 < volume < small_volume / 2:
+        raise ValueError(
+          f"the volume for well {well.name} must be 0 or at least half a small drop, "
+          f"{small_volume / 2} uL, got {volume}; nothing is sent"
+        )
+    if pre_dispense_volume is None:
+      pre_dispense_volume = PRE_DISPENSE_VOLUMES[chip_type]
+    if pre_dispense_volume < 0:
+      raise ValueError(f"pre_dispense_volume must not be negative, got {pre_dispense_volume}")
+    if liquid_class is None:
+      liquid_class = mantis_mapping[("1 cP", chip_type)]
+    plate_clamp = self._driver.plate_clamp
+    if plate_clamp is not None and plate_clamp.auxiliary_output is not None:
+      raise NotImplementedError(
+        f"{self._driver.name}: a dispense with a pneumatic clamp has not been captured; nothing "
+        "is sent"
+      )
+    if plate_clamp is not None:
+      if plate_clamp.levels is None:
+        raise MantisConfigurationError(
+          f"{self._driver.name}: no clamp levels for this unit; give its vendor folder "
+          "(oem_config_directory)"
+        )
+      self._driver._check_index(
+        name="default_lock_level",
+        value=plate_clamp.default_lock_level,
+        allowed=tuple(plate_clamp.levels),
+      )
+    profiles = arm._get_route_profiles()
+    visits: List[Tuple[List[List[Tuple[float, float, float]]], int, int]] = []
+    for well, volume in zip(wells, volumes):
+      if volume == 0:
+        continue
+      targets = arm._get_route_line_targets(
+        route_line=arm._get_well_arm_frame_location(well=well, offset=offset)
+      )
+      moves = (
+        [arm._get_queued_move(targets=targets, profiles=profiles)]
+        if visits
+        else arm._get_well_entry_moves(targets=targets)
+      )
+      large_count, small_count = _get_dispense_pump_cycle(
+        volume=volume,
+        large_volume=large_volume,
+        small_volume=small_volume,
+        minimum_small_drops=minimum_small_drops,
+      )
+      visits.append((moves, small_count, large_count))
+    into_waste: List[List[Tuple[float, float, float]]] = []
+    out_of_waste: List[List[Tuple[float, float, float]]] = []
+    if pre_dispense_volume > 0:
+      into_waste = arm._get_approach_path_moves(name=WASTE_APPROACH_PATH, reverse=False)
+      out_of_waste = arm._get_approach_path_moves(name=WASTE_APPROACH_PATH, reverse=True)
+    to_idle = arm._get_route_moves(route=CHIP_CHANGER_ROUTE)
+    # The safe height alone, as the unit's MoveToSafeHeight sequence: its third line.
+    to_safe_height = arm._get_route_moves(route=CHIP_CHANGER_ROUTE[2:3])
+    delays = LIQUID_CLASS_DELAYS[chip_type]
+    durations = {
+      name: {index: delay(liquid_class) for index, delay in delays[name].items()}
+      for name in (small, large)
+    }
+    if not await arm.request_is_parked():
+      await arm.park()
+
+    async def queue_drops(*, order: Tuple[Tuple[str, int], ...]) -> Tuple[Optional[int], float]:
+      item, seconds = None, 0.0
+      for name, count in order:
+        last, played = await self._queue_plays(
+          chip_type=chip_type, name=name, count=count, durations=durations[name]
+        )
+        item, seconds = last or item, seconds + played
+      return item, seconds
+
+    async def queue() -> None:
+      await self._set_pressures(
+        chip_pressure=liquid_class.chip_pressure, vacuum=liquid_class.vacuum
+      )
+      if pre_dispense_volume > 0:
+        item = await arm._queue_moves(moves=into_waste)
+        await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(into_waste))
+        large_count, small_count = _get_pump_cycle(
+          volume=pre_dispense_volume, large_volume=large_volume, small_volume=small_volume
+        )
+        _, seconds = await queue_drops(order=((large, large_count), (small, small_count)))
+        moves = out_of_waste + to_idle + to_safe_height + to_idle
+        item = await arm._queue_moves(moves=moves)
+        # A chosen bound, not a device's: twice what the drops take, and a move's each.
+        await self._driver._wait_for_queue_item(
+          item=item, timeout=MOVE_TIMEOUT * len(moves) + 2 * seconds
+        )
+      seconds, count = 0.0, 0
+      for moves, small_count, large_count in visits:
+        item = await arm._queue_moves(moves=moves)
+        last, played = await queue_drops(order=((small, small_count), (large, large_count)))
+        item, seconds, count = last or item, seconds + played, count + len(moves)
+      # A chosen bound, not a device's: twice what the drops take, and a move's each.
+      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * count + 2 * seconds)
+      # The safe state holds for the large drop's fill delay, as captured after the last well.
+      await self._queue_plays(
+        chip_type=chip_type,
+        name="safe_state",
+        count=1,
+        durations={0: liquid_class.large_fill_delay},
+      )
+      item = await arm._queue_moves(moves=to_idle)
+      await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * len(to_idle))
+
+    await self._play_queued_operation(arm=arm, queue=queue, plate_clamp=plate_clamp)
+    logger.info("[%s] dispensed %s uL into %d wells", self._driver.name, sum(volumes), len(visits))
     await arm._report_pose()
 
   async def recover_reagent(

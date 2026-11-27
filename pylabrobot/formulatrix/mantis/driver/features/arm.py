@@ -31,7 +31,7 @@ from typing import (
   cast,
 )
 
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Deck, Plate, Well
 from pylabrobot.resources.manipulator import LinkBody
 
 from ...resource_model import (
@@ -137,6 +137,9 @@ HOME_FRAME_DEVICE_SPEED = 500.0
 HOME_FRAME_DEVICE_ACCELERATION = 100.0
 # The safe height, mm above Z's flag: the routes' Z -1.570.
 SAFE_HEIGHT = 1.57
+# The nozzle's height above a wellplate's highest point over a well, mm: the unit's PitchHeight
+# (StageTuning.config), 2.5 on every unit seen; each captured dispense stood there.
+PITCH_HEIGHT = 2.5
 # PyLabRobot design choice: the plate holder is sampled every 5 mm to fit the deck frame to the arm
 # frame.
 DECK_FIT_SPACING = 5.0
@@ -146,8 +149,10 @@ HOLDER_EDGE_TOLERANCE = 1e-6
 # PyLabRobot design choice: how close, mm, the head must stand to a route line below the safe height on
 # an approach path, in x, y and Z, to count as on that path.
 APPROACH_PATH_TOLERANCE = 0.5
-# Before and after each chip slot's path, the head goes to (15, 30) at the safe height, as in every
-# recorded pick-up and placement. These are the first four lines of the waste route.
+# PyLabRobot design choice: how close, mm, Z must stand to a well's height to go well to well.
+WELL_HEIGHT_TOLERANCE = 0.5
+# The head goes to (15, 30) at the safe height around each chip slot's path, and the first two
+# lines start each captured move onto a wellplate; the waste route's first four lines.
 CHIP_CHANGER_ROUTE: List[MantisArmCoordinate] = [
   MantisArmCoordinate(x=None, y=None, z=None),
   MantisArmCoordinate(x=15.0, y=30.0, z=None),
@@ -797,6 +802,13 @@ class Arm:
     )
     return self._deck_to_arm_transform
 
+  @staticmethod
+  def _check_over_plate_holder(*, x: float, y: float) -> bool:
+    """Whether a deck-frame (x, y), mm, is over the plate holder, its edges included."""
+    holder_x = x - PLATE_HOLDER_LOCATION.x
+    holder_y = PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - y
+    return 0 <= holder_x <= PLATE_HOLDER_SIZE_X and 0 <= holder_y <= PLATE_HOLDER_SIZE_Y
+
   def _get_arm_frame_xy(self, *, x: float, y: float) -> Tuple[float, float]:
     """A deck-frame (x, y), mm, in the arm frame, unrounded: by the stage transform over the plate
     holder, by the fitted transform elsewhere.
@@ -804,10 +816,10 @@ class Arm:
     Raises:
       MantisConfigurationError: without the unit's ``stage`` block.
     """
-    holder_x = x - PLATE_HOLDER_LOCATION.x
-    holder_y = PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - y
-    if 0 <= holder_x <= PLATE_HOLDER_SIZE_X and 0 <= holder_y <= PLATE_HOLDER_SIZE_Y:
-      stage = self._get_stage_position(x=holder_x, y=holder_y, z=0.0)
+    if self._check_over_plate_holder(x=x, y=y):
+      stage = self._get_stage_position(
+        x=x - PLATE_HOLDER_LOCATION.x, y=PLATE_HOLDER_LOCATION.y + PLATE_HOLDER_SIZE_Y - y, z=0.0
+      )
       return cast(float, stage.x), cast(float, stage.y)
     turn, shift_x, shift_y = self._get_deck_to_arm_transform()
     model_x, model_y = x - ARM_BASE_X, ARM_BASE_Y - y
@@ -2419,6 +2431,121 @@ class Arm:
     await self._move_along_approach_path(
       name=WASH_APPROACH_PATH.format(position=position), with_model_updates=with_model_updates
     )
+
+  def _get_well_arm_frame_location(self, *, well: Well, offset: Coordinate) -> MantisArmCoordinate:
+    """Where the nozzle stands over a well's centre, ``PITCH_HEIGHT`` above its wellplate's highest
+    point (its frame or its wells' tops), in the arm frame.
+
+    Args:
+      well: a well of a wellplate over the plate holder.
+      offset: added to the nozzle's location, mm; its z must not be negative.
+
+    Raises:
+      MantisConfigurationError: without the unit's ``stage`` block.
+      ValueError: if ``offset.z`` is negative, the well is not on a wellplate on a deck, the
+        wellplate has a lid, or the location is not over the plate holder.
+    """
+    if offset.z < 0:
+      raise ValueError(
+        f"offset.z {offset.z} mm would take the nozzle below PITCH_HEIGHT; nothing moves"
+      )
+    wellplate = well.parent
+    if not isinstance(wellplate, Plate):
+      raise ValueError(f"well {well.name} is not on a wellplate")
+    if wellplate.has_lid():
+      raise ValueError(f"wellplate {wellplate.name} has a lid; nothing moves")
+    deck = wellplate.parent
+    while deck is not None and not isinstance(deck, Deck):
+      deck = deck.parent
+    if deck is None:
+      raise ValueError(f"wellplate {wellplate.name} is not on a deck")
+    center = well.get_location_wrt(deck, x="c", y="c")
+    top = max(
+      resource.get_location_wrt(deck, z="t").z
+      for resource in [wellplate, *wellplate.get_all_items()]
+    )
+    location = Coordinate(
+      x=center.x + offset.x, y=center.y + offset.y, z=top + PITCH_HEIGHT + offset.z
+    )
+    if not self._check_over_plate_holder(x=location.x, y=location.y):
+      raise ValueError(
+        f"well {well.name} at ({location.x:.2f}, {location.y:.2f}) mm is not over the plate "
+        "holder; nothing moves"
+      )
+    return self._get_arm_frame_location(location=location)
+
+  def _get_well_entry_moves(
+    self, *, targets: Dict[int, float]
+  ) -> List[List[Tuple[float, float, float]]]:
+    """The queued moves from idle onto a well, as captured, at the route profile: the arms to
+    (15, 30), Z down there to the well's height, then the arms across with Z held.
+
+    Args:
+      targets: each motor's target over the well, device units, from ``_get_route_line_targets``.
+
+    Raises:
+      MantisKinematicsError, ValueError: as ``_get_route_line_targets``.
+    """
+    profiles = self._get_route_profiles()
+    return [
+      *self._get_route_moves(route=CHIP_CHANGER_ROUTE[:2]),
+      self._get_queued_move(targets={Z_MOTOR: targets[Z_MOTOR]}, profiles=profiles),
+      self._get_queued_move(
+        targets={motor: targets[motor] for motor in ARM_MOTORS}, profiles=profiles
+      ),
+    ]
+
+  async def move_to_well(
+    self,
+    *,
+    well: Well,
+    offset: Coordinate = Coordinate.zero(),
+    with_model_updates: bool = False,
+  ) -> None:
+    """Move the nozzle over a well's centre, ``PITCH_HEIGHT`` above its wellplate's highest point
+    (its frame or its wells' tops).
+
+    From idle, queued as captured: the arms to (15, 30), Z down there to the well's height, then
+    the arms across. Below the safe height this entry is unguarded: nothing avoids the chip racks.
+    From over the plate holder within ``WELL_HEIGHT_TOLERANCE`` of that height: the arms and Z in
+    one item, as captured between wells. From anywhere else the head is parked first.
+
+    Args:
+      well: a well of a wellplate over the plate holder.
+      offset: added to the nozzle's location, mm; its z must not be negative.
+      with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
+        model and the simulator follow the whole path; on a device up to 36% slower (design.md).
+
+    Raises:
+      MantisConfigurationError: without the unit's ``arm`` or ``stage`` block; nothing is sent.
+      MantisMotionError: if the arm is not brought up, or a motor faults.
+      MantisKinematicsError: if the location is out of the arm's reach; nothing is sent.
+      NotImplementedError: on a v3, until a v3 has run it; nothing is sent.
+      ValueError: if ``offset.z`` is negative, the well is not on a wellplate on a deck, the
+        wellplate has a lid, the location is not over the plate holder, or a target is outside its
+        motor's limits; nothing is sent.
+    """
+    self._check_initialized()
+    self._check_stage()
+    arm_frame_location = self._get_well_arm_frame_location(well=well, offset=offset)
+    targets = self._get_route_line_targets(route_line=arm_frame_location)
+    entry_moves = self._get_well_entry_moves(targets=targets)
+    joint_state = await self.request_joint_state()
+    head = self._get_head_position(joint_state=joint_state)
+    head_x, head_y = self._get_deck_frame_xy(x=cast(float, head.x), y=cast(float, head.y))
+    z_joint_position = cast(float, arm_frame_location.z)
+    if (
+      self._check_over_plate_holder(x=head_x, y=head_y)
+      and abs(joint_state[Z_MOTOR] - z_joint_position) <= WELL_HEIGHT_TOLERANCE
+    ):
+      moves = [self._get_queued_move(targets=targets, profiles=self._get_route_profiles())]
+    else:
+      if not await self.request_is_parked():
+        await self.park(with_model_updates=with_model_updates)
+      moves = entry_moves
+    await self._play_queued_moves(moves=moves, with_model_updates=with_model_updates)
+    if not with_model_updates:  # else passed on after the last move
+      await self._report_pose()
 
   def _get_chip_slot_path(self, *, slot: int) -> List[MantisArmCoordinate]:
     """A chip slot's path from its safe start into the slot and back out, with every line checked.

@@ -565,6 +565,31 @@ class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):
     await arm.park()
     self.assertTrue(await arm.request_is_parked())
 
+  async def test_move_to_well_stands_the_nozzle_over_each_well_above_the_wellplate(self):
+    arm = self.mantis.arm
+    assert arm is not None
+    # From idle down onto A1, then on to A2 at that height; 2.5 mm above the 14.2 mm top.
+    for name, x, y in (("A1", 14.3, 11.28), ("A2", 23.3, 11.28)):
+      with self.subTest(well=name):
+        await arm.move_to_well(well=self.wellplate.get_item(name))
+        arm_frame_location = compute_arm_frame_position(
+          position=(x, y, REFERENCE_HEIGHT - (14.2 + 2.5)),
+          origin=(-50.0, 40.0, 51.0),
+          transformation_matrix=SYNTHETIC_STAGE_BLOCK["transformation_matrix"],
+          offset_x=(0.0, 0.0, -0.0015),
+          offset_y=(0.0, 0.0, 0.0025),
+          arm_type_rotation_degree=0.0,
+          arm_type_translation=(0.0, 0.0, 0.0),
+        )
+        head_x, head_y, head_z = await request_head_position(arm=arm)
+        assert arm_frame_location.x is not None and arm_frame_location.y is not None
+        assert arm_frame_location.z is not None
+        self.assertAlmostEqual(head_x, arm_frame_location.x, places=3)
+        self.assertAlmostEqual(head_y, arm_frame_location.y, places=3)
+        self.assertAlmostEqual(head_z, -arm_frame_location.z, places=3)
+    await arm.park()
+    self.assertTrue(await arm.request_is_parked())
+
 
 if __name__ == "__main__":
   unittest.main()

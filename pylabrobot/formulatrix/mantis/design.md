@@ -123,7 +123,8 @@ generations; without `zones` the head
 is moved to idle from near idle only; without `approach_paths` a move to the waste or a wash refuses; without
 `stage` a move to a wellplate refuses. An arm type other than `Standard` is refused. A route file is
 read whole and refused on any line it does not understand, never skipped. Factory files (encoder
-corrections, taught sequences) are never committed; tests use synthetic tables.
+corrections, taught sequences) are never committed; tests use synthetic tables, but for one v4's
+stage block, which the well tests need to send that v4's captured moves.
 
 Which vendor values are the unit's own, from a v3 and a v4 install side by side:
 
@@ -263,10 +264,9 @@ read back by its encoder (command 84, within `Z_TRAVERSE_TOLERANCE`) or it raise
 with Z held; then Z, if named. `move_to_xy_position` takes the nozzle to a deck-frame (x, y) through
 the inverse kinematics on it; `move_to_location` adds Z's move to the location's height;
 `move_to_z_position` moves Z alone where the nozzle stands. Every public move that moves the arms is
-guarded; a dispense, which moves between wells at well height, queues its moves
-privately. Every move checks every target against the motor limits read, and Z's speed and
-acceleration against `Z_SPEED_RANGE` and `Z_ACCELERATION_RANGE`, before anything is sent. Nothing
-models the chip racks.
+guarded, but for `move_to_well`, which moves as the captured dispenses do (below). Every move
+checks every target against the motor limits read, and Z's speed and acceleration against
+`Z_SPEED_RANGE` and `Z_ACCELERATION_RANGE`, before anything is sent. Nothing models the chip racks.
 
 An xy speed in mm/s turns into each arm motor's by its turn over the nozzle's straight-line
 distance, acceleration likewise: the motors start and end together, the move takes as long as a
@@ -286,12 +286,22 @@ queued item each, as captured; back to the path's start, the line the head stand
 first. Every other move across, and `park`, from a pose on a path first goes back along it to its
 start, every argument checked before; a move of Z alone there is refused.
 
-`park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (False by default). True: each queued
-item is played on its own (61, 62, 68) and each route step moved, then the pose read (84) and
-passed on, so the 3D model and the simulator follow every segment. Each item ends with every
-motor's move done before the next starts (seen in a capture), so the path is the same; without an
-observer nothing more is read. False plays a path in one go and reads the pose once at the end, as
-the stop's park always does.
+`move_to_well(well=...)` stands the nozzle over a well's centre, `PITCH_HEIGHT` (the unit's
+`PitchHeight`, 2.5 mm) above its wellplate's highest point, its frame or its wells' tops, as every
+captured dispense does before its drops: from idle, queued at the route profile, the first two lines
+of `CHIP_CHANGER_ROUTE`, then Z alone down to the well's height at (15, 30), then the arms across
+with Z held; from over the plate holder at that height (within `WELL_HEIGHT_TOLERANCE`), the arms
+and Z in one item, as captured between wells. From anywhere else it parks first. The well's
+wellplate must sit on a deck, over the plate holder, without a lid; an `offset` with a negative z is
+refused, as nothing below `PITCH_HEIGHT` was captured. Below the safe height the entry is unguarded
+(open point 53).
+
+`park`, `move_to_waste`, `move_to_wash` and `move_to_well` take `with_model_updates` (False by
+default). True: each queued item is played on its own (61, 62, 68) and each route step moved, then
+the pose read (84) and passed on, so the 3D model and the simulator follow every segment. Each item
+ends with every motor's move done before the next starts (seen in a capture), so the path is the
+same; without an observer nothing more is read. False plays a path in one go and reads the pose once
+at the end, as the stop's park always does.
 
 True is the one to use in simulation, or with the 3D viewer open: the model follows every point of
 an approach path or zone route instead of jumping to its end. It is False by default because, on a
@@ -346,6 +356,21 @@ leaves the chip line pressurised, as a v4 does: it holds the chip's valves shut.
 a v4's, after the bottle, as the tare does, and warns if a line still reads above `VENT_TOLERANCE`;
 a v4 does not, and a session would end with the line at about 12 psi. With a chip left on the head
 it is not vented, so the chip's valves stay held shut.
+
+`Pump.dispense(wells=..., volumes=...)` plays what a v4 sends dispensing from the chip on the head
+into wells of the wellplate on the plate holder, as captured. After the sequencer starts, the clamp
+is locked at its `default_lock_level` (the vendor's wellplate definitions name it `clamplevel`),
+then the pump started as for a prime and the liquid class's dispense pressures set
+(`chip_pressure`, `vacuum`). The pre-dispense (`PRE_DISPENSE_VOLUMES`, the chips' own) is played at
+the waste, large drops first, then the head comes back out to (15, 30) at the safe height, to the
+safe height alone, and to (15, 30) again. Then onto the first well as `Arm.move_to_well` enters
+from idle, and well to well in one item each, each well's small then large drops; a well first
+takes up to `minimum_small_drops` small drops (the wellplate definitions' `minsd`), the rest split
+as a prime's (`_get_dispense_pump_cycle`). After the last well the safe state, held for the large
+drop's fill delay, and the head back to (15, 30) at the safe height. Then the clamp is released,
+then the pressure as after a prime; a failed or cancelled unlock still releases the pressure. A
+volume of 0 skips its well. A pneumatic clamp is refused (open point 56). Every well, volume and the
+clamp's level is checked before anything is sent.
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
@@ -570,11 +595,11 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 42. **The read-back after a rise is Z's encoder (command 84), not the demand position.** It
     catches a rise the device refused, dropped or stalled, within `Z_TRAVERSE_TOLERANCE`; Z's
     encoder has been read at rest only, never right after a move.
-43. **The stage transform has not commanded a move through this driver.** The same chain
-    reproduces, to 1 µm, the recorded head positions over the 96 wells of recorded dispenses on a
-    v4; that check needs the unit's own matrix and origin, so it is kept outside this repository
-    and the tests here are synthetic. Whether the nozzle stands over each well is for a device run
-    to show.
+43. **The stage transform has not commanded a move through this driver on a device.** With a
+    v4's stage block and wellplate, the tests send that v4's captured entry onto a wellplate and
+    moves between wells, to 9 decimals. Over its 8 dispense captures, 9 entries and 726 moves
+    between wells matched within 1e-12 device units; that sweep needs the captures, so it is kept
+    outside this repository. Whether the nozzle stands over each well is for a device run to show.
 44. **The holder's back-left corner is the wellplate frame's origin,** as the clamp pushes a
     wellplate there, with A1 at the back left: y runs from the holder's back edge.
 45. **The stage maps the nozzle of a fitted chip.** It is the unit's calibration, made with a chip;
@@ -605,3 +630,24 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 52. **The vacuum line is not vented at stop:** after a prime or a recovery it stays near -12 inHg,
     as a v4 leaves it. Whether a v4 ever vents it is not captured, nor what venting the chip line
     does with a chip on the head, so stop then leaves the chip line pressurised.
+53. **`move_to_well` moves the arms below the safe height, unguarded,** as captured: down at
+    (15, 30), behind the wellplate's back edge, then across 2.5 mm above its top. One older capture
+    of a test dispense went from (15, 30) at the safe height to A1 with the arms and Z in one item
+    instead; the later dispenses all entered as here. Between wells only steps of one well were
+    captured, along a row or down a column, and the same well again; no longer jump (A1 to H12)
+    was, so one is sent as one joint move, untested. The way back is `park`, which rises first; the
+    captures leave with the arms to (15, 30) at well height, then Z up. Neither the entry nor
+    `PITCH_HEIGHT` over a wellplate has run through this driver.
+54. **`Pump.dispense` has not run through this driver.** Its frames match one v4's 1 uL dispense
+    into one well command for command, and the moves and drops of a 96-well gradient from its
+    entry onto the wellplate to its way out; a well's drops match every captured dispense. The
+    captured runs also picked up, primed, recovered and placed the chip; those are separate calls
+    here. A dispense without a pre-dispense goes onto the first well straight from idle, which no
+    capture shows.
+55. **The chip's pre-attach and pre-detach sequences are not sent.** In the captured dispense runs
+    the pre-attach sequence (every valve closed for 100 ms) is played before a pick-up and the
+    pre-detach sequence before the placement, both with the pump running; a pick-up or a placement
+    on its own, or around a prime alone, sends neither. `pick_up_chip` and `place_chip` do not run
+    the pump, so neither is sent.
+56. **A dispense with a pneumatic clamp is not captured,** so it is refused. Its lock would start
+    the air pump, which the dispense would then find running, as open point 51.
