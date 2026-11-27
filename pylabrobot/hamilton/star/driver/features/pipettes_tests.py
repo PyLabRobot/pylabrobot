@@ -18,6 +18,7 @@ from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
+from pylabrobot.resources.errors import NoTipError
 from pylabrobot.resources.hamilton import STARDeck
 
 
@@ -252,6 +253,67 @@ class TestXYMove(unittest.IsolatedAsyncioTestCase):
     with self.assertRaisesRegex(RuntimeError, "X refused"):
       await self.pipettes.move_to_xy_positions(500.0, {0: 420.0})
     self.assertEqual(self.sent[-1], jy("4200 3000 2000 1600 1420 1240 1060 0880"))
+
+
+class TestXMove(unittest.IsolatedAsyncioTestCase):
+  """`move_to_x_position`: checked first, the low channels and head up, then the arm."""
+
+  async def asyncSetUp(self):
+    self.pipettes, self.sent = await channels(width=9.0, positions=TestXYMove.SPREAD)
+    await self.pipettes.move_stop_disc_to_z_positions({0: 200.0, 1: 250.0})
+    self.sent.clear()
+
+  def _moves(self) -> List[str]:
+    return [command for command in self.sent if command[2:4] in ("ZA", "XP")]
+
+  async def test_only_the_low_channels_rise_and_before_x(self):
+    await self.pipettes.move_to_x_position(x=500.0)
+    self.assertEqual(self._moves(), ["P1ZAza22838zv11652zr075zw3", "X0XPla05000lr3lw7"])
+
+  async def test_a_refused_x_or_raise_moves_nothing(self):
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_to_x_position(x=5000.0)
+    with self.assertRaises(ValueError):
+      await self.pipettes.move_to_x_position(x=500.0, minimum_traverse_height_start=400)
+    self.assertEqual(self._moves(), [])
+
+  async def test_moving_x_with_y_raises_only_once(self):
+    await self.pipettes.move_to_xy_positions(500.0, {0: 420.0})
+    raised = [command for command in self.sent if command[2:4] == "ZA"]
+    self.assertEqual(raised, ["P1ZAza22838zv11652zr075zw3"])
+
+  def _low_head(self) -> None:
+    """Put the 96-head below every traverse height; its safe-Z moves are recorded as sent."""
+    head = self.pipettes.arm.head96
+    assert head is not None
+
+    async def low() -> float:
+      return 150.0
+
+    async def to_safe_z(*args: Any, **kwargs: Any) -> float:
+      self.sent.append("head to safe Z")
+      return 300.0
+
+    head.request_z_position = low  # type: ignore[method-assign]
+    head.move_to_safe_z = to_safe_z  # type: ignore[method-assign]
+
+  async def test_a_low_head_rises_before_x(self):
+    self._low_head()
+    await self.pipettes.move_to_x_position(x=500.0)
+    x_move = next(i for i, command in enumerate(self.sent) if command.startswith("X0XP"))
+    self.assertLess(self.sent.index("head to safe Z"), x_move)
+
+  async def test_a_height_of_0_raises_neither_channels_nor_head(self):
+    self._low_head()
+    await self.pipettes.move_to_x_position(x=500.0, minimum_traverse_height_start=0)
+    self.assertEqual(self._moves(), ["X0XPla05000lr3lw7"])
+    await self.pipettes.move_to_xy_positions(500.0, {0: 420.0}, minimum_traverse_height_start=0)
+    self.assertNotIn("head to safe Z", self.sent)
+
+  async def test_without_safety_checks_only_the_arm_moves(self):
+    await self.pipettes.move_to_x_position(x=500.0, perform_safety_checks=False)
+    self.assertTrue(self.sent)
+    self.assertEqual([command for command in self.sent if not command.startswith("X0")], [])
 
 
 async def simulated_channels() -> Pipettes:
@@ -708,7 +770,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._stand_at_x(300.0, 250.04)
     x = await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0)
     self.assertEqual(self.sent, ["C0XLpn01xs02000"])
-    self.moves.assert_awaited_once_with(252.0)
+    self.moves.assert_awaited_once_with(x=252.0, perform_safety_checks=False)
     self.assertEqual(x, 249.4)
 
   async def test_x_probe_with_no_post_detection_distance_sends_only_the_search(self):
@@ -727,7 +789,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._stand_at_x(300.0, 400.0)
     x = await self.pipettes.probe_x_using_clld(0, "right")
     self.assertEqual(self.sent, [f"C0XLpn01xs{round(high * 10):05}"])
-    self.moves.assert_awaited_once_with(398.0)
+    self.moves.assert_awaited_once_with(x=398.0, perform_safety_checks=False)
     self.assertEqual(x, 400.6)
 
   async def test_x_probe_refuses_an_end_behind_the_arm_or_out_of_reach(self):
@@ -812,7 +874,7 @@ class TestCLLDProbing(unittest.IsolatedAsyncioTestCase):
     self._answer_the_search_with("XL", "C0XLid0001er12/00")
     self._stand_at_x(300.0, 200.0)
     self.assertIsNone(await self.pipettes.probe_x_using_clld(0, "left", search_end_position=200.0))
-    self.moves.assert_awaited_once_with(202.0)
+    self.moves.assert_awaited_once_with(x=202.0, perform_safety_checks=False)
 
   async def test_y_probe_that_finds_nothing_makes_its_post_detection_move_and_answers_none(self):
     for trace in (70, 73):
@@ -1481,7 +1543,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.pipettes = self.driver.pipettes
     self.deck = deck
     self.sent: List[str] = []
-    self.lh = [1500] * self.pipettes.num_channels
+    self.lh = [1100] * self.pipettes.num_channels
     # Where a z-touch stops, in stop disc increments; a list gives one reply per search.
     self.rz: Union[int, List[int]] = 22300
     self.fail_with: dict = {}  # module -> list of error strings, one per search, in order
@@ -1549,7 +1611,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
       + ["C0RL"],
     )
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    self.assertEqual(heights, [round(150.0 - bottom, 2)] * 4)
+    self.assertEqual(heights, [round(110.0 - bottom, 2)] * 4)
     self.xy.assert_awaited_once()
     assert self.xy.await_args is not None
     x, ys = self.xy.await_args.args
@@ -1576,7 +1638,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     overhang = 334.7 - 282.8
     found, nothing = (self.pipettes.get_reference_point_location(ch) for ch in (0, 1))
     assert found is not None and nothing is not None
-    self.assertAlmostEqual(found.z, 150.0 + overhang)
+    self.assertAlmostEqual(found.z, 110.0 + overhang)
     bottom = wells[1].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     self.assertAlmostEqual(nothing.z, bottom - 1.0 + overhang, places=1)
 
@@ -1631,7 +1693,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.safe_z.await_count, 2, "up before the first batch and after the failure")
 
   async def test_replicates_are_averaged(self):
-    self.lh = [1500] * self.pipettes.num_channels
+    self.lh = [1100] * self.pipettes.num_channels
     calls = {"n": 0}
     original = self.pipettes._driver.send_command
 
@@ -1639,14 +1701,56 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
       result = await original(module=module, command=command, **kwargs)
       if command == "RL":
         calls["n"] += 1
-        result["lh"] = [1500 + 10 * calls["n"]] * self.pipettes.num_channels
+        result["lh"] = [1100 + 10 * calls["n"]] * self.pipettes.num_channels
       return result
 
     self.pipettes._driver.send_command = varying  # type: ignore[assignment]
     wells = self._wells("A1")
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
     heights = await self.pipettes.probe_liquid_heights(wells, n_replicates=3)
-    self.assertEqual(heights, [round(152.0 - bottom, 2)])
+    self.assertEqual(heights, [round(112.0 - bottom, 2)])
+
+  async def test_a_surface_above_the_top_raises_naming_every_channel_and_comes_up(self):
+    # Sensors that trigger as the search begins answer a height above the wells searched.
+    wells = self._wells("A1", "B1", "C1")
+    top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    surface = round(top + 3.0, 1)
+    self.lh[0] = self.lh[1] = round(surface * 10)
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.probe_liquid_heights(wells)
+    message = str(refused.exception)
+    self.assertIn("cannot be a liquid surface", message)
+    self.assertIn(f"channel 0 in {wells[0].name}: {surface:.1f} mm", message)
+    self.assertIn(f"channel 1 in {wells[1].name}", message)
+    self.assertIn(f"its top is at {top:.2f} mm", message)
+    self.assertNotIn("channel 2", message)
+    self.assertEqual(self.safe_z.await_count, 2, "up before the first batch and after the failure")
+
+  async def test_a_surface_above_the_top_in_one_round_is_not_averaged_away(self):
+    wells = self._wells("A1")
+    top = wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    n = self.pipettes.num_channels
+    reads = [[1100] * n, [round((top + 3.0) * 10)] * n]
+    original = self.pipettes._driver.send_command
+
+    async def varying(module: str, command: str, **kwargs: Any):
+      result = await original(module=module, command=command, **kwargs)
+      if command == "RL":
+        result["lh"] = reads.pop(0)
+      return result
+
+    self.pipettes._driver.send_command = varying  # type: ignore[assignment]
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.probe_liquid_heights(wells, n_replicates=3)
+    self.assertIn("cannot be a liquid surface", str(refused.exception))
+    self.assertEqual(self.sent.count("C0RL"), 2, "the third round is not searched")
+
+  async def test_a_surface_up_to_a_seating_error_above_the_top_is_liquid(self):
+    wells = self._wells("A1")
+    surface = round(wells[0].get_location_wrt(self.deck, "c", "c", "t").z + 1.0, 1)
+    bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
+    self.lh = [round(surface * 10)] * self.pipettes.num_channels
+    self.assertEqual(await self.pipettes.probe_liquid_heights(wells), [round(surface - bottom, 2)])
 
   async def test_any_other_channel_error_is_raised_after_coming_up(self):
     self.fail_with["P1"] = ["P1ZLid0001er99"]
@@ -1851,7 +1955,7 @@ class TestLiquidHeightProbing(unittest.IsolatedAsyncioTestCase):
     )
     self.assertEqual(self.xy.await_count, 2)
     bottom = wells[0].get_location_wrt(self.deck, "c", "c", "cavity_bottom").z
-    self.assertEqual(heights, [round(150.0 - bottom, 2)] * 6)
+    self.assertEqual(heights, [round(110.0 - bottom, 2)] * 6)
 
   async def test_a_turned_plate_is_searched_where_its_wells_stand(self):
     turned = cor_axy_96_wellplate_500uL_Ub("turned")
@@ -2727,6 +2831,47 @@ def _answer_pick_ups_as_the_device(pipettes: Pipettes, rack: Any, empty: List[st
     return await answer(module, command, **kwargs)
 
   driver._answer = answered
+
+
+class TestChannelsArePlacedBeforeATipCommand(unittest.IsolatedAsyncioTestCase):
+  """Every channel is placed in Y by its width before a `C0 TP` or `C0 TR` into spots, so the
+  device moves none aside itself."""
+
+  async def asyncSetUp(self):
+    self.pipettes, self.rack, _ = await channels_over_a_rack()
+    self.order: List[str] = []
+    log = self.pipettes._driver._log_exchange  # type: ignore[attr-defined]
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written[:4] in ("X0XP", "C0JY", "C0TP", "C0TR"):
+        self.order.append(written[:4])
+      log(written, read)
+
+    self.pipettes._driver._log_exchange = recorded  # type: ignore[attr-defined]
+
+  async def test_channels_behind_the_batch_are_placed_in_front_of_it_first(self):
+    """Channels 6 and 7 stand behind where channel 5 is going; they are moved out first."""
+    await self.pipettes.move_to_y_positions(
+      {0: 470.0, 1: 400.0, 2: 380.0, 3: 360.0, 4: 340.0, 5: 320.0, 6: 300.0, 7: 290.0}
+    )
+    self.order.clear()
+    spots = [self.rack.get_item(f"{row}1") for row in "ABCDEF"]
+    await self.pipettes.pick_up_tips(spots, use_channels=[0, 1, 2, 3, 4, 5])
+    self.assertEqual(self.order, ["X0XP", "C0JY", "C0TP"])
+
+  async def test_a_drop_with_a_channel_without_a_tip_moves_nothing(self):
+    await self.pipettes.pick_up_tips([self.rack.get_item("A1")], use_channels=[0])
+    self.order.clear()
+    with self.assertRaises(NoTipError):
+      await self.pipettes.drop_tips([self.rack.get_item("D1")], use_channels=[3])
+    self.assertEqual(self.order, [])
+
+  async def test_a_drop_into_spots_is_placed_first(self):
+    spots = [self.rack.get_item(row + "1") for row in "AB"]
+    await self.pipettes.pick_up_tips(spots, use_channels=[0, 1])
+    self.order.clear()
+    await self.pipettes.drop_tips(spots, use_channels=[0, 1])
+    self.assertEqual(self.order, ["X0XP", "C0JY", "C0TR"])
 
 
 class TestTipCommandsRefuseARackNoHeadCanReach(unittest.IsolatedAsyncioTestCase):
@@ -4300,6 +4445,24 @@ class TestAspirateInSimulation(_SimulatedPlateWithWater):
       )
     self.assertIn("met no floor", str(refused.exception))
     self.assertEqual(sent, [])
+
+  async def test_a_surface_found_above_the_top_is_refused_before_the_command(self):
+    # The simulator answers a search from the tracker, so the read is stood in for: every channel
+    # answers the height the search of a well starts from.
+    top = self.wells[0].get_location_wrt(self.deck, "c", "c", "t").z
+    start = round(top + self.pipettes.well_search_start_clearance, 1)
+    self.pipettes.request_last_lld_z_positions = unittest.mock.AsyncMock(  # type: ignore[method-assign]
+      return_value=[start] * self.pipettes.num_channels
+    )
+    sent = self._record_aspirations()
+    with self.assertRaises(RuntimeError) as refused:
+      await self.pipettes.aspirate(self.wells[:2], [10.0] * 2, lld_mode=Pipettes.LLDMode.CAPACITIVE)
+    message = str(refused.exception)
+    self.assertIn("cannot be a liquid surface", message)
+    self.assertIn(f"channel 0 in {self.wells[0].name}", message)
+    self.assertIn(f"channel 1 in {self.wells[1].name}", message)
+    self.assertEqual(sent, [])
+    self.assertEqual(self.wells[0].tracker.get_used_volume(), 150.0)
 
   async def test_no_liquid_found_is_refused_and_earlier_batches_stand(self):
     for row in "EFGH":

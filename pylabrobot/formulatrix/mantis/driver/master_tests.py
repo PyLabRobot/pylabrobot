@@ -25,7 +25,7 @@ from pylabrobot.formulatrix.mantis.driver.events import (
   decode_sequence_stopped,
 )
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
-from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController
+from pylabrobot.formulatrix.mantis.driver.features.pump import PressureController, Pump
 from pylabrobot.formulatrix.mantis.driver.features.rfid import (
   RFID_PING_DEVICE_COMMAND,
   RFID_READ_TAG_COMMAND,
@@ -76,6 +76,8 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (0, 82, "0200"): "01000000000000005940",
   (0, 84, "0000"): "00000000b42350bf",
   (0, 84, "0100"): "0000000090b8d73f",
+  # Z's encoder at its flag (-0.25 device units), as the v4 answered: a stop reads where it stopped.
+  (0, 84, "0200"): "000000000000d0bf",
   # The absolute encoders, valid.
   (11, 30, "0000"): "010000000000f43f6740",
   (11, 30, "0100"): "010000000000a0d73940",
@@ -90,6 +92,27 @@ RECORDED_REPLIES: Dict[Tuple[int, int, str], str] = {
   (10, 16, "0000"): "0000",
   (10, 12, "0000"): "0000",
   (10, 14, ""): "0000",
+  (10, 12, "0100"): "0000",
+  # The tare's writes, answered with no payload: each controller off, its proportional valve shut,
+  # its solenoid at 10000 then 0, and its sensor's offset lowered by the reading above.
+  (10, 13, "00000000"): "",
+  (10, 13, "01000000"): "",
+  (10, 32, "00000000"): "",
+  (10, 32, "01000000"): "",
+  (10, 34, "00001027"): "",
+  (10, 34, "01001027"): "",
+  (10, 34, "00000000"): "",
+  (10, 34, "01000000"): "",
+  (10, 21, "00000000004049d0853f00000020f7802dc0"): "",
+  (10, 21, "010000000080d1d5853f000000e0bda32dc0"): "",
+  # Each tared sensor's calibration written back at stop, as read above.
+  (10, 21, "00000000004049d0853f000000e06f292bc0"): "",
+  (10, 21, "010000000080d1d5853f00000000b4572bc0"): "",
+  # The release at stop, as captured: the vacuum's controller off, the reservoir valves opened.
+  (10, 13, "02000000"): "",
+  (10, 15, "0000"): "",
+  (10, 34, "0000204e"): "",
+  (10, 32, "0000204e"): "",
   # The release and the lock at levels 1, 2 and 3.
   (12, 31, "000000000000e83f000000000000000088130000"): "",
   (12, 30, "0000000000000000105839b4c876be3fd0070000"): "",
@@ -165,6 +188,25 @@ RECORDED_LINK_FAILURE = D2XXError("FT_GetQueueStatus returned FT_IO_ERROR (4)", 
 # Interface A: what the RFID reader on a Mantis v4 sent, chunked as it arrived.
 READER_PING_REPLY = [b"TRF7970A EVM \r\n\r\n"]
 READER_EMPTY_SLOT_REPLY = [b"Request mode.\r\n", b"[]\r\n"]
+
+
+# What a stop sends board 10 with the pump off: the pump read, then each tared sensor's calibration
+# written back, as setup read it.
+PUMP_READ = (10, 14, b"")
+CALIBRATION_WRITTEN_BACK = [
+  (10, 21, bytes.fromhex("00000000004049d0853f000000e06f292bc0")),
+  (10, 21, bytes.fromhex("010000000080d1d5853f00000000b4572bc0")),
+]
+# A v4's chip line vented at stop with the frames the captured tare vents it with, then the bottle
+# and chip lines read.
+CHIP_LINE_VENT = [
+  (10, 13, bytes.fromhex("01000000")),
+  (10, 32, bytes.fromhex("01000000")),
+  (10, 34, bytes.fromhex("01001027")),
+  (10, 34, bytes.fromhex("01000000")),
+  (10, 30, bytes.fromhex("0000")),
+  (10, 30, bytes.fromhex("0100")),
+]
 
 
 def make_answers(
@@ -254,22 +296,39 @@ class FakeLink:
 class DriverTestCase(unittest.IsolatedAsyncioTestCase):
   # every recorded reply is answered; a slow test runner must not time one out
   default_read_timeout = 5.0
+  # Boards a test leaves silent: only a command to one of them waits briefly, as it is never
+  # answered, so a slow runner cannot time out one that is.
+  absent_boards: Tuple[int, ...] = ()
 
   def setUp(self):
     # The LED bar's holds are taken, not waited: setup holds "setup_done" for a second.
     patcher = mock.patch.object(LedBar, "_sleep", autospec=True)
     self.led_bar_sleep = patcher.start()
     self.addCleanup(patcher.stop)
+    # The pump's waits too: the tare waits between its readings.
+    patcher = mock.patch.object(Pump, "_sleep", autospec=True)
+    self.pump_sleep = patcher.start()
+    self.addCleanup(patcher.stop)
 
   def make_driver(self, *, link: FakeLink, **kwargs) -> MantisDriver:
     driver = MantisDriver(io=link.io, rfid_io=link.reader.io, **kwargs)
     driver.default_read_timeout = self.default_read_timeout
+    if self.absent_boards:
+      send_command = driver._send_command
+      absent_boards = self.absent_boards
+
+      async def send(**command):
+        if command["board"] in absent_boards:
+          command["timeout"] = 0.25
+        return await send_command(**command)
+
+      driver._send_command = send  # type: ignore[method-assign]
     return driver
 
   async def set_up_driver(self, *, link: FakeLink, skip_arm: bool = True, **kwargs) -> MantisDriver:
     driver = self.make_driver(link=link, **kwargs)
     await driver.setup(skip_arm=skip_arm)
-    self.addAsyncCleanup(driver.stop)
+    self.addAsyncCleanup(driver.stop, accept_chip_left_on_head=True)
     return driver
 
 
@@ -293,13 +352,18 @@ class SetupTests(DriverTestCase):
       DeviceConfiguration(
         generation="v4",
         firmware_versions={0: "4.20.6.2", 10: "1.0.8", 11: "0.1.7 DBG", 12: "0.1.8 DBG"},
-        motor_limits={0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
         feedback_sensor_parameters=RECORDED_CALIBRATION,
       ),
     )
+    # The motor limits are the arm's, read for it.
+    assert driver.arm is not None
+    self.assertEqual(
+      driver.arm.configuration.motor_limits,
+      {0: (-4000.0, 4000.0), 1: (-4000.0, 4000.0), 2: (-160.0, 2300.0)},
+    )
 
-  async def test_only_board_0_must_answer_and_each_other_board_is_asked_once(self):
-    self.default_read_timeout = 0.25  # boards 10 to 12 never answer
+  async def test_only_board_0_must_answer_and_board_11_is_asked_twice(self):
+    self.absent_boards = (10, 11, 12)
     link = FakeLink(answers=make_answers(absent_boards=(10, 11, 12)))
     driver = await self.set_up_driver(link=link)
     self.assertEqual(driver.configuration.generation, "v3")
@@ -307,9 +371,41 @@ class SetupTests(DriverTestCase):
       driver.configuration.firmware_versions, {0: "4.20.6.2", 10: None, 11: None, 12: None}
     )
     sent = [parse_frame(frame=frame)[1:] for frame in link.written]
-    for board in (10, 11, 12):
+    for board, count in ((10, 1), (11, 2), (12, 1)):
       with self.subTest(board=board):
-        self.assertEqual(sent.count((board, 1, b"")), 1)
+        self.assertEqual(sent.count((board, 1, b"")), count)
+
+  async def test_board_11_answering_its_second_attempt_makes_a_v4(self):
+    self.absent_boards = (11,)  # its first version request goes unanswered
+    link = FakeLink(answers=make_answers())
+    write = link.write
+    dropped: List[bytes] = []
+
+    async def drop_first_board_11_request(data: bytes) -> int:
+      if parse_frame(frame=data)[1:3] == (11, 1) and not dropped:
+        dropped.append(data)
+        link.written.append(data)
+        return len(data)
+      return await write(data)
+
+    link.io.write.side_effect = drop_first_board_11_request
+    driver = await self.set_up_driver(link=link)
+    self.assertEqual(driver.configuration.generation, "v4")
+    self.assertEqual(driver.configuration.firmware_versions[11], "0.1.7 DBG")
+
+  async def test_a_v4_arm_block_on_a_silent_board_11_refuses_setup(self):
+    with tempfile.TemporaryDirectory() as directory:
+      path = os.path.join(directory, "declared.json")
+      with open(path, "w", encoding="utf-8") as f:
+        json.dump({"arm": {"homing_position_a": {"0": 0.0, "1": 0.0}}}, f)
+      link = FakeLink(answers=make_answers(absent_boards=(11,)))
+      self.absent_boards = (11,)
+      driver = self.make_driver(link=link, declared_configuration_json=path)
+      with self.assertRaisesRegex(MantisConfigurationError, "absolute-encoder references"):
+        await driver.setup()
+    sent = [parse_frame(frame=frame)[1:3] for frame in link.written]
+    self.assertNotIn((0, 22), sent)
+    self.assertIsNone(driver.arm)
 
   async def test_declared_configuration_that_disagrees_refuses_setup(self):
     with tempfile.TemporaryDirectory() as directory:
@@ -332,8 +428,8 @@ class SetupTests(DriverTestCase):
       with open(path, "w", encoding="utf-8") as f:
         json.dump({"device": RECORDING["device"]}, f)
       link = FakeLink(answers=make_answers(absent_boards=(12,)))
+      self.absent_boards = (12,)
       driver = self.make_driver(link=link, declared_configuration_json=path)
-      driver.default_read_timeout = 0.25  # board 12 never answers
       with self.assertRaisesRegex(
         MantisConfigurationError, "board 12: declared '0.1.8 DBG', device did not"
       ):

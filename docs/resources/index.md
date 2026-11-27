@@ -21,6 +21,7 @@ The PLR Resource Management System consists of two key components, each serving 
 :hidden:
 
 introduction
+assigning-resources
 custom-resources
 ```
 
@@ -103,7 +104,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
 
   <tr><td>├── ResourceStack</td></tr>
-  <tr><td>│   └── <a href="resource-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
+  <tr><td>│   └── <a href="itemized-resource/tiprack/nested-tip-rack.html">Nested tip rack stack</a></td></tr>
 
   <tr><td>└── Workcell (to be made)</td></tr>
 </table>
@@ -175,6 +176,7 @@ library/agenbio
 library/agilent
 library/alpaqua
 library/azenta
+library/beckman_coulter
 library/bioer
 library/biorad
 library/boekel
@@ -183,9 +185,11 @@ library/cellvis
 library/corning
 library/eppendorf
 library/falcon
+library/formulatrix
 library/greiner
 library/hamilton
 library/imcs
+library/mckesson
 library/nest
 library/opentrons
 library/perkin_elmer

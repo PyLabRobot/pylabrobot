@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Optional
 
 from pylabrobot.io.hid import HID
+from pylabrobot.thermo_fisher.kingfisher.hid import decode_report, encode_reports
 
 logger = logging.getLogger(__name__)
 
@@ -203,10 +204,7 @@ class PrestoConnection:
         if not raw:
           await asyncio.sleep(0)
           continue
-        length = raw[0]
-        if length > 63 or length > len(raw) - 1:
-          raise PrestoError(f"Invalid HID payload length {length} in {len(raw)}-byte report")
-        for element in messages.feed(raw[1 : 1 + length]):
+        for element in messages.feed(decode_report(raw)):
           if element.tag == "Res":
             if element.get("name") != self._pending_name:
               logger.debug("Ignoring unmatched response %s", element.get("name"))
@@ -263,11 +261,9 @@ class PrestoConnection:
     async with self._writes:
       if not payload.endswith(b"\n"):
         payload += b"\n"
-      for offset in range(0, len(payload), 63):
+      for report in encode_reports(payload):
         if check_session and self._failure is not None:
           raise self._failure
-        chunk = payload[offset : offset + 63]
-        report = bytes([len(chunk)]) + chunk.ljust(63, b"\x00")
         written = await self.io.write(report, report_id=b"\x00")
         if written != 65:
           raise OSError(f"Short HID output report write: {written} of 65 bytes")

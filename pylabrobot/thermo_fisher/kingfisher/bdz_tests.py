@@ -95,6 +95,25 @@ class BdzTests(unittest.TestCase):
         reread = read_bdz(write_bdz(parsed))
         self.assertEqual(reread, parsed)
 
+  def test_variable_bindit_versions(self) -> None:
+    """Read Presto and Duo exports without assuming a fixed-length version header."""
+    for variant in ("presto", "duo"):
+      source = protocol(variant)
+      original = write_bdz(source)
+      for version in (b"4.1", b"4.123.456.789"):
+        data = bytearray(original[:33] + struct.pack("<H", len(version)) + version + original[43:])
+        struct.pack_into("<I", data, 12, 19 + len(version))
+        struct.pack_into("<I", data, 41 + len(version), len(data) - 55 - len(version))
+        with self.subTest(variant=variant, version=version):
+          self.assertEqual(read_bdz(bytes(data)), read_bdz(original))
+
+  def test_unsafe_xml_is_rejected(self) -> None:
+    """Apply shared XML declaration checks before interpreting instrument metadata."""
+    data = write_bdz(protocol())
+    props, _ = _bdz_parts(data)
+    with self.assertRaisesRegex(ValueError, "declaration"):
+      read_bdz(replace_xml(data, properties=b"<!DOCTYPE Properties>" + props))
+
   def test_synthetic_fixture_has_known_semantics(self) -> None:
     data = (Path(__file__).parent / "test_data" / "presto_mix.bdz").read_bytes()
     parsed = read_bdz(data)

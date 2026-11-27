@@ -485,7 +485,7 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
     return arm
 
   async def test_setup_with_vision(self):
-    arm = await self._arm()
+    arm = await self._arm(with_light_greeting=False)
     self.assertEqual(self.network.sent, _SETUP)
     config = _vision(arm).configuration
     self.assertEqual(
@@ -540,8 +540,52 @@ class TestPreciseFlexVisionWire(unittest.IsolatedAsyncioTestCase):
         await call()
     self.assertEqual(self.network.sent, [])
 
+  async def test_setup_fades_the_front_led_on_last(self):
+    greeting = [
+      f"controller: {command}"
+      for brightness in (10, 30, 60, 100, 0)
+      for command in (
+        "VToolProperty led Bank 1",
+        f"VToolProperty led Brightness {brightness}",
+        "Vprocess LightControl",
+      )
+    ]
+    with patch(
+      "pylabrobot.brooks.precise_flex.driver.features.vision.asyncio.sleep", new=AsyncMock()
+    ) as sleep:
+      await self._arm()
+    self.assertEqual(self.network.sent, _SETUP + greeting)
+    self.assertEqual([c.args for c in sleep.await_args_list[-4:]], [(0.1,)] * 4)
+
   async def test_stop_closes_the_vision_server(self):
     arm = await self._arm()
+    self.network.sent.clear()
+    await arm.stop(with_light_farewell=False)
+    self.assertEqual(self.network.sent, _STOP)
+
+  async def test_stop_flashes_the_leds_twice_first(self):
+    flash = [
+      f"controller: {command}"
+      for bank in (1, 2)
+      for brightness in (100, 0)
+      for command in (
+        f"VToolProperty led Bank {bank}",
+        f"VToolProperty led Brightness {brightness}",
+        "Vprocess LightControl",
+      )
+    ]
+    arm = await self._arm()
+    self.network.sent.clear()
+    with patch(
+      "pylabrobot.brooks.precise_flex.driver.features.vision.asyncio.sleep", new=AsyncMock()
+    ) as sleep:
+      await arm.stop()
+    self.assertEqual(self.network.sent, flash * 2 + _STOP)
+    self.assertEqual([c.args for c in sleep.await_args_list], [(0.1,)] * 4)
+
+  async def test_stop_without_light_control_does_not_flash(self):
+    arm = await self._arm()
+    _vision(arm).configuration = VisionConfiguration(discovered=True)
     self.network.sent.clear()
     await arm.stop()
     self.assertEqual(self.network.sent, _STOP)

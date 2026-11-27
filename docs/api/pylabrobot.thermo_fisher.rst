@@ -102,6 +102,36 @@ KingFisher Presto
     ProtocolStep
     ProtocolTimeLeft
 
+KingFisher Flex
+---------------
+
+.. currentmodule:: pylabrobot.thermo_fisher.kingfisher.flex
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    KingFisherFlex
+    FlexError
+    FlexEvent
+    FlexRunResult
+    FlexTranscriptEntry
+    FlexProtocol
+    FlexBoundProtocol
+    FlexAction
+    FlexManualHandler
+    FlexStartAcknowledgement
+    FlexProtocolError
+    FlexProtocolIssue
+    FlexCommand
+    FlexPlate
+    FlexPlateHolder
+    FlexDispense
+    FlexTip
+    FlexPrompt
+    read_flex_bdz
+
 BindIt protocol files
 ---------------------
 

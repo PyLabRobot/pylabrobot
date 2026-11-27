@@ -351,7 +351,9 @@ class USB(IOBase):
           continue
 
       if self._serial_number is not None:
-        if dev._serial_number is None:
+        # PyUSB reads the serial number descriptor on first access; `_serial_number` is only its
+        # cache, empty until then.
+        if dev.iSerialNumber == 0 or dev.serial_number is None:
           raise RuntimeError(
             f"A serial number was specified for '{self.human_readable_device_name}', but the device does not have a serial number."
           )

@@ -423,6 +423,9 @@ class Pipettes:
   # A liquid search stops looking this far below the modelled cavity bottom, in mm: the seating
   # error of a plate, no more.
   search_limit_below_cavity_bottom: float = 1.0
+  # A surface found more than this above its container's top, in mm, is refused: the seating
+  # error of a plate, no more.
+  surface_limit_above_top: float = 1.0
   # A Z-touch starts this fraction of the cavity depth above the cavity bottom: the channels get
   # there fast, then touch slowly. Never under the tracked liquid; the top when tracking is off.
   ztouch_search_start_fraction: float = 0.5
@@ -753,7 +756,8 @@ class Pipettes:
   def _min_pair_spacing(self, i: int, j: int) -> float:
     """The smallest Y gap two channels may sit at by themselves, in mm, whatever lies between them.
 
-    The wider of the two, rounded up to 0.1 mm, since neither may overlap the other.
+    The wider of the two, rounded up to 0.1 mm, since neither may overlap the other. A channel
+    carrying a CoRe gripper tool keeps `CoreGrippers.tool_width_margin` more.
 
     Args:
       i: one channel, 0-indexed from the back.
@@ -768,7 +772,12 @@ class Pipettes:
     widths = [self.configuration.channels[channel].width for channel in (i, j)]
     if any(width is None for width in widths):
       raise RuntimeError(f"channels {i} and {j} have no width read yet; run discovery first")
-    return math.ceil(max(cast(List[float], widths)) * 10) / 10
+    margin = 0.0
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._tools_taken_from is not None:
+      if {i, j} & {grippers._back_channel, grippers._front_channel}:
+        margin = grippers.tool_width_margin
+    return math.ceil((max(cast(List[float], widths)) + margin) * 10) / 10
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """The smallest allowed Y gap two channels may sit at, in mm.
@@ -795,7 +804,9 @@ class Pipettes:
   def minimum_y_spacings(self) -> List[float]:
     """The smallest Y gap each channel keeps from the one in front of it, in mm, one per channel.
 
-    What `plan_batches` asks for; the last channel has nothing in front of it.
+    One gap per pair, the last channel having nothing in front of it. `plan_batches` reads one
+    value per channel instead, and takes the larger of each pair: it is given
+    `_min_pair_spacing(i=channel, j=channel)` for each channel.
 
     Returns:
       One gap per channel, back to front.
@@ -1342,46 +1353,6 @@ class Pipettes:
       await self._set_z_speed(channel, self.default_z_speed)
       await self._set_z_acceleration(channel, self.default_z_acceleration)
 
-  # -- x position --------------------------------------------------------------------------------
-
-  async def request_x_position(self) -> float:
-    """Request where along X the channels are, in deck mm.
-
-    The channels have no X drive. They ride the arm and sit at its reference point, and this asks
-    the arm. Nothing is recorded: each channel's resource is a child of the arm's and follows it
-    in X.
-
-    Returns:
-      The position in mm.
-    """
-    return await self.arm.request_position()
-
-  async def move_to_x_position(
-    self,
-    x: float,
-    acceleration_level: Optional[int] = None,
-    current_limit: Optional[int] = None,
-    settle_reads: int = 20,
-  ):
-    """Move the channels along X. The whole arm travels, with everything else it carries.
-
-    Args:
-      x: where to go, in mm.
-      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the pipettes.
-      current_limit: the motor current limit. Defaults to the X-arm that holds the pipettes.
-      settle_reads: how many reads to take before calling the arm stopped.
-
-    Raises:
-      ValueError: If the channels cannot reach it.
-    """
-    self._check_reachable("x", x)
-    return await self.arm.move_to_x_position(
-      x,
-      acceleration_level=acceleration_level,
-      current_limit=current_limit,
-      settle_reads=settle_reads,
-    )
-
   # -- y position --------------------------------------------------------------------------------
 
   async def _plan_y_positions(
@@ -1849,6 +1820,53 @@ class Pipettes:
     async with self._temporary_z_drive_profile(speed=speed, acceleration=acceleration):
       await self.probe_z_max()
 
+  async def _traverse_raise_targets(self, height: float) -> Dict[int, float]:
+    """The stop disc target of every channel whose lowest point is below `height`, checked.
+
+    A channel's lowest point is its tip bottom when it carries one, else its stop disc.
+
+    Args:
+      height: the height every lowest point has to reach, in mm.
+
+    Returns:
+      Each low channel's stop disc target in mm, keyed by channel; empty if none is low.
+
+    Raises:
+      ValueError: If a channel cannot raise its lowest point that high.
+    """
+    lowest = await self._unchecked_fw_request_lowest_z_positions()
+    targets = {}
+    for channel, z in enumerate(lowest):
+      if z < height:
+        stop_disc = await self.request_stop_disc_z_position(channel)
+        target = round(stop_disc + height - z, 2)
+        # The lowest point reads to 0.1 mm, the stop disc finer: raised to the top, the sum can pass
+        # it by that much.
+        top = self.configuration.z_range[1]
+        targets[channel] = top if top < target <= top + 0.1 else target
+        self._check_reachable("z", targets[channel])
+    return targets
+
+  async def _raise_head_on_the_arm(self, height: float) -> None:
+    """Raise the 96- or 384-head on these channels' arm to its safe Z if it is below `height`.
+
+    The head rides the arm, so an X move drags it along. Its lowest point is its tip bottom when it
+    carries tips, else its stop disc. A head already at its top stays there.
+
+    Args:
+      height: the height the head's lowest point has to be at, in mm.
+    """
+    # TODO: include the iSWAP once its safety design is decided.
+    head = self.arm.head96 or self.arm.head384
+    if head is None:
+      return
+    stop_disc = height
+    if await head.request_tip_presence():
+      stop_disc += await head.request_tip_overhang()
+    z = await head.request_z_position()
+    if z < stop_disc and z < head.configuration.z_range[1]:
+      await head.move_to_safe_z()
+
   # -- dispensing drive position -------------------------------------------------------------------
 
   async def dispensing_drive_request_uL_position(self, channel: int) -> float:
@@ -1971,30 +1989,67 @@ class Pipettes:
     self.piston_positions[channel] = round(self.piston_positions[channel] + drawn, 1)
     return drawn
 
-  # -- x and y together ----------------------------------------------------------------------------
+  # -- x position --------------------------------------------------------------------------------
 
-  async def _traverse_raise_targets(self, height: float) -> Dict[int, float]:
-    """The stop disc target of every channel whose lowest point is below `height`, checked.
+  async def request_x_position(self) -> float:
+    """Request where along X the channels are, in deck mm.
 
-    A channel's lowest point is its tip bottom when it carries one, else its stop disc.
-
-    Args:
-      height: the height every lowest point has to reach, in mm.
+    The channels have no X drive. They ride the arm and sit at its reference point, and this asks
+    the arm. Nothing is recorded: each channel's resource is a child of the arm's and follows it
+    in X.
 
     Returns:
-      Each low channel's stop disc target in mm, keyed by channel; empty if none is low.
+      The position in mm.
+    """
+    return await self.arm.request_position()
+
+  async def move_to_x_position(
+    self,
+    x: float,
+    acceleration_level: Optional[int] = None,
+    current_limit: Optional[int] = None,
+    settle_reads: int = 20,
+    minimum_traverse_height_start: Optional[float] = None,
+    perform_safety_checks: bool = True,
+  ):
+    """Move the channels along X: everything low on the arm raised first, then the arm.
+
+    Everything is checked before anything moves. If the 96- or 384-head on this arm is below
+    `minimum_traverse_height_start` it goes to its safe Z, and every channel below it is raised to
+    it, all at once; then the arm travels, with everything it carries.
+
+    Args:
+      x: where to go, in mm.
+      acceleration_level: how hard to accelerate. Defaults to the X-arm that holds the pipettes.
+      current_limit: the motor current limit. Defaults to the X-arm that holds the pipettes.
+      settle_reads: how many reads to take before calling the arm stopped.
+      minimum_traverse_height_start: the height every channel's and the head's lowest point has to
+        be at first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
+      perform_safety_checks: whether to run the reads and raises above. False sends the X move
+        alone.
 
     Raises:
-      ValueError: If a channel cannot raise its lowest point that high.
+      ValueError: If the channels cannot reach `x`, or a channel cannot be raised that high.
     """
-    lowest = await self._unchecked_fw_request_lowest_z_positions()
-    targets = {}
-    for channel, z in enumerate(lowest):
-      if z < height:
-        stop_disc = await self.request_stop_disc_z_position(channel)
-        targets[channel] = round(stop_disc + height - z, 2)
-        self._check_reachable("z", targets[channel])
-    return targets
+    height = (
+      self.default_minimum_traverse_height
+      if minimum_traverse_height_start is None
+      else minimum_traverse_height_start
+    )
+    self._check_reachable("x", x)
+    if perform_safety_checks and height > 0:
+      raises = await self._traverse_raise_targets(height)
+      await self._raise_head_on_the_arm(height)
+      if raises:
+        await self.move_stop_disc_to_z_positions(raises)
+    return await self.arm.move_to_x_position(
+      x,
+      acceleration_level=acceleration_level,
+      current_limit=current_limit,
+      settle_reads=settle_reads,
+    )
+
+  # -- x and y together ----------------------------------------------------------------------------
 
   async def move_to_xy_positions(
     self,
@@ -2006,6 +2061,7 @@ class Pipettes:
     x_acceleration_level: Optional[int] = None,
     y_speed: Optional[float] = None,
     y_acceleration_level: Optional[int] = None,
+    perform_safety_checks: bool = True,
   ) -> None:
     """Move the channels across the deck: the low ones up first, then X and Y together.
 
@@ -2017,11 +2073,13 @@ class Pipettes:
       x: where to send the arm, in mm. The channels share it.
       ys: where to put each named channel, in mm, keyed by channel, 0-indexed from the back.
       make_space: whether the channels not named may be moved in Y. See `move_to_y_positions`.
-      minimum_traverse_height_start: the height to raise every low channel's lowest point to
-        first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
+      minimum_traverse_height_start: the height every channel's and the head's lowest point has to
+        be at first, in mm. `default_minimum_traverse_height` when None; 0 raises nothing.
       x_acceleration_level: the arm's level for this move. See `move_to_x_position`.
       y_speed: every channel's Y speed for this move only, in mm/s. See `move_to_y_positions`.
       y_acceleration_level: every channel's Y level for this move only. See `move_to_y_positions`.
+      perform_safety_checks: whether to run the reads and raises first. See
+        `move_to_x_position`.
 
     Raises:
       ValueError: If X, a Y or a raise is out of reach, or two channels would stand too close.
@@ -2045,12 +2103,19 @@ class Pipettes:
       if value is not None and not low <= value <= high:
         raise ValueError(f"{name} must be between {low} and {high}, is {value}")
     planned_ys = await self._plan_y_positions(ys, make_space)
-    raises = await self._traverse_raise_targets(height) if height > 0 else {}
+    raises = (
+      await self._traverse_raise_targets(height) if perform_safety_checks and height > 0 else {}
+    )
 
+    if perform_safety_checks and height > 0:
+      await self._raise_head_on_the_arm(height)
     if raises:
       await self.move_stop_disc_to_z_positions(raises)
     results = await asyncio.gather(
-      self.move_to_x_position(x=x, acceleration_level=x_acceleration_level),
+      # the arm is already safe
+      self.move_to_x_position(
+        x=x, acceleration_level=x_acceleration_level, perform_safety_checks=False
+      ),
       self._move_to_planned_y_positions(
         channel_locations=planned_ys, speed=y_speed, acceleration_level=y_acceleration_level
       ),
@@ -2533,7 +2598,8 @@ class Pipettes:
     # Back away, so a carrier moved later does not drag against the tip; 0 sends no move.
     if round(post_detection_distance, 1) > 0:
       away = post_detection_distance if direction == "left" else -post_detection_distance
-      await self.move_to_x_position(detected + away)
+      # the tip backs away at the probing height
+      await self.move_to_x_position(x=detected + away, perform_safety_checks=False)
     surface = detected - diameter / 2 if direction == "left" else detected + diameter / 2
     return round(surface, 1) if found else None
 
@@ -3660,7 +3726,10 @@ class Pipettes:
       for batch in plan_batches(
         use_channels=use_channels[: len(dealt)],
         containers=dealt,
-        channel_spacings=self.minimum_y_spacings,
+        # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+        channel_spacings=[
+          self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+        ],
         wrt_resource=deck,
         x_tolerance=tolerance,
         resource_offsets=offsets,
@@ -3818,11 +3887,13 @@ class Pipettes:
     From `z_start` to `search_limit_below_cavity_bottom` under the cavity bottom, on the stop disc.
     One `C0 RL` per round; None where a channel found nothing. Each channel is then modelled where
     its search left it: its stop disc an overhang above the surface found, or at its window's end.
+    A surface more than `surface_limit_above_top` above its container's top on the deck ends the
+    round with an error.
 
     Args:
       batch: the channels and which container each has, by job index.
-      containers: per job, what each channel searches in. Nothing here reads them: the simulator
-        answers the searches from their trackers.
+      containers: per job, what each channel searches in; their tops are read off the deck, and
+        the simulator answers the searches from their trackers.
       overhangs: each channel's tip overhang in mm, keyed by channel.
       z_cavity_bottom: per job, on the deck in mm.
       z_start: per job, tip bottom height the search starts from, on the deck in mm.
@@ -3837,7 +3908,13 @@ class Pipettes:
 
     Raises:
       STARFirmwareError: Anything a channel answered other than that it found nothing.
+      RuntimeError: No deck, or a surface found more than that above its container's top, every
+        such channel of the round named.
     """
+    deck = self._driver.deck
+    if deck is None:
+      raise RuntimeError("containers are placed from the deck; this driver was given none")
+    z_top = {job: containers[job].get_location_wrt(deck, "c", "c", "t").z for job in batch.indices}
     searches = self._get_stop_disc_search_windows(
       batch, overhangs, z_cavity_bottom, z_start, self.search_limit_below_cavity_bottom
     )
@@ -3857,6 +3934,7 @@ class Pipettes:
         return_exceptions=True,
       )
       heights = await self.request_last_lld_z_positions()
+      above_top = []
       for (channel, job, end, _), result in zip(searches, results):
         if isinstance(result, STARFirmwareError) and self._found_nothing(
           result, self.channel_id(channel)
@@ -3868,9 +3946,20 @@ class Pipettes:
         else:
           found[job].append(heights[channel])
           stopped = heights[channel] + overhangs[channel]
+          # A plate seated higher than modelled holds liquid above its modelled top.
+          if heights[channel] > round(z_top[job] + self.surface_limit_above_top, 1):
+            above_top.append(
+              f"channel {channel} in {containers[job].name}: {heights[channel]:.1f} mm, its top "
+              f"is at {z_top[job]:.2f} mm"
+            )
         # No post-detection move, so the stop disc stays where the search left it: the model has
         # it there, not still up at the start.
         self.update_location_by_reference_point(channel, z=round(stopped, 2))
+      if above_top:
+        raise RuntimeError(
+          "a surface found more than a plate's seating error above the top of its container "
+          "cannot be a liquid surface in this container: " + "; ".join(above_top)
+        )
     return found
 
   async def probe_liquid_heights(
@@ -3917,8 +4006,9 @@ class Pipettes:
 
     Raises:
       ValueError: If an argument is out of range, or the lists do not match.
-      RuntimeError: If a channel used carries no tip, the driver was given no deck, or liquid was
-        found in some rounds and not in others.
+      RuntimeError: If a channel used carries no tip, the driver was given no deck, liquid was
+        found in some rounds and not in others, or a surface was found more than 1 mm above its
+        container's top.
     """
     if resource_offsets is not None:
       warnings.warn(
@@ -4281,8 +4371,8 @@ class Pipettes:
       ys.append(round(centre.y * 10))
       placed[channel] = (centre.x, centre.y)
 
-    # Each pair taking part by itself, as legacy checks them; the firmware arranges the channels
-    # between. Distances in tenths, as the command carries them: 9.0 mm is 9.0 mm, float or not.
+    # Each pair taking part by itself, as legacy checks them; the channels between are placed first,
+    # except around a discard's places. Distances in tenths: 9.0 mm is 9.0 mm, float or not.
     for i, (xi, yi) in placed.items():
       for j, (xj, yj) in placed.items():
         # Channels in different columns are separate moves on the device.
@@ -4527,7 +4617,8 @@ class Pipettes:
 
     The spots may hold tips of different models: a command carries one tip type, so the spots are
     grouped by the model of tip they hold and each group is planned into its own commands. The
-    commands go out in ascending X, whichever group they came from, so the arm sweeps once.
+    commands go out in ascending X, whichever group they came from, so the arm sweeps once. Before
+    each one, every channel is placed in Y by its width, so the device moves none aside itself.
 
     Heights as legacy's `STARBackend.pick_up_tips`: the process begins a collar's height above the
     highest spot and ends at the spot. Once the device has picked them up, each tip is taken out of
@@ -4553,10 +4644,17 @@ class Pipettes:
       NoTipError: If a spot holds no tip while tip tracking is on.
       HasTipError: If a channel already carries a tip.
       ValueError: If a position cannot be reached.
+      RuntimeError: If the CoRe grippers hold a resource.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    # The channels are placed before each command: a gripped plate would be squeezed or let fall.
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._held_resource is not None:
+      raise RuntimeError(
+        f"the CoRe grippers hold {grippers._held_resource.name}; place it before a tip command"
+      )
     use_channels = list(range(len(tip_spots))) if use_channels is None else list(use_channels)
     offsets = [Coordinate.zero()] * len(tip_spots) if offsets is None else list(offsets)
 
@@ -4592,7 +4690,10 @@ class Pipettes:
         for batch in plan_batches(
           use_channels=[use_channels[index] for index in group],
           containers=cast(List[Container], [tip_spots[index] for index in group]),
-          channel_spacings=self.minimum_y_spacings,
+          # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+          channel_spacings=[
+            self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+          ],
           wrt_resource=deck,
           x_tolerance=ANY_COLUMN if x_tolerance is None else x_tolerance,
           resource_offsets=[offsets[index] for index in group],
@@ -4604,11 +4705,22 @@ class Pipettes:
       indices = [group[index] for index in batch.indices]
       spots = [tip_spots[index] for index in indices]
       in_batch = list(batch.channels)
+      locations = {
+        channel: spot.get_location_wrt(deck, x="c", y="c", z="b") + offsets[index]
+        for spot, channel, index in zip(spots, in_batch, indices)
+      }
+      # Every channel placed first, by its width, over the batch's first column and at the height
+      # the command travels at: the command then only goes down and up.
+      await self.move_to_xy_positions(
+        x=min(location.x for location in locations.values()),
+        ys=batch.y_positions,
+        make_space=True,
+        minimum_traverse_height_start=self._tip_traverse_height(
+          [hamilton_tips[index] for index in indices], minimum_traverse_height_start
+        ),
+      )
       await self._pick_up_tips_in_one_move(
-        {
-          channel: spot.get_location_wrt(deck, x="c", y="c", z="b") + offsets[index]
-          for spot, channel, index in zip(spots, in_batch, indices)
-        },
+        locations,
         {channel: hamilton_tips[index] for channel, index in zip(in_batch, indices)},
         begin_tip_pick_up_process=begin_tip_pick_up_process,
         end_tip_pick_up_process=end_tip_pick_up_process,
@@ -4801,7 +4913,8 @@ class Pipettes:
     The channels may carry tips of different kinds: a `DROP` lowers them all to one height, so the
     channels are grouped by the collar height of the tip they carry and each group is planned into
     its own commands, in ascending X. A `PLACE_SHIFT` lets go from a height of its own, so a
-    discard takes whatever the channels carry in one command.
+    discard takes whatever the channels carry in one command. Before each command into spots,
+    every channel is placed in Y by its width, so the device moves none aside itself.
 
     Args:
       destinations: where each channel's tip goes: a `TipSpot`, which receives it, or a place on
@@ -4823,12 +4936,19 @@ class Pipettes:
       NoTipError: If a channel carries no tip in the model.
       HasTipError: If a tip spot already holds a tip.
       ValueError: If two tips would go into one spot.
+      RuntimeError: If the CoRe grippers hold a resource.
     """
     if not destinations:
       return
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    # The channels are placed before each command: a gripped plate would be squeezed or let fall.
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._held_resource is not None:
+      raise RuntimeError(
+        f"the CoRe grippers hold {grippers._held_resource.name}; place it before a tip command"
+      )
     use_channels = list(range(len(destinations))) if use_channels is None else list(use_channels)
     offsets = [Coordinate.zero()] * len(destinations) if offsets is None else list(offsets)
 
@@ -4872,26 +4992,43 @@ class Pipettes:
           for batch in plan_batches(
             use_channels=[use_channels[index] for index in of_one_collar],
             containers=cast(List[Container], [spots[index] for index in of_one_collar]),
-            channel_spacings=self.minimum_y_spacings,
+            # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+            channel_spacings=[
+              self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+            ],
             wrt_resource=deck,
             x_tolerance=ANY_COLUMN if x_tolerance is None else x_tolerance,
             resource_offsets=[offsets[index] for index in of_one_collar],
           )
         ]
       planned.sort(key=lambda p: (p[0].x_position, min(p[1][i] for i in p[0].indices)))
-      groups = [
-        ([of_one_collar[index] for index in batch.indices], list(batch.channels))
+      groups: List[Tuple[List[int], List[int], Optional[ChannelBatch]]] = [
+        ([of_one_collar[index] for index in batch.indices], list(batch.channels), batch)
         for batch, of_one_collar in planned
       ]
     else:
-      groups = [(list(range(len(destinations))), use_channels)]
+      groups = [(list(range(len(destinations))), use_channels, None)]
 
-    for indices, channels_in_group in groups:
+    for indices, channels_in_group, batch in groups:
+      # Spots: every channel placed first, by its width. Places given as coordinates, such as a
+      # discard's, are not planned, and the firmware arranges the channels around them.
+      locations = {channel: where(index) for channel, index in zip(channels_in_group, indices)}
+      carried = [self.get_mounted_tip(channel) for channel in channels_in_group]
+      # A channel without a tip is refused by the drop itself, before anything moves.
+      if batch is not None and all(tip is not None for tip in carried):
+        await self.move_to_xy_positions(
+          x=min(location.x for location in locations.values()),
+          ys=batch.y_positions,
+          make_space=True,
+          minimum_traverse_height_start=self._tip_traverse_height(
+            [tip for tip in carried if tip is not None], minimum_traverse_height_start
+          ),
+        )
       # Held now, because the command takes each tip off its shaft: what is put into the spot is
       # the tip the channel came with.
       held = {channel: self.get_mounted_tip(channel) for channel in channels_in_group}
       dropped = await self._drop_tips_in_one_move(
-        {channel: where(index) for channel, index in zip(channels_in_group, indices)},
+        locations,
         drop_method,
         begin_tip_deposit_process=begin_tip_deposit_process,
         end_tip_deposit_process=end_tip_deposit_process,
@@ -5629,7 +5766,7 @@ class Pipettes:
         volume, warning when 20 % off.
 
     Raises:
-      RuntimeError: No liquid found.
+      RuntimeError: No liquid found, or a surface found more than 1 mm above its container's top.
     """
     pairs = [(ch, job) for ch, job in zip(batch.channels, batch.indices) if job in searched]
     if not pairs:
@@ -6479,8 +6616,8 @@ class Pipettes:
         or over a surface outside the container's height-volume data.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
         container without height-volume functions under CAPACITIVE, PRESSURE or auto surface
-        following, no liquid found where the channels searched, or no floor met where they
-        touched.
+        following, no liquid found where the channels searched, a surface found more than 1 mm
+        above its container's top, or no floor met where they touched.
       NotImplementedError: DUAL.
       TooLittleVolumeError: A tip without room for what it is to draw.
     """
@@ -7326,8 +7463,9 @@ class Pipettes:
         height-volume data, or `blow_out` contradicting `blow_out_air_volumes`.
       RuntimeError: A channel without a tip, or without the firmware a ZTOUCH needs, no deck, a
         container without height-volume functions under CAPACITIVE or auto surface following, no
-        liquid found where the channels searched, a container the search found without the room,
-        or no floor met where they touched.
+        liquid found where the channels searched, a surface found more than 1 mm above its
+        container's top, a container the search found without the room, or no floor met where
+        they touched.
     """
     if resource_offsets is not None:
       warnings.warn(

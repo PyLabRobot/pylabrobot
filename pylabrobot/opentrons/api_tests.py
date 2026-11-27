@@ -128,6 +128,17 @@ class OpentronsAPITests(unittest.IsolatedAsyncioTestCase):
       await self.api.get_connected_modules(), (ModuleInfo("module", "temperatureModuleType"),)
     )
 
+  async def test_a_modules_live_state_comes_with_its_identity(self) -> None:
+    state = {"currentTemperature": 23.0, "targetTemperature": None, "status": "idle"}
+    self.io.request.return_value = {
+      "data": [
+        {"id": "m", "moduleModel": "temperatureModuleV2", "serialNumber": "T", "data": state}
+      ]
+    }
+    (module,) = await self.api.get_connected_modules()
+    self.assertEqual(module.data, state)
+    self.assertEqual(module, ModuleInfo("m", None, "temperatureModuleV2", "T"))
+
   async def test_run_listing_says_which_run_is_current_and_when_it_was_created(self) -> None:
     self.io.request.return_value = {
       "data": [

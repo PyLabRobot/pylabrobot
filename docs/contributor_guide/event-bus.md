@@ -24,7 +24,8 @@ one subscriber is active. Use one of these helpers:
 
 - `@evented_operation(...)` for a trivial projection of one public async method's invocation.
 - `with event_operation(...):` for explicit semantic context assembled inside an operation.
-- `emit_event(...)` only for a meaningful state transition that is not an operation lifecycle.
+- `emit_event(...)` for a meaningful state transition or instrument-reported observation that
+  is not an operation lifecycle.
 
 Use a low-level diagnostic event only when the transport boundary itself is useful to observe.
 Diagnostic events may inherit the enclosing semantic operation context, but do not define a new

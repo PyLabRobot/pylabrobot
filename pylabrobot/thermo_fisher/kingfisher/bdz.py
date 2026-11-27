@@ -60,10 +60,11 @@ import re
 import struct
 import uuid
 import xml.etree.ElementTree as ET
-import zlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, Optional, Tuple
+
+from pylabrobot.thermo_fisher.kingfisher.bdz_container import parse_xml, read_container
 
 # ── Binary format constants ──────────────────────────────────────────────────
 
@@ -420,20 +421,6 @@ class BdzProtocol:
 
 
 # ── Low-level binary helpers ──────────────────────────────────────────────────
-
-
-def _read_one_gzip_stream(data: bytes, start: int) -> Tuple[bytes, int]:
-  """Read one complete gzip member, validating its CRC and uncompressed size."""
-  if data[start : start + 2] != b"\x1f\x8b":
-    raise ValueError(f"Expected gzip stream at offset {start}")
-  decoder = zlib.decompressobj(wbits=31)
-  try:
-    content = decoder.decompress(data[start:])
-  except zlib.error as error:
-    raise ValueError("Corrupt BDZ gzip stream") from error
-  if not decoder.eof:
-    raise ValueError("Truncated BDZ gzip stream")
-  return content, len(data) - len(decoder.unused_data)
 
 
 def _gzip_compress(data: bytes) -> bytes:
@@ -1104,24 +1091,10 @@ def _variant_from_properties(root: ET.Element) -> InstrumentVariant:
 
 def _bdz_parts(data: bytes) -> Tuple[bytes, bytes]:
   """Check file structure, member sizes, checksums and trailing metadata."""
-  if len(data) < 61 or data[:4] != BINDIT_MAGIC:
-    raise ValueError("Not a complete BindIt BDZ header")
-  if struct.unpack_from("<I", data, 49)[0] != len(data) - 63:
-    raise ValueError("BDZ file size does not match its header")
-  props, first_end = _read_one_gzip_stream(data, 61)
-  if first_end - 61 != struct.unpack_from("<I", data, 57)[0]:
-    raise ValueError("BDZ first stream size does not match its header")
-  separator = data[first_end : first_end + 8]
-  if len(separator) != 8 or separator[:4] != STREAM_SEP_PREFIX:
-    raise ValueError("Invalid BDZ stream separator")
-  exported, second_end = _read_one_gzip_stream(data, first_end + 8)
-  if second_end - first_end - 8 != struct.unpack_from("<I", separator, 4)[0]:
-    raise ValueError("BDZ second stream size does not match its separator")
-  try:
-    root = ET.fromstring(props)
-    exported_root = ET.fromstring(exported)
-  except ET.ParseError as error:
-    raise ValueError("Invalid BDZ XML") from error
+  container = read_container(data)
+  props, exported = container.properties, container.exported
+  root = parse_xml(props, "Properties")
+  exported_root = parse_xml(exported, "ExportedData")
   obj = root.find("ExportedObject")
   params = root.find("InstrumentParameters")
   if obj is None or params is None:
@@ -1133,7 +1106,7 @@ def _bdz_parts(data: bytes) -> Tuple[bytes, bytes]:
     != _CONTRACTS[variant].instrument_type_id
   ):
     raise ValueError("BDZ protocol instrument ID does not match its properties")
-  if data[second_end:] != _build_trailing_section(name, _CONTRACTS[variant]):
+  if container.name != name or container.parameters_type != _CONTRACTS[variant].params_type:
     raise ValueError("BDZ trailing metadata does not match its protocol")
   return props, exported
 
