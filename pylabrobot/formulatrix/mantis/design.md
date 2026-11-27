@@ -217,10 +217,12 @@ The arm's generation fork points (`Arm._get_generation`):
 - `request_joint_state`: a v3 raises `MantisMotionError` before this connection's bring-up, so
   does every read above on a v3.
 - `_check_initialized`: a v3 raises `NotImplementedError` after its bring-up, until a v3 has run
-  its moves; so park, the waste, the washes and recovery too.
+  its moves; so park, the waste, the washes and recovery too. A chip pick-up and placement run on
+  a v3 from idle only.
 - `recover_from_fault`: a v4 recovers to idle from its absolute encoders, a v3 runs its bring-up
   again.
-- `_halt`: a v3 stops its motors and is not parked until a v3 has run its moves.
+- `_halt`: a v3 stops its motors and is not parked until a v3 has run its moves. A stop refused
+  for a chip on the head leaves it brought up, as a v4, so the chip can be placed back.
 
 **M6a. Numbers shown to a user are mm and degrees to 2 decimals; nothing else is rounded.** Logs,
 exception messages and reprs print mm and degrees with 2 decimals (Z's encoder resolves about 6 µm;
@@ -285,6 +287,25 @@ forward. In the open it is parked first. Going back, a path's lines play backwar
 queued item each, as captured; back to the path's start, the line the head stands at is sent
 first. Every other move across, and `park`, from a pose on a path first goes back along it to its
 start, every argument checked before; a move of Z alone there is refused.
+
+`pick_up_chip` and `place_chip` wait, as captured, at a chip slot's attach line: the last line
+before the head first moves sideways below the safe height, the head lowered in the slot. By the
+path's shape the sideways move after it takes the chip on, and played backwards the sideways move
+before it leaves the chip in the slot (not yet watched on a device). So `attached_chip` and
+`current_chip` change once the device has played the attach line, even if a later move fails or is
+cancelled: a pick-up counts the chip on the head from there, a placement until there. That is the
+safe side: a head that may carry the chip counts as carrying it, so `stop` does not lower Z with it;
+only a head stopped before a pick-up's sideways move, or after a placement's, counts as without it.
+
+`pick_up_chip` takes a slot or the chip in one, found by its spot; `place_chip` takes the slot.
+`attached_chip` is the chip on the head, `current_chip` the slot it came from. The chip is the one
+assigned to that slot's spot in the resource model, else one built from the type its tag reads
+(`get_chip_factory`); a chip type with no definition is picked up all the same, `attached_chip`
+None. `pick_up_chip(chip_number)` of the chip already on the head sends nothing; of another, once
+that slot's tag shows a chip, it places the head's chip back first. A v3 picks up and places from
+idle only. `place_chip` without a chip on the head logs a warning and sends nothing.
+`place_chip(..., recover_liquid=True)` is refused: no capture shows a placement that recovers the
+liquid (open point 54). `Mantis.pick_up_chip` and `Mantis.place_chip` pass to the arm's.
 
 `park`, `move_to_waste` and `move_to_wash` take `with_model_updates` (False by default). True: each queued
 item is played on its own (61, 62, 68) and each route step moved, then the pose read (84) and
@@ -431,6 +452,11 @@ four links (`LinkBody`). The arm holds no resource: setup registers the device's
 and the stop's park the arm reads its three encoders (command 84) and passes the links' angles and
 Z's height to it; the column rises and falls with Z. A failed move passes where it stopped from the
 reads it logs. With no observer nothing more is read; a failed update only warns (STAR P8).
+Setup also registers `_update_chip_model` as the arm's `_chip_observer`: once a chip counts as on
+the head (the attach line, above), its chip resource moves from its chip spot onto the right long
+link, keeping the pose relative to the link it had in the spot with the head at the attach line, so
+the Visualizer shows it on the head; once placed, back into its spot. A slot without a chip
+resource changes nothing.
 
 **M19. The LED bar shows what the device does, never at the cost of it.** An action runs inside
 `_show_action`: the bar shows its colour, the enclosing action's when it ends, the idle animation
@@ -605,3 +631,9 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
 52. **The vacuum line is not vented at stop:** after a prime or a recovery it stays near -12 inHg,
     as a v4 leaves it. Whether a v4 ever vents it is not captured, nor what venting the chip line
     does with a chip on the head, so stop then leaves the chip line pressurised.
+53. **A chip on the head is drawn about 6.4 mm below the right long link.** It keeps the pose it
+    had in its spot relative to the link; with the head at slot 1's attach line the 3D model leaves
+    6.4 mm between the chip's top and the link's underside, where by eye on a device there is none.
+    No correction is applied until a caliper measures the link's height over a seated chip.
+54. **A placement that recovers the chip's liquid is not captured,** so `recover_liquid=True` is
+    refused. The unit's chips ship a detach-recovery sequence, but no capture shows it played.

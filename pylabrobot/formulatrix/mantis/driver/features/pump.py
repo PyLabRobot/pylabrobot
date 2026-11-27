@@ -408,7 +408,7 @@ class Pump:
       failure = error
     arm = self._driver.arm
     try:
-      if arm is not None and arm.attached_chip is not None:
+      if arm is not None and arm.current_chip is not None:
         logger.warning("[%s] a chip is on the head: the chip line is not vented", self._driver.name)
       else:
         await self._vent_chip_line()
@@ -525,9 +525,9 @@ class Pump:
     if arm is None:
       raise MantisConfigurationError(f"{self._driver.name}: no arm carries a chip")
     arm._check_initialized()
-    if arm.attached_chip is None:
+    if arm.current_chip is None:
       raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
-    chip_type = arm._attached_chip_type
+    chip_type = None if arm.attached_chip is None else arm.attached_chip.chip_type
     if chip_type is None or chip_type not in SEQUENCE_VOLUMES:
       raise MantisConfigurationError(
         f"{self._driver.name}: the chip on the head is a {chip_type} chip; only "

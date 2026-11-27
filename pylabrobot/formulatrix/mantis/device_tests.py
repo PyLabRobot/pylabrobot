@@ -1,20 +1,23 @@
 """Mantis device tests: the parts tree, and the arm model following the moves."""
 
+import json
 import math
 import os
+import tempfile
 import unittest
 from typing import cast
 from unittest import mock
 
-from pylabrobot.formulatrix.mantis import Mantis, MantisDevice
+from pylabrobot.formulatrix.mantis import RECORDING_MANTIS_V4, Mantis, MantisDevice
 from pylabrobot.formulatrix.mantis.driver.arm_kinematics import (
   MantisArmCoordinate,
   compute_joint_angles,
 )
 from pylabrobot.formulatrix.mantis.driver.errors import MantisMotionError
+from pylabrobot.formulatrix.mantis.driver.features.arm_tests import CHIP_SLOT_1_PATH
 from pylabrobot.formulatrix.mantis.driver.features.led_bar import LedBar
 from pylabrobot.io.ftdi import FTDI
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, Resource
 from pylabrobot.resources.formulatrix.mantis_chips import mantis_chip_low_volume_hi_fi
 
 RESOURCE_MODEL = os.path.join(os.path.dirname(__file__), "resource_model")
@@ -123,8 +126,74 @@ class SimulatedChipSlotTests(unittest.IsolatedAsyncioTestCase):
     await arm._check_chip_slot_tag(slot=1, action="pick_up_chip")
     with self.assertRaisesRegex(MantisMotionError, "chip slot 1 already holds chip chip_1"):
       await arm._check_chip_slot_tag(slot=1, action="place_chip")
-    arm._attached_chip = 1  # its chip is on the head
+    arm._current_chip = 1  # its chip is on the head
     await arm._check_chip_slot_tag(slot=1, action="place_chip")
+
+
+class ChipModelTests(unittest.IsolatedAsyncioTestCase):
+  async def set_up_device(self) -> MantisDevice:
+    with open(RECORDING_MANTIS_V4, encoding="utf-8") as file:
+      configuration = json.load(file)
+    directory = tempfile.TemporaryDirectory()
+    self.addCleanup(directory.cleanup)
+    path = os.path.join(directory.name, "mantis.json")
+    with open(path, "w", encoding="utf-8") as file:
+      json.dump({**configuration, "approach_paths": {"chip_slot_1": CHIP_SLOT_1_PATH}}, file)
+    device = Mantis(simulation=True, declared_configuration_json=path)
+    with mock.patch.object(LedBar, "_sleep", autospec=True):
+      await device.setup()
+    self.addAsyncCleanup(device.stop, accept_chip_left_on_head=True)
+    return device
+
+  async def test_a_picked_up_chip_rides_the_link_and_a_placed_one_its_spot(self):
+    device = await self.set_up_device()
+    assert device.arm is not None
+    chip = mantis_chip_low_volume_hi_fi(name="chip_1")
+    device.chip_spots[1].assign_child_resource(resource=chip)
+    in_spot, turned_in_spot = chip.get_absolute_location(), chip.get_absolute_rotation().z
+    with self.assertRaisesRegex(ValueError, "in no chip slot's spot"):
+      await device.pick_up_chip(chip_number=mantis_chip_low_volume_hi_fi(name="loose"))
+    await device.pick_up_chip(chip_number=chip)  # the chip itself, found by its spot
+    self.assertIs(device.attached_chip, chip)
+    self.assertEqual(device.current_chip, 1)
+    self.assertIs(chip.parent, device.arm_links["right_long_arm"])
+    # The head at slot 1's attach line, CHIP_SLOT_1_PATH's line 6: the chip where it lay in its spot.
+    theta_1, theta_2 = compute_joint_angles(
+      location=MantisArmCoordinate(x=124.052, y=12.077, z=None)
+    )
+    device._update_arm_model(theta_1=theta_1, theta_2=theta_2, z=-10.938)
+    on_head = chip.get_absolute_location()
+    pairs = {"x": (on_head.x, in_spot.x), "y": (on_head.y, in_spot.y), "z": (on_head.z, in_spot.z)}
+    for axis, (moved, placed) in pairs.items():
+      with self.subTest(axis=axis):
+        self.assertAlmostEqual(moved, placed, places=3)
+    turned = chip.get_absolute_rotation().z - turned_in_spot
+    self.assertAlmostEqual((turned + 180.0) % 360.0 - 180.0, 0.0, places=6)
+    await device.place_chip(chip_number=1)
+    self.assertIsNone(device.attached_chip)
+    self.assertIsNone(device.current_chip)
+    self.assertIs(chip.parent, device.chip_spots[1])
+    self.assertEqual(chip.rotation.z, 0.0)
+    self.assertEqual(chip.get_absolute_location(), in_spot)
+
+  async def test_a_chip_on_the_head_keeps_its_pose_through_serialize_and_deserialize(self):
+    device = await self.set_up_device()
+    assert device.arm is not None
+    device.chip_spots[1].assign_child_resource(resource=mantis_chip_low_volume_hi_fi(name="chip_1"))
+    await device.pick_up_chip(chip_number=1)
+    link = device.arm_links["right_long_arm"]
+    loaded = Resource.deserialize(link.serialize())
+    chip, loaded_chip = link.get_resource("chip_1"), loaded.get_resource("chip_1")
+    self.assertEqual(type(loaded_chip), type(chip))
+    self.assertEqual(loaded_chip.location, chip.location)
+    self.assertAlmostEqual(loaded_chip.rotation.z, chip.rotation.z)
+
+  async def test_a_slot_without_a_chip_resource_changes_nothing(self):
+    device = await self.set_up_device()
+    device._update_chip_model(slot=1, on_head=True)
+    device._update_chip_model(slot=1, on_head=False)
+    self.assertIsNone(device.chip_spots[1].resource)
+    self.assertEqual(device.arm_links["right_long_arm"].children, [])
 
 
 if __name__ == "__main__":

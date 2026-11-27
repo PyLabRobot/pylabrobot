@@ -634,7 +634,7 @@ class StopTests(ArmTestCase):
     link = self.close_link()
     driver = await self.set_up_arm(link=link)
     driver.arm._initialized = True
-    driver.arm._attached_chip = 1
+    driver.arm._current_chip = 1
     driver._next_item = 14  # numbered as in the recorded close
     with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
       await driver.stop()
@@ -1813,13 +1813,13 @@ class RouteDiscoveryTests(ArmTestCase):
 # words are the captured cold start's, in its order, one per read of each phase.
 CAPTURED_STATUS_RUNS = {
   0: [
-    ("0000", 1),
+    ("0000", 3),
     ("0100", 2),
     ("0001", 1),
     ("0100", 2),
     ("0001", 1),
     ("0100", 2),
-    ("0000", 2),
+    ("0000", 4),
     ("0100", 2),
     ("0001", 1),
     ("0100", 2),
@@ -1837,13 +1837,13 @@ CAPTURED_STATUS_RUNS = {
     ("0400", 2),
   ],
   1: [
-    ("0000", 1),
+    ("0000", 3),
     ("0100", 2),
     ("0000", 1),
     ("0100", 2),
     ("0000", 1),
     ("0100", 2),
-    ("0000", 2),
+    ("0000", 4),
     ("0100", 2),
     ("0000", 1),
     ("0100", 2),
@@ -1860,7 +1860,7 @@ CAPTURED_STATUS_RUNS = {
     ("0500", 2),
     ("0400", 2),
   ],
-  2: [("0000", 8), ("0400", 13), ("0500", 1), ("0400", 12)],
+  2: [("0000", 10), ("0400", 15), ("0500", 1), ("0400", 12)],
 }
 # board, command, request payload, reply payload; "-" is an empty payload. Each following-error
 # configuration read (command 82) answers as captured: enabled, at most 4.0. Last, the captured
@@ -2127,22 +2127,28 @@ class V3ArmTests(DriverTestCase):
       else:
         self.assertEqual((sent_command, payload), (expected_command, request))
     self.assertFalse(driver.arm.is_initialized)
-    # Each Z home follows a following-error check of every motor, as captured.
-    homes = [
+    # Each seat checks every motor twice after clearing the arms' faults, and each Z home once
+    # before its search, as captured.
+    checks = [
       (command, payload[:2].hex())
       for _, board, command, payload in (parse_frame(frame=frame) for frame in link.written)
-      if board == 0 and command in (82, 21)
+      if board == 0 and command in (17, 82, 20, 21)
     ]
-    precheck = [(82, "0000"), (82, "0100"), (82, "0200")]
-    self.assertEqual(
-      homes,
-      precheck
-      + [(21, "0200")]  # Z first, before the arms move
-      + precheck
-      + [(21, "0200")]
-      + precheck
-      + [(21, "0200"), (21, "0100"), (21, "0000")],
-    )
+    precheck = [(82, "0000"), (20, "0000"), (82, "0100"), (20, "0100"), (82, "0200"), (20, "0200")]
+    seat = [(17, "0000"), (17, "0100")] + precheck * 2
+    z_home = precheck + [(17, "0200"), (21, "0200")]
+    seat_starts = [
+      index for index in range(len(checks)) if checks[index : index + len(seat)] == seat
+    ]
+    z_home_starts = [
+      index for index in range(len(checks)) if checks[index : index + len(z_home)] == z_home
+    ]
+    self.assertEqual(len(seat_starts), 2)
+    self.assertEqual(len(z_home_starts), 3)
+    self.assertLess(z_home_starts[0], seat_starts[0])  # Z first, before the arms move
+    self.assertLess(seat_starts[0], z_home_starts[1])
+    self.assertLess(z_home_starts[1], seat_starts[1])
+    self.assertLess(seat_starts[1], z_home_starts[2])
 
   async def test_an_arm_fault_before_the_bring_up_is_logged_before_it_is_cleared(self):
     """The opening read finds motor 0 slipped, a status word captured after a seat."""
@@ -2167,6 +2173,15 @@ class V3ArmTests(DriverTestCase):
     self.assertNotIn(
       22, [command for _, _, command, _ in map(lambda f: parse_frame(frame=f), link.written[sent:])]
     )
+
+  async def test_a_stop_refused_for_a_chip_on_the_head_leaves_the_arm_brought_up(self):
+    driver, _ = await self.set_up_arm()
+    self.assertTrue(driver.arm.is_initialized)
+    driver.arm._current_chip = 1
+    self.addCleanup(setattr, driver.arm, "_current_chip", None)
+    with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
+      await driver.stop()
+    self.assertTrue(driver.arm.is_initialized)  # so the chip can be placed back
 
   async def test_missing_calibration_refuses_motion_and_pose(self):
     """Discovery remains usable without another unit's calibration being substituted."""
@@ -2368,19 +2383,19 @@ class V3ArmTests(DriverTestCase):
     self.assertIsNone(configuration.zone_rectangles)
 
   async def test_a_v3_picks_up_and_places_a_chip_from_idle(self):
-    """Run on two v3 units, every chip slot: the slot's whole route queued, the chip recorded."""
+    """Run on two v3 units, every chip slot: the slot's whole route queued, the chip kept."""
     driver, queued = await self.set_up_chip_slots()
     route_length = 2 * (2 + len(arm_module.CHIP_CHANGER_ROUTE)) + len(CHIP_SLOT_1_PATH)
-    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.pick_up_chip(chip_number=1)
     self.assertEqual(len(queued), route_length)
-    self.assertEqual(driver.arm.attached_chip, 1)
+    self.assertEqual(driver.arm.current_chip, 1)
     self.assertEqual(self.tag_reads(), 1)
     queued.clear()
     self.link.reader.tags = {}  # the chip is on the head
     self.sent_before = len(self.link.written)
-    await driver.arm.place_chip(slot=1)
+    await driver.arm.place_chip(chip_number=1)
     self.assertEqual(len(queued), route_length)
-    self.assertIsNone(driver.arm.attached_chip)
+    self.assertIsNone(driver.arm.current_chip)
     self.assertEqual(self.tag_reads(), 1)
 
   async def test_a_v3_not_parked_refuses_a_chip_slot_before_moving(self):
@@ -2388,13 +2403,13 @@ class V3ArmTests(DriverTestCase):
     refuse."""
     driver, queued = await self.set_up_chip_slots(parked=False)
     with self.assertRaisesRegex(NotImplementedError, "a chip only from idle"):
-      await driver.arm.pick_up_chip(slot=1)
+      await driver.arm.pick_up_chip(chip_number=1)
     self.assertEqual(queued, [])
     self.assertEqual(self.tag_reads(), 0)
-    self.assertIsNone(driver.arm.attached_chip)
-    driver.arm._attached_chip = 1
+    self.assertIsNone(driver.arm.current_chip)
+    driver.arm._current_chip = 1
     with self.assertRaisesRegex(NotImplementedError, "a chip only from idle"):
-      await driver.arm.place_chip(slot=1)
+      await driver.arm.place_chip(chip_number=1)
     self.assertEqual(queued, [])
     self.assertEqual(self.tag_reads(), 0)
     with self.assertRaisesRegex(NotImplementedError, "only in its bring-up"):
@@ -2638,7 +2653,7 @@ class ChipSlotTests(ArmTestCase):
   async def test_a_pick_up_and_a_placement_queue_the_recorded_moves(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
-    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.pick_up_chip(chip_number=1)
     self.assertEqual(self.sent(link)[0], CHIP_SLOT_1_TAG_READ)
     self.assertEqual(self.sent(link).count(CHIP_SLOT_1_TAG_READ), 1)
     self.assert_captured(
@@ -2647,12 +2662,12 @@ class ChipSlotTests(ArmTestCase):
       captured=CAPTURED_CHIP_SLOT_1_PICK_UP,
       waits=CAPTURED_CHIP_SLOT_WAITS["pick_up"],
     )
-    self.assertEqual(driver.arm.attached_chip, 1)
+    self.assertEqual(driver.arm.current_chip, 1)
     self.sent_before = len(link.written)
     driver._next_item = 1
     driver._wait_for_queue_item.reset_mock()
     link.reader.tags = {}  # the chip is on the head
-    await driver.arm.place_chip(slot=1)
+    await driver.arm.place_chip(chip_number=1)
     self.assertEqual(self.sent(link)[0], CHIP_SLOT_1_TAG_READ)
     self.assertEqual(self.sent(link).count(CHIP_SLOT_1_TAG_READ), 1)
     self.assert_captured(
@@ -2661,92 +2676,183 @@ class ChipSlotTests(ArmTestCase):
       captured=CAPTURED_CHIP_SLOT_1_PLACE,
       waits=CAPTURED_CHIP_SLOT_WAITS["place"],
     )
-    self.assertIsNone(driver.arm.attached_chip)
+    self.assertIsNone(driver.arm.current_chip)
 
   async def test_the_led_bar_shows_cyan_for_a_pick_up_and_violet_for_a_placement(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
-    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.pick_up_chip(chip_number=1)
     link.reader.tags = {}  # the chip is on the head
-    await driver.arm.return_chip()
+    await driver.arm.place_chip(chip_number=1)
     written = link.written[self.sent_before :]
     self.assertEqual(bar_states(written=written), [CYAN, "idle", VIOLET, "idle"])
 
-  async def test_return_chip_without_a_chip_and_a_second_pick_up_are_refused(self):
+  async def test_a_pick_up_from_another_slot_places_the_chip_on_the_head_back_first(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
-    with self.assertRaisesRegex(MantisMotionError, "no chip is on the head"):
-      await driver.arm.return_chip()
-    await driver.arm.pick_up_chip(slot=1)
-    with self.assertRaisesRegex(MantisMotionError, "the chip from slot 1 is on the head"):
-      await driver.arm.pick_up_chip(slot=1)
+    assert driver.arm.configuration.approach_paths is not None
+    assert driver.rfid is not None and driver.rfid.slot_to_antenna is not None
+    paths = driver.arm.configuration.approach_paths
+    paths["chip_slot_2"] = paths["chip_slot_1"]
+    await driver.arm.pick_up_chip(chip_number=1)
+    link.reader.tags = {}  # slot 1's chip on the head, slot 2 empty: nothing is placed back
+    self.sent_before = len(link.written)
+    with self.assertRaisesRegex(MantisMotionError, "chip slot 2 holds no chip"):
+      await driver.arm.pick_up_chip(chip_number=2)
+    self.assertNotIn(68, [command for _, command, _ in self.sent(link)])
+    self.assertEqual(driver.arm.current_chip, 1)
+    link.reader.tags = {driver.rfid.slot_to_antenna[2]: LOW_VOLUME_HI_FI_TAG_REPLY}
+    self.sent_before = len(link.written)
+    await driver.arm.pick_up_chip(chip_number=2)
+    written = link.written[self.sent_before :]
+    self.assertEqual(bar_states(written=written), [VIOLET, "idle", CYAN, "idle"])
+    self.assertEqual(driver.arm.current_chip, 2)
+
+  async def test_a_chip_type_without_a_definition_is_picked_up_without_a_chip_resource(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    with mock.patch.dict(arm_module.MANTIS_CHIP_FACTORIES, clear=True):
+      await driver.arm.pick_up_chip(chip_number=1)
+    self.assertEqual(driver.arm.current_chip, 1)
+    self.assertIsNone(driver.arm.attached_chip)
+
+  async def test_a_placement_without_a_chip_and_a_second_pick_up_send_nothing(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    with self.assertLogs(arm_module.logger, level="WARNING"):
+      await driver.arm.place_chip(chip_number=1)
+    with self.assertRaisesRegex(NotImplementedError, "recovers the liquid"):
+      await driver.arm.place_chip(chip_number=1, recover_liquid=True)
+    self.assertEqual(self.sent(link), [])
+    await driver.arm.pick_up_chip(chip_number=1)
+    self.sent_before = len(link.written)
+    await driver.arm.pick_up_chip(chip_number=1)
+    self.assertEqual(self.sent(link), [])
+    self.assertEqual(driver.arm.current_chip, 1)
 
   async def test_after_a_refused_stop_the_chip_returns_then_stop_runs(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
-    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.pick_up_chip(chip_number=1)
     link.reader.tags = {}  # the chip is on the head
     with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
       await driver.stop()
     driver._next_item = 1
     driver._wait_for_queue_item.reset_mock()
     self.sent_before = len(link.written)
-    await driver.arm.return_chip()
+    await driver.arm.place_chip(chip_number=1)
     self.assert_captured(
       link=link,
       driver=driver,
       captured=CAPTURED_CHIP_SLOT_1_PLACE,
       waits=CAPTURED_CHIP_SLOT_WAITS["place"],
     )
-    self.assertIsNone(driver.arm.attached_chip)
+    self.assertIsNone(driver.arm.current_chip)
+
+  async def test_a_pick_up_failing_after_the_attach_line_leaves_the_chip_on_the_head(self):
+    # The pick-up's first wait is at the attach line; the wait after it fails.
+    attach_line = CAPTURED_CHIP_SLOT_WAITS["pick_up"][0]
+    for with_model_updates, played in ((False, 1), (True, attach_line + 1)):
+      with self.subTest(with_model_updates=with_model_updates):
+        link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+        driver = await self.set_up_chip_slots(link=link)
+        driver._wait_for_queue_item.side_effect = [None] * played + [MantisTimeoutError("late")]
+        with self.assertRaises(MantisTimeoutError):
+          await driver.arm.pick_up_chip(chip_number=1, with_model_updates=with_model_updates)
+        self.assertEqual(driver.arm.current_chip, 1)
+        self.sent_before = len(link.written)
+        with self.assertRaisesRegex(MantisMotionError, "a chip is still on the head"):
+          await driver.stop()
+        sent = self.sent(link)
+        self.assertEqual(sent[:4], HALT)
+        self.assertEqual([frame for frame in sent if frame[1] in (22, 68)], [])  # Z not lowered
+
+  async def test_a_pick_up_failing_before_the_attach_line_leaves_no_chip_on_the_head(self):
+    attach_line = CAPTURED_CHIP_SLOT_WAITS["pick_up"][0]
+    for with_model_updates, played in ((False, 0), (True, attach_line)):
+      with self.subTest(with_model_updates=with_model_updates):
+        link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+        driver = await self.set_up_chip_slots(link=link)
+        driver._wait_for_queue_item.side_effect = [None] * played + [MantisTimeoutError("late")]
+        with self.assertRaises(MantisTimeoutError):
+          await driver.arm.pick_up_chip(chip_number=1, with_model_updates=with_model_updates)
+        self.assertIsNone(driver.arm.current_chip)
+
+  async def test_a_placement_failing_after_the_attach_line_leaves_no_chip_on_the_head(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    await driver.arm.pick_up_chip(chip_number=1)
+    link.reader.tags = {}  # the chip is on the head
+    driver._wait_for_queue_item.side_effect = [None, MantisTimeoutError("late")]
+    with self.assertRaises(MantisTimeoutError):
+      await driver.arm.place_chip(chip_number=1)
+    self.assertIsNone(driver.arm.current_chip)
+
+  async def test_the_chip_observer_is_told_once_the_attach_line_has_played(self):
+    link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
+    driver = await self.set_up_chip_slots(link=link)
+    driver.arm._chip_observer = observer = mock.Mock()
+    # The first wait is at the attach line: failing there tells nothing, after it the chip's move.
+    for played in (0, 1):
+      driver._wait_for_queue_item.side_effect = [None] * played + [MantisTimeoutError("late")]
+      with self.assertRaises(MantisTimeoutError):
+        await driver.arm.pick_up_chip(chip_number=1)
+    self.assertEqual(observer.call_args_list, [mock.call(slot=1, on_head=True)])
+    link.reader.tags = {}  # the chip is on the head
+    driver._wait_for_queue_item.side_effect = [None, MantisTimeoutError("late")]
+    with self.assertRaises(MantisTimeoutError):
+      await driver.arm.place_chip(chip_number=1)
+    self.assertEqual(
+      observer.call_args_list, [mock.call(slot=1, on_head=True), mock.call(slot=1, on_head=False)]
+    )
 
   async def test_a_placement_into_another_slot_is_refused_and_nothing_moves(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
-    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.pick_up_chip(chip_number=1)
     self.sent_before = len(link.written)
     with self.assertRaisesRegex(MantisMotionError, "from slot 1, not 2"):
-      await driver.arm.place_chip(slot=2)
+      await driver.arm.place_chip(chip_number=2)
     self.assertEqual(self.sent(link), [])
-    self.assertEqual(driver.arm.attached_chip, 1)
+    self.assertEqual(driver.arm.current_chip, 1)
 
   async def test_without_a_slot_path_nothing_moves(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
     with self.assertRaisesRegex(MantisConfigurationError, "no path into chip slot 2"):
-      await driver.arm.pick_up_chip(slot=2)
+      await driver.arm.pick_up_chip(chip_number=2)
     self.assertEqual(self.sent(link), [])
-    self.assertIsNone(driver.arm.attached_chip)
+    self.assertIsNone(driver.arm.current_chip)
 
   async def test_a_pick_up_from_an_empty_slot_is_refused_after_the_tag_read(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
     link.reader.tags = {}
     with self.assertRaisesRegex(MantisMotionError, "chip slot 1 holds no chip by its tag"):
-      await driver.arm.pick_up_chip(slot=1)
+      await driver.arm.pick_up_chip(chip_number=1)
     self.assertEqual(self.sent(link), [CHIP_SLOT_1_TAG_READ])
-    self.assertIsNone(driver.arm.attached_chip)
+    self.assertIsNone(driver.arm.current_chip)
 
   async def test_a_placement_into_a_slot_that_holds_a_chip_is_refused_after_the_tag_read(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
-    await driver.arm.pick_up_chip(slot=1)
+    await driver.arm.pick_up_chip(chip_number=1)
     self.sent_before = len(link.written)
     with self.assertRaisesRegex(
       MantisMotionError, "chip slot 1 already holds a low_volume_hi_fi chip by its tag"
     ):
-      await driver.arm.place_chip(slot=1)
+      await driver.arm.place_chip(chip_number=1)
     self.assertEqual(self.sent(link), [CHIP_SLOT_1_TAG_READ])
-    self.assertEqual(driver.arm.attached_chip, 1)
+    self.assertEqual(driver.arm.current_chip, 1)
 
   async def test_without_an_rfid_reader_nothing_is_sent(self):
     link = RouteLink(answers=make_answers(), encoders=IDLE_ENCODER_REPLIES)
     driver = await self.set_up_chip_slots(link=link)
     driver.rfid = None
     with self.assertRaisesRegex(MantisConfigurationError, "no RFID reader answered at setup"):
-      await driver.arm.pick_up_chip(slot=1)
+      await driver.arm.pick_up_chip(chip_number=1)
     self.assertEqual(self.sent(link), [])
-    self.assertIsNone(driver.arm.attached_chip)
+    self.assertIsNone(driver.arm.current_chip)
 
   async def test_a_head_stopped_inside_a_slot_is_on_its_path(self):
     # Below the safe height, inside the slot; at it, before and after, in the open.

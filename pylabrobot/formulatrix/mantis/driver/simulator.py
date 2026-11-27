@@ -7,7 +7,6 @@ from typing import Dict, List, Literal, Optional, Set, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.resources.formulatrix.mantis_chips import MantisChip
-from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .arm_kinematics import compute_device_position, compute_device_rate
 from .configuration import (
@@ -232,8 +231,8 @@ class MantisSimulationArm(Arm):
     self._absolute_positions: Dict[int, float] = self._get_idle_targets()
     self._statuses: Dict[int, int] = {0: 0, 1: 0, Z_MOTOR: 0}
     self._homed: Set[int] = set()
-    # The device's chip spots by slot, set by its setup; a pick-up or placement checks them.
-    self._chip_spots: Optional[Dict[int, ResourceHolder]] = None
+    # Each motor's following-error check (enabled, maximum) once set; power-on's until then.
+    self._following_errors: Dict[int, Tuple[bool, float]] = {}
 
   def _check_calibrated(self) -> None:
     """Pass: a simulated arm needs only its offsets, which it always has."""
@@ -256,7 +255,7 @@ class MantisSimulationArm(Arm):
       return
     chip_spot = self._chip_spots.get(slot)
     chip = chip_spot.resource if chip_spot is not None else None
-    held = isinstance(chip, MantisChip) and self._attached_chip != slot
+    held = isinstance(chip, MantisChip) and self._current_chip != slot
     if action == "pick_up_chip" and not held:
       raise MantisMotionError(
         f"{self._driver.name}: chip slot {slot} holds no chip in the model; nothing moves"
@@ -327,7 +326,8 @@ class MantisSimulationArm(Arm):
   async def _unchecked_fw_set_following_error_configuration(
     self, *, motor: int, enabled: bool, maximum: float
   ) -> None:
-    """Set nothing: a simulated motor does not slip."""
+    """Hold the check as set; a simulated motor never slips."""
+    self._following_errors[motor] = (enabled, maximum)
 
   async def _unchecked_fw_set_encoder_position(self, *, motor: int, position: float) -> None:
     """Set nothing: the controller's position is the one simulated."""
@@ -476,9 +476,20 @@ class MantisSimulationDriver(MantisDriver):
     return 0.0
 
   async def request_following_error_configuration(self, *, motor: int) -> Tuple[bool, float]:
-    """Raise: the following-error check is not part of the configuration."""
+    """The simulated arm's following-error check for the motor, as last set or at power-on.
+
+    Raises:
+      NotImplementedError: without a simulated arm.
+    """
     self._check_index(name="motor", value=motor, allowed=MOTORS)
-    raise NotImplementedError(f"{self.name}: the following-error check is not simulated")
+    if not isinstance(self.arm, MantisSimulationArm):
+      raise NotImplementedError(f"{self.name}: the following-error check is not simulated")
+    if motor in self.arm._following_errors:
+      return self.arm._following_errors[motor]
+    # As captured at power-on: at most 4.0, but 100.0 for a v4's Z.
+    if motor == Z_MOTOR and self.arm._get_generation() == "v4":
+      return True, 100.0
+    return True, 4.0
 
   async def request_encoder_position(self, *, motor: int) -> float:
     """Where the simulated arm's motor is: where its controller holds it; 0 without one, as after
