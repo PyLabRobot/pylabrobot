@@ -305,7 +305,9 @@ in both modes:
 | `move_to_wash(position=2)` from wash 1 | 1.19 s | 1.08 s | +0.11 s (+10%) |
 | `park()` from wash 2 | 6.72 s | 5.44 s | +1.28 s (+24%) |
 
-On a v3, `Arm.initialize` (`_initialize_v3`) follows the captured cold start: it seats the arms
+On a v3, `Arm.initialize` (`_initialize_v3`) first homes Z, before the arms move: a following
+error an arm motor reports at the opening status read is logged as a warning, then cleared so Z's
+check for a slipped motor passes. Then it follows the captured cold start: it seats the arms
 against their stops (`_seat_arm_motors`, at most `SEAT_PASSES` passes) and backs them off from
 where command 27 reads them, homes Z with the unit's Z values (`_home_z`, its following-error
 check and home-done wait as on a v4), repeats both, homes the arms in order 1 then 0
@@ -323,6 +325,27 @@ confirm both control states, never plate contact or pressure, and `request_state
 off a pump started by the clamp, and a pump already running stays on. The clamp serializes these
 operations, owns a pump change before sending it, and attempts valve release and pump restoration
 independently on failure or cancellation.
+
+`Pump.prime_chip` and `Pump.recover_reagent` play what a v4 sends, as captured, for the chip on
+the head (low and high volume Hi-Fi, the chip types captured; a v3 is refused). Each clears and
+starts the sequencer, then starts the pump if it is off (`_start_pump`): the first time since
+setup every valve is queued closed first, as a v4's startup does, else the pressure pushes air back
+into the input; then the pump on and each line enabled with the target last set on it, none before
+the first, and `START_PUMP_DELAY`. `_set_pressures` sets the liquid class's prime or recovery
+pressures as the chips' preparing-pressure sequence: the vacuum, through 0 on a v4, settled; the
+bottle let off; the chip line, settled within `SETTLE_TIMEOUT` or `MantisPressureError`. A prime
+then queues the waste's path, the small then the large drops (`_get_pump_cycle`, a v4's
+split), the safe state, the way back out of the waste and the four lines to (15, 30) at the safe
+height; a recovery the four lines, the reverse pump (`_get_reverse_pump_cycle`) and the safe state,
+then the four lines again. A liquid class gives each drop's and reverse pump's fill and empty
+delays (`LIQUID_CLASS_DELAYS`) and the safe state's hold. Both release what they took: the whole
+pressure if they started the pump, else only the chip and vacuum lines, so a pump already running
+for the clamp stays on; a failure or cancellation first aborts the sequencer and stops every motor
+(M10). Each setup's tare starts the pump's state over. The chip stays on the head. An operation
+leaves the chip line pressurised, as a v4 does: it holds the chip's valves shut. `stop` then vents
+a v4's, after the bottle, as the tare does, and warns if a line still reads above `VENT_TOLERANCE`;
+a v4 does not, and a session would end with the line at about 12 psi. With a chip left on the head
+it is not vented, so the chip's valves stay held shut.
 
 **M9. Names say what kind of thing they are.** (STAR P10.)
 
@@ -376,9 +399,9 @@ answer from it; a board it leaves `None` does not answer, and the device name is
 feature has a simulation subclass that overrides its `_unchecked_fw_*` calls and reads with state
 above the wire: `MantisSimulationPlateClamp` reads 0 until a command sets clamping done or
 unclamping done; `MantisSimulationRfid` reads every slot empty; `MantisSimulationPump` starts off,
-reads every line at 0 with the recorded calibration, and follows clamp commands for its air-pump
-state; `MantisSimulationPlateClamp` also holds a valve's state; `MantisSimulationLedBar` takes
-every command and
+reads every line at 0 with the recorded calibration, a line enabled as settled at once, and follows
+clamp commands for its air-pump state; `MantisSimulationPlateClamp` also holds a valve's state;
+`MantisSimulationLedBar` takes every command and
 waits no hold. `MantisSimulationArm` stands at idle with its absolute encoders reading there, so it
 needs no encoder correction; its offsets are the declared ones, else 0, and its zones, approach paths and
 stage the declared ones, else none. On a v3 it runs the bring-up below the `_unchecked_fw_*`
@@ -576,3 +599,9 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     moves the arms and raises Z in one item as written. The move between the washes goes safe Z
     to safe Z, as captured. A head stopped between two lines of a path is not placed on it: it is
     in the open, and rises straight up.
+51. **A prime or a recovery with the pump already running** (for a pneumatic clamp) neither
+    closes the valves nor enables the lines with their targets first, and at its end lets off only
+    the chip and vacuum lines. No capture shows this case; a device run must, before it is relied on.
+52. **The vacuum line is not vented at stop:** after a prime or a recovery it stays near -12 inHg,
+    as a v4 leaves it. Whether a v4 ever vents it is not captured, nor what venting the chip line
+    does with a chip on the head, so stop then leaves the chip line pressurised.

@@ -3,7 +3,6 @@ from .plates import (
   beckman_coulter_biomek_24_wellplate_square_rb,
   beckman_coulter_biomek_96_deepwell_square,
   beckman_coulter_biomek_96_wellplate_flat,
-  beckman_coulter_biomek_96_wellplate_vb,
   beckman_coulter_biomek_modular_reservoir,
   beckman_coulter_biomek_reservoir,
   beckman_coulter_biomek_reservoir_350cb,

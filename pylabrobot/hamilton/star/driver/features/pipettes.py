@@ -756,7 +756,8 @@ class Pipettes:
   def _min_pair_spacing(self, i: int, j: int) -> float:
     """The smallest Y gap two channels may sit at by themselves, in mm, whatever lies between them.
 
-    The wider of the two, rounded up to 0.1 mm, since neither may overlap the other.
+    The wider of the two, rounded up to 0.1 mm, since neither may overlap the other. A channel
+    carrying a CoRe gripper tool keeps `CoreGrippers.tool_width_margin` more.
 
     Args:
       i: one channel, 0-indexed from the back.
@@ -771,7 +772,12 @@ class Pipettes:
     widths = [self.configuration.channels[channel].width for channel in (i, j)]
     if any(width is None for width in widths):
       raise RuntimeError(f"channels {i} and {j} have no width read yet; run discovery first")
-    return math.ceil(max(cast(List[float], widths)) * 10) / 10
+    margin = 0.0
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._tools_taken_from is not None:
+      if {i, j} & {grippers._back_channel, grippers._front_channel}:
+        margin = grippers.tool_width_margin
+    return math.ceil((max(cast(List[float], widths)) + margin) * 10) / 10
 
   def _min_spacing_between(self, i: int, j: int) -> float:
     """The smallest allowed Y gap two channels may sit at, in mm.
@@ -798,7 +804,9 @@ class Pipettes:
   def minimum_y_spacings(self) -> List[float]:
     """The smallest Y gap each channel keeps from the one in front of it, in mm, one per channel.
 
-    What `plan_batches` asks for; the last channel has nothing in front of it.
+    One gap per pair, the last channel having nothing in front of it. `plan_batches` reads one
+    value per channel instead, and takes the larger of each pair: it is given
+    `_min_pair_spacing(i=channel, j=channel)` for each channel.
 
     Returns:
       One gap per channel, back to front.
@@ -1831,7 +1839,11 @@ class Pipettes:
     for channel, z in enumerate(lowest):
       if z < height:
         stop_disc = await self.request_stop_disc_z_position(channel)
-        targets[channel] = round(stop_disc + height - z, 2)
+        target = round(stop_disc + height - z, 2)
+        # The lowest point reads to 0.1 mm, the stop disc finer: raised to the top, the sum can pass
+        # it by that much.
+        top = self.configuration.z_range[1]
+        targets[channel] = top if top < target <= top + 0.1 else target
         self._check_reachable("z", targets[channel])
     return targets
 
@@ -3714,7 +3726,10 @@ class Pipettes:
       for batch in plan_batches(
         use_channels=use_channels[: len(dealt)],
         containers=dealt,
-        channel_spacings=self.minimum_y_spacings,
+        # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+        channel_spacings=[
+          self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+        ],
         wrt_resource=deck,
         x_tolerance=tolerance,
         resource_offsets=offsets,
@@ -4356,8 +4371,8 @@ class Pipettes:
       ys.append(round(centre.y * 10))
       placed[channel] = (centre.x, centre.y)
 
-    # Each pair taking part by itself, as legacy checks them; the firmware arranges the channels
-    # between. Distances in tenths, as the command carries them: 9.0 mm is 9.0 mm, float or not.
+    # Each pair taking part by itself, as legacy checks them; the channels between are placed first,
+    # except around a discard's places. Distances in tenths: 9.0 mm is 9.0 mm, float or not.
     for i, (xi, yi) in placed.items():
       for j, (xj, yj) in placed.items():
         # Channels in different columns are separate moves on the device.
@@ -4602,7 +4617,8 @@ class Pipettes:
 
     The spots may hold tips of different models: a command carries one tip type, so the spots are
     grouped by the model of tip they hold and each group is planned into its own commands. The
-    commands go out in ascending X, whichever group they came from, so the arm sweeps once.
+    commands go out in ascending X, whichever group they came from, so the arm sweeps once. Before
+    each one, every channel is placed in Y by its width, so the device moves none aside itself.
 
     Heights as legacy's `STARBackend.pick_up_tips`: the process begins a collar's height above the
     highest spot and ends at the spot. Once the device has picked them up, each tip is taken out of
@@ -4628,10 +4644,17 @@ class Pipettes:
       NoTipError: If a spot holds no tip while tip tracking is on.
       HasTipError: If a channel already carries a tip.
       ValueError: If a position cannot be reached.
+      RuntimeError: If the CoRe grippers hold a resource.
     """
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    # The channels are placed before each command: a gripped plate would be squeezed or let fall.
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._held_resource is not None:
+      raise RuntimeError(
+        f"the CoRe grippers hold {grippers._held_resource.name}; place it before a tip command"
+      )
     use_channels = list(range(len(tip_spots))) if use_channels is None else list(use_channels)
     offsets = [Coordinate.zero()] * len(tip_spots) if offsets is None else list(offsets)
 
@@ -4667,7 +4690,10 @@ class Pipettes:
         for batch in plan_batches(
           use_channels=[use_channels[index] for index in group],
           containers=cast(List[Container], [tip_spots[index] for index in group]),
-          channel_spacings=self.minimum_y_spacings,
+          # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+          channel_spacings=[
+            self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+          ],
           wrt_resource=deck,
           x_tolerance=ANY_COLUMN if x_tolerance is None else x_tolerance,
           resource_offsets=[offsets[index] for index in group],
@@ -4679,11 +4705,22 @@ class Pipettes:
       indices = [group[index] for index in batch.indices]
       spots = [tip_spots[index] for index in indices]
       in_batch = list(batch.channels)
+      locations = {
+        channel: spot.get_location_wrt(deck, x="c", y="c", z="b") + offsets[index]
+        for spot, channel, index in zip(spots, in_batch, indices)
+      }
+      # Every channel placed first, by its width, over the batch's first column and at the height
+      # the command travels at: the command then only goes down and up.
+      await self.move_to_xy_positions(
+        x=min(location.x for location in locations.values()),
+        ys=batch.y_positions,
+        make_space=True,
+        minimum_traverse_height_start=self._tip_traverse_height(
+          [hamilton_tips[index] for index in indices], minimum_traverse_height_start
+        ),
+      )
       await self._pick_up_tips_in_one_move(
-        {
-          channel: spot.get_location_wrt(deck, x="c", y="c", z="b") + offsets[index]
-          for spot, channel, index in zip(spots, in_batch, indices)
-        },
+        locations,
         {channel: hamilton_tips[index] for channel, index in zip(in_batch, indices)},
         begin_tip_pick_up_process=begin_tip_pick_up_process,
         end_tip_pick_up_process=end_tip_pick_up_process,
@@ -4876,7 +4913,8 @@ class Pipettes:
     The channels may carry tips of different kinds: a `DROP` lowers them all to one height, so the
     channels are grouped by the collar height of the tip they carry and each group is planned into
     its own commands, in ascending X. A `PLACE_SHIFT` lets go from a height of its own, so a
-    discard takes whatever the channels carry in one command.
+    discard takes whatever the channels carry in one command. Before each command into spots,
+    every channel is placed in Y by its width, so the device moves none aside itself.
 
     Args:
       destinations: where each channel's tip goes: a `TipSpot`, which receives it, or a place on
@@ -4898,12 +4936,19 @@ class Pipettes:
       NoTipError: If a channel carries no tip in the model.
       HasTipError: If a tip spot already holds a tip.
       ValueError: If two tips would go into one spot.
+      RuntimeError: If the CoRe grippers hold a resource.
     """
     if not destinations:
       return
     deck = self._driver.deck
     if deck is None:
       raise RuntimeError("tip commands are placed from the deck; this driver was given none")
+    # The channels are placed before each command: a gripped plate would be squeezed or let fall.
+    grippers = self.arm.core_grippers
+    if grippers is not None and grippers._held_resource is not None:
+      raise RuntimeError(
+        f"the CoRe grippers hold {grippers._held_resource.name}; place it before a tip command"
+      )
     use_channels = list(range(len(destinations))) if use_channels is None else list(use_channels)
     offsets = [Coordinate.zero()] * len(destinations) if offsets is None else list(offsets)
 
@@ -4947,26 +4992,43 @@ class Pipettes:
           for batch in plan_batches(
             use_channels=[use_channels[index] for index in of_one_collar],
             containers=cast(List[Container], [spots[index] for index in of_one_collar]),
-            channel_spacings=self.minimum_y_spacings,
+            # One value per channel, as `plan_batches` reads it: a pair takes the larger of its two.
+            channel_spacings=[
+              self._min_pair_spacing(i=channel, j=channel) for channel in range(self.num_channels)
+            ],
             wrt_resource=deck,
             x_tolerance=ANY_COLUMN if x_tolerance is None else x_tolerance,
             resource_offsets=[offsets[index] for index in of_one_collar],
           )
         ]
       planned.sort(key=lambda p: (p[0].x_position, min(p[1][i] for i in p[0].indices)))
-      groups = [
-        ([of_one_collar[index] for index in batch.indices], list(batch.channels))
+      groups: List[Tuple[List[int], List[int], Optional[ChannelBatch]]] = [
+        ([of_one_collar[index] for index in batch.indices], list(batch.channels), batch)
         for batch, of_one_collar in planned
       ]
     else:
-      groups = [(list(range(len(destinations))), use_channels)]
+      groups = [(list(range(len(destinations))), use_channels, None)]
 
-    for indices, channels_in_group in groups:
+    for indices, channels_in_group, batch in groups:
+      # Spots: every channel placed first, by its width. Places given as coordinates, such as a
+      # discard's, are not planned, and the firmware arranges the channels around them.
+      locations = {channel: where(index) for channel, index in zip(channels_in_group, indices)}
+      carried = [self.get_mounted_tip(channel) for channel in channels_in_group]
+      # A channel without a tip is refused by the drop itself, before anything moves.
+      if batch is not None and all(tip is not None for tip in carried):
+        await self.move_to_xy_positions(
+          x=min(location.x for location in locations.values()),
+          ys=batch.y_positions,
+          make_space=True,
+          minimum_traverse_height_start=self._tip_traverse_height(
+            [tip for tip in carried if tip is not None], minimum_traverse_height_start
+          ),
+        )
       # Held now, because the command takes each tip off its shaft: what is put into the spot is
       # the tip the channel came with.
       held = {channel: self.get_mounted_tip(channel) for channel in channels_in_group}
       dropped = await self._drop_tips_in_one_move(
-        {channel: where(index) for channel, index in zip(channels_in_group, indices)},
+        locations,
         drop_method,
         begin_tip_deposit_process=begin_tip_deposit_process,
         end_tip_deposit_process=end_tip_deposit_process,

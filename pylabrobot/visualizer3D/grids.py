@@ -48,6 +48,17 @@ def describe_bands(resource: Resource) -> Optional[List[Dict[str, Any]]]:
   return described or None
 
 
+def _depth_in(child: Resource, frame: Resource) -> float:
+  """How far `child` reaches along `frame`'s y axis, in mm: its box, turned as it stands there."""
+  ys = [
+    child.get_location_wrt(frame, x, y, z).y
+    for x in ("l", "r")
+    for y in ("f", "b")
+    for z in ("b", "t")
+  ]
+  return max(ys) - min(ys)
+
+
 def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
   """The repeated grid this resource lays positions on, or None if it lays none.
 
@@ -102,10 +113,9 @@ def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
 
   # A mark runs to the back of what the positions carry, not of the resource: the deepest child
   # seated on the line (sharing its y), or the resource's own depth when nothing stands on it.
-  try:
-    depth = resource.get_absolute_size_y()
-  except Exception:
-    return None
+  # Both along the resource's own y, the frame the marks are drawn in, so turning the resource
+  # turns its marks without changing them.
+  depth = resource.get_size_y()
 
   seated: List[float] = []
   for child in getattr(resource, "children", []):
@@ -113,7 +123,7 @@ def describe_grid(resource: Resource) -> Optional[Dict[str, Any]]:
     if location is None or abs(location.y - first.y) > SEATED_TOLERANCE:
       continue
     try:
-      seated.append(child.get_absolute_size_y())
+      seated.append(_depth_in(child, resource))
     except Exception:
       continue
 

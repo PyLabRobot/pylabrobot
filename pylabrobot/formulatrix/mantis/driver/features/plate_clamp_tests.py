@@ -21,6 +21,7 @@ from pylabrobot.formulatrix.mantis.driver.features.plate_clamp import PlateClamp
 from pylabrobot.formulatrix.mantis.driver.framing import build_frame, parse_frame
 from pylabrobot.formulatrix.mantis.driver.master_tests import (
   CALIBRATION_WRITTEN_BACK,
+  CHIP_LINE_VENT,
   PUMP_READ,
   DriverTestCase,
   FakeLink,
@@ -145,7 +146,15 @@ class PlateClampTests(DriverTestCase):
       [RELEASE, STATE_READ, LOCK_AT_LEVEL_2]
       + [STATE_READ] * 8
       + HALT
-      + [STATE_READ, RELEASE, STATE_READ, STATE_READ, PUMP_READ, *CALIBRATION_WRITTEN_BACK],
+      + [
+        STATE_READ,
+        RELEASE,
+        STATE_READ,
+        STATE_READ,
+        PUMP_READ,
+        *CHIP_LINE_VENT,
+        *CALIBRATION_WRITTEN_BACK,
+      ],
     )
 
   async def test_stop_releases_a_clamp_not_actuated_since_power_on(self):
@@ -153,7 +162,9 @@ class PlateClampTests(DriverTestCase):
     answer_states_in_turn(link=self.link, turns=[(31, STATES_AFTER_RELEASE_AT_POWER_ON)])
     await self.driver.stop()
     self.assertEqual(
-      self.sent(), HALT + [STATE_READ, RELEASE, STATE_READ, PUMP_READ, *CALIBRATION_WRITTEN_BACK]
+      self.sent(),
+      HALT
+      + [STATE_READ, RELEASE, STATE_READ, PUMP_READ, *CHIP_LINE_VENT, *CALIBRATION_WRITTEN_BACK],
     )
 
 

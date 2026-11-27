@@ -18,6 +18,7 @@ from pylabrobot.hamilton.star.driver.simulator import STARSimulationDriver
 from pylabrobot.lib.liquid_handling.pipette_batch_scheduling import plan_batches
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.corning.axygen.plates import cor_axy_96_wellplate_500uL_Ub
+from pylabrobot.resources.errors import NoTipError
 from pylabrobot.resources.hamilton import STARDeck
 
 
@@ -2830,6 +2831,47 @@ def _answer_pick_ups_as_the_device(pipettes: Pipettes, rack: Any, empty: List[st
     return await answer(module, command, **kwargs)
 
   driver._answer = answered
+
+
+class TestChannelsArePlacedBeforeATipCommand(unittest.IsolatedAsyncioTestCase):
+  """Every channel is placed in Y by its width before a `C0 TP` or `C0 TR` into spots, so the
+  device moves none aside itself."""
+
+  async def asyncSetUp(self):
+    self.pipettes, self.rack, _ = await channels_over_a_rack()
+    self.order: List[str] = []
+    log = self.pipettes._driver._log_exchange  # type: ignore[attr-defined]
+
+    def recorded(written: str, read: Optional[str]) -> None:
+      if written[:4] in ("X0XP", "C0JY", "C0TP", "C0TR"):
+        self.order.append(written[:4])
+      log(written, read)
+
+    self.pipettes._driver._log_exchange = recorded  # type: ignore[attr-defined]
+
+  async def test_channels_behind_the_batch_are_placed_in_front_of_it_first(self):
+    """Channels 6 and 7 stand behind where channel 5 is going; they are moved out first."""
+    await self.pipettes.move_to_y_positions(
+      {0: 470.0, 1: 400.0, 2: 380.0, 3: 360.0, 4: 340.0, 5: 320.0, 6: 300.0, 7: 290.0}
+    )
+    self.order.clear()
+    spots = [self.rack.get_item(f"{row}1") for row in "ABCDEF"]
+    await self.pipettes.pick_up_tips(spots, use_channels=[0, 1, 2, 3, 4, 5])
+    self.assertEqual(self.order, ["X0XP", "C0JY", "C0TP"])
+
+  async def test_a_drop_with_a_channel_without_a_tip_moves_nothing(self):
+    await self.pipettes.pick_up_tips([self.rack.get_item("A1")], use_channels=[0])
+    self.order.clear()
+    with self.assertRaises(NoTipError):
+      await self.pipettes.drop_tips([self.rack.get_item("D1")], use_channels=[3])
+    self.assertEqual(self.order, [])
+
+  async def test_a_drop_into_spots_is_placed_first(self):
+    spots = [self.rack.get_item(row + "1") for row in "AB"]
+    await self.pipettes.pick_up_tips(spots, use_channels=[0, 1])
+    self.order.clear()
+    await self.pipettes.drop_tips(spots, use_channels=[0, 1])
+    self.assertEqual(self.order, ["X0XP", "C0JY", "C0TR"])
 
 
 class TestTipCommandsRefuseARackNoHeadCanReach(unittest.IsolatedAsyncioTestCase):
