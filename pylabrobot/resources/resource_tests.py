@@ -23,6 +23,8 @@ from pylabrobot.resources.errors import NoLocationError, ResourceNotFoundError
 from pylabrobot.resources.hamilton.tip_creators import TIP_DIAMETER, TipSize
 from pylabrobot.resources.plate_adapter import PlateAdapter
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.resource_stack import ResourceStack
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.tip import Tip
 from pylabrobot.utils.linalg import matrix_multiply_3x3, matrix_vector_multiply_3x3
@@ -1515,25 +1517,80 @@ class TestNameIndex(unittest.TestCase):
     with self.assertRaises(ValueError):
       second.assign_child_resource(holder, location=Coordinate.zero())
 
-  def test_moving_between_parents_goes_through_the_old_one(self):
-    """A resource is moved by taking it off one parent and putting it on another, in that order.
-
-    Handing it straight to the new parent is refused, because the name is checked while the old
-    parent still holds it. Long-standing behaviour, unrelated to the index, and worth pinning: it is
-    why a plate changing carriers reaches a subscriber as an unassignment and an assignment.
-    """
+  def test_moving_within_the_tree_keeps_the_name(self):
+    """A resource can go straight to another parent in the same tree; its name is still its own."""
     root = self.block("root")
     left, right = self.block("left"), self.block("right")
     root.assign_child_resource(left, location=Coordinate.zero())
     root.assign_child_resource(right, location=Coordinate.zero())
 
     plate = self.block("plate")
+    plate.assign_child_resource(self.block("well"), location=Coordinate.zero())
     left.assign_child_resource(plate, location=Coordinate.zero())
 
-    with self.assertRaises(ValueError):
-      right.assign_child_resource(plate, location=Coordinate.zero())
-
-    left.unassign_child_resource(plate)
     right.assign_child_resource(plate, location=Coordinate.zero())
     self.assertIs(plate.parent, right)
-    self.assertEqual(root.get_resource("plate"), plate)
+    self.assertEqual(left.children, [])
+    with self.assertRaises(ResourceNotFoundError):
+      left.get_resource("plate")
+    self.assertIs(root.get_resource("plate"), plate)
+    self.assertIs(root.get_resource("well"), plate.children[0])
+
+  def test_moving_within_the_tree_unassigns_then_assigns(self):
+    """A move inside one tree reaches subscribers as an unassignment and then an assignment, and
+    leaves the tree's map of names the same as a fresh walk of the tree."""
+    root = self.block("root")
+    left, right = self.block("left"), self.block("right")
+    root.assign_child_resource(left, location=Coordinate.zero())
+    root.assign_child_resource(right, location=Coordinate.zero())
+    plate = self.block("plate")
+    well = self.block("well")
+    plate.assign_child_resource(well, location=Coordinate.zero())
+    well.assign_child_resource(self.block("liquid"), location=Coordinate.zero())
+    left.assign_child_resource(plate, location=Coordinate.zero())
+
+    calls = []
+    root.register_will_assign_resource_callback(lambda r: calls.append(("will_assign", r.name)))
+    root.register_will_unassign_resource_callback(lambda r: calls.append(("will_unassign", r.name)))
+    root.register_did_unassign_resource_callback(lambda r: calls.append(("did_unassign", r.name)))
+    root.register_did_assign_resource_callback(lambda r: calls.append(("did_assign", r.name)))
+
+    right.assign_child_resource(plate, location=Coordinate.zero())
+    self.assertEqual(
+      calls,
+      [
+        ("will_assign", "plate"),
+        ("will_unassign", "plate"),
+        ("did_unassign", "plate"),
+        ("did_assign", "plate"),
+      ],
+    )
+    self.assertEqual(root._resources(), {r.name: r for r in [root] + root.get_all_children()})
+
+  def test_moving_within_the_tree_into_a_stack(self):
+    """A plate goes from a holder onto a stack in the same tree, and lands on the stack's top."""
+    root = self.block("root")
+    holder = ResourceHolder("holder", size_x=10, size_y=10, size_z=10)
+    stack = ResourceStack("stack", direction="z")
+    root.assign_child_resource(holder, location=Coordinate.zero())
+    root.assign_child_resource(stack, location=Coordinate(20, 0, 0))
+    stack.assign_child_resource(self.block("bottom"))
+
+    plate = self.block("plate")
+    holder.assign_child_resource(plate)
+    stack.assign_child_resource(plate)
+    self.assertIsNone(holder.resource)
+    self.assertIs(stack.get_top_item(), plate)
+    self.assertEqual(plate.location, Coordinate(0, 0, 10))
+    self.assertIs(root.get_resource("plate"), plate)
+
+  def test_a_resource_on_the_same_parent_is_still_refused(self):
+    """Assigning a resource again to its own parent is refused: a parent such as a stack places a
+    new child from its current children, which still include that resource."""
+    root = self.block("root")
+    plate = self.block("plate")
+    root.assign_child_resource(plate, location=Coordinate.zero())
+    with self.assertRaises(ValueError):
+      root.assign_child_resource(plate, location=Coordinate(1, 2, 3))
+    self.assertEqual(root.children, [plate])
+    self.assertEqual(plate.location, Coordinate.zero())
