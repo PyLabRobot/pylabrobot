@@ -1355,7 +1355,7 @@ class MantisDriver:
     Raises:
       MantisMotionError: if a chip is on the head, unless ``accept_chip_left_on_head``; every motor
         is stopped, the arm stays where it stopped, brought up, and the link stays open for
-        ``Arm.return_chip``.
+        ``Arm.place_chip``.
     """
     if self._reader is not None and self._reader.done() and self._connected:
       failure = None if self._reader.cancelled() else self._reader.exception()
@@ -1371,11 +1371,11 @@ class MantisDriver:
       if not waiter.done():
         waiter.set_exception(MantisNotConnectedError(stopped))
     if self._connected:
-      chip_on_head = self.arm is not None and self.arm.attached_chip is not None
+      chip_on_head = self.arm is not None and self.arm.current_chip is not None
       if chip_on_head and not accept_chip_left_on_head:
         await self._halt(park=False)  # no park: Z is not lowered with the chip on the head
         raise MantisMotionError(
-          f"{self.name}: a chip is still on the head; return it with return_chip(), or pass "
+          f"{self.name}: a chip is still on the head; place it with place_chip(), or pass "
           "accept_chip_left_on_head=True"
         )
       await self._halt()

@@ -37,6 +37,7 @@ from pylabrobot.formulatrix.mantis.driver.master_tests import (
   FakeLink,
   make_answers,
 )
+from pylabrobot.resources.formulatrix.mantis_chips import get_chip_factory, mantis_chip_low_volume
 
 # The pressure board's reads, as sent.
 CALIBRATION_READS = [(10, 20, bytes.fromhex(request)) for request in ("0000", "0100", "0200")]
@@ -552,8 +553,8 @@ class PrimeAndRecoveryTests(ArmTestCase):
     driver.arm._initialized = True
     driver.arm.request_is_parked = mock.AsyncMock(return_value=True)  # type: ignore[method-assign]
     driver._wait_for_queue_item = mock.AsyncMock()  # type: ignore[method-assign]
-    driver.arm._attached_chip = 1
-    driver.arm._attached_chip_type = chip_type
+    driver.arm._current_chip = 1
+    driver.arm._attached_chip = get_chip_factory(chip_type=chip_type)("chip")
     driver.pump._valves_closed = True
     driver.pump._target_pressures = dict(targets)
     self.link = link
@@ -611,7 +612,7 @@ class PrimeAndRecoveryTests(ArmTestCase):
         self.assert_frames(
           sent=self.sent_frames(link=self.link), captured=expand_captured(captured=captured)
         )
-        self.assertEqual(driver.arm.attached_chip, 1)
+        self.assertEqual(driver.arm.current_chip, 1)
 
   async def test_a_recovery_sends_the_captured_frames(self):
     cases = (
@@ -658,10 +659,10 @@ class PrimeAndRecoveryTests(ArmTestCase):
     driver = await self.set_up_chip(chip_type="low_volume_hi_fi", targets={})
     with self.assertRaisesRegex(ValueError, "volume must be more than 0"):
       await driver.pump.prime_chip(volume=0.0)
-    driver.arm._attached_chip_type = "low_volume"
+    driver.arm._attached_chip = mantis_chip_low_volume(name="chip")
     with self.assertRaisesRegex(MantisConfigurationError, "low_volume chip"):
       await driver.pump.recover_reagent(volume=6.0)
-    driver.arm._attached_chip = None
+    driver.arm._current_chip, driver.arm._attached_chip = None, None
     with self.assertRaisesRegex(MantisMotionError, "no chip is on the head"):
       await driver.pump.prime_chip(volume=6.0)
     driver.configuration.generation = "v3"

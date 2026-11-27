@@ -1,7 +1,9 @@
 from .mantis_chips import (
+  MANTIS_CHIP_FACTORIES,
   MantisChip,
   MantisChipInput,
   MantisChipNozzle,
+  get_chip_factory,
   mantis_chip_high_volume,
   mantis_chip_high_volume_hi_fi,
   mantis_chip_low_volume,

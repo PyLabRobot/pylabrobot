@@ -3,7 +3,7 @@
 Specifications: https://help.formulatrix.com/mantis/5.5/Content/Chip_Overview.htm
 """
 
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, Literal, Optional, Tuple
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -471,3 +471,29 @@ def mantis_chip_high_volume_hi_fi(name: str) -> MantisChip:
     default_predispense_volume={"tube": 6.0, "pipette_tip": 6.0},  # from spec
     model="mantis_chip_high_volume_hi_fi",
   )
+
+
+# Each chip type, as the RFID reader names it, and its definition.
+MANTIS_CHIP_FACTORIES: Dict[str, Callable[[str], MantisChip]] = {
+  "low_volume": mantis_chip_low_volume,
+  "high_volume": mantis_chip_high_volume,
+  "low_volume_hi_fi": mantis_chip_low_volume_hi_fi,
+  "high_volume_hi_fi": mantis_chip_high_volume_hi_fi,
+}
+
+
+def get_chip_factory(chip_type: str) -> Callable[[str], MantisChip]:
+  """Return the definition of a chip type.
+
+  Args:
+    chip_type: the chip type, as the RFID reader names it.
+
+  Raises:
+    KeyError: for a chip type with no definition; the message lists the defined ones.
+  """
+  try:
+    return MANTIS_CHIP_FACTORIES[chip_type]
+  except KeyError:
+    raise KeyError(
+      f"Unknown Mantis chip {chip_type!r}. Available: {sorted(MANTIS_CHIP_FACTORIES)}"
+    ) from None

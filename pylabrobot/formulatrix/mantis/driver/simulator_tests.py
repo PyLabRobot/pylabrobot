@@ -40,6 +40,7 @@ from pylabrobot.formulatrix.mantis.driver.stage_transform import (
 )
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.corning import cor_96_wellplate_360uL_Fb
+from pylabrobot.resources.formulatrix.mantis_chips import mantis_chip_low_volume_hi_fi
 
 
 async def request_head_position(*, arm) -> Tuple[float, float, float]:
@@ -507,10 +508,10 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
     # As captured, both end at (15, 30) at the safe height, the chip still on the head.
     arm, pump = self.arm, self.mantis.pump
     assert pump is not None
-    arm._attached_chip, arm._attached_chip_type = 1, "low_volume_hi_fi"
+    arm._current_chip, arm._attached_chip = 1, mantis_chip_low_volume_hi_fi(name="chip")
 
     def remove_chip() -> None:  # stop refuses a chip on the head
-      arm._attached_chip = None
+      arm._current_chip, arm._attached_chip = None, None
 
     self.addCleanup(remove_chip)
     for operation in (pump.prime_chip, pump.recover_reagent):
@@ -518,7 +519,7 @@ class SimulatedRouteTests(unittest.IsolatedAsyncioTestCase):
         await operation(volume=6.0)
         await self.assert_head_at(x=15.0, y=30.0, z=1.57)
         self.assertFalse(await pump.request_pump_on())
-        self.assertEqual(arm.attached_chip, 1)
+        self.assertEqual(arm.current_chip, 1)
 
 
 class SimulatedWellplateTests(unittest.IsolatedAsyncioTestCase):

@@ -28,10 +28,16 @@ from typing import (
   Optional,
   Sequence,
   Tuple,
+  Union,
   cast,
 )
 
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources import Coordinate, ResourceHolder
+from pylabrobot.resources.formulatrix.mantis_chips import (
+  MANTIS_CHIP_FACTORIES,
+  MantisChip,
+  get_chip_factory,
+)
 from pylabrobot.resources.manipulator import LinkBody
 
 from ...resource_model import (
@@ -76,6 +82,7 @@ from ..stage_transform import compute_arm_frame_position
 from ..v3_arm_configuration import V3ArmConfiguration
 
 if TYPE_CHECKING:
+  from ...liquid_classes import MantisLiquidClass
   from ..master import MantisDriver
 
 logger = logging.getLogger(__name__)
@@ -241,6 +248,8 @@ class Arm:
 
   After each move, and where a failed one stopped, the measured pose goes to ``_pose_observer`` if
   one is set: the two links' angles and Z's height, as keywords ``theta_1``, ``theta_2`` and ``z``.
+  Once a chip counts as on the head or off it, ``_chip_observer`` is told, if one is set: the chip
+  slot and whether the chip is on the head, as keywords ``slot`` and ``on_head``.
   """
 
   # Where the ``default_*`` properties start: the arms at the route profile (None), Z at the
@@ -274,10 +283,12 @@ class Arm:
     self.configuration = configuration
     self._initialized = False
     self._pose_observer: Optional[Callable[..., None]] = None
-    # The chip slot the head's chip came from; None without a chip.
-    self._attached_chip: Optional[int] = None
-    # The head's chip's type, as its slot's tag read before the pick-up; None without a chip.
-    self._attached_chip_type: Optional[str] = None
+    self._chip_observer: Optional[Callable[..., None]] = None
+    # The chip on the head, and the chip slot it came from; None without a chip.
+    self._attached_chip: Optional[MantisChip] = None
+    self._current_chip: Optional[int] = None
+    # The device's chip spots by slot, set by its setup; a picked-up chip is the one in its spot.
+    self._chip_spots: Optional[Dict[int, ResourceHolder]] = None
     # The two link angles last passed on, degrees, the geometry's own; None before any.
     self._link_angles: Optional[Tuple[float, float]] = None
     self._deck_to_arm_transform: Optional[Tuple[float, float, float]] = None
@@ -285,9 +296,14 @@ class Arm:
       raise MantisConfigurationError(f"{driver.name}: a v4 takes no v3 arm block")
 
   @property
-  def attached_chip(self) -> Optional[int]:
-    """The chip slot the chip on the head was picked up from; None without a chip."""
+  def attached_chip(self) -> Optional[MantisChip]:
+    """The chip on the head, or None; updated by ``pick_up_chip`` and ``place_chip``."""
     return self._attached_chip
+
+  @property
+  def current_chip(self) -> Optional[int]:
+    """The chip slot the chip on the head came from, or None."""
+    return self._current_chip
 
   @property
   def is_initialized(self) -> bool:
@@ -1024,6 +1040,21 @@ class Arm:
     except Exception:
       logger.warning("[%s] the arm's pose was not passed on", self._driver.name, exc_info=True)
 
+  def _notify_chip(self, *, slot: int, on_head: bool) -> None:
+    """Tell ``_chip_observer``, if one is set, that a chip counts as on the head or off it; a
+    failure only warns.
+
+    Args:
+      slot: the chip slot picked up from or placed into.
+      on_head: True once a pick-up's attach line has played, False once a placement's has.
+    """
+    if self._chip_observer is None:
+      return
+    try:
+      self._chip_observer(slot=slot, on_head=on_head)
+    except Exception:
+      logger.warning("[%s] the chip's move was not passed on", self._driver.name, exc_info=True)
+
   def _get_five_bar(self, *, links: Dict[str, LinkBody]) -> Optional[Dict[str, Any]]:
     """The arm as a five-bar linkage, for a viewer to place the four links from the two driven
     angles; None before a pose was passed on.
@@ -1315,6 +1346,7 @@ class Arm:
     moves: List[List[Tuple[float, float, float]]],
     with_model_updates: bool = False,
     wait_after: Tuple[int, ...] = (),
+    wait_after_callback: Optional[Callable[[int], None]] = None,
   ) -> None:
     """Clear and start the sequencer, queue each move, then wait until the last is played.
 
@@ -1327,6 +1359,8 @@ class Arm:
         ``_report_pose``; each item ends with every motor's move done, so the path is the same.
       wait_after: indices of the moves after which queuing pauses until the device has played
         them.
+      wait_after_callback: called with each ``wait_after`` index once the device has played that
+        move, before anything more is queued.
 
     Raises:
       MantisMotionError: if a motor reports an error first.
@@ -1335,8 +1369,10 @@ class Arm:
     if not moves:
       return
     if with_model_updates:
-      for move in moves:
+      for index, move in enumerate(moves):
         await self._play_queued_moves(moves=[move], with_model_updates=False)
+        if wait_after_callback is not None and index in wait_after:
+          wait_after_callback(index)
         await self._report_pose()
       return
     await self._driver._unchecked_fw_clear_sequencer()
@@ -1347,6 +1383,8 @@ class Arm:
       for end in [*pauses, len(moves) - 1]:
         item = await self._queue_moves(moves=moves[start : end + 1])
         await self._driver._wait_for_queue_item(item=item, timeout=MOVE_TIMEOUT * (end + 1 - start))
+        if wait_after_callback is not None and end in wait_after:
+          wait_after_callback(end)
         start = end + 1
     except BaseException:
       try:
@@ -1570,6 +1608,13 @@ class Arm:
     }
     for motor in ARM_MOTORS:
       await self._unchecked_fw_clear_motor_faults(motor=motor)
+    # Every motor checked for a slip twice before the seat, as captured.
+    for _ in range(2):
+      for motor in (*ARM_MOTORS, Z_MOTOR):
+        enabled, _ = await self._driver.request_following_error_configuration(motor=motor)
+        if enabled:
+          status = await self._driver.request_motor_status(motor=motor)
+          self._check_status(motor=motor, status=status)
     seated_once = False
     for _ in range(SEAT_PASSES):
       for motor in ARM_MOTORS:
@@ -2479,15 +2524,27 @@ class Arm:
     raise MantisConfigurationError("a chip slot path never moves sideways below the safe height")
 
   async def _move_through_chip_slot(
-    self, *, path: List[MantisArmCoordinate], attach_line: int, with_model_updates: bool
+    self,
+    *,
+    path: List[MantisArmCoordinate],
+    attach_line: int,
+    current_chip: Optional[int],
+    attached_chip: Optional[MantisChip],
+    with_model_updates: bool,
   ) -> None:
     """Move from idle along ``CHIP_CHANGER_ROUTE``, through a chip slot's path and back the same way
     to idle, queued as in the recordings. Queuing pauses at the attach line and before idle until
     the device has played the moves so far.
 
+    Once the attach line has played, the chip on the head is ``attached_chip``, from slot
+    ``current_chip`` (design.md), even if a later move fails or is cancelled, and
+    ``_chip_observer`` is told.
+
     Args:
       path: the slot's path, in the order played.
       attach_line: the line of ``path`` to wait at.
+      current_chip: the chip slot whose chip is on the head after the attach line; None for none.
+      attached_chip: that chip; None for none.
       with_model_updates: as ``_play_queued_moves``.
     """
     if not await self.request_is_parked():
@@ -2496,10 +2553,19 @@ class Arm:
     route = [*idle, *CHIP_CHANGER_ROUTE, *path, *CHIP_CHANGER_ROUTE, *idle]
     moves = self._get_route_moves(route=route)
     first_path_line = len(idle) + len(CHIP_CHANGER_ROUTE)
+
+    def wait_after_callback(index: int) -> None:
+      if index == first_path_line + attach_line:
+        slot = current_chip if current_chip is not None else self._current_chip
+        self._current_chip, self._attached_chip = current_chip, attached_chip
+        if slot is not None:
+          self._notify_chip(slot=slot, on_head=current_chip is not None)
+
     await self._play_queued_moves(
       moves=moves,
       with_model_updates=with_model_updates,
       wait_after=(first_path_line + attach_line, len(route) - len(idle) - 1),
+      wait_after_callback=wait_after_callback,
     )
     if not with_model_updates:  # else passed on after the last move
       await self._report_pose()
@@ -2543,96 +2609,148 @@ class Arm:
       )
     return tag
 
-  async def pick_up_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
-    """Pick up the chip in a chip slot along the unit's path into it, from wherever the head stands,
-    and return to idle, as the recorded pick-ups do.
-
-    First the slot's tag is read (``_check_chip_slot_tag``): the pick-up refuses an empty slot.
+  def _get_chip(self, *, chip_number: int, tag: Optional[Dict[str, Any]]) -> Optional[MantisChip]:
+    """The chip in a chip slot: the device's chip in its spot, else one built from the chip type
+    its tag reads; None for a type unknown or without a definition.
 
     Args:
-      slot: the chip slot, 1 to 6.
+      chip_number: the chip slot.
+      tag: the slot's tag, as ``_check_chip_slot_tag`` read it; None when not read.
+
+    Raises:
+      MantisConfigurationError: if the spot's chip is of another type than the tag reads.
+    """
+    chip_type = None if tag is None else tag["chip_type"]
+    spot = None if self._chip_spots is None else self._chip_spots.get(chip_number)
+    chip = None if spot is None else spot.resource
+    if isinstance(chip, MantisChip):
+      if chip_type is not None and chip.chip_type != chip_type:
+        raise MantisConfigurationError(
+          f"{self._driver.name}: chip slot {chip_number} holds a {chip_type} chip by its tag, "
+          f"but its spot holds a {chip.chip_type} chip; nothing moves"
+        )
+      return chip
+    if chip_type not in MANTIS_CHIP_FACTORIES:
+      logger.info(
+        "[%s] chip slot %d: no definition of chip type %s",
+        self._driver.name,
+        chip_number,
+        chip_type,
+      )
+      return None
+    factory = get_chip_factory(chip_type=chip_type)
+    return factory(f"{self._driver.name}_chip_{chip_number}")
+
+  async def pick_up_chip(
+    self, chip_number: Union[int, MantisChip], *, with_model_updates: bool = False
+  ) -> None:
+    """Pick up the chip in a chip slot along the unit's path into it, from wherever the head stands
+    (a v3 from idle only), and return to idle, as captured. A chip on the head from another slot
+    is placed back first, once this slot's tag shows a chip; one from this slot stays.
+
+    First the slot's tag is read (``_check_chip_slot_tag``): the pick-up refuses an empty slot.
+    The chip counts as on the head once the attach line has played, whatever fails after it.
+
+    Args:
+      chip_number: the chip slot, 1 to 6, or the chip in one, by its spot in the resource model.
       with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
         model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
     Raises:
-      MantisConfigurationError: without the slot's path or an RFID reader; nothing moves (on a v3
-        the head's position is read first).
-      MantisMotionError: if the arm is not brought up, a chip is already on the head, or a motor
-        faults; or if the tag rules the pick-up out, after the tag read only.
+      MantisConfigurationError: without the slot's path or an RFID reader, or if the slot's spot
+        holds a chip of another type than its tag reads; nothing moves (on a v3 the head's
+        position is read first).
+      MantisMotionError: if the arm is not brought up or a motor faults; or if the tag rules the
+        pick-up out, after the tag read only.
       NotImplementedError: on a v3 not parked: it would park first, which no v3 has run; nothing
         moves, only the head's position is read. A v3 picks up from idle (run on two v3 units,
         every chip slot).
     """
     self._check_initialized(run_on_v3=True)
-    if self._attached_chip is not None:
-      raise MantisMotionError(
-        f"{self._driver.name}: the chip from slot {self._attached_chip} is on the head; "
-        "place it first"
-      )
-    path = self._get_chip_slot_path(slot=slot)
+    if isinstance(chip_number, MantisChip):
+      chip_spots = self._chip_spots or {}
+      slots = [slot for slot, spot in chip_spots.items() if spot.resource is chip_number]
+      if not slots and chip_number is not self._attached_chip:
+        raise ValueError(f"chip {chip_number.name} is in no chip slot's spot; nothing moves")
+      chip_number = slots[0] if slots else cast(int, self._current_chip)
+    if self._current_chip == chip_number:
+      logger.info("[%s] the chip from slot %d is on the head", self._driver.name, chip_number)
+      return
+    path = self._get_chip_slot_path(slot=chip_number)
     attach_line = self._get_attach_line(path=path)
     await self._check_v3_at_idle()
-    tag = await self._check_chip_slot_tag(slot=slot, action="pick_up_chip")
+    tag = await self._check_chip_slot_tag(slot=chip_number, action="pick_up_chip")
+    chip = self._get_chip(chip_number=chip_number, tag=tag)
+    if self._current_chip is not None:
+      await self.place_chip(chip_number=self._current_chip, with_model_updates=with_model_updates)
     async with self._driver._show_action(action="pick_up_chip"):
       await self._move_through_chip_slot(
         path=path,
         attach_line=attach_line,
+        current_chip=chip_number,
+        attached_chip=chip,
         with_model_updates=with_model_updates,
       )
-    self._attached_chip = slot
-    self._attached_chip_type = None if tag is None else tag["chip_type"]
-    logger.info("[%s] picked up the chip in slot %d", self._driver.name, slot)
+    logger.info("[%s] picked up the chip in slot %d", self._driver.name, chip_number)
 
-  async def place_chip(self, *, slot: int, with_model_updates: bool = False) -> None:
+  async def place_chip(
+    self,
+    chip_number: int,
+    recover_liquid: bool = False,
+    *,
+    liquid_class: Optional["MantisLiquidClass"] = None,
+    with_model_updates: bool = False,
+  ) -> None:
     """Place the chip on the head back into its chip slot along the unit's path into it played
     backwards, from wherever the head stands, and return to idle, as the recorded placements do.
+    Without a chip on the head nothing moves and a warning is logged.
 
     First the slot's tag is read (``_check_chip_slot_tag``): the placement refuses a slot that
-    holds a chip.
+    holds a chip. The chip counts as on the head until the attach line has played.
 
     Args:
-      slot: the chip slot the chip was picked up from, 1 to 6.
+      chip_number: the chip slot the chip was picked up from, 1 to 6.
+      recover_liquid: recover the chip's liquid after the placement; not captured, so refused.
+      liquid_class: the recovery's delays, with ``recover_liquid``.
       with_model_updates: as for ``pick_up_chip``.
 
     Raises:
       MantisConfigurationError: without the slot's path or an RFID reader; nothing moves (on a v3
         the head's position is read first).
-      MantisMotionError: if the arm is not brought up, no chip is on the head, the chip is from
-        another slot (nothing moves), or a motor faults; or if the slot's tag reads a chip, after
-        the tag read only.
-      NotImplementedError: on a v3 not parked, as for ``pick_up_chip``.
+      MantisMotionError: if the arm is not brought up, the chip is from another slot (nothing
+        moves), or a motor faults; or if the slot's tag reads a chip, after the tag read only.
+      NotImplementedError: with ``recover_liquid``, which no capture has shown; on a v3 not parked,
+        as for ``pick_up_chip``. Nothing moves.
     """
     self._check_initialized(run_on_v3=True)
-    if self._attached_chip is None:
-      raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
-    if slot != self._attached_chip:
-      raise MantisMotionError(
-        f"{self._driver.name}: the chip on the head is from slot {self._attached_chip}, not "
-        f"{slot}; place it back there"
+    if recover_liquid:
+      raise NotImplementedError(
+        f"{self._driver.name}: a placement that recovers the liquid has not been captured; "
+        "nothing moves"
       )
-    path = self._get_chip_slot_path(slot=slot)
+    if self._current_chip is None:
+      logger.warning(
+        "[%s] no chip is on the head to place into slot %d", self._driver.name, chip_number
+      )
+      return
+    if chip_number != self._current_chip:
+      raise MantisMotionError(
+        f"{self._driver.name}: the chip on the head is from slot {self._current_chip}, not "
+        f"{chip_number}; place it back there"
+      )
+    path = self._get_chip_slot_path(slot=chip_number)
     attach_line = self._get_attach_line(path=path)
     await self._check_v3_at_idle()
-    await self._check_chip_slot_tag(slot=slot, action="place_chip")
+    await self._check_chip_slot_tag(slot=chip_number, action="place_chip")
     async with self._driver._show_action(action="place_chip"):
       await self._move_through_chip_slot(
         path=path[::-1],
         attach_line=len(path) - 1 - attach_line,
+        current_chip=None,
+        attached_chip=None,
         with_model_updates=with_model_updates,
       )
-    logger.info("[%s] placed the chip back into slot %d", self._driver.name, slot)
-    self._attached_chip = None
-    self._attached_chip_type = None
-
-  async def return_chip(self, *, with_model_updates: bool = False) -> None:
-    """Place the chip on the head back into the slot it was picked up from.
-
-    Raises:
-      MantisMotionError: if no chip is on the head, or as for ``place_chip``.
-    """
-    if self._attached_chip is None:
-      raise MantisMotionError(f"{self._driver.name}: no chip is on the head")
-    await self.place_chip(slot=self._attached_chip, with_model_updates=with_model_updates)
+    logger.info("[%s] placed the chip back into slot %d", self._driver.name, chip_number)
 
   async def _park(self, *, with_model_updates: bool = False) -> None:
     """Park at idle and lower Z to ``SHUTDOWN_Z``, as in the recorded close.
@@ -2705,7 +2823,8 @@ class Arm:
     """
     initialized, self._initialized = self._initialized, False
     if self._get_generation() == "v3":
-      await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR))
+      if await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR)) and not park:
+        self._initialized = initialized  # brought up still, so a chip can be placed back
       await self._log_where_it_stopped()
       return
     if not await self._stop_motors(motors=(*ARM_MOTORS, Z_MOTOR)):
