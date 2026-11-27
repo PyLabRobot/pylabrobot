@@ -1,15 +1,20 @@
-"""The Mantis LC3 chip carousel on its own FTDI command link."""
+"""The LC3 chip carousel: a USB device beside the Mantis, turned by motor 0 on its board 0.
+
+Interface B of its FTDI bridge carries the command frames, interface A its RFID reader, as on the
+Mantis.
+"""
 
 import asyncio
+import contextlib
 import logging
 import math
 import struct
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional, Tuple
 
 from pylabrobot.io.ftdi import FTDI
 
-from .driver.carousel_configuration import CarouselConfiguration
-from .driver.errors import (
+from ..carousel_configuration import CarouselConfiguration
+from ..errors import (
   MOTOR_ERROR_CODE_DESCRIPTIONS,
   MOTOR_STATUS_ERROR_BITS,
   FrameError,
@@ -18,8 +23,11 @@ from .driver.errors import (
   MantisNotConnectedError,
   MantisTimeoutError,
 )
-from .driver.events import HOME_DONE_EVENT, MOVE_DONE_EVENT, decode_home_done, decode_move_done
-from .driver.master import MantisDriver
+from ..events import HOME_DONE_EVENT, MOVE_DONE_EVENT, decode_home_done, decode_move_done
+from .rfid import RFID_BAUD_RATE, _initialize_rfid_module, _read_tag_from_ftdi, describe_tag
+
+if TYPE_CHECKING:
+  from ..master import MantisDriver
 
 logger = logging.getLogger(__name__)
 
@@ -41,43 +49,36 @@ def _is_carousel_move(payload: bytes) -> bool:
 
 
 class MantisCarousel:
-  """Home and position an LC3 carousel independently of the Mantis arm.
+  """An LC3 carousel: home it, turn a chip slot to the head or over its RFID reader, read a tag.
 
-  Setup opens the LC3 link without moving. Home before selecting an angle or a one-based chip
-  slot. Keep the Mantis head clear of the carousel; this class does not coordinate arm movement.
+  The Mantis's driver builds one for each declared ``left_carousel`` and ``right_carousel`` block
+  and sets it up at discovery; setup reads firmware and limits without moving. It turns only with
+  the Mantis's head read at idle.
   """
 
   def __init__(
     self,
     *,
     configuration: CarouselConfiguration,
-    io: Optional[FTDI] = None,
-    ftdi_library: Optional[str] = None,
+    io: FTDI,
+    rfid_io: Optional[FTDI],
+    driver: "MantisDriver",
   ):
-    """Use this unit's carousel calibration and interface B of its USB product ``LC3``.
-
-    Args:
-      configuration: serial-matched geometry and motion settings, from the OEM database or
-        explicitly supplied calibration.
-      io: an already-built FTDI link, instead of constructing one for the configured serial.
-      ftdi_library: "libftdi", "d2xx", or None for the transport's platform default.
     """
+    Args:
+      configuration: serial-matched geometry and motion settings, from a declared block.
+      io: the LC3's command link, interface B of its USB product ``LC3``.
+      rfid_io: the LC3's RFID reader's link, interface A; None without a reader.
+      driver: the Mantis's driver, whose head must read at idle before the carousel turns.
+    """
+    # The master imports this module, so the LC3's command link is built from it here.
+    from ..master import MantisDriver
+
     self.configuration = configuration
-    link = (
-      io
-      if io is not None
-      else FTDI(
-        human_readable_device_name="Formulatrix Mantis LC3 carousel",
-        usb_product="LC3",
-        device_id=configuration.device_id,
-        vid=0x0403,
-        pid=0x6010,
-        interface_select=2,
-        ftdi_library=ftdi_library,
-      )
-    )
     # Use the Mantis command transport without its arm, pressure-board or RFID discovery.
-    self._driver = MantisDriver(io=link, name=f"LC3 {configuration.device_id}")
+    self._driver = MantisDriver(io=io, name=f"LC3 {configuration.device_id}")
+    self._mantis_driver = driver
+    self._rfid_io = rfid_io
     self._operation_lock = asyncio.Lock()
     self._connected = False
     self._limits: Optional[Tuple[float, float]] = None
@@ -99,6 +100,43 @@ class MantisCarousel:
       raise MantisMotionError(f"carousel reports {', '.join(faults)}", motor=0, status=status)
     if require_homed and not status & _HOMED:
       raise MantisMotionError("carousel is not homed; call home() first", motor=0, status=status)
+
+  async def _check_head_clear(self) -> None:
+    """Refuse to turn unless the Mantis's head reads at idle, out of every slot.
+
+    Raises:
+      MantisMotionError: if the arm is not brought up, or the head does not read at idle.
+    """
+    arm = self._mantis_driver.arm
+    if arm is None or not arm.is_initialized:
+      raise MantisMotionError(
+        f"[{self.configuration.device_id}] the Mantis's arm is not brought up, so the head may be "
+        "in the carousel; it is not turned"
+      )
+    if not await arm.request_is_parked():
+      raise MantisMotionError(
+        f"[{self.configuration.device_id}] the Mantis's head does not read at idle; the carousel "
+        "is not turned"
+      )
+
+  async def _check_at_position(self, *, position: float) -> None:
+    """Read that the carousel stands homed, still and without faults at an angle, or an angle a
+    whole turn from it, within ``_POSITION_TOLERANCE``; hold ``_operation_lock`` around it.
+
+    Raises:
+      MantisMotionError: if it does not read so.
+    """
+    status = await self.request_status()
+    self._check_status(status, require_homed=True)
+    if status & _MOVING_OR_HOMING:
+      raise MantisMotionError("carousel is moving", motor=0, status=status)
+    current = await self._driver.request_motor_position(motor=0)
+    revolution = self.configuration.steps_per_revolution
+    offset = (current - self._to_device(position)) % revolution
+    if not math.isfinite(current) or min(offset, revolution - offset) > _POSITION_TOLERANCE:
+      raise MantisMotionError(
+        f"carousel reads {current}, not at {position % 360.0:.2f} degrees", motor=0
+      )
 
   async def request_status(self) -> int:
     """The motor status word: bit 0 moving, bit 1 homing, bit 2 homed; higher bits are faults."""
@@ -176,7 +214,8 @@ class MantisCarousel:
   async def home(self, *, timeout: float = 45.0) -> None:
     """Establish the carousel's flag reference; do nothing if already homed without faults.
 
-    Faults are cleared before homing. Failure or cancellation stops the motor.
+    Faults are cleared before homing, once the Mantis's head reads at idle (``_check_head_clear``).
+    Failure or cancellation stops the motor.
     """
     if not math.isfinite(timeout) or timeout <= 0:
       raise ValueError("timeout must be finite and positive")
@@ -186,9 +225,10 @@ class MantisCarousel:
         raise MantisMotionError("carousel is already moving", motor=0, status=status)
       if status & _HOMED and not any(status & bit for bit in _FAULT_BITS):
         return
+      await self._check_head_clear()
       try:
         await self._driver._send_command(board=0, command=17, payload=struct.pack("<h", 0))
-        config = self.configuration
+        configuration = self.configuration
         await self._execute_motion(
           command=21,
           payload=struct.pack(
@@ -197,9 +237,9 @@ class MantisCarousel:
             0,
             1,
             0,
-            self._to_device(config.homing_slow_speed),
-            self._to_device(config.homing_fast_speed),
-            self._to_device(config.homing_acceleration),
+            self._to_device(configuration.homing_slow_speed),
+            self._to_device(configuration.homing_fast_speed),
+            self._to_device(configuration.homing_acceleration),
           ),
           homing=True,
           timeout=timeout,
@@ -244,7 +284,8 @@ class MantisCarousel:
 
     A decreasing move approaches from the unit's configured preposition below the target.
     Repeating the same angle sends no motion. Rates are degrees/s and degrees/s²; omitted rates
-    use the unit's configuration. Failure or cancellation stops the motor.
+    use the unit's configuration. It turns only once the Mantis's head reads at idle
+    (``_check_head_clear``). Failure or cancellation stops the motor.
     """
     speed = self.configuration.default_speed if speed is None else speed
     acceleration = self.configuration.default_acceleration if acceleration is None else acceleration
@@ -261,6 +302,8 @@ class MantisCarousel:
       if not math.isfinite(current):
         raise FrameError("carousel returned a non-finite position")
       targets = self._plan_rotation(position=position, current=current)
+      if targets:
+        await self._check_head_clear()
       try:
         for target in targets:
           await self._execute_motion(
@@ -279,30 +322,120 @@ class MantisCarousel:
         raise
       logger.info("[%s] carousel at %.2f degrees", self.configuration.device_id, position % 360.0)
 
+  def _get_slot_position(self, *, slot: int, slot_one_position: float) -> float:
+    """A one-based slot's angle, in degrees, from slot one's, as the vendor's software counts.
+
+    Raises:
+      ValueError: if ``slot`` is not one of this carousel's.
+    """
+    if type(slot) is not int or not 1 <= slot <= self.configuration.capacity:
+      raise ValueError(f"slot must be an integer from 1 to {self.configuration.capacity}")
+    return slot_one_position + 360.0 * (slot - 1) / self.configuration.capacity
+
   async def move_to_slot(
     self, slot: int, *, speed: Optional[float] = None, acceleration: Optional[float] = None
   ) -> None:
     """Select a one-based chip slot using this carousel's calibrated slot-one angle."""
-    if type(slot) is not int or not 1 <= slot <= self.configuration.capacity:
-      raise ValueError(f"slot must be an integer from 1 to {self.configuration.capacity}")
-    position = (
-      self.configuration.slot_one_position + 360.0 * (slot - 1) / self.configuration.capacity
+    position = self._get_slot_position(
+      slot=slot, slot_one_position=self.configuration.slot_one_position
     )
-    await self.move_to(position, speed=speed, acceleration=acceleration)
+    await self.move_to(position=position, speed=speed, acceleration=acceleration)
+
+  @contextlib.asynccontextmanager
+  async def _hold_at_slot(self, *, slot: int) -> AsyncIterator[None]:
+    """Turn a slot to the head (``move_to_slot``) and hold the carousel there while the block
+    runs: no turn starts until it ends. Before it runs, the carousel must read homed, still and
+    without faults, at the slot's calibrated angle (``_check_at_position``).
+
+    Raises:
+      MantisMotionError: if the carousel does not read so; the block does not run.
+      ValueError: if ``slot`` is not one of this carousel's; nothing is sent.
+    """
+    position = self._get_slot_position(
+      slot=slot, slot_one_position=self.configuration.slot_one_position
+    )
+    await self.move_to(position=position)
+    async with self._operation_lock:
+      await self._check_at_position(position=position)
+      yield
+
+  async def request_tag(self, *, slot: int) -> Optional[Dict[str, Any]]:
+    """Turn a slot's chip over the LC3's RFID reader and read its tag, with the carousel read at the
+    reader's angle and held there; it stays there.
+
+    Args:
+      slot: 1 to ``configuration.capacity``.
+
+    Returns:
+      What the tag says, as ``Rfid.request_tag``; None when the slot holds no chip.
+
+    Raises:
+      MantisConfigurationError: without the reader's angle or a reader that answered at setup;
+        nothing is sent.
+      MantisMotionError: as ``move_to``, the head not at idle included, or if the carousel does
+        not then read at the reader's angle (``_check_at_position``); nothing is read.
+      MantisTimeoutError, FrameError: if the read does not end in a whole tag or an empty field;
+        a slot is never taken as empty from an incomplete read.
+      ValueError: if ``slot`` is not one of this carousel's; nothing is sent.
+    """
+    rfid_slot_one_position = self.configuration.rfid_slot_one_position
+    if rfid_slot_one_position is None or self._rfid_io is None:
+      raise MantisConfigurationError(
+        f"[{self.configuration.device_id}] no RFID reader angle, or no reader answered at setup; "
+        "nothing is sent"
+      )
+    position = self._get_slot_position(slot=slot, slot_one_position=rfid_slot_one_position)
+    await self.move_to(position=position)
+    async with self._operation_lock:  # read where the carousel was read to stand
+      await self._check_at_position(position=position)
+      tag = await _read_tag_from_ftdi(io=self._rfid_io, require_complete=True)
+    if tag is None:
+      return None
+    result = describe_tag(tag=tag)
+    if not result["valid"]:
+      logger.warning(
+        "[%s] slot %d: tag %s is not valid", self.configuration.device_id, slot, result["serial"]
+      )
+    return result
 
   async def stop(self) -> None:
-    """Stop any motion and close the link, leaving the carousel at its current angle."""
+    """Stop any motion and close both links, leaving the carousel at its current angle."""
     connected, self._connected = self._connected, False
     try:
       if connected and await self._driver.request_motor_status(motor=0) & _MOVING_OR_HOMING:
         await self._stop_motor()
     finally:
-      await self._driver.stop()
-      self._limits = None
+      try:
+        await self._driver.stop()
+      finally:
+        if self._rfid_io is not None:
+          await self._rfid_io.stop()
+        self._limits = None
     logger.info("[%s] carousel disconnected", self.configuration.device_id)
 
+  async def _set_up_reader(self) -> None:
+    """Open the RFID reader's link and ping and set up the reader; one that fails is left out,
+    with a warning, and ``request_tag`` refuses."""
+    if self._rfid_io is None:
+      return
+    try:
+      await self._rfid_io.setup()
+      await self._rfid_io.set_baudrate(baudrate=RFID_BAUD_RATE)
+      await self._rfid_io.set_line_property(bits=8, stopbits=0, parity=0)  # 8N1
+      await _initialize_rfid_module(io=self._rfid_io)
+    except Exception:
+      logger.warning(
+        "[%s] the LC3's RFID reader did not answer", self.configuration.device_id, exc_info=True
+      )
+      rfid_io, self._rfid_io = self._rfid_io, None
+      try:
+        await rfid_io.stop()
+      except Exception:
+        logger.warning("[%s] the RFID link did not close", self.configuration.device_id)
+
   async def setup(self) -> None:
-    """Open only this LC3's command link and read firmware and limits, without motion."""
+    """Open this LC3's command link and read firmware and limits, without motion; then set up its
+    RFID reader (``_set_up_reader``)."""
     if self._connected:
       return
     try:
@@ -312,6 +445,7 @@ class MantisCarousel:
       if not all(math.isfinite(value) for value in (lower, upper)) or lower >= upper:
         raise MantisConfigurationError("carousel returned invalid travel limits")
       self._limits = lower, upper
+      await self._set_up_reader()
       self._connected = True
     except BaseException:
       await self._driver.stop()

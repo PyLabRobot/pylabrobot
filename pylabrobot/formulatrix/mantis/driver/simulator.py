@@ -27,6 +27,7 @@ from .features.arm import (
   Arm,
   MantisArmConfiguration,
 )
+from .features.carousel import MantisCarousel
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
@@ -238,12 +239,17 @@ class MantisSimulationArm(Arm):
     """Pass: a simulated arm needs only its offsets, which it always has."""
 
   async def _check_chip_slot_tag(
-    self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
+    self,
+    *,
+    slot: int,
+    action: Literal["pick_up_chip", "place_chip"],
+    carousel: Optional[MantisCarousel] = None,
   ) -> None:
     """Check a chip slot against the device's chip spots instead of its tag: a pick-up needs a
     ``MantisChip`` there, a placement none. The chip on the head counts as out of its spot.
 
-    Without chip spots (a driver used without its device), nothing is checked.
+    Without chip spots (a driver used without its device), nothing is checked. An LC3 is not
+    simulated, so ``carousel`` is always None.
     """
     if self._chip_spots is None:
       logger.info(
@@ -639,6 +645,14 @@ class MantisSimulationDriver(MantisDriver):
       self.rfid = MantisSimulationRfid(
         driver=self, slot_to_antenna=slot_to_antenna, multiplexer_delay_raw=multiplexer_delay_raw
       )
+
+  async def _discover_carousel(
+    self, *, name: Literal["left_carousel", "right_carousel"]
+  ) -> Optional[MantisCarousel]:
+    """None: an LC3 is not simulated, so a declared carousel is logged and left out."""
+    if name in self._unit_blocks:
+      logger.info("[%s] simulated: the %s block is not simulated", self.name, name)
+    return None
 
   async def _open(self) -> None:
     """Open nothing: there is no link. The sequencer is stopped and empty."""

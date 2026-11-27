@@ -20,6 +20,7 @@ from typing import (
   Callable,
   Dict,
   List,
+  Literal,
   Optional,
   Set,
   Tuple,
@@ -28,6 +29,7 @@ from typing import (
 from pylabrobot.io.ftdi import FTDI
 
 from .arm_kinematics import MantisArmCoordinate
+from .carousel_configuration import CarouselConfiguration
 from .configuration import (
   FITTED_FIELDS,
   MOTION_CALIBRATION_BLOCKS,
@@ -62,6 +64,7 @@ from .events import (
   describe_event,
 )
 from .features.arm import Arm, MantisArmConfiguration
+from .features.carousel import MantisCarousel
 from .features.led_bar import LedBar
 from .features.plate_clamp import PlateClamp
 from .features.pump import Pump
@@ -137,6 +140,30 @@ class MantisDriver:
       ftdi_library=ftdi_library,
     )
 
+  def _build_carousel_io(self, *, device_id: str, ftdi_library: Optional[str]) -> FTDI:
+    """Build the link to an LC3, interface B of USB product ``LC3`` with its serial."""
+    return FTDI(
+      human_readable_device_name="Formulatrix Mantis LC3 carousel",
+      usb_product="LC3",
+      device_id=device_id,
+      vid=0x0403,
+      pid=0x6010,
+      interface_select=2,  # interface B carries the command link, as on the Mantis
+      ftdi_library=ftdi_library,
+    )
+
+  def _build_carousel_rfid_io(self, *, device_id: str, ftdi_library: Optional[str]) -> FTDI:
+    """Build the link to an LC3's RFID reader, interface A of the same FTDI bridge."""
+    return FTDI(
+      human_readable_device_name="Formulatrix Mantis LC3 RFID reader",
+      usb_product="LC3",
+      device_id=device_id,
+      vid=0x0403,
+      pid=0x6010,
+      interface_select=RFID_FTDI_INTERFACE,
+      ftdi_library=ftdi_library,
+    )
+
   def __init__(
     self,
     *,
@@ -174,6 +201,7 @@ class MantisDriver:
       io if io is not None else self._build_io(device_id=device_id, ftdi_library=ftdi_library)
     )
     self.name = name
+    self._ftdi_library = ftdi_library  # for the LC3s' links, built at discovery
     self.declared_configuration_json = declared_configuration_json
     self.oem_config_directory = oem_config_directory
     self._unit_blocks: Dict[str, Dict[str, Any]] = {}
@@ -201,6 +229,8 @@ class MantisDriver:
     self.arm: Optional[Arm] = None
     self.rfid: Optional[Rfid] = None
     self.led_bar: Optional[LedBar] = None
+    self.left_carousel: Optional[MantisCarousel] = None
+    self.right_carousel: Optional[MantisCarousel] = None
     self._show_actions = show_actions
     # The latest sequencer item the device reported played; the sequencer sets it.
     self._sequence_progress: Optional[int] = None
@@ -1185,13 +1215,58 @@ class MantisDriver:
       sources.insert(0, (self.oem_config_directory, folder))
     return _fill_declared_configuration(declared=declared, sources=sources)
 
+  async def _discover_carousel(
+    self, *, name: Literal["left_carousel", "right_carousel"]
+  ) -> Optional[MantisCarousel]:
+    """Build and set up the LC3 carousel a declared block names, with its RFID reader where the
+    block gives the reader's angle; None without the block, or when the LC3 does not answer
+    (logged). Nothing moves.
+
+    Args:
+      name: the block, and the driver attribute the carousel becomes.
+
+    Raises:
+      MantisConfigurationError: if the block is malformed, or its pick-up path never moves
+        sideways below the safe height.
+    """
+    block = self._unit_blocks.get(name)
+    if block is None:
+      return None
+    configuration = CarouselConfiguration.from_block(block=block)
+    if configuration.pick_up_path is not None:
+      try:
+        Arm._get_attach_line(path=configuration.pick_up_path)
+      except MantisConfigurationError as error:
+        raise MantisConfigurationError(f"{name} block: {error}") from error
+    rfid_io = None
+    if configuration.rfid_slot_one_position is not None:
+      rfid_io = self._build_carousel_rfid_io(
+        device_id=configuration.device_id, ftdi_library=self._ftdi_library
+      )
+    carousel = MantisCarousel(
+      configuration=configuration,
+      io=self._build_carousel_io(
+        device_id=configuration.device_id, ftdi_library=self._ftdi_library
+      ),
+      rfid_io=rfid_io,
+      driver=self,
+    )
+    carousel._driver.default_read_timeout = self.default_read_timeout
+    try:
+      await carousel.setup()
+    except Exception:
+      logger.warning("[%s] the %s did not answer", self.name, name, exc_info=True)
+      return None
+    return carousel
+
   async def discover(self) -> None:
     """Read the configuration into ``configuration``, check it against the declared one, then
-    build the features it lists, read the pump's sensor calibration into ``configuration``, and
-    build the RFID reader if it answers on interface A.
+    build the features it lists, read the pump's sensor calibration into ``configuration``, set up
+    each declared LC3 carousel (``_discover_carousel``), and build the RFID reader if it answers on
+    interface A.
 
-    The reader is set up again after every opening of the link; one that fails is absent. A
-    calibration the pressure board does not answer is left empty.
+    The reader and the carousels are set up again after every opening of the link; one that fails
+    is absent. A calibration the pressure board does not answer is left empty.
 
     Raises:
       MantisConfigurationError: if the device does not match the declared configuration, the
@@ -1227,6 +1302,10 @@ class MantisDriver:
         self.configuration.feedback_sensor_parameters = await self.pump._request_calibration()
       except (TimeoutError, CommandRefusedError, FrameError, struct.error) as error:
         logger.warning("[%s] the pressure sensors' calibration not read: %r", self.name, error)
+    if self.left_carousel is None:
+      self.left_carousel = await self._discover_carousel(name="left_carousel")
+    if self.right_carousel is None:
+      self.right_carousel = await self._discover_carousel(name="right_carousel")
     if self.rfid is None and self.rfid_io is not None and self._rfid_link_open:
       try:
         await _initialize_rfid_module(io=self.rfid_io)
@@ -1300,8 +1379,22 @@ class MantisDriver:
       except Exception:
         logger.warning("[%s] the RFID reader's link did not open", self.name, exc_info=True)
 
+  async def _close_carousels(self) -> None:
+    """Stop each carousel and close its links; the carousels are built again when the link
+    reopens."""
+    carousels = (self.left_carousel, self.right_carousel)
+    self.left_carousel, self.right_carousel = None, None
+    for carousel in carousels:
+      if carousel is None:
+        continue
+      try:
+        await carousel.stop()  # a turning carousel stops where it stands
+      except Exception:
+        logger.warning("[%s] an LC3's links did not close", self.name, exc_info=True)
+
   async def _close(self) -> None:
-    """Stop reading the link and close it, then close the RFID reader's link."""
+    """Stop reading the link and close it, then close the RFID reader's link and the carousels'
+    (``_close_carousels``)."""
     reader, self._reader = self._reader, None
     if reader is not None and reader.done():
       if not reader.cancelled():
@@ -1324,6 +1417,7 @@ class MantisDriver:
           await self.rfid_io.stop()
         except Exception:
           logger.warning("[%s] the RFID reader's link did not close", self.name, exc_info=True)
+      await self._close_carousels()
 
   async def _halt(self, *, park: bool = True) -> None:
     """Abort the sequencer, then stop the motors and park an arm brought up (``Arm._halt``).
@@ -1344,7 +1438,7 @@ class MantisDriver:
   async def stop(self, accept_chip_left_on_head: bool = False) -> None:
     """Fail the command in flight and every event waiter; abort the sequencer, stop the
     motors and park a v4 arm brought up; release the plate clamp and the pressure, turn the LED bar
-    off, stop reading the link and close it.
+    off, stop reading the link and close it, then stop each carousel and close its links.
 
     Each step runs whether or not the one before it succeeded. After reading the link failed,
     nothing is sent: the link is closed.

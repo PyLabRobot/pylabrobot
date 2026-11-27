@@ -13,6 +13,7 @@ the unit's stage transform over the plate holder and the arm frame fitted to it 
 """
 
 import asyncio
+import contextlib
 import dataclasses
 import functools
 import logging
@@ -44,6 +45,7 @@ from ...resource_model import (
   ARM_BASE_X,
   ARM_BASE_Y,
   ARM_Z,
+  CHIP_SLOT_RACKS,
   PLATE_HOLDER_LOCATION,
   PLATE_HOLDER_SIZE_X,
   PLATE_HOLDER_SIZE_Y,
@@ -59,6 +61,7 @@ from ..arm_kinematics import (
   compute_joint_angles,
   compute_position,
 )
+from ..carousel_configuration import CarouselConfiguration
 from ..errors import (
   MOTOR_ERROR_CODE_DESCRIPTIONS,
   MOTOR_STATUS_ERROR_BITS,
@@ -84,6 +87,7 @@ from ..v3_arm_configuration import V3ArmConfiguration
 if TYPE_CHECKING:
   from ...liquid_classes import MantisLiquidClass
   from ..master import MantisDriver
+  from .carousel import MantisCarousel
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +306,7 @@ class Arm:
 
   @property
   def current_chip(self) -> Optional[int]:
-    """The chip slot the chip on the head came from, or None."""
+    """The chip number the chip on the head came from (``pick_up_chip``), or None."""
     return self._current_chip
 
   @property
@@ -2570,44 +2574,159 @@ class Arm:
     if not with_model_updates:  # else passed on after the last move
       await self._report_pose()
 
+  def _get_carousel_slot(self, *, chip_number: int) -> Optional[Tuple["MantisCarousel", int]]:
+    """The carousel and its slot a chip number names; None for a chip slot's, or a number past
+    the declared carousels' slots.
+
+    The carousels' slots are numbered after the chip slots (``CHIP_SLOT_RACKS``) by the declared
+    blocks, whether or not each carousel answered at setup: the ``left_carousel`` block's
+    capacity first, then the ``right_carousel`` block's; a numbering of ours (design.md, open
+    point 60).
+
+    Raises:
+      MantisConfigurationError: for a slot of a declared carousel that did not answer at setup, or
+        a malformed block; nothing moves.
+    """
+    number = chip_number - max(CHIP_SLOT_RACKS)
+    carousels = (
+      ("left_carousel", self._driver.left_carousel),
+      ("right_carousel", self._driver.right_carousel),
+    )
+    for name, carousel in carousels:
+      block = self._driver._unit_blocks.get(name)
+      if block is None or number < 1:
+        continue
+      capacity = CarouselConfiguration.from_block(block=block).capacity
+      if number <= capacity:
+        if carousel is None:
+          raise MantisConfigurationError(
+            f"{self._driver.name}: chip {chip_number} is the declared {name}'s slot {number}, "
+            "but it did not answer at setup; nothing moves"
+          )
+        return carousel, number
+      number -= capacity
+    return None
+
+  def _get_chip_path(self, *, chip_number: int) -> List[MantisArmCoordinate]:
+    """The path into a chip number's slot (``_get_chip_slot_path``), or into a carousel's slot,
+    its ``pick_up_path``, with every line checked.
+
+    Raises:
+      MantisConfigurationError: without the path; nothing moves.
+      MantisKinematicsError, ValueError: as ``_get_route_line_targets``.
+      NotImplementedError: for a carousel's slot on a v4, where none has run; nothing moves.
+    """
+    carousel_slot = self._get_carousel_slot(chip_number=chip_number)
+    if carousel_slot is None:
+      return self._get_chip_slot_path(slot=chip_number)
+    if self._get_generation() == "v4":
+      raise NotImplementedError(
+        f"{self._driver.name}: a v4 has not picked up or placed a carousel's chip; nothing moves"
+      )
+    path = carousel_slot[0].configuration.pick_up_path
+    if path is None:
+      raise MantisConfigurationError(
+        f"{self._driver.name}: no pick-up path for chip {chip_number}'s carousel; declare its "
+        "pick_up_path, measured on the unit"
+      )
+    self._get_route_targets(route=path)
+    return path
+
   async def _check_chip_slot_tag(
-    self, *, slot: int, action: Literal["pick_up_chip", "place_chip"]
+    self,
+    *,
+    slot: int,
+    action: Literal["pick_up_chip", "place_chip"],
+    carousel: Optional["MantisCarousel"] = None,
   ) -> Optional[Dict[str, Any]]:
     """Read a chip slot's tag and return it: a pick-up needs a chip there, a placement an empty
-    slot.
+    slot. A carousel's slot is turned over the LC3's reader to be read (``request_tag``).
 
     A tag not read whole in time reads as an empty slot.
 
     Args:
-      slot: the chip slot, 1 to 6.
+      slot: the chip slot, 1 to 6, or the carousel's slot.
       action: "pick_up_chip" or "place_chip".
+      carousel: the carousel the slot is on; None for a chip slot.
 
     Returns:
       The tag, as ``Rfid.request_tag`` reads it; None for a placement into an empty slot.
 
     Raises:
       MantisConfigurationError: without an RFID reader, or as ``Rfid.request_tag``; nothing is sent.
-      MantisMotionError: if the tag rules the action out; only the tag read is sent.
+      MantisMotionError: if the tag rules the action out; only the tag read is sent (and the
+        carousel turned to its reader).
     """
-    rfid = self._driver.rfid
-    if rfid is None:
-      raise MantisConfigurationError(
-        f"{self._driver.name}: no RFID reader answered at setup, so chip slot {slot} cannot be "
-        "read; nothing moves"
-      )
-    tag = await rfid.request_tag(slot=slot)
+    where = f"chip slot {slot}"
+    if carousel is not None:
+      side = "left" if carousel is self._driver.left_carousel else "right"
+      where = f"{side} carousel slot {slot}"
+      tag = await carousel.request_tag(slot=slot)
+    else:
+      rfid = self._driver.rfid
+      if rfid is None:
+        raise MantisConfigurationError(
+          f"{self._driver.name}: no RFID reader answered at setup, so {where} cannot be read; "
+          "nothing moves"
+        )
+      tag = await rfid.request_tag(slot=slot)
     if action == "place_chip":
       if tag is not None:
         chip = "a chip" if tag["chip_type"] is None else f"a {tag['chip_type']} chip"
         raise MantisMotionError(
-          f"{self._driver.name}: chip slot {slot} already holds {chip} by its tag; nothing moves"
+          f"{self._driver.name}: {where} already holds {chip} by its tag; nothing moves"
         )
       return tag
     if tag is None:
       raise MantisMotionError(
-        f"{self._driver.name}: chip slot {slot} holds no chip by its tag; nothing moves"
+        f"{self._driver.name}: {where} holds no chip by its tag; nothing moves"
       )
     return tag
+
+  async def _check_chip_tag(
+    self, *, chip_number: int, action: Literal["pick_up_chip", "place_chip"]
+  ) -> Optional[Dict[str, Any]]:
+    """A chip number's tag, as ``_check_chip_slot_tag`` reads and rules on it. For a carousel's
+    slot the carousel is homed first; both turn it only with the head read at idle, where a v3
+    stands by ``_check_v3_at_idle`` (a v4 is refused before, ``_get_chip_path``).
+
+    Raises:
+      as ``_check_chip_slot_tag`` and ``MantisCarousel.home``.
+    """
+    carousel_slot = self._get_carousel_slot(chip_number=chip_number)
+    if carousel_slot is None:
+      return await self._check_chip_slot_tag(slot=chip_number, action=action)
+    carousel, slot = carousel_slot
+    await carousel.home()
+    return await self._check_chip_slot_tag(slot=slot, action=action, carousel=carousel)
+
+  async def _move_through_chip_number(
+    self,
+    *,
+    chip_number: int,
+    path: List[MantisArmCoordinate],
+    attach_line: int,
+    current_chip: Optional[int],
+    attached_chip: Optional[MantisChip],
+    with_model_updates: bool,
+  ) -> None:
+    """``_move_through_chip_slot`` into a chip number's slot. A carousel's slot is first turned
+    to the head and held there (``MantisCarousel._hold_at_slot``) until the head is back at idle:
+    nothing moves into a carousel that does not read homed and at the slot, and it does not turn
+    meanwhile.
+    """
+    carousel_slot = self._get_carousel_slot(chip_number=chip_number)
+    async with contextlib.AsyncExitStack() as stack:
+      if carousel_slot is not None:
+        carousel, slot = carousel_slot
+        await stack.enter_async_context(carousel._hold_at_slot(slot=slot))
+      await self._move_through_chip_slot(
+        path=path,
+        attach_line=attach_line,
+        current_chip=current_chip,
+        attached_chip=attached_chip,
+        with_model_updates=with_model_updates,
+      )
 
   def _get_chip(self, *, chip_number: int, tag: Optional[Dict[str, Any]]) -> Optional[MantisChip]:
     """The chip in a chip slot: the device's chip in its spot, else one built from the chip type
@@ -2648,11 +2767,14 @@ class Arm:
     (a v3 from idle only), and return to idle, as captured. A chip on the head from another slot
     is placed back first, once this slot's tag shows a chip; one from this slot stays.
 
-    First the slot's tag is read (``_check_chip_slot_tag``): the pick-up refuses an empty slot.
+    First the slot's tag is read (``_check_chip_tag``): the pick-up refuses an empty slot.
     The chip counts as on the head once the attach line has played, whatever fails after it.
+    A carousel's slot is read over its reader with the head at idle, then turned to the head and
+    held there while the carousel's ``pick_up_path`` plays (``_move_through_chip_number``).
 
     Args:
-      chip_number: the chip slot, 1 to 6, or the chip in one, by its spot in the resource model.
+      chip_number: the chip slot, 1 to 6, or after them a carousel's slot
+        (``_get_carousel_slot``); or the chip on the head or in a chip slot's spot.
       with_model_updates: play each segment on its own and pass the pose on after it, so the 3D
         model and the simulator follow the whole path; on a device up to 36% slower (design.md).
 
@@ -2676,15 +2798,16 @@ class Arm:
     if self._current_chip == chip_number:
       logger.info("[%s] the chip from slot %d is on the head", self._driver.name, chip_number)
       return
-    path = self._get_chip_slot_path(slot=chip_number)
+    path = self._get_chip_path(chip_number=chip_number)
     attach_line = self._get_attach_line(path=path)
     await self._check_v3_at_idle()
-    tag = await self._check_chip_slot_tag(slot=chip_number, action="pick_up_chip")
+    tag = await self._check_chip_tag(chip_number=chip_number, action="pick_up_chip")
     chip = self._get_chip(chip_number=chip_number, tag=tag)
     if self._current_chip is not None:
       await self.place_chip(chip_number=self._current_chip, with_model_updates=with_model_updates)
     async with self._driver._show_action(action="pick_up_chip"):
-      await self._move_through_chip_slot(
+      await self._move_through_chip_number(
+        chip_number=chip_number,
         path=path,
         attach_line=attach_line,
         current_chip=chip_number,
@@ -2705,11 +2828,12 @@ class Arm:
     backwards, from wherever the head stands, and return to idle, as the recorded placements do.
     Without a chip on the head nothing moves and a warning is logged.
 
-    First the slot's tag is read (``_check_chip_slot_tag``): the placement refuses a slot that
-    holds a chip. The chip counts as on the head until the attach line has played.
+    First the slot's tag is read (``_check_chip_tag``): the placement refuses a slot that
+    holds a chip. The chip counts as on the head until the attach line has played. A carousel's
+    slot is read, turned and held as for ``pick_up_chip``.
 
     Args:
-      chip_number: the chip slot the chip was picked up from, 1 to 6.
+      chip_number: the chip number the chip was picked up from.
       recover_liquid: recover the chip's liquid after the placement; not captured, so refused.
       liquid_class: the recovery's delays, with ``recover_liquid``.
       with_model_updates: as for ``pick_up_chip``.
@@ -2738,12 +2862,13 @@ class Arm:
         f"{self._driver.name}: the chip on the head is from slot {self._current_chip}, not "
         f"{chip_number}; place it back there"
       )
-    path = self._get_chip_slot_path(slot=chip_number)
+    path = self._get_chip_path(chip_number=chip_number)
     attach_line = self._get_attach_line(path=path)
     await self._check_v3_at_idle()
-    await self._check_chip_slot_tag(slot=chip_number, action="place_chip")
+    await self._check_chip_tag(chip_number=chip_number, action="place_chip")
     async with self._driver._show_action(action="place_chip"):
-      await self._move_through_chip_slot(
+      await self._move_through_chip_number(
+        chip_number=chip_number,
         path=path[::-1],
         attach_line=len(path) - 1 - attach_line,
         current_chip=None,

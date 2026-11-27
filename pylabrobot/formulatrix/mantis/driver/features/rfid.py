@@ -12,7 +12,12 @@ import struct
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ..errors import MantisConfigurationError, MantisNotConnectedError, MantisTimeoutError
+from ..errors import (
+  FrameError,
+  MantisConfigurationError,
+  MantisNotConnectedError,
+  MantisTimeoutError,
+)
 from ..framing import MOTION_BOARD
 
 if TYPE_CHECKING:
@@ -115,6 +120,26 @@ def compute_tag_valid(*, tag: bytes) -> bool:
   return True
 
 
+def describe_tag(*, tag: bytes) -> Dict[str, Any]:
+  """What a whole tag says, as ``Rfid.request_tag`` returns it.
+
+  Args:
+    tag: the tag, hex-decoded.
+  """
+  code = compute_chip_type_code(tag=tag)
+  end = RFID_DATE_OF_MANUFACTURE_OFFSET + RFID_DATE_OF_MANUFACTURE_LENGTH
+  return {
+    "serial": compute_tag_serial(tag=tag),
+    "chip_type": RFID_CHIP_TYPE_CODES.get(code) if code is not None else None,
+    "chip_type_code": code,
+    "date_of_manufacture": _transform_serial(
+      raw=tag[RFID_DATE_OF_MANUFACTURE_OFFSET:end].decode("ascii", "replace")
+    ),
+    "valid": compute_tag_valid(tag=tag),
+    "tag_hex": tag.hex(),
+  }
+
+
 async def _send_command_to_ftdi(*, io: "FTDI", command: bytes) -> None:
   """Clear what the reader sent before, then write one command."""
   await io.usb_purge_rx_buffer()
@@ -139,6 +164,35 @@ async def _read_reply(*, io: "FTDI", stop_key: bytes) -> bytes:
     else:
       await asyncio.sleep(0.01)  # PyLabRobot design choice: poll every 10 ms
   return buffer
+
+
+async def _read_tag_from_ftdi(*, io: "FTDI", require_complete: bool = False) -> Optional[bytes]:
+  """The tag in a reader's field, hex-decoded; None for an empty field (``[]``), and, unless
+  ``require_complete``, for a tag not read whole in time.
+
+  Args:
+    io: the reader's open link, the Mantis's or an LC3's interface A.
+    require_complete: raise for a read that does not end in a whole tag or an empty field.
+
+  Raises:
+    MantisTimeoutError: with ``require_complete``, if no reply ends in time.
+    FrameError: with ``require_complete``, if the reply holds neither a whole tag nor ``[]``.
+  """
+  await _send_command_to_ftdi(io=io, command=RFID_READ_TAG_COMMAND)
+  try:
+    reply = await _read_reply(io=io, stop_key=b"]")
+  except MantisTimeoutError:
+    if require_complete:
+      raise
+    return None
+  match = re.search(rb"\[([0-9A-Fa-f]*)\]", reply)
+  if match is not None and not match.group(1):
+    return None
+  if match is None or len(match.group(1)) != 2 + 8 * RFID_TAG_BLOCK_COUNT:
+    if require_complete:
+      raise FrameError(f"the RFID reader sent no whole tag: {reply!r}")
+    return None
+  return bytes.fromhex(match.group(1).decode("ascii"))
 
 
 async def _initialize_rfid_module(*, io: "FTDI") -> None:
@@ -205,15 +259,7 @@ class Rfid:
     io = self._driver.rfid_io
     if io is None:
       raise MantisNotConnectedError(f"{self._driver.name}: the RFID reader's link is not open")
-    await _send_command_to_ftdi(io=io, command=RFID_READ_TAG_COMMAND)
-    try:
-      reply = await _read_reply(io=io, stop_key=b"]")
-    except MantisTimeoutError:
-      return None
-    match = re.search(rb"\[([0-9A-Fa-f]*)\]", reply)
-    if match is None or len(match.group(1)) != 2 + 8 * RFID_TAG_BLOCK_COUNT:
-      return None
-    return bytes.fromhex(match.group(1).decode("ascii"))
+    return await _read_tag_from_ftdi(io=io)
 
   async def request_tag(self, *, slot: int) -> Optional[Dict[str, Any]]:
     """Read the tag of the chip in an input slot.
@@ -247,18 +293,7 @@ class Rfid:
       tag = await self._read_tag()
     if tag is None:
       return None
-    code = compute_chip_type_code(tag=tag)
-    end = RFID_DATE_OF_MANUFACTURE_OFFSET + RFID_DATE_OF_MANUFACTURE_LENGTH
-    result = {
-      "serial": compute_tag_serial(tag=tag),
-      "chip_type": RFID_CHIP_TYPE_CODES.get(code) if code is not None else None,
-      "chip_type_code": code,
-      "date_of_manufacture": _transform_serial(
-        raw=tag[RFID_DATE_OF_MANUFACTURE_OFFSET:end].decode("ascii", "replace")
-      ),
-      "valid": compute_tag_valid(tag=tag),
-      "tag_hex": tag.hex(),
-    }
+    result = describe_tag(tag=tag)
     if not result["valid"]:
       logger.warning("[%s] slot %d: tag %s is not valid", self._driver.name, slot, result["serial"])
     return result
