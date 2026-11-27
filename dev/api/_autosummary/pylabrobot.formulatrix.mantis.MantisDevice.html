@@ -598,6 +598,12 @@ input slot (<code class="docutils literal notranslate"><span class="pre">chip_sp
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.arm.html#pylabrobot.formulatrix.mantis.MantisDevice.arm" title="pylabrobot.formulatrix.mantis.MantisDevice.arm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">arm</span></code></a></p></td>
 <td><p>The v3 or v4 arm and Z after discovery; None before.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.attached_chip.html#pylabrobot.formulatrix.mantis.MantisDevice.attached_chip" title="pylabrobot.formulatrix.mantis.MantisDevice.attached_chip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">attached_chip</span></code></a></p></td>
+<td><p>The chip on the arm's head, or None; updated by <code class="docutils literal notranslate"><span class="pre">pick_up_chip</span></code> and <code class="docutils literal notranslate"><span class="pre">place_chip</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.current_chip.html#pylabrobot.formulatrix.mantis.MantisDevice.current_chip" title="pylabrobot.formulatrix.mantis.MantisDevice.current_chip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_chip</span></code></a></p></td>
+<td><p>The chip slot the chip on the arm's head came from, or None.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.led_bar.html#pylabrobot.formulatrix.mantis.MantisDevice.led_bar" title="pylabrobot.formulatrix.mantis.MantisDevice.led_bar"><code class="xref py py-obj docutils literal notranslate"><span class="pre">led_bar</span></code></a></p></td>
 <td><p>The LED bar, once setup found board 12 on a v4; None before, without it, or on a v3.</p></td>
 </tr>
@@ -732,6 +738,12 @@ input slot (<code class="docutils literal notranslate"><span class="pre">chip_sp
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.named.html#pylabrobot.formulatrix.mantis.MantisDevice.named" title="pylabrobot.formulatrix.mantis.MantisDevice.named"><code class="xref py py-obj docutils literal notranslate"><span class="pre">named</span></code></a>(name)</p></td>
 <td><p>Return a copy of this resource with the given name.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.pick_up_chip.html#pylabrobot.formulatrix.mantis.MantisDevice.pick_up_chip" title="pylabrobot.formulatrix.mantis.MantisDevice.pick_up_chip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pick_up_chip</span></code></a>(chip_number)</p></td>
+<td><p>Pick up a chip onto the arm's head.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.place_chip.html#pylabrobot.formulatrix.mantis.MantisDevice.place_chip" title="pylabrobot.formulatrix.mantis.MantisDevice.place_chip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">place_chip</span></code></a>(chip_number[, recover_liquid, ...])</p></td>
+<td><p>Place the chip on the arm's head back into its chip slot.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.MantisDevice.register_did_assign_resource_callback.html#pylabrobot.formulatrix.mantis.MantisDevice.register_did_assign_resource_callback" title="pylabrobot.formulatrix.mantis.MantisDevice.register_did_assign_resource_callback"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_did_assign_resource_callback</span></code></a>(callback)</p></td>
 <td><p>Add a callback that will be called after a resource is assigned to this resource.</p></td>

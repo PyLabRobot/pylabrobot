@@ -16,6 +16,8 @@ pylabrobot.formulatrix.mantis.MantisDevice
       :toctree: .
    
       ~MantisDevice.arm
+      ~MantisDevice.attached_chip
+      ~MantisDevice.current_chip
       ~MantisDevice.led_bar
       ~MantisDevice.location
       ~MantisDevice.name
@@ -69,6 +71,8 @@ pylabrobot.formulatrix.mantis.MantisDevice
       ~MantisDevice.load_state
       ~MantisDevice.load_state_from_file
       ~MantisDevice.named
+      ~MantisDevice.pick_up_chip
+      ~MantisDevice.place_chip
       ~MantisDevice.register_did_assign_resource_callback
       ~MantisDevice.register_did_unassign_resource_callback
       ~MantisDevice.register_state_update_callback

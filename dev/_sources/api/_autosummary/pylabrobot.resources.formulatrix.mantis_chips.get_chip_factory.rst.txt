@@ -1,0 +1,6 @@
+pylabrobot.resources.formulatrix.mantis\_chips.get\_chip\_factory
+=================================================================
+
+.. currentmodule:: pylabrobot.resources.formulatrix.mantis_chips
+
+.. autofunction:: get_chip_factory
