@@ -20,8 +20,7 @@ def get_rotation_wrt(resource: Resource, other: Resource) -> Rotation:
     resource: the resource whose rotation is wanted.
     other: the resource whose axes it is expressed along.
   """
-  turned, frame = resource.get_absolute_rotation(), other.get_absolute_rotation()
-  return Rotation(x=turned.x - frame.x, y=turned.y - frame.y, z=turned.z - frame.z)
+  return resource.get_absolute_rotation().relative_to(other.get_absolute_rotation())
 
 
 def get_pick_location(resource: Resource, deck: Resource) -> Coordinate:
