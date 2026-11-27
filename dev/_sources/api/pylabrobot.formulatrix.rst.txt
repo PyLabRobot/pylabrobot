@@ -22,6 +22,7 @@ Mantis
    driver.simulator.MantisSimulationPump
    driver.simulator.MantisSimulationRfid
    driver.simulator.MantisSimulationLedBar
+   driver.simulator.MantisSimulationDropSensor
    driver.features.arm.Arm
    driver.features.arm.MantisPose
    driver.features.arm.MantisArmConfiguration
@@ -32,6 +33,7 @@ Mantis
    driver.features.pump.Pump
    driver.features.rfid.Rfid
    driver.features.led_bar.LedBar
+   driver.features.drop_sensor.DropSensor
    driver.configuration.DeviceConfiguration
    driver.events
    driver.errors.MantisError

@@ -1,0 +1,33 @@
+﻿:orphan:
+
+
+pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationDropSensor
+=========================================================================
+
+.. currentmodule:: pylabrobot.formulatrix.mantis.driver.simulator
+
+.. autoclass:: MantisSimulationDropSensor
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationDropSensor.consecutive_run
+      ~MantisSimulationDropSensor.drop_detected
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~MantisSimulationDropSensor.__init__
+      ~MantisSimulationDropSensor.reset
+   
+   

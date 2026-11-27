@@ -63,7 +63,7 @@
     <link rel="icon" href="../../_static/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.__init__" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.__init__.html" />
+    <link rel="next" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed.html" />
     <link rel="prev" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp.unlock" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPlateClamp.unlock.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
@@ -591,6 +591,15 @@
 <p>A pump with no device behind it, answering from the declared configuration.</p>
 <p>Off, its controllers disabled, every line at 0, with the recorded sensor calibration; a controller
 enabled reads settled at once.</p>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_primed</span></code></a></p></td>
+<td><p>Whether the chip on the head was primed since it was picked up.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
@@ -600,10 +609,10 @@ enabled reads settled at once.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.measure_pressure.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.measure_pressure" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.measure_pressure"><code class="xref py py-obj docutils literal notranslate"><span class="pre">measure_pressure</span></code></a>(*, controller)</p></td>
 <td><p>0: no line holds pressure.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.prime_chip.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.prime_chip" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.prime_chip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prime_chip</span></code></a>(*, volume[, liquid_class])</p></td>
-<td><p>Prime the chip on the head at the waste with <code class="docutils literal notranslate"><span class="pre">volume</span></code>, as captured: the pump started, the prime pressures set, the head into the waste, the small then the large drops, the safe state, the head out of the waste to (15, 30) at the safe height, the pressure released.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.prime_chip.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.prime_chip" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.prime_chip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prime_chip</span></code></a>(chip_number, *[, volume, ...])</p></td>
+<td><p>Pick up the chip in slot <code class="docutils literal notranslate"><span class="pre">chip_number</span></code> and prime it at the waste, as captured: the pump started, the prime pressures set, the head into the waste, the drops, the safe state, the head out of the waste to (15, 30) at the safe height, the pressure released.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.recover_reagent.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.recover_reagent" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.recover_reagent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recover_reagent</span></code></a>(*, volume[, liquid_class])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.recover_reagent.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.recover_reagent" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.recover_reagent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recover_reagent</span></code></a>(chip_number, *[, volume, ...])</p></td>
 <td><p>Draw <code class="docutils literal notranslate"><span class="pre">volume</span></code> of the chip on the head's reagent back into its input, as captured: the pump started, the head to (15, 30) at the safe height, the recovery pressures set, the reverse pump played, the safe state, the pressure released.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.request_controller_enabled.html#pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.request_controller_enabled" title="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.request_controller_enabled"><code class="xref py py-obj docutils literal notranslate"><span class="pre">request_controller_enabled</span></code></a>(*, controller)</p></td>
@@ -650,11 +659,11 @@ enabled reads settled at once.</p>
       </div>
     </a>
     <a class="right-next"
-       href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.__init__.html"
+       href="pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.__init__</p>
+        <p class="prev-next-title">pylabrobot.formulatrix.mantis.driver.simulator.MantisSimulationPump.is_primed</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
