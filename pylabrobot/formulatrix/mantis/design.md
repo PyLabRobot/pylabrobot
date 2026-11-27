@@ -9,11 +9,10 @@ last section lists what is open and where the code does not follow a rule yet.
 ```
 device.py                    MantisDevice, a Resource, and the Mantis() factory. setup() / stop(),
                              the driver, the parts; places the arm's links from a pose read.
-carousel.py                  MantisCarousel. The external LC3's own FTDI link, homing and
-                             calibrated chip-slot positioning; independent of arm movement.
 driver/carousel_configuration.py
                              CarouselConfiguration. Serial-matched carousel geometry and motion
-                             settings read from the OEM database without modifying it.
+                             settings, from a declared block or read from the OEM database without
+                             modifying it.
 driver/master.py             MantisDriver. Owns the link, the reader, reply matching, events,
                              the sequencer, discovery and the saved configuration; reads the
                              motors; halts the device at stop; shows setup and stop on the LED
@@ -38,7 +37,7 @@ driver/sequence_files.py     The unit's sequence files: the waypoints of a route
 driver/confirmed_firmware_versions.py
                              The firmware sets confirmed on a device, per generation.
 driver/features/             One class per thing the device is fitted with: Arm, PlateClamp, Pump,
-                             Rfid, LedBar.
+                             Rfid, LedBar, MantisCarousel.
 driver/recordings/           One real Mantis of each generation: its configuration and unit values.
 resource_model/              The parts the device is modelled as, their files and manifest.
 liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity band and chip type.
@@ -46,14 +45,26 @@ liquid_classes/              MantisLiquidClass and mantis_mapping, by viscosity 
 
 ## The patterns
 
-The external LC3 carousel selects USB product `LC3` and its configured serial, on interface B.
-`MantisCarousel` uses `MantisDriver`'s command transport and motor reads without running Mantis
-feature discovery. All commands address motor 0 on the carousel's board 0. Setup reads firmware
-and travel limits without moving. Homing establishes the flag reference; positioning selects the
-nearest equivalent angle within the limits and applies the configured backlash approach on a
-decreasing move. Completion requires the matching event and an idle, homed status without faults.
-Failure or cancellation stops the motor. Shutdown stops in place and closes only the LC3 link.
-The carousel does not coordinate the arm or attach chips.
+A Mantis has up to two LC3 carousels, `driver.left_carousel` and `driver.right_carousel` (also on
+the device), each None until discovery sets it up from its declared block (M3). An LC3 is a USB
+device of its own: product `LC3` and its serial, commands on interface B, its RFID reader on
+interface A. `MantisCarousel` uses `MantisDriver`'s command transport and motor reads without
+running Mantis feature discovery. All commands address motor 0 on the carousel's board 0. Setup
+reads firmware and travel limits without moving, then sets up the reader as the Mantis's is set up
+(one that does not answer is left out, logged). Homing establishes the flag reference; positioning
+selects the nearest equivalent angle within the limits and applies the configured backlash approach
+on a decreasing move. Completion requires the matching event and an idle, homed status without
+faults; after a move the position read back must lie within `_POSITION_TOLERANCE` (0.01 motor units)
+of the target, where the captured moves read back within 1e-4. Failure or cancellation stops the
+motor. A carousel turns, homing included, only once the Mantis's arm is brought up and its head
+reads at idle (`request_is_parked`), out of every slot; nothing is sent otherwise.
+`request_tag(slot=...)` turns the slot to the reader's angle (`rfid_slot_one_position`, the vendor's
+`RfidCarousel<capacity>Offset`, a slot's angle counted from it as the vendor's software counts the
+chip slots'), then, holding the carousel's lock, reads back that it stands there
+(`_check_at_position`) and reads its tag as `Rfid.request_tag` does (`describe_tag`). Only a read
+that ends in a whole tag or an empty field counts: one that times out or is malformed raises, so a
+slot is never taken as empty from it. The Mantis's `stop` stops each carousel in place and closes
+its links.
 
 **M1. One driver. Features hang off it.** (STAR P1.) A feature is a plain class holding `_driver`
 and sending through it. No per-feature backend or frontend.
@@ -67,17 +78,18 @@ stops. Board 0's version string and the serial number decide nothing.
 
 **M3. Nothing exists until the device says it is fitted; one class per feature.** (STAR P2.)
 `discover` reads the configuration (`_request_configuration`), checks it against a declared one,
-then `_discover_features` builds the features it lists; a refused setup builds none. The RFID
-reader is the exception: `discover` builds it when it answers its ping on interface A, after every
-opening of the link. Each feature is an `Optional` attribute of the driver, `None` until built:
+then `_discover_features` builds the features it lists; a refused setup builds none. The RFID reader
+is the exception: `discover` builds it when it answers its ping on interface A, after every opening
+of the link. Each feature is an `Optional` attribute of the driver, `None` until built:
 `plate_clamp` from the unit's `plate_clamp` block, its `controller` key matching the boards (a
-pressure-board output and board 10, or levels and board 12); `pump` when board 10 answered; `arm`
-on every unit; `led_bar` only on a v4 whose board 12 answered. Every feature is one class on both
-generations, with the same public methods. The generation selects only private plumbing, in the
-fork points listed in M6, each written `== "v3"` / `== "v4"` and refusing any other value. Where a
-v3 lacks the hardware (absolute encoders, a motor clamp state) the method raises
-`MantisConfigurationError`; where a v3 path has not run on a device it raises
-`NotImplementedError`.
+pressure-board output and board 10, or levels and board 12); `pump` when board 10 answered; `arm` on
+every unit; `led_bar` only on a v4 whose board 12 answered; `left_carousel` and `right_carousel`
+from their declared blocks, once the LC3 answers its firmware and limit reads (one that does not is
+left out, logged), set up again after every opening of the link. Every feature is one class on both
+generations, with the same public methods. The generation selects only private plumbing, in the fork
+points listed in M6, each written `== "v3"` / `== "v4"` and refusing any other value. Where a v3
+lacks the hardware (absolute encoders, a motor clamp state) the method raises
+`MantisConfigurationError`; where a v3 path has not run on a device it raises `NotImplementedError`.
 
 **M4. A configuration holds facts only, and is data.** (STAR P3, P13.) `DeviceConfiguration` holds
 what the device answered: generation, firmware versions and the pressure board's sensor
@@ -113,11 +125,15 @@ idle; `zones` where the unit declares its zones (a v4), with each zone's routes,
 `approach_paths`, the unit's paths from idle to the waste (`"waste"`) and to each wash position
 (`"wash_1"`, `"wash_2"`), from `System/Sequences/Common`; `stage` where the unit
 declares its stage transform, with its tilt and arm type and the plate holder's origin from the
-`Data` folder.
+`Data` folder. `left_carousel` and `right_carousel` come from the declared file only:
+`CarouselConfiguration`'s fields (`CarouselConfiguration.from_oem_database` reads them from the
+vendor's `data.db`).
 
 **M4d. Motion calibration never comes from a recording.** A block that calibrates motion
-(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `approach_paths`, `stage`) comes from the unit's folder or
-its declared file only; no recording holds one. Without it, nothing that needs it is sent: without
+(`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `approach_paths`, `stage`, `left_carousel`,
+`right_carousel`) comes from the unit's folder or
+its declared file only (the carousel blocks from the declared file only, M4a); no recording holds
+one. Without it, nothing that needs it is sent: without
 `arm` `Arm.initialize` refuses, and so does `setup` unless `skip_arm=True`, on both
 generations; without `zones` the head
 is moved to idle from near idle only; without `approach_paths` a move to the waste or a wash refuses; without
@@ -432,7 +448,8 @@ once, and the motor reads answer from it; without it the motors read idle at 0, 
 power-on. A motor read the configuration does
 not hold is not simulated. The sequencer, on the driver, holds `SEQUENCER_QUEUE_SIZE` items,
 stopped and empty after setup, and once started plays each item at once, a queued move moving the
-simulated arm; stop and abort keep what is queued.
+simulated arm; stop and abort keep what is queued. An LC3 is not simulated: a declared carousel
+block is logged and the carousel left out.
 
 **M16. Locking is by subsystem.** (STAR P11.) One lock serializes the link today. When features
 add commands that the device runs together, each subsystem gets its own lock, taken in declaration
@@ -441,7 +458,9 @@ order.
 **M17. The master holds every link to the device.** (STAR P21.) The FTDI has two interfaces; the
 master opens both in `setup` and closes them in `stop`, and a feature sends only through the
 master's links. Both links select USB product `Mantis`: the separate `LC3` carousel shares the
-VID/PID and motion protocol but does not control the arm. Interface B carries the command frames;
+VID/PID and motion protocol but does not control the arm; the master builds each LC3's two links
+(`_build_carousel_io`, `_build_carousel_rfid_io`), its carousel opens them at discovery, and the
+master's `stop` closes them. Interface B carries the command frames;
 interface A, the RFID reader's commands.
 
 **M18. The resource model mirrors the device; it never decides for it.** (STAR P12.) `MantisDevice`
@@ -637,3 +656,14 @@ where a colour took a release from 0.21 s to 0.34 s on the recorded v4.
     No correction is applied until a caliper measures the link's height over a seated chip.
 54. **A placement that recovers the chip's liquid is not captured,** so `recover_liquid=True` is
     refused. The unit's chips ship a detach-recovery sequence, but no capture shows it played.
+55. **The LC3's RFID read has run on one LC3, not captured here.** Its reader is set up and read
+    as the Mantis's, the tests' replies the Mantis reader's captured ones; no turn to a reader
+    angle is captured, so no test sends one.
+56. **Idle is taken as clear of every carousel slot.** A carousel turns only with the head read at
+    idle (0.5 degrees and 0.5 mm, `request_is_parked`); where the head first enters a slot's reach
+    is not measured.
+57. **A carousel block comes from the declared file only, not the unit's folder.** The vendor's
+    `data.db` lists each LC3 and its location; `CarouselConfiguration.from_oem_database` reads
+    one for the declared file, but setup does not read `data.db` itself.
+58. **A Mantis input slot's tag not read whole counts as empty.** `Rfid.request_tag` returns None
+    for it, so a chip slot placement can go ahead on an incomplete read; an LC3's read refuses it.

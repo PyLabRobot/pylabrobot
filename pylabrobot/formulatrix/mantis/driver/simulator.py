@@ -27,6 +27,7 @@ from .features.arm import (
   Arm,
   MantisArmConfiguration,
 )
+from .features.carousel import MantisCarousel
 from .features.led_bar import LedBar
 from .features.plate_clamp import CLAMPING_DONE, UNCLAMPING_DONE, PlateClamp
 from .features.pump import PressureController, Pump
@@ -639,6 +640,14 @@ class MantisSimulationDriver(MantisDriver):
       self.rfid = MantisSimulationRfid(
         driver=self, slot_to_antenna=slot_to_antenna, multiplexer_delay_raw=multiplexer_delay_raw
       )
+
+  async def _discover_carousel(
+    self, *, name: Literal["left_carousel", "right_carousel"]
+  ) -> Optional[MantisCarousel]:
+    """None: an LC3 is not simulated, so a declared carousel is logged and left out."""
+    if name in self._unit_blocks:
+      logger.info("[%s] simulated: the %s block is not simulated", self.name, name)
+    return None
 
   async def _open(self) -> None:
     """Open nothing: there is no link. The sequencer is stopped and empty."""

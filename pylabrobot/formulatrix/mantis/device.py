@@ -21,6 +21,7 @@ from .driver.arm_kinematics import (
 from .driver.configuration import RECORDING_MANTIS_V4
 from .driver.errors import MantisConfigurationError
 from .driver.features.arm import CHIP_CHANGER_ROUTE, Arm
+from .driver.features.carousel import MantisCarousel
 from .driver.features.led_bar import LedBar
 from .driver.features.plate_clamp import PlateClamp
 from .driver.features.pump import Pump
@@ -272,8 +273,8 @@ class MantisDevice(Resource):
     self.plate_holder.appearance = {"color": 0x8C9198}  # type: ignore[attr-defined]
     self.deck.assign_child_resource(self.plate_holder, location=PLATE_HOLDER_LOCATION)
 
-    # Both chip racks, always: whether a side carries a carousel instead is not read from the
-    # device; cb declares it (chip_layout), and carousels are not supported yet.
+    # Both chip racks, always: a declared carousel (left_carousel, right_carousel) is not
+    # modelled.
     self.left_chip_rack = chip_rack(name=f"{name}_left_chip_rack", side="left")
     self.assign_child_resource(self.left_chip_rack, location=measured_at["left_chip_rack"])
     self.right_chip_rack = chip_rack(name=f"{name}_right_chip_rack", side="right")
@@ -331,6 +332,18 @@ class MantisDevice(Resource):
   def led_bar(self) -> Optional[LedBar]:
     """The LED bar, once setup found board 12 on a v4; None before, without it, or on a v3."""
     return self.driver.led_bar
+
+  @property
+  def left_carousel(self) -> Optional[MantisCarousel]:
+    """The LC3 carousel the ``left_carousel`` block declares, once setup found it; None before or
+    without one."""
+    return self.driver.left_carousel
+
+  @property
+  def right_carousel(self) -> Optional[MantisCarousel]:
+    """The LC3 carousel the ``right_carousel`` block declares, once setup found it; None before or
+    without one."""
+    return self.driver.right_carousel
 
   @property
   def arm(self) -> Optional[Arm]:

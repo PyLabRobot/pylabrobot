@@ -34,8 +34,8 @@ For each unit block, setup takes:
 3. the generation's recording's, when neither has it, with a warning: another unit's values,
    less accurate on this one. `save_configuration` does not save a block taken from a recording.
    A block that calibrates motion (`MOTION_CALIBRATION_BLOCKS`: `arm`, `zones`, `approach_paths`,
-   `stage`) is never taken from a recording, and no recording holds one: without it, the motion it
-   calibrates refuses.
+   `stage`, `left_carousel`, `right_carousel`) is never taken from a recording, and no recording
+   holds one: without it, the motion it calibrates refuses.
 
 A declared file saved before a block or a non-fitted `device` field existed still loads: each
 value it lacks comes from the folder, else the recording, on a device and in simulation, with one

@@ -55,6 +55,23 @@ class CarouselConfigurationTests(unittest.TestCase):
     self.assertAlmostEqual(config.default_acceleration, 653.2258064516129)
     self.assertEqual(Path(self.path).read_bytes(), original)
 
+  def test_the_readers_angle_is_the_column_for_the_carousels_capacity(self):
+    """RfidCarousel24Offset for a 24-slot carousel, not the 18-slot column; none without it."""
+    config = CarouselConfiguration.from_oem_database(path=self.path, device_id="L-000143")
+    self.assertIsNone(config.rfid_slot_one_position)
+    database = sqlite3.connect(self.path)
+    try:
+      database.executescript(
+        "ALTER TABLE LC3 ADD COLUMN RfidCarousel18Offset FLOAT;"
+        "ALTER TABLE LC3 ADD COLUMN RfidCarousel24Offset FLOAT;"
+        "UPDATE LC3 SET RfidCarousel18Offset = 226.53, RfidCarousel24Offset = 225.029;"
+      )
+      database.commit()
+    finally:
+      database.close()
+    config = CarouselConfiguration.from_oem_database(path=self.path, device_id="L-000143")
+    self.assertEqual(config.rfid_slot_one_position, 225.029)
+
   def test_wrong_serial_does_not_borrow_another_units_calibration(self):
     """A missing hardware assignment is an error."""
     with self.assertRaisesRegex(MantisConfigurationError, "expected one calibrated carousel"):
