@@ -112,6 +112,8 @@ class ExecutorSetupTests(unittest.IsolatedAsyncioTestCase):
     io.human_readable_device_name = "mock serial"
     io._ser = None
     io._executor = None
+    io._write_executor = None
+    io.write_while_reading = False
     device = _ClosableDevice()
     started = threading.Event()
     release = threading.Event()

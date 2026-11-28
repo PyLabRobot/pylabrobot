@@ -82,6 +82,10 @@ class HamiltonTCPClient:
 
   _ERROR_CODES: ClassVar[Dict[Tuple[int, int, int, int, int], str]] = {}
 
+  # How the client asks to connect (InitMessage's connection type): 1, a standard connection.
+  # Some instruments answer object queries only to a controller (the MPE2: 0x1111).
+  CONNECTION_TYPE: int = 1
+
   def __init__(
     self,
     host: str,
@@ -231,7 +235,9 @@ class HamiltonTCPClient:
   async def _initialize_connection(self):
     logger.info("Initializing Hamilton connection...")
 
-    packet = InitMessage(timeout=self._connection_timeout).build()
+    packet = InitMessage(
+      timeout=self._connection_timeout, connection_type=self.CONNECTION_TYPE
+    ).build()
     await self._write_handshake(packet)
 
     size_data = await self._read_exact_handshake(2)

@@ -7,6 +7,8 @@ pylabrobot.hamilton package
    :toctree: _autosummary
    :recursive:
 
+   mpe2
    prep
+   transport.rs232_ppp
    transport.tcp
    transport.text_tcp
